@@ -1,0 +1,212 @@
+# .github/workflows/deploy-production.yml
+# Production Deployment — Triggered on push to main or manual dispatch with approval
+
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy-production" to confirm'
+        required: true
+        type: string
+      version_tag:
+        description: 'Version tag (e.g., v1.2.3). Leave empty for auto-generated.'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ───── Validate manual dispatch confirmation ─────
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate manual trigger confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy-production" ]; then
+            echo "❌ Confirmation text does not match. Expected 'deploy-production'."
+            exit 1
+          fi
+          echo "✅ Manual deployment confirmed."
+
+  # ───── Wait for CI to pass ─────
+  ci-check:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 30
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: Build
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+          allowed-conclusions: success
+
+  # ───── Build & Push Docker Images ─────
+  build-and-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: ci-check
+    timeout-minutes: 20
+    outputs:
+      sha_short: ${{ steps.meta.outputs.sha_short }}
+      version_tag: ${{ steps.meta.outputs.version_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+          REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+          VERSION_TAG="${{ github.event.inputs.version_tag }}"
+          if [ -z "$VERSION_TAG" ]; then
+            VERSION_TAG="v$(date +%Y%m%d)-${SHA_SHORT}"
+          fi
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "repo_lower=${REPO_LOWER}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/api.Dockerfile
+          target: production
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:latest
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:${{ steps.meta.outputs.version_tag }}
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:${{ steps.meta.outputs.sha_short }}
+          cache-from: type=gha,scope=api-production
+          cache-to: type=gha,mode=max,scope=api-production
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/web.Dockerfile
+          target: production
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/web:latest
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/web:${{ steps.meta.outputs.version_tag }}
+            ghcr.io/${{ steps.meta.outputs.repo_lower }}/web:${{ steps.meta.outputs.sha_short }}
+          cache-from: type=gha,scope=web-production
+          cache-to: type=gha,mode=max,scope=web-production
+
+  # ───── Deploy to Production Server ─────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    timeout-minutes: 15
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy deployment files to production server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.production.yml,infrastructure/nginx/,scripts/deploy.sh,scripts/rollback.sh"
+          target: /opt/myfinpro
+          overwrite: true
+
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/myfinpro
+            chmod +x scripts/deploy.sh scripts/rollback.sh
+            ./scripts/deploy.sh production
+
+      - name: Verify deployment health
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            echo "Waiting for services to stabilize..."
+            sleep 20
+
+            echo "Checking API health..."
+            for i in $(seq 1 15); do
+              if curl -sf http://localhost/api/v1/health > /dev/null 2>&1; then
+                echo "✅ API health check passed"
+                break
+              fi
+              if [ "$i" -eq 15 ]; then
+                echo "❌ API health check failed after 15 attempts"
+                exit 1
+              fi
+              echo "Attempt $i/15 — retrying in 5s..."
+              sleep 5
+            done
+
+            echo "Checking Web health..."
+            for i in $(seq 1 15); do
+              if curl -sf http://localhost/ > /dev/null 2>&1; then
+                echo "✅ Web health check passed"
+                break
+              fi
+              if [ "$i" -eq 15 ]; then
+                echo "❌ Web health check failed after 15 attempts"
+                exit 1
+              fi
+              echo "Attempt $i/15 — retrying in 5s..."
+              sleep 5
+            done
+
+            echo "🚀 Production deployment verified successfully!"
+
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            echo "⚠️ Production deployment failed — initiating rollback..."
+            cd /opt/myfinpro
+            if [ -f scripts/rollback.sh ]; then
+              chmod +x scripts/rollback.sh
+              ./scripts/rollback.sh production
+            fi
