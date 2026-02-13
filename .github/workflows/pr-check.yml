@@ -1,0 +1,85 @@
+name: PR Quality Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-title-check:
+    name: PR Title Convention
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check PR title follows Conventional Commits
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            must not start with an uppercase character.
+
+  changed-packages:
+    name: Detect Changed Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: changed
+        uses: tj-actions/changed-files@v46
+        with:
+          files_yaml: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+            bot:
+              - 'apps/bot/**'
+            shared:
+              - 'packages/shared/**'
+            infra:
+              - 'infrastructure/**'
+              - 'docker-compose.yml'
+              - '.github/**'
+
+      - name: Summary of changes
+        run: |
+          echo "### Changed Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.changed.outputs.api_any_changed }}" == "true" ]; then
+            echo "- 📦 **apps/api**" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.changed.outputs.web_any_changed }}" == "true" ]; then
+            echo "- 📦 **apps/web**" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.changed.outputs.bot_any_changed }}" == "true" ]; then
+            echo "- 📦 **apps/bot**" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.changed.outputs.shared_any_changed }}" == "true" ]; then
+            echo "- 📦 **packages/shared**" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.changed.outputs.infra_any_changed }}" == "true" ]; then
+            echo "- 🔧 **infrastructure**" >> $GITHUB_STEP_SUMMARY
+          fi
