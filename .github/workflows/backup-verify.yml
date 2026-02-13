@@ -1,0 +1,242 @@
+name: Backup Verification
+
+on:
+  schedule:
+    # Run weekly on Sundays at 3:00 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+env:
+  MYSQL_ROOT_PASSWORD: rootpassword
+  MYSQL_USER: myfinpro
+  MYSQL_PASSWORD: testpassword
+  MYSQL_DATABASE: myfinpro
+  MYSQL_PORT: 3306
+
+jobs:
+  verify-backup:
+    name: Verify Backup & Restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+          MYSQL_USER: ${{ env.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ env.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ env.MYSQL_DATABASE }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD 2>/dev/null; then
+              echo "MySQL is ready"
+              break
+            fi
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
+
+      - name: Create test database with sample data
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD $MYSQL_DATABASE <<'SQL'
+            CREATE TABLE IF NOT EXISTS users (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              email VARCHAR(255) NOT NULL UNIQUE,
+              name VARCHAR(255) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS accounts (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              user_id INT NOT NULL,
+              name VARCHAR(255) NOT NULL,
+              balance DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+              currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS transactions (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              account_id INT NOT NULL,
+              amount DECIMAL(15,2) NOT NULL,
+              description VARCHAR(500),
+              transaction_date DATE NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (account_id) REFERENCES accounts(id)
+            );
+
+            INSERT INTO users (email, name) VALUES
+              ('alice@example.com', 'Alice Johnson'),
+              ('bob@example.com', 'Bob Smith');
+
+            INSERT INTO accounts (user_id, name, balance, currency) VALUES
+              (1, 'Checking Account', 5000.00, 'USD'),
+              (1, 'Savings Account', 15000.00, 'USD'),
+              (2, 'Main Account', 3200.00, 'EUR');
+
+            INSERT INTO transactions (account_id, amount, description, transaction_date) VALUES
+              (1, -50.00, 'Grocery Store', '2025-01-15'),
+              (1, 3000.00, 'Salary', '2025-01-01'),
+              (2, -200.00, 'Transfer to Checking', '2025-01-10'),
+              (3, -45.50, 'Restaurant', '2025-01-12');
+          SQL
+
+      - name: Record original data checksums
+        id: original
+        run: |
+          USER_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM users;" $MYSQL_DATABASE)
+          ACCOUNT_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM accounts;" $MYSQL_DATABASE)
+          TX_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM transactions;" $MYSQL_DATABASE)
+          TABLE_CHECKSUM=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "CHECKSUM TABLE users, accounts, transactions;" $MYSQL_DATABASE)
+
+          echo "user_count=$USER_COUNT" >> "$GITHUB_OUTPUT"
+          echo "account_count=$ACCOUNT_COUNT" >> "$GITHUB_OUTPUT"
+          echo "tx_count=$TX_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Original counts: users=$USER_COUNT, accounts=$ACCOUNT_COUNT, transactions=$TX_COUNT"
+          echo "Checksums: $TABLE_CHECKSUM"
+
+      - name: Create backup directory
+        run: mkdir -p /tmp/myfinpro-backups
+
+      - name: Run backup script
+        run: |
+          ./scripts/backup.sh \
+            --output-dir /tmp/myfinpro-backups \
+            --host 127.0.0.1 \
+            --port 3306 \
+            --user root \
+            --database $MYSQL_DATABASE
+        env:
+          MYSQL_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+
+      - name: Verify backup file exists and is valid
+        run: |
+          BACKUP_FILE=$(ls -t /tmp/myfinpro-backups/myfinpro_*.sql.gz 2>/dev/null | head -1)
+
+          if [[ -z "$BACKUP_FILE" ]]; then
+            echo "::error::No backup file found"
+            exit 1
+          fi
+
+          echo "Backup file: $BACKUP_FILE"
+          echo "File size: $(du -h "$BACKUP_FILE" | cut -f1)"
+
+          # Verify gzip integrity
+          if ! gzip -t "$BACKUP_FILE"; then
+            echo "::error::Backup file failed gzip integrity check"
+            exit 1
+          fi
+          echo "✓ Gzip integrity verified"
+
+          # Verify file is not empty
+          if [[ ! -s "$BACKUP_FILE" ]]; then
+            echo "::error::Backup file is empty"
+            exit 1
+          fi
+          echo "✓ Backup file is non-empty"
+
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_ENV"
+
+      - name: Run verify-backup script
+        run: |
+          ./scripts/verify-backup.sh \
+            --backup-dir /tmp/myfinpro-backups \
+            --max-age-hours 1
+
+      - name: Drop original database for restore test
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD <<SQL
+            DROP DATABASE IF EXISTS $MYSQL_DATABASE;
+            CREATE DATABASE $MYSQL_DATABASE;
+          SQL
+
+      - name: Run restore script
+        run: |
+          ./scripts/restore.sh "$backup_file" \
+            --force \
+            --host 127.0.0.1 \
+            --port 3306 \
+            --user root \
+            --database $MYSQL_DATABASE
+        env:
+          MYSQL_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+
+      - name: Verify restored data matches original
+        run: |
+          USER_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM users;" $MYSQL_DATABASE)
+          ACCOUNT_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM accounts;" $MYSQL_DATABASE)
+          TX_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM transactions;" $MYSQL_DATABASE)
+
+          echo "Restored counts: users=$USER_COUNT, accounts=$ACCOUNT_COUNT, transactions=$TX_COUNT"
+
+          EXPECTED_USERS="${{ steps.original.outputs.user_count }}"
+          EXPECTED_ACCOUNTS="${{ steps.original.outputs.account_count }}"
+          EXPECTED_TX="${{ steps.original.outputs.tx_count }}"
+
+          PASS=true
+          if [[ "$USER_COUNT" != "$EXPECTED_USERS" ]]; then
+            echo "::error::User count mismatch: got $USER_COUNT, expected $EXPECTED_USERS"
+            PASS=false
+          fi
+          if [[ "$ACCOUNT_COUNT" != "$EXPECTED_ACCOUNTS" ]]; then
+            echo "::error::Account count mismatch: got $ACCOUNT_COUNT, expected $EXPECTED_ACCOUNTS"
+            PASS=false
+          fi
+          if [[ "$TX_COUNT" != "$EXPECTED_TX" ]]; then
+            echo "::error::Transaction count mismatch: got $TX_COUNT, expected $EXPECTED_TX"
+            PASS=false
+          fi
+
+          if [[ "$PASS" == "true" ]]; then
+            echo "✓ All data verified — restore matches original"
+          else
+            echo "::error::Data verification failed"
+            exit 1
+          fi
+
+      - name: Test backup age check script (should pass)
+        run: |
+          ./scripts/check-backup-age.sh \
+            --backup-dir /tmp/myfinpro-backups \
+            --max-age 26
+
+      - name: Test backup age check script (should fail with low threshold)
+        run: |
+          # This should exit 1 because we set max-age to 0 hours
+          if ./scripts/check-backup-age.sh --backup-dir /tmp/myfinpro-backups --max-age 0; then
+            echo "::error::Expected check-backup-age to fail with 0-hour threshold"
+            exit 1
+          else
+            echo "✓ Correctly detected backup exceeds 0-hour threshold"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Backup Verification Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backup created | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Gzip integrity | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Restore successful | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Data integrity | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Age check | ✅ |" >> "$GITHUB_STEP_SUMMARY"

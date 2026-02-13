@@ -1,0 +1,12 @@
+# =============================================================================
+# MyFinPro Backup Cron Configuration
+# =============================================================================
+# Install with: crontab infrastructure/backup/crontab
+# Or add entries to existing crontab: crontab -e
+# =============================================================================
+
+# Daily backup at 2:00 AM
+0 2 * * * /opt/myfinpro/scripts/backup.sh --docker >> /var/log/myfinpro/backup.log 2>&1
+
+# Backup age check every 6 hours
+0 */6 * * * /opt/myfinpro/scripts/check-backup-age.sh --max-age 26 >> /var/log/myfinpro/backup-check.log 2>&1
