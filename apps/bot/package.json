@@ -1,0 +1,30 @@
+{
+  "name": "@myfinpro/bot",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn src/main.ts",
+    "dev": "ts-node-dev --respawn src/main.ts",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Bot tests — placeholder\" && exit 0",
+    "test:unit": "echo \"Bot tests — placeholder\" && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@myfinpro/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@myfinpro/tsconfig": "workspace:*",
+    "@myfinpro/eslint-config": "workspace:*",
+    "@types/node": "^22.15.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3",
+    "eslint": "^9.0.0"
+  }
+}

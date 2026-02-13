@@ -41,6 +41,18 @@
 - As a group member, I can see which group member each expense or income is related to (on behalf of whom the expense/income was done) so that I can understand individual contributions.
 - As a group member, I can view expenses and incomes of each group member separately so that I can analyze individual spending patterns.
 
+## Web app user
+- As a web app user, I can switch between dark and light themes so that I can customize the app's appearance to my preference.
+- As a web app user, I can view analytics and reports for my personal finances so that I can analyze my spending patterns.
+- As a web app user, I can view analytics and reports for my groups/families so that I can analyze shared finances.
+- As a web app user, I can see which group/family member each expense or income is related to so that I can track individual contributions.
+- As a web app user, I can see and manage individual or group/family expenses and incomes in a table veiw, where I can see, edit, add, or delete each expense/income and its details, including the group/family member it's related to, documents such as scaned receipts, date/time of operation, a member it's on behalf of, and other details.
+- As a web app user, I can add notes to expenses/incomes. Notes may include tags/hashtags, mentions of other users, mentions of other expences/incomes, pictures, and support markdown semantic.
+- As a web app user, I can set up notifications via email, Telegram, or web push notifications:
+  - Notifications about due payments.
+  - Notifications about low balances.
+  - Notifications of target progress to low or gone backwards.
+
 ## Telegram User
 - As a Telegram user, I can check balances and reminders through a bot with buttons and dialogs.
 - As a Telegram user, I can open the mini app to manage budgets and targets on mobile.
@@ -48,6 +60,7 @@
 - As a Telegram user, I can add purchases and expenses via the bot UI (conversational) so that I can track spending through chat commands.
 - As a Telegram user, I can add purchases and expenses via the mini app so that I can track spending with a rich mobile interface.
 - As a Telegram user, I can send a receipt photo via the bot so that I can quickly add expenses while on the go.
+- As a Telegram user, I can add a note to an expense/income via the bot or mini app so that I can add additional context or details. It should support markdown semantic, pictures, mentions of other users, mentions of other expences/incomes, and hashtags.
 
 ### Group/Family Management via Telegram
 - As a Telegram user, I can view group/family expenses and incomes via the bot so that I can monitor shared budgets on the go.
@@ -60,3 +73,5 @@
 - As a user, I can ask an AI assistant questions about my personal finances and receive personalized insights based on my budget data.
 - As a user, I can ask the AI assistant questions about my family/group finances and receive insights about shared budgets, expenses, and spending patterns.
 - As a user, I can ask the AI assistant for details about individual family/group member contributions and expenses.
+- As a user, I can ask the AI assistant for advice on budgeting, saving, or managing expenses based on my financial data and targets.
+- As a user, I want to have an MCP that I can access from my preferred AI assistant (e.g., ChatGPT, Claude, etc.) so that I can manage my finances directly from the assistant. I should have an ability to ask questions, add or remove expenses, incomes, budgets, and targets.

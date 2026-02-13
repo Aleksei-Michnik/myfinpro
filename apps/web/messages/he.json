@@ -1,0 +1,24 @@
+{
+  "common": {
+    "appName": "MyFinPro",
+    "loading": "טוען...",
+    "error": "אירעה שגיאה",
+    "save": "שמור",
+    "cancel": "ביטול",
+    "delete": "מחק",
+    "edit": "ערוך",
+    "back": "חזרה"
+  },
+  "nav": {
+    "home": "דף הבית",
+    "dashboard": "לוח בקרה",
+    "transactions": "תנועות",
+    "budgets": "תקציבים",
+    "settings": "הגדרות"
+  },
+  "home": {
+    "title": "ניהול כספים אישי ומשפחתי",
+    "subtitle": "עקוב אחרי הכנסות, הוצאות ותקציבים",
+    "welcome": "ברוכים הבאים ל-MyFinPro"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@myfinpro/shared",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@myfinpro/tsconfig": "workspace:*",
+    "@myfinpro/eslint-config": "workspace:*",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "eslint": "^9.0.0",
+    "vitest": "^4.0.18"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "common": {
+    "appName": "MyFinPro",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back"
+  },
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "transactions": "Transactions",
+    "budgets": "Budgets",
+    "settings": "Settings"
+  },
+  "home": {
+    "title": "Personal & Family Finance Management",
+    "subtitle": "Track your income, expenses, and budgets",
+    "welcome": "Welcome to MyFinPro"
+  }
+}

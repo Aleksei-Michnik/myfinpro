@@ -1,0 +1,34 @@
+// ─────────────────────────────────────────────────────────────
+// MyFinPro — Prisma Schema
+// Location: apps/api/prisma/schema.prisma
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ── Phase 0: Minimal User model placeholder for Prisma verification ──
+// Full user model will be defined in Phase 1.1
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ── Phase 0: Baseline model for connection testing ──
+
+model HealthCheck {
+  id        Int      @id @default(autoincrement())
+  status    String   @db.VarChar(50)
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("health_checks")
+}

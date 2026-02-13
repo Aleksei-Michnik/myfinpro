@@ -1,0 +1,48 @@
+{
+  "name": "myfinpro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal/Family Finance Management Application",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:bot": "pnpm --filter bot dev",
+    "build": "turbo run build",
+    "build:api": "pnpm --filter api build",
+    "build:web": "pnpm --filter web build",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "pnpm --filter api test:integration",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:coverage": "turbo run test:coverage",
+    "db:migrate": "pnpm --filter api exec prisma migrate dev",
+    "db:migrate:prod": "pnpm --filter api exec prisma migrate deploy",
+    "db:generate": "pnpm --filter api exec prisma generate",
+    "db:seed": "pnpm --filter api exec prisma db seed",
+    "db:reset": "pnpm --filter api exec prisma migrate reset",
+    "db:studio": "pnpm --filter api exec prisma studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:restart": "docker compose restart",
+    "docker:logs": "docker compose logs -f",
+    "docker:build": "docker compose build",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "prepare": "echo 'Monorepo ready'"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.3",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  }
+}
