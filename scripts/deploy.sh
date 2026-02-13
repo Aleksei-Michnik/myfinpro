@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
-# scripts/deploy.sh — Deploy MyFinPro services with zero-downtime approach
-# Usage: ./scripts/deploy.sh [staging|production]
+# scripts/deploy.sh — Deploy MyFinPro services with ephemeral secret injection
+#
+# Security pattern:
+#   1. Accept env vars (from CI) or read from GitHub Secrets via `gh` CLI
+#   2. Write temp .env file
+#   3. docker compose up
+#   4. shred .env (secrets never persist on disk)
+#
+# Usage:
+#   ./scripts/deploy.sh [staging|production]
+#
+# When called from GitHub Actions, env vars are pre-set via SSH envs.
+# For manual deployment, ensure required env vars are exported or use `gh` CLI.
 
 set -euo pipefail
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 ENVIRONMENT="${1:-staging}"
-DEPLOY_DIR="/opt/myfinpro"
+DEPLOY_DIR="/opt/myfinpro/${ENVIRONMENT}"
 COMPOSE_FILE="docker-compose.${ENVIRONMENT}.yml"
-ENV_FILE=".env.${ENVIRONMENT}"
+ENV_FILE=".env"
 HEALTH_CHECK_URL="http://localhost/api/v1/health"
 HEALTH_CHECK_RETRIES=20
 HEALTH_CHECK_INTERVAL=5
@@ -46,13 +57,68 @@ validate_environment() {
     exit 1
   fi
 
-  if [ ! -f "$ENV_FILE" ]; then
-    error "Environment file $ENV_FILE not found. Copy from .env.${ENVIRONMENT}.example and configure."
-    exit 1
-  fi
-
   log "Deploying to ${ENVIRONMENT} environment..."
 }
+
+# ─── Write ephemeral .env file ───────────────────────────────────────────────
+
+write_env_file() {
+  log "Writing ephemeral .env file..."
+
+  # Required variables — check they are set
+  local required_vars=(
+    MYSQL_ROOT_PASSWORD MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD
+    DATABASE_URL JWT_SECRET JWT_REFRESH_SECRET REDIS_URL
+    NODE_ENV API_PORT CORS_ORIGIN LOG_LEVEL SWAGGER_ENABLED
+    RATE_LIMIT_TTL RATE_LIMIT_MAX NEXT_PUBLIC_API_URL API_INTERNAL_URL
+    GHCR_REPO IMAGE_TAG
+  )
+
+  for var in "${required_vars[@]}"; do
+    if [ -z "${!var:-}" ]; then
+      error "Required env var $var is not set. Set it as an environment variable or configure GitHub Secrets."
+      exit 1
+    fi
+  done
+
+  cat > "$ENV_FILE" << EOF
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+MYSQL_DATABASE=${MYSQL_DATABASE}
+MYSQL_USER=${MYSQL_USER}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+DATABASE_URL=${DATABASE_URL}
+JWT_SECRET=${JWT_SECRET}
+JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+REDIS_URL=${REDIS_URL}
+NODE_ENV=${NODE_ENV}
+API_PORT=${API_PORT}
+CORS_ORIGIN=${CORS_ORIGIN}
+LOG_LEVEL=${LOG_LEVEL}
+SWAGGER_ENABLED=${SWAGGER_ENABLED}
+RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
+RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
+NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+API_INTERNAL_URL=${API_INTERNAL_URL}
+GHCR_REPO=${GHCR_REPO}
+IMAGE_TAG=${IMAGE_TAG}
+EOF
+
+  chmod 600 "$ENV_FILE"
+  info "Ephemeral .env file written."
+}
+
+# ─── Shred .env file ────────────────────────────────────────────────────────
+
+shred_env_file() {
+  log "Shredding ephemeral .env file..."
+  if [ -f "$ENV_FILE" ]; then
+    shred -vfz -n 3 "$ENV_FILE" 2>/dev/null || rm -f "$ENV_FILE"
+    info ".env file securely removed."
+  fi
+}
+
+# Ensure .env is shredded on exit (even on failure)
+trap shred_env_file EXIT
 
 # ─── Save current image tags for rollback ────────────────────────────────────
 
@@ -61,7 +127,6 @@ save_current_tags() {
   if docker compose -f "$COMPOSE_FILE" ps --format json 2>/dev/null | head -1 | grep -q "Service"; then
     docker compose -f "$COMPOSE_FILE" config --images 2>/dev/null > "$BACKUP_TAG_FILE" || true
   fi
-  # Also save the current running image digests
   docker inspect --format='{{.Config.Image}}' \
     $(docker compose -f "$COMPOSE_FILE" ps -q api 2>/dev/null) 2>/dev/null >> "$BACKUP_TAG_FILE" || true
   docker inspect --format='{{.Config.Image}}' \
@@ -90,7 +155,7 @@ run_migrations() {
   log "Waiting for MySQL to be healthy..."
   local retries=30
   for i in $(seq 1 "$retries"); do
-    if docker compose -f "$COMPOSE_FILE" exec -T mysql mysqladmin ping -h localhost -u root -p"${MYSQL_ROOT_PASSWORD:-}" --silent 2>/dev/null; then
+    if docker compose -f "$COMPOSE_FILE" exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
       info "MySQL is healthy."
       break
     fi
@@ -146,7 +211,6 @@ wait_for_health() {
 
   log "Waiting for $service_name to become healthy..."
   for i in $(seq 1 "$max_retries"); do
-    # Check Docker health status
     local health_status
     health_status=$(docker compose -f "$COMPOSE_FILE" ps "$service_name" --format json 2>/dev/null | grep -o '"Health":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "unknown")
     if [ "$health_status" = "healthy" ]; then
@@ -195,13 +259,17 @@ main() {
   log "═══════════════════════════════════════════════════════════════"
   log "  MyFinPro Deployment — ${ENVIRONMENT^^}"
   log "  Started at: $(date)"
+  log "  Security: Ephemeral secret injection (write → compose up → shred)"
   log "═══════════════════════════════════════════════════════════════"
 
   validate_environment
+  write_env_file
   save_current_tags
   pull_images
   run_migrations
   restart_services
+
+  # .env is shredded by the EXIT trap after compose up reads it
 
   if verify_deployment; then
     cleanup

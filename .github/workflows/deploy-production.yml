@@ -1,5 +1,6 @@
 # .github/workflows/deploy-production.yml
 # Production Deployment — Triggered on push to main or manual dispatch with approval
+# Security: GitHub Secrets → SSH → write temp .env → compose up → shred .env
 
 name: Deploy Production
 
@@ -141,20 +142,84 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          source: "docker-compose.yml,docker-compose.production.yml,infrastructure/nginx/,scripts/deploy.sh,scripts/rollback.sh"
-          target: /opt/myfinpro
+          source: "docker-compose.production.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh"
+          target: /opt/myfinpro/production
           overwrite: true
 
-      - name: Deploy to production
+      - name: Inject secrets, deploy, and shred
         uses: appleboy/ssh-action@v1
+        env:
+          # ── Database secrets ──
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # ── Auth secrets ──
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          # ── Redis ──
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          # ── Non-secret config ──
+          NODE_ENV: production
+          API_PORT: "3001"
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          LOG_LEVEL: warn
+          SWAGGER_ENABLED: "false"
+          RATE_LIMIT_TTL: "60000"
+          RATE_LIMIT_MAX: "30"
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          API_INTERNAL_URL: http://api:3001
+          # ── Image config ──
+          GHCR_REPO: ${{ secrets.GHCR_REPO }}
+          IMAGE_TAG: latest
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGIN,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG
           script: |
-            cd /opt/myfinpro
-            chmod +x scripts/deploy.sh scripts/rollback.sh
-            ./scripts/deploy.sh production
+            set -euo pipefail
+            DEPLOY_DIR="/opt/myfinpro/production"
+            cd "$DEPLOY_DIR"
+
+            echo "── Writing ephemeral .env ──"
+            cat > .env << 'ENVEOF'
+            MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE=${MYSQL_DATABASE}
+            MYSQL_USER=${MYSQL_USER}
+            MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            DATABASE_URL=${DATABASE_URL}
+            JWT_SECRET=${JWT_SECRET}
+            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            REDIS_URL=${REDIS_URL}
+            NODE_ENV=${NODE_ENV}
+            API_PORT=${API_PORT}
+            CORS_ORIGIN=${CORS_ORIGIN}
+            LOG_LEVEL=${LOG_LEVEL}
+            SWAGGER_ENABLED=${SWAGGER_ENABLED}
+            RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
+            RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
+            NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+            API_INTERNAL_URL=${API_INTERNAL_URL}
+            GHCR_REPO=${GHCR_REPO}
+            IMAGE_TAG=${IMAGE_TAG}
+            ENVEOF
+            chmod 600 .env
+
+            echo "── Pulling latest images ──"
+            docker compose -f docker-compose.production.yml pull api web
+
+            echo "── Starting services ──"
+            docker compose -f docker-compose.production.yml up -d
+
+            echo "── Shredding .env ──"
+            shred -vfz -n 3 .env 2>/dev/null || rm -f .env
+
+            echo "── Cleaning up dangling images ──"
+            docker image prune -f 2>/dev/null || true
+
+            echo "✅ Production deployment complete"
 
       - name: Verify deployment health
         uses: appleboy/ssh-action@v1
@@ -205,7 +270,7 @@ jobs:
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
             echo "⚠️ Production deployment failed — initiating rollback..."
-            cd /opt/myfinpro
+            cd /opt/myfinpro/production
             if [ -f scripts/rollback.sh ]; then
               chmod +x scripts/rollback.sh
               ./scripts/rollback.sh production

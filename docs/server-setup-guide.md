@@ -11,13 +11,14 @@
 - [Part 1: Initial Server Setup](#part-1-initial-server-setup) (~30 min)
 - [Part 2: Application Directory Setup](#part-2-application-directory-setup) (~10 min)
 - [Part 3: SSL/TLS Setup (Production)](#part-3-ssltls-setup-production) (~15 min)
-- [Part 4: GitHub Actions Integration](#part-4-github-actions-integration) (~20 min)
+- [Part 4: GitHub Actions & Secrets Configuration](#part-4-github-actions--secrets-configuration) (~20 min)
 - [Part 5: First Deployment](#part-5-first-deployment) (~15 min)
 - [Part 6: Backup Configuration](#part-6-backup-configuration) (~15 min)
 - [Part 7: Monitoring & Maintenance](#part-7-monitoring--maintenance)
 - [Part 8: Staging-Specific Configuration](#part-8-staging-specific-configuration)
 - [Part 9: Production-Specific Configuration](#part-9-production-specific-configuration)
-- [Part 10: Troubleshooting](#part-10-troubleshooting)
+- [Part 10: Security Architecture](#part-10-security-architecture)
+- [Part 11: Troubleshooting](#part-11-troubleshooting)
 
 ---
 
@@ -27,12 +28,12 @@ Define these variables **before** running any commands. Replace placeholder valu
 
 ```bash
 # ── Set these on your LOCAL machine and on the server ──
-export SERVER_IP="203.0.113.10"           # Your server's public IP
-export DOMAIN="myfinpro.example.com"      # Production domain
-export STAGING_DOMAIN="staging.myfinpro.example.com"  # Staging domain
-export DEPLOY_USER="deploy"               # Non-root deploy user
-export GITHUB_USERNAME="your-github-username"  # GitHub username (lowercase)
-export GITHUB_REPO="your-github-username/myfinpro"  # owner/repo (lowercase)
+export SERVER_IP="<YOUR_SERVER_IP>"                    # Your server's public IP
+export DOMAIN="<YOUR_PRODUCTION_DOMAIN>"               # Production domain
+export STAGING_DOMAIN="<YOUR_STAGING_DOMAIN>"           # Staging domain
+export DEPLOY_USER="deploy"                             # Non-root deploy user
+export GITHUB_USERNAME="<YOUR_GITHUB_USERNAME>"         # GitHub username (lowercase)
+export GITHUB_REPO="<YOUR_GITHUB_USERNAME>/myfinpro"    # owner/repo (lowercase)
 ```
 
 **Conventions used in this guide:**
@@ -337,102 +338,39 @@ sudo fail2ban-client status sshd  # Shows fail2ban running
 
 All commands below should be run as the **deploy** user.
 
-### 2.1 Create Application Directory
+### 2.1 Create Application Directories
 
 ```bash
 # (as deploy)
-sudo mkdir -p /opt/myfinpro
-sudo chown $USER:$USER /opt/myfinpro
+sudo mkdir -p /opt/myfinpro/staging
+sudo mkdir -p /opt/myfinpro/production
+sudo chown -R $USER:$USER /opt/myfinpro
 ```
 
 ### 2.2 Set Up Directory Structure
 
 ```bash
 # (as deploy)
-cd /opt/myfinpro
+for env in staging production; do
+  cd /opt/myfinpro/$env
 
-mkdir -p \
-  scripts \
-  infrastructure/nginx/conf.d \
-  infrastructure/mysql/init \
-  infrastructure/backup \
-  logs
+  mkdir -p \
+    scripts \
+    infrastructure/nginx/conf.d \
+    infrastructure/mysql/init \
+    infrastructure/backup \
+    logs
+done
 ```
 
-### 2.3 Configure Environment Files
-
-#### For Staging
-
-```bash
-# (local) — Copy the template to the server
-scp .env.staging.example $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/.env.staging
-```
-
-Then on the server, edit it with real values:
-
-```bash
-# (as deploy) — on the server
-cd /opt/myfinpro
-nano .env.staging
-```
-
-Key values to change in `.env.staging`:
-
-| Variable | What to set |
-|---|---|
-| `MYSQL_ROOT_PASSWORD` | Strong random password |
-| `MYSQL_PASSWORD` | Strong random password |
-| `DATABASE_URL` | Must match `MYSQL_USER` and `MYSQL_PASSWORD` |
-| `GHCR_REPO` | `your-github-username/myfinpro` (lowercase) |
-| `JWT_ACCESS_SECRET` | Generate: `openssl rand -base64 48` |
-| `JWT_REFRESH_SECRET` | Generate: `openssl rand -base64 48` |
-| `CORS_ORIGINS` | Your staging domain |
-| `NEXT_PUBLIC_API_URL` | `https://staging.myfinpro.example.com/api/v1` |
-
-#### For Production
-
-```bash
-# (local) — Copy the template to the server
-scp .env.production.example $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/.env.production
-```
-
-Then on the server, edit with strong, unique credentials:
-
-```bash
-# (as deploy) — on the server
-cd /opt/myfinpro
-nano .env.production
-```
-
-Key values to change in `.env.production`:
-
-| Variable | What to set |
-|---|---|
-| `MYSQL_ROOT_PASSWORD` | `openssl rand -base64 48` |
-| `MYSQL_PASSWORD` | `openssl rand -base64 48` |
-| `DATABASE_URL` | Must match `MYSQL_USER` and `MYSQL_PASSWORD` |
-| `GHCR_REPO` | `your-github-username/myfinpro` (lowercase) |
-| `JWT_ACCESS_SECRET` | `openssl rand -base64 48` |
-| `JWT_REFRESH_SECRET` | `openssl rand -base64 48` |
-| `REDIS_PASSWORD` | `openssl rand -base64 32` |
-| `CORS_ORIGINS` | `https://myfinpro.example.com` |
-| `NEXT_PUBLIC_API_URL` | `https://myfinpro.example.com/api/v1` |
-| `SWAGGER_ENABLED` | `false` |
-
-### 2.4 Set File Permissions
-
-```bash
-# (as deploy)
-chmod 600 /opt/myfinpro/.env.staging
-chmod 600 /opt/myfinpro/.env.production
-```
+> **Note:** No `.env` files are created on the server. Secrets are injected ephemerally by the deploy workflow from GitHub Secrets. See [Part 10: Security Architecture](#part-10-security-architecture).
 
 **Verification:**
 
 ```bash
-ls -la /opt/myfinpro/.env.*
-# -rw------- 1 deploy deploy ... .env.staging
-# -rw------- 1 deploy deploy ... .env.production
+ls -la /opt/myfinpro/staging/
+ls -la /opt/myfinpro/production/
+# Should show scripts/, infrastructure/, logs/ directories
 ```
 
 ---
@@ -458,7 +396,7 @@ Before obtaining the cert, ensure DNS is already pointing to your server and por
 ```bash
 # (as root)
 # Stop anything on port 80 first (if Nginx container is running)
-docker compose -f /opt/myfinpro/docker-compose.production.yml down nginx 2>/dev/null || true
+docker compose -f /opt/myfinpro/production/docker-compose.production.yml down nginx 2>/dev/null || true
 
 # Obtain the certificate
 certbot certonly --standalone \
@@ -481,7 +419,7 @@ Create a production Nginx config with SSL:
 
 ```bash
 # (as deploy)
-cat > /opt/myfinpro/infrastructure/nginx/conf.d/production-ssl.conf << 'NGINXEOF'
+cat > /opt/myfinpro/production/infrastructure/nginx/conf.d/production-ssl.conf << 'NGINXEOF'
 upstream api_upstream {
     server api:3001;
 }
@@ -569,14 +507,14 @@ server {
 NGINXEOF
 
 # Replace the domain placeholder with your actual domain
-sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" /opt/myfinpro/infrastructure/nginx/conf.d/production-ssl.conf
+sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" /opt/myfinpro/production/infrastructure/nginx/conf.d/production-ssl.conf
 ```
 
 Then update `docker-compose.production.yml` to mount Let's Encrypt certs. Uncomment the SSL volume line:
 
 ```bash
 # (as deploy)
-cd /opt/myfinpro
+cd /opt/myfinpro/production
 # Edit docker-compose.production.yml — uncomment the letsencrypt volume:
 #   - /etc/letsencrypt:/etc/letsencrypt:ro
 ```
@@ -608,7 +546,7 @@ chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
 
 ---
 
-## Part 4: GitHub Actions Integration
+## Part 4: GitHub Actions & Secrets Configuration
 
 > ⏱ Estimated time: **20 minutes**
 
@@ -648,16 +586,17 @@ EOF
 
 Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
 
-Add the following secrets:
+#### SSH & Infrastructure Secrets
 
 | Secret | Value | Description |
 |---|---|---|
-| `STAGING_HOST` | `203.0.113.10` | Staging server IP or hostname |
+| `STAGING_HOST` | `<YOUR_SERVER_IP>` | Staging server IP or hostname |
 | `STAGING_USER` | `deploy` | SSH user for staging server |
 | `STAGING_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging |
-| `PRODUCTION_HOST` | `203.0.113.20` | Production server IP or hostname |
+| `PRODUCTION_HOST` | `<YOUR_SERVER_IP>` | Production server IP or hostname |
 | `PRODUCTION_USER` | `deploy` | SSH user for production server |
 | `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production |
+| `GHCR_REPO` | `<YOUR_GITHUB_USERNAME>/myfinpro` | GHCR repository (lowercase) |
 
 To copy the private key:
 
@@ -666,6 +605,23 @@ To copy the private key:
 cat ~/.ssh/myfinpro-deploy
 # Copy the entire output including -----BEGIN OPENSSH PRIVATE KEY----- and -----END OPENSSH PRIVATE KEY-----
 ```
+
+#### Application Secrets (per GitHub Environment)
+
+Configure these in each GitHub Environment (`staging` / `production`):
+
+| Secret | Description | How to generate |
+|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | MySQL root password | `openssl rand -base64 48` |
+| `MYSQL_DATABASE` | Database name | `myfinpro_staging` / `myfinpro` |
+| `MYSQL_USER` | Database user | `myfinpro_staging` / `myfinpro_prod` |
+| `MYSQL_PASSWORD` | Database user password | `openssl rand -base64 48` |
+| `DATABASE_URL` | Full connection string | `mysql://USER:PASS@mysql:3306/DB_NAME` |
+| `JWT_SECRET` | JWT access token secret | `openssl rand -base64 48` |
+| `JWT_REFRESH_SECRET` | JWT refresh token secret | `openssl rand -base64 48` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
+| `CORS_ORIGIN` | Allowed CORS origins (prod) | `https://<YOUR_PRODUCTION_DOMAIN>` |
+| `NEXT_PUBLIC_API_URL` | Public API URL (prod) | `https://<YOUR_PRODUCTION_DOMAIN>/api` |
 
 ### 4.3 Create GitHub Environments
 
@@ -689,7 +645,7 @@ The server needs to pull Docker images from GitHub Container Registry.
 # Create a GitHub Personal Access Token (PAT) with `read:packages` scope
 # at: https://github.com/settings/tokens
 
-echo "YOUR_GITHUB_PAT" | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
 ```
 
 **Verification:**
@@ -720,84 +676,74 @@ ssh -i ~/.ssh/myfinpro-deploy -o StrictHostKeyChecking=no $DEPLOY_USER@$SERVER_I
 
 > ⏱ Estimated time: **15 minutes**
 
-### 5.1 Copy Project Files to the Server
+### 5.1 Trigger the Deploy Workflow
 
-The CI/CD pipeline copies deployment files automatically, but for the first deployment, copy them manually:
+The recommended way to do the first deployment is through GitHub Actions:
+
+1. Ensure all GitHub Secrets are configured (see Part 4)
+2. Push to the `develop` branch (for staging) or `main` branch (for production)
+3. Or go to **Actions → Deploy Staging → Run workflow** for manual trigger
+
+The workflow will automatically:
+1. Build and push Docker images to GHCR
+2. Copy deployment files to the server
+3. Write ephemeral `.env` from GitHub Secrets
+4. Pull images and start services with `docker compose up -d`
+5. Shred the `.env` file
+6. Verify health checks
+
+### 5.2 Manual First Deployment (Alternative)
+
+If you need to deploy manually without GitHub Actions for the first time:
 
 ```bash
 # (local) — from the repository root
-scp docker-compose.yml $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/
-scp docker-compose.staging.yml $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/
-scp docker-compose.production.yml $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/
-scp -r infrastructure/nginx/ $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/infrastructure/
-scp -r infrastructure/mysql/ $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/infrastructure/
-scp scripts/deploy.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
-scp scripts/rollback.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
-scp scripts/backup.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
-scp scripts/check-backup-age.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
+scp docker-compose.staging.yml $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/
+scp -r infrastructure/nginx/ $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/infrastructure/
+scp -r infrastructure/mysql/ $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/infrastructure/
+scp scripts/deploy.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/scripts/
+scp scripts/rollback.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/scripts/
 ```
 
-Make scripts executable:
+Then SSH in and run with required env vars:
 
 ```bash
 # (as deploy) — on the server
-chmod +x /opt/myfinpro/scripts/*.sh
+cd /opt/myfinpro/staging
+chmod +x scripts/*.sh
+
+# Export all required env vars
+export MYSQL_ROOT_PASSWORD="$(openssl rand -base64 48)"
+export MYSQL_DATABASE="myfinpro_staging"
+export MYSQL_USER="myfinpro_staging"
+export MYSQL_PASSWORD="$(openssl rand -base64 48)"
+export DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}"
+export JWT_SECRET="$(openssl rand -base64 48)"
+export JWT_REFRESH_SECRET="$(openssl rand -base64 48)"
+export REDIS_URL="redis://redis:6379"
+export NODE_ENV="staging"
+export API_PORT="3001"
+export CORS_ORIGIN="*"
+export LOG_LEVEL="debug"
+export SWAGGER_ENABLED="true"
+export RATE_LIMIT_TTL="60000"
+export RATE_LIMIT_MAX="60"
+export NEXT_PUBLIC_API_URL="/api"
+export API_INTERNAL_URL="http://api:3001"
+export GHCR_REPO="<YOUR_GITHUB_USERNAME>/myfinpro"
+export IMAGE_TAG="staging"
+
+# Run the deploy script (writes .env → compose up → shreds .env)
+./scripts/deploy.sh staging
 ```
 
-### 5.2 Pull Docker Images from GHCR
+> ⚠️ **Important:** After manual deployment, add these same secret values to GitHub Secrets so future CI/CD deployments use the same credentials.
 
-Choose the correct compose file for your environment:
+### 5.3 Verify Deployment
 
 ```bash
 # (as deploy)
-cd /opt/myfinpro
-
-# For staging:
-docker compose -f docker-compose.staging.yml pull
-
-# For production:
-docker compose -f docker-compose.production.yml pull
-```
-
-### 5.3 Start Database and Run Migrations
-
-```bash
-# (as deploy) — Example for staging
-cd /opt/myfinpro
-COMPOSE_FILE="docker-compose.staging.yml"
-
-# Start MySQL and Redis first
-docker compose -f $COMPOSE_FILE up -d mysql redis
-
-# Wait for MySQL to be healthy
-echo "Waiting for MySQL..."
-until docker compose -f $COMPOSE_FILE exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; do
-  sleep 2
-done
-echo "MySQL is ready."
-
-# Run Prisma migrations
-docker compose -f $COMPOSE_FILE run --rm api npx prisma migrate deploy --schema=prisma/schema.prisma
-```
-
-### 5.4 Start All Services
-
-```bash
-# (as deploy)
-cd /opt/myfinpro
-
-# For staging:
-docker compose -f docker-compose.staging.yml up -d
-
-# For production:
-docker compose -f docker-compose.production.yml up -d
-```
-
-### 5.5 Verify Deployment
-
-```bash
-# (as deploy)
-cd /opt/myfinpro
+cd /opt/myfinpro/staging
 
 # Check all containers are running
 docker compose -f docker-compose.staging.yml ps
@@ -818,14 +764,14 @@ docker compose -f docker-compose.staging.yml logs --tail=20 api
 docker compose -f docker-compose.staging.yml logs --tail=20 web
 ```
 
-### 5.6 Set Up DNS
+### 5.4 Set Up DNS
 
 Point your domain to the server IP. Add these DNS records with your DNS provider:
 
 | Type | Name | Value | TTL |
 |---|---|---|---|
-| `A` | `myfinpro.example.com` | `203.0.113.20` (production IP) | 300 |
-| `A` | `staging.myfinpro.example.com` | `203.0.113.10` (staging IP) | 300 |
+| `A` | `<YOUR_PRODUCTION_DOMAIN>` | `<YOUR_PRODUCTION_SERVER_IP>` | 300 |
+| `A` | `<YOUR_STAGING_DOMAIN>` | `<YOUR_STAGING_SERVER_IP>` | 300 |
 
 **Verification:**
 
@@ -850,20 +796,20 @@ If not already done in Part 5:
 
 ```bash
 # (local)
-scp scripts/backup.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
-scp scripts/check-backup-age.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/scripts/
-scp infrastructure/backup/backup.env.example $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/infrastructure/backup/
+scp scripts/backup.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/production/scripts/
+scp scripts/check-backup-age.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/production/scripts/
+scp infrastructure/backup/backup.env.example $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/production/infrastructure/backup/
 
 # (as deploy) — on the server
-chmod +x /opt/myfinpro/scripts/backup.sh
-chmod +x /opt/myfinpro/scripts/check-backup-age.sh
+chmod +x /opt/myfinpro/production/scripts/backup.sh
+chmod +x /opt/myfinpro/production/scripts/check-backup-age.sh
 ```
 
 ### 6.2 Configure Backup Environment
 
 ```bash
 # (as deploy) — on the server
-cd /opt/myfinpro
+cd /opt/myfinpro/production
 cp infrastructure/backup/backup.env.example infrastructure/backup/backup.env
 nano infrastructure/backup/backup.env
 ```
@@ -879,8 +825,8 @@ BACKUP_MAX_AGE_HOURS=26
 
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
-MYSQL_USER=myfinpro_prod      # Match your .env.production
-MYSQL_PASSWORD=your_db_pass   # Match your .env.production
+MYSQL_USER=myfinpro_prod      # Match your GitHub Secret
+MYSQL_PASSWORD=your_db_pass   # Match your GitHub Secret
 MYSQL_DATABASE=myfinpro
 
 # For Docker-based backups (recommended)
@@ -910,8 +856,8 @@ crontab infrastructure/backup/crontab
 
 This installs:
 
-- **Daily backup** at 2:00 AM: `/opt/myfinpro/scripts/backup.sh --docker`
-- **Backup age check** every 6 hours: `/opt/myfinpro/scripts/check-backup-age.sh --max-age 26`
+- **Daily backup** at 2:00 AM: `/opt/myfinpro/production/scripts/backup.sh --docker`
+- **Backup age check** every 6 hours: `/opt/myfinpro/production/scripts/check-backup-age.sh --max-age 26`
 
 **Verification:**
 
@@ -924,7 +870,7 @@ crontab -l
 
 ```bash
 # (as deploy) — Run a manual backup
-/opt/myfinpro/scripts/backup.sh --docker
+/opt/myfinpro/production/scripts/backup.sh --docker
 
 # Verify the backup was created
 ls -lh /var/backups/myfinpro/
@@ -937,10 +883,6 @@ echo "Latest backup: $LATEST_BACKUP"
 
 # Dry-run: just verify the backup is valid gzip
 gzip -t "$LATEST_BACKUP" && echo "Backup is valid gzip"
-
-# Actual restore command (use with caution):
-# gunzip -c "$LATEST_BACKUP" | docker exec -i myfinpro-staging-mysql \
-#   mysql -u root -p"$MYSQL_ROOT_PASSWORD" myfinpro_staging
 ```
 
 ### 6.5 Set Up Backup Monitoring
@@ -949,14 +891,9 @@ Test the backup age check:
 
 ```bash
 # (as deploy)
-/opt/myfinpro/scripts/check-backup-age.sh --max-age 26
+/opt/myfinpro/production/scripts/check-backup-age.sh --max-age 26
 # Expected: OK: Latest backup 'myfinpro_...' is 0h old (threshold: 26h)
 ```
-
-If you set `ALERT_WEBHOOK_URL` in `backup.env`, alerts will be sent when:
-
-- No backups are found
-- The latest backup is older than the threshold (26 hours)
 
 ---
 
@@ -966,7 +903,7 @@ If you set `ALERT_WEBHOOK_URL` in `backup.env`, alerts will be sent when:
 
 ```bash
 # (as deploy)
-cd /opt/myfinpro
+cd /opt/myfinpro/staging   # or /opt/myfinpro/production
 COMPOSE_FILE="docker-compose.staging.yml"  # or docker-compose.production.yml
 
 # View all service logs
@@ -1037,9 +974,6 @@ Add this line:
 # Remove unused images, containers, and networks
 docker system prune -af
 
-# Remove unused volumes (⚠️ careful — this deletes data volumes too)
-# docker volume prune -f
-
 # Remove dangling images only
 docker image prune -f
 
@@ -1054,37 +988,23 @@ Deployments are triggered automatically via GitHub Actions:
 - **Staging:** Push to `develop` branch → automatic deploy
 - **Production:** Push to `main` branch → requires approval → deploy
 
-For manual deployment:
-
-```bash
-# (as deploy) — on the server
-cd /opt/myfinpro
-./scripts/deploy.sh staging     # or production
-```
-
-Or trigger manually from GitHub: **Actions** → **Deploy Staging/Production** → **Run workflow**.
+For manual deployment, trigger from GitHub: **Actions** → **Deploy Staging/Production** → **Run workflow**.
 
 ### 7.5 Rollback a Failed Deployment
 
 ```bash
 # (as deploy) — on the server
-cd /opt/myfinpro
+cd /opt/myfinpro/staging   # or /opt/myfinpro/production
 
 # Automatic rollback (uses saved previous image tags)
 ./scripts/rollback.sh staging     # or production
-
-# Manual rollback to a specific image version
-# Edit the .env file and set IMAGE_TAG to the desired version:
-#   IMAGE_TAG=staging-abc1234
-# Then:
-docker compose -f docker-compose.staging.yml pull api web
-docker compose -f docker-compose.staging.yml up -d
 ```
 
 ### 7.6 Database Maintenance
 
 ```bash
 # (as deploy)
+cd /opt/myfinpro/production
 COMPOSE_FILE="docker-compose.production.yml"
 
 # Check migration status
@@ -1092,17 +1012,6 @@ docker compose -f $COMPOSE_FILE exec api npx prisma migrate status
 
 # Connect to MySQL shell
 docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p
-
-# Run OPTIMIZE TABLE (schedule during low traffic)
-docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p -e "OPTIMIZE TABLE myfinpro.your_table_name;"
-
-# Check slow queries
-docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p -e "SHOW VARIABLES LIKE 'slow_query%';"
-
-# Enable slow query log (add to MySQL command in compose)
-# --slow-query-log=1
-# --slow-query-log-file=/var/log/mysql/slow.log
-# --long-query-time=2
 ```
 
 ---
@@ -1114,7 +1023,7 @@ docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p -e "SHOW VARIABLES L
 | Setting | Staging | Production |
 |---|---|---|
 | Compose file | `docker-compose.staging.yml` | `docker-compose.production.yml` |
-| Env file | `.env.staging` | `.env.production` |
+| Deploy directory | `/opt/myfinpro/staging/` | `/opt/myfinpro/production/` |
 | Image tag | `staging` | `latest` / version tag |
 | MySQL port exposed | Yes (3306) | No (internal only) |
 | Redis port exposed | Yes (6379) | No (internal only) |
@@ -1135,35 +1044,7 @@ To protect the staging environment with basic auth via Nginx:
 sudo apt install -y apache2-utils
 
 # Create password file
-htpasswd -cb /opt/myfinpro/infrastructure/nginx/.htpasswd staging secretpassword
-```
-
-Add to your staging Nginx config (`infrastructure/nginx/conf.d/default.conf`):
-
-```nginx
-# Add inside the server block, before location blocks:
-auth_basic "Staging Environment";
-auth_basic_user_file /etc/nginx/.htpasswd;
-
-# Except for health checks:
-location = /health {
-    auth_basic off;
-    access_log off;
-    return 200 '{"status":"ok","service":"nginx"}';
-    add_header Content-Type application/json;
-}
-
-location /api/v1/health {
-    auth_basic off;
-    proxy_pass http://api_upstream/api/v1/health;
-}
-```
-
-And mount the htpasswd file in your staging compose under the nginx service:
-
-```yaml
-volumes:
-  - ./infrastructure/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+htpasswd -cb /opt/myfinpro/staging/infrastructure/nginx/.htpasswd staging secretpassword
 ```
 
 ### Lower Resource Requirements
@@ -1176,7 +1057,7 @@ Staging typically runs on a smaller server (1–2 vCPU, 2 GB RAM). The default s
 
 ### Resource Limits
 
-The production compose file (`docker-compose.production.yml`) already includes resource limits:
+The production compose file (`docker-compose.production.yml`) includes resource limits:
 
 | Service | CPU Limit | Memory Limit | Memory Reservation |
 |---|---|---|---|
@@ -1200,7 +1081,7 @@ logging:
     max-file: "5"
 ```
 
-For system-level log rotation, ensure the log directory is managed:
+For system-level log rotation:
 
 ```bash
 # (as root) — on the production server
@@ -1217,43 +1098,60 @@ cat > /etc/logrotate.d/myfinpro << 'EOF'
 EOF
 ```
 
-### Rate Limiting at Nginx Level
+---
 
-Add to your production Nginx config (inside the `http` block in `nginx.conf`):
+## Part 10: Security Architecture
 
-```nginx
-# Rate limiting
-limit_req_zone $binary_remote_addr zone=api_limit:10m rate=30r/m;
-limit_req_zone $binary_remote_addr zone=web_limit:10m rate=60r/m;
+### Ephemeral Secret Injection Pattern
+
+MyFinPro uses an **ephemeral secret injection** pattern for deployments:
+
+```mermaid
+sequenceDiagram
+    participant GS as GitHub Secrets
+    participant GA as GitHub Actions
+    participant SSH as SSH Session
+    participant Srv as Server
+    participant DC as Docker Compose
+
+    GS->>GA: Secrets via envs parameter
+    GA->>SSH: appleboy/ssh-action
+    SSH->>Srv: Write .env (chmod 600)
+    SSH->>DC: docker compose up -d
+    DC->>DC: Read env_file: .env
+    SSH->>Srv: shred -vfz -n 3 .env
+    Note over Srv: Secrets no longer on disk
 ```
 
-Apply in `conf.d/production-ssl.conf`:
+### Why This Pattern?
 
-```nginx
-location /api/ {
-    limit_req zone=api_limit burst=10 nodelay;
-    # ... existing proxy settings ...
-}
+| Threat | Mitigation |
+|--------|------------|
+| Secrets in git history | Never committed — injected at deploy time from GitHub Secrets |
+| Secrets persisted on server disk | `.env` is shredded after `docker compose up` |
+| `docker inspect` leaking secrets | Using `env_file:` directive instead of `environment:` |
+| Secret rotation complexity | Update GitHub Secret → redeploy (no SSH needed) |
+| Audit trail | GitHub Secrets provides built-in audit logging |
 
-location / {
-    limit_req zone=web_limit burst=20 nodelay;
-    # ... existing proxy settings ...
-}
-```
+### What This Means for Server Setup
 
-### Higher Security Settings
+- **No `.env` files are created during server provisioning**
+- **No secrets need to be manually placed on the server**
+- All secrets are managed in **GitHub → Settings → Secrets and variables → Actions**
+- The deploy workflow handles writing and shredding the `.env` file automatically
+- For manual deployments, export env vars and use `scripts/deploy.sh` which handles the secure pattern
 
-Production-specific hardening already in the compose file:
+### How to Rotate Secrets
 
-- No ports exposed except 80/443 (Nginx only)
-- Redis and MySQL are internal-only (no exposed ports)
-- Swagger is disabled (`SWAGGER_ENABLED=false`)
-- Lower rate limits (`THROTTLE_LIMIT=30` vs. 60 for staging)
-- Log level set to `warn` instead of `debug`
+1. Go to **GitHub → Settings → Secrets and variables → Actions**
+2. Update the secret value (e.g., `JWT_SECRET`)
+3. Trigger a new deployment (push to branch or manual dispatch)
+4. The new secret value is injected on the next deploy
+5. No need to SSH into any server
 
 ---
 
-## Part 10: Troubleshooting
+## Part 11: Troubleshooting
 
 ### Common Issues and Solutions
 
@@ -1275,7 +1173,7 @@ docker images | grep myfinpro
 
 ```bash
 # Re-authenticate with GHCR
-echo "$GITHUB_PAT" | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
 
 # Verify the image exists
 docker pull ghcr.io/$GITHUB_REPO/api:staging
@@ -1357,67 +1255,6 @@ certbot certonly --standalone -d $DOMAIN --force-renewal
 docker exec myfinpro-prod-nginx nginx -s reload
 ```
 
-### How to Check Service Status
-
-```bash
-# All services
-docker compose -f $COMPOSE_FILE ps
-
-# Specific service
-docker compose -f $COMPOSE_FILE ps api
-
-# Detailed container inspection
-docker inspect myfinpro-prod-api | jq '.[0].State'
-```
-
-### How to View Logs
-
-```bash
-# All services
-docker compose -f $COMPOSE_FILE logs
-
-# Follow specific service
-docker compose -f $COMPOSE_FILE logs -f api
-
-# Since a timestamp
-docker compose -f $COMPOSE_FILE logs --since="1h" api
-
-# Deployment logs on the server
-ls -la /opt/myfinpro/deploy-*.log
-ls -la /opt/myfinpro/rollback-*.log
-tail -50 /opt/myfinpro/deploy-*.log
-```
-
-### How to Restart Services
-
-```bash
-# Restart a single service
-docker compose -f $COMPOSE_FILE restart api
-
-# Restart all services
-docker compose -f $COMPOSE_FILE restart
-
-# Full stop and start (recreate containers)
-docker compose -f $COMPOSE_FILE down
-docker compose -f $COMPOSE_FILE up -d
-```
-
-### How to Connect to the Database
-
-```bash
-# Interactive MySQL shell (as root user)
-docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p
-
-# Interactive MySQL shell (as app user)
-docker compose -f $COMPOSE_FILE exec mysql mysql -u myfinpro_prod -p myfinpro
-
-# Run a single query
-docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p -e "SELECT COUNT(*) FROM myfinpro.users;"
-
-# From the host (staging only — port exposed)
-mysql -h 127.0.0.1 -P 3306 -u myfinpro_staging -p myfinpro_staging
-```
-
 ---
 
 ## Quick Reference
@@ -1426,11 +1263,10 @@ mysql -h 127.0.0.1 -P 3306 -u myfinpro_staging -p myfinpro_staging
 
 | Path | Description |
 |---|---|
-| `/opt/myfinpro/` | Application root directory |
-| `/opt/myfinpro/.env.staging` | Staging environment config |
-| `/opt/myfinpro/.env.production` | Production environment config |
-| `/opt/myfinpro/scripts/` | Deploy, rollback, backup scripts |
-| `/opt/myfinpro/infrastructure/` | Nginx configs, MySQL init, backup config |
+| `/opt/myfinpro/staging/` | Staging application root |
+| `/opt/myfinpro/production/` | Production application root |
+| `/opt/myfinpro/*/scripts/` | Deploy, rollback, backup scripts |
+| `/opt/myfinpro/*/infrastructure/` | Nginx configs, MySQL init |
 | `/var/backups/myfinpro/` | Database backups |
 | `/var/log/myfinpro/` | Application logs (backup, cron) |
 | `/etc/letsencrypt/` | SSL certificates |
@@ -1438,16 +1274,8 @@ mysql -h 127.0.0.1 -P 3306 -u myfinpro_staging -p myfinpro_staging
 ### Key Commands
 
 ```bash
-# Deploy
-cd /opt/myfinpro && ./scripts/deploy.sh staging
-
-# Rollback
-cd /opt/myfinpro && ./scripts/rollback.sh staging
-
-# Backup
-/opt/myfinpro/scripts/backup.sh --docker
-
 # View status
+cd /opt/myfinpro/staging
 docker compose -f docker-compose.staging.yml ps
 
 # View logs
@@ -1456,6 +1284,11 @@ docker compose -f docker-compose.staging.yml logs -f api
 # Health check
 curl -sf http://localhost/api/v1/health | jq .
 ```
+
+### Secret Management
+
+All secrets managed in GitHub → Settings → Secrets and variables → Actions.
+See [Part 4](#part-4-github-actions--secrets-configuration) for full list.
 
 ### Health Check Endpoints
 

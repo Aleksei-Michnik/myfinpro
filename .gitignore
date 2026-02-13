@@ -14,8 +14,7 @@ out/
 .env.staging
 .env.production
 !.env.example
-!.env.staging.example
-!.env.production.example
+!.env.*.template
 !apps/*/.env.example
 
 # ── IDE ──

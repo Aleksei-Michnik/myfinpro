@@ -1,5 +1,7 @@
 # docker-compose.production.yml
-# Production deployment — pre-built GHCR images, resource limits, hardened settings
+# Production deployment — standalone compose file with ephemeral secret injection
+# Secrets are injected via env_file (.env) written by the deploy workflow and shredded after startup
+# Working directory: /opt/myfinpro/production/
 # Usage: docker compose -f docker-compose.production.yml up -d
 
 services:
@@ -8,19 +10,16 @@ services:
     image: mysql:8.4
     container_name: myfinpro-prod-mysql
     restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    env_file:
+      - .env
     # No exposed ports in production — internal only
     volumes:
-      - mysql_data:/var/lib/mysql
+      - myfinpro-production-mysql:/var/lib/mysql
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
-      - myfinpro-net
+      - myfinpro-production
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,9 +50,9 @@ services:
     restart: unless-stopped
     # No exposed ports in production — internal only
     volumes:
-      - redis_data:/data
+      - myfinpro-production-redis:/data
     networks:
-      - myfinpro-net
+      - myfinpro-production
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -79,15 +78,10 @@ services:
     container_name: myfinpro-prod-api
     restart: unless-stopped
     env_file:
-      - .env.production
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      - .env
     # No exposed ports — accessed through Nginx only
     networks:
-      - myfinpro-net
+      - myfinpro-production
     depends_on:
       mysql:
         condition: service_healthy
@@ -118,13 +112,10 @@ services:
     container_name: myfinpro-prod-web
     restart: unless-stopped
     env_file:
-      - .env.production
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      - .env
     # No exposed ports — accessed through Nginx only
     networks:
-      - myfinpro-net
+      - myfinpro-production
     depends_on:
       api:
         condition: service_healthy
@@ -161,7 +152,7 @@ services:
       # Uncomment when SSL is configured:
       # - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
-      - myfinpro-net
+      - myfinpro-production
     depends_on:
       api:
         condition: service_healthy
@@ -185,45 +176,12 @@ services:
         max-size: "10m"
         max-file: "5"
 
-  # ───── Database Backup (Optional) ─────
-  # Uncomment to enable scheduled backups via a lightweight cron container.
-  # Alternatively, install the crontab on the host: crontab infrastructure/backup/crontab
-  #
-  # backup:
-  #   image: mysql:8.4
-  #   container_name: myfinpro-prod-backup
-  #   restart: unless-stopped
-  #   entrypoint: /bin/sh
-  #   command: >
-  #     -c "apt-get update && apt-get install -y cron &&
-  #     echo '0 2 * * * /opt/myfinpro/scripts/backup.sh --docker >> /var/log/myfinpro/backup.log 2>&1' | crontab - &&
-  #     echo '0 */6 * * * /opt/myfinpro/scripts/check-backup-age.sh --max-age 26 >> /var/log/myfinpro/backup-check.log 2>&1' | crontab - &&
-  #     cron -f"
-  #   env_file:
-  #     - .env.production
-  #     - infrastructure/backup/backup.env
-  #   volumes:
-  #     - ./scripts:/opt/myfinpro/scripts:ro
-  #     - ./infrastructure/backup:/opt/myfinpro/infrastructure/backup:ro
-  #     - backup_data:/var/backups/myfinpro
-  #     - backup_logs:/var/log/myfinpro
-  #   networks:
-  #     - myfinpro-net
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 256M
-  #         cpus: "0.25"
-
 volumes:
-  mysql_data:
+  myfinpro-production-mysql:
     driver: local
-  redis_data:
+  myfinpro-production-redis:
     driver: local
 
 networks:
-  myfinpro-net:
+  myfinpro-production:
     driver: bridge

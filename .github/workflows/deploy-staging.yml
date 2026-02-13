@@ -1,5 +1,6 @@
 # .github/workflows/deploy-staging.yml
 # Staging Deployment — Triggered on push to develop or manual dispatch
+# Security: GitHub Secrets → SSH → write temp .env → compose up → shred .env
 
 name: Deploy Staging
 
@@ -106,25 +107,84 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
-          source: "docker-compose.yml,docker-compose.staging.yml,infrastructure/nginx/,scripts/deploy.sh"
-          target: /opt/myfinpro
+          source: "docker-compose.staging.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh"
+          target: /opt/myfinpro/staging
           overwrite: true
 
-      - name: Deploy to staging
+      - name: Inject secrets, deploy, and shred
         uses: appleboy/ssh-action@v1
         env:
-          DEPLOY_ENV: staging
+          # ── Database secrets ──
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # ── Auth secrets ──
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          # ── Redis ──
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          # ── Non-secret config ──
+          NODE_ENV: staging
+          API_PORT: "3001"
+          CORS_ORIGIN: "*"
+          LOG_LEVEL: debug
+          SWAGGER_ENABLED: "true"
+          RATE_LIMIT_TTL: "60000"
+          RATE_LIMIT_MAX: "60"
+          NEXT_PUBLIC_API_URL: /api
+          API_INTERNAL_URL: http://api:3001
+          # ── Image config ──
+          GHCR_REPO: ${{ secrets.GHCR_REPO }}
           IMAGE_TAG: staging
-          GITHUB_SHA_SHORT: ${{ needs.build-and-push.outputs.sha_short || '' }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
-          envs: DEPLOY_ENV,IMAGE_TAG
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGIN,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG
           script: |
-            cd /opt/myfinpro
-            chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh staging
+            set -euo pipefail
+            DEPLOY_DIR="/opt/myfinpro/staging"
+            cd "$DEPLOY_DIR"
+
+            echo "── Writing ephemeral .env ──"
+            cat > .env << 'ENVEOF'
+            MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE=${MYSQL_DATABASE}
+            MYSQL_USER=${MYSQL_USER}
+            MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            DATABASE_URL=${DATABASE_URL}
+            JWT_SECRET=${JWT_SECRET}
+            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            REDIS_URL=${REDIS_URL}
+            NODE_ENV=${NODE_ENV}
+            API_PORT=${API_PORT}
+            CORS_ORIGIN=${CORS_ORIGIN}
+            LOG_LEVEL=${LOG_LEVEL}
+            SWAGGER_ENABLED=${SWAGGER_ENABLED}
+            RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
+            RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
+            NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+            API_INTERNAL_URL=${API_INTERNAL_URL}
+            GHCR_REPO=${GHCR_REPO}
+            IMAGE_TAG=${IMAGE_TAG}
+            ENVEOF
+            chmod 600 .env
+
+            echo "── Pulling latest images ──"
+            docker compose -f docker-compose.staging.yml pull api web
+
+            echo "── Starting services ──"
+            docker compose -f docker-compose.staging.yml up -d
+
+            echo "── Shredding .env ──"
+            shred -vfz -n 3 .env 2>/dev/null || rm -f .env
+
+            echo "── Cleaning up dangling images ──"
+            docker image prune -f 2>/dev/null || true
+
+            echo "✅ Staging deployment complete"
 
       - name: Verify deployment health
         uses: appleboy/ssh-action@v1
@@ -166,7 +226,7 @@ jobs:
 
             echo "🚀 Staging deployment verified successfully!"
 
-      - name: Notify on failure
+      - name: Rollback on failure
         if: failure()
         uses: appleboy/ssh-action@v1
         with:
@@ -175,7 +235,7 @@ jobs:
           key: ${{ secrets.STAGING_SSH_KEY }}
           script: |
             echo "⚠️ Staging deployment failed — initiating rollback..."
-            cd /opt/myfinpro
+            cd /opt/myfinpro/staging
             if [ -f scripts/rollback.sh ]; then
               chmod +x scripts/rollback.sh
               ./scripts/rollback.sh staging

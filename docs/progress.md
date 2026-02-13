@@ -179,6 +179,13 @@
 - ✅ Production deploy with manual approval gate
 - ✅ Zero-downtime deployment strategy
 
+**Security improvement (post-Phase 0):**
+- Migrated to ephemeral secret injection pattern — GitHub Secrets as single source of truth
+- Deploy workflow: write temp `.env` → `docker compose up` → `shred .env`
+- Docker Compose uses `env_file:` directive (not `environment:`) to prevent `docker inspect` exposure
+- Replaced `.env.*.example` with `.env.*.template` (schema-only, no sample values)
+- Updated all deployment documentation and server setup guides
+
 ---
 
 ### Iteration 0.6: Backup Strategy
