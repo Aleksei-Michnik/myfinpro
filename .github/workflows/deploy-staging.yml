@@ -73,7 +73,6 @@ jobs:
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging-${{ steps.meta.outputs.sha_short }}
           no-cache: true
-          cache-to: type=gha,mode=max,scope=api-staging
 
       - name: Build and push Web image
         uses: docker/build-push-action@v6

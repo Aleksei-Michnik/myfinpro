@@ -24,8 +24,10 @@ FROM dependencies AS build
 COPY . .
 # Build shared package, generate Prisma client, then build API
 RUN pnpm --filter shared run build && \
+    ls -la /app/packages/shared/dist/ && \
     pnpm --filter api exec prisma generate && \
-    pnpm --filter api run build
+    pnpm --filter api run build && \
+    ls -la /app/apps/api/dist/
 
 # ───── Production Stage ─────
 FROM base AS production
