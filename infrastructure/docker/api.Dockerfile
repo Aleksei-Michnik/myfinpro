@@ -23,11 +23,10 @@ CMD ["pnpm", "run", "start:dev"]
 FROM dependencies AS build
 COPY . .
 # Build shared package, generate Prisma client, then build API
-RUN pnpm --filter shared run build && \
-    ls -la /app/packages/shared/dist/ && \
+RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo /app/apps/api/tsconfig.build.tsbuildinfo /app/apps/api/tsconfig.tsbuildinfo && \
+    pnpm --filter shared run build && \
     pnpm --filter api exec prisma generate && \
-    pnpm --filter api run build && \
-    ls -la /app/apps/api/dist/
+    pnpm --filter api run build
 
 # ───── Production Stage ─────
 FROM base AS production

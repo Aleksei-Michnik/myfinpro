@@ -22,7 +22,10 @@ CMD ["pnpm", "run", "dev"]
 # ───── Build Stage ─────
 FROM dependencies AS build
 COPY . .
-RUN pnpm --filter web run build
+# Remove stale tsbuildinfo (incremental builds skip emit if present without dist)
+RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \
+    pnpm --filter shared run build && \
+    pnpm --filter web run build
 
 # ───── Production Stage ─────
 FROM node:22-alpine AS production
