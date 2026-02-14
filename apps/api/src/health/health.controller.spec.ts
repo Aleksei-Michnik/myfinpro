@@ -41,7 +41,9 @@ describe('HealthController', () => {
         {
           provide: PrismaService,
           useValue: {
-            $queryRawUnsafe: jest.fn().mockResolvedValue([{ 1: 1 }]),
+            healthCheck: {
+              findFirst: jest.fn().mockResolvedValue(null),
+            },
           },
         },
       ],

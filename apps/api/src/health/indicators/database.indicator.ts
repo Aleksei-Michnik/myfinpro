@@ -11,7 +11,9 @@ export class DatabaseHealthIndicator extends HealthIndicator {
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      // Use findFirst on a known model as a connectivity check
+      // This works reliably with Prisma driver adapters
+      await this.prisma.healthCheck.findFirst();
       return this.getStatus(key, true);
     } catch (error) {
       throw new HealthCheckError(
