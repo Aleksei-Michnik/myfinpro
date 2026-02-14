@@ -135,7 +135,7 @@ jobs:
           NEXT_PUBLIC_API_URL: /api
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──
-          GHCR_REPO: ${{ secrets.GHCR_REPO }}
+          GHCR_REPO: aleksei-michnik/myfinpro
           IMAGE_TAG: staging
         with:
           host: ${{ secrets.STAGING_HOST }}

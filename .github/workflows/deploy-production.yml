@@ -171,7 +171,7 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ secrets.PRODUCTION_NEXT_PUBLIC_API_URL }}
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──
-          GHCR_REPO: ${{ secrets.GHCR_REPO }}
+          GHCR_REPO: aleksei-michnik/myfinpro
           IMAGE_TAG: latest
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
