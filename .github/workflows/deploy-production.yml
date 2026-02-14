@@ -149,26 +149,26 @@ jobs:
       - name: Inject secrets, deploy, and shred
         uses: appleboy/ssh-action@v1
         env:
-          # ── Database secrets ──
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
-          MYSQL_USER: ${{ secrets.MYSQL_USER }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # ── Database secrets (mapped from PRODUCTION_* GitHub secrets) ──
+          MYSQL_ROOT_PASSWORD: ${{ secrets.PRODUCTION_MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.PRODUCTION_MYSQL_DATABASE }}
+          MYSQL_USER: ${{ secrets.PRODUCTION_MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.PRODUCTION_MYSQL_PASSWORD }}
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           # ── Auth secrets ──
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.PRODUCTION_JWT_REFRESH_SECRET }}
           # ── Redis ──
-          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
           # ── Non-secret config ──
           NODE_ENV: production
           API_PORT: "3001"
-          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          CORS_ORIGIN: ${{ secrets.PRODUCTION_CORS_ORIGIN }}
           LOG_LEVEL: warn
           SWAGGER_ENABLED: "false"
           RATE_LIMIT_TTL: "60000"
           RATE_LIMIT_MAX: "30"
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.PRODUCTION_NEXT_PUBLIC_API_URL }}
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──
           GHCR_REPO: ${{ secrets.GHCR_REPO }}
@@ -184,7 +184,7 @@ jobs:
             cd "$DEPLOY_DIR"
 
             echo "── Writing ephemeral .env ──"
-            cat > .env << 'ENVEOF'
+            cat > .env << ENVEOF
             MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
             MYSQL_DATABASE=${MYSQL_DATABASE}
             MYSQL_USER=${MYSQL_USER}
