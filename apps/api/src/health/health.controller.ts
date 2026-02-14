@@ -31,7 +31,7 @@ export class HealthController {
   check(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.isHealthy('database'),
-      () => this.memory.isHealthy('memory', 80),
+      () => this.memory.isHealthy('memory', 95),
     ]);
   }
 
@@ -41,7 +41,7 @@ export class HealthController {
   checkDetails(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.isHealthy('database'),
-      () => this.memory.isHealthy('memory', 80),
+      () => this.memory.isHealthy('memory', 95),
       () => this.redis.isHealthy('redis'),
       () =>
         this.disk.checkStorage('disk', {
