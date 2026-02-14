@@ -72,7 +72,7 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging-${{ steps.meta.outputs.sha_short }}
-          cache-from: type=gha,scope=api-staging
+          no-cache: true
           cache-to: type=gha,mode=max,scope=api-staging
 
       - name: Build and push Web image
