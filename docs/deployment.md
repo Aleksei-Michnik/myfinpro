@@ -16,10 +16,10 @@ GitHub Secrets (source of truth)
 
 **Environments:**
 
-| Environment | Branch    | Trigger          | Compose File                    | Deploy Dir                    |
-|-------------|-----------|------------------|---------------------------------|-------------------------------|
-| Staging     | `develop` | Push / Manual    | `docker-compose.staging.yml`    | `/opt/myfinpro/staging/`      |
-| Production  | `main`    | Push + Approval  | `docker-compose.production.yml` | `/opt/myfinpro/production/`   |
+| Environment | Branch    | Trigger         | Compose File                    | Deploy Dir                  |
+| ----------- | --------- | --------------- | ------------------------------- | --------------------------- |
+| Staging     | `develop` | Push / Manual   | `docker-compose.staging.yml`    | `/opt/myfinpro/staging/`    |
+| Production  | `main`    | Push + Approval | `docker-compose.production.yml` | `/opt/myfinpro/production/` |
 
 ---
 
@@ -38,13 +38,13 @@ Secrets are **never stored persistently** on the server. The deployment follows 
 
 ### Why This Pattern?
 
-| Concern | Solution |
-|---------|----------|
-| Secrets in git history | Never committed — injected at deploy time |
-| Secrets on server disk | Shredded after compose up |
+| Concern                   | Solution                                    |
+| ------------------------- | ------------------------------------------- |
+| Secrets in git history    | Never committed — injected at deploy time   |
+| Secrets on server disk    | Shredded after compose up                   |
 | `docker inspect` exposure | Using `env_file:` instead of `environment:` |
-| Secret rotation | Update GitHub Secret → redeploy |
-| Audit trail | GitHub Secrets audit log |
+| Secret rotation           | Update GitHub Secret → redeploy             |
+| Audit trail               | GitHub Secrets audit log                    |
 
 ---
 
@@ -83,49 +83,49 @@ Configure these in **Settings → Secrets and variables → Actions**.
 
 ### SSH & Infrastructure Secrets (per environment)
 
-| Secret             | Description                              |
-|--------------------|------------------------------------------|
-| `STAGING_HOST`     | Staging server IP or hostname            |
-| `STAGING_USER`     | SSH username on staging server           |
-| `STAGING_SSH_KEY`  | Private SSH key for staging server       |
-| `PRODUCTION_HOST`  | Production server IP or hostname         |
-| `PRODUCTION_USER`  | SSH username on production server        |
-| `PRODUCTION_SSH_KEY` | Private SSH key for production server  |
-| `GHCR_REPO`        | GitHub Container Registry repo (lowercase, e.g., `owner/myfinpro`) |
+| Secret               | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `STAGING_HOST`       | Staging server IP or hostname                                      |
+| `STAGING_USER`       | SSH username on staging server                                     |
+| `STAGING_SSH_KEY`    | Private SSH key for staging server                                 |
+| `PRODUCTION_HOST`    | Production server IP or hostname                                   |
+| `PRODUCTION_USER`    | SSH username on production server                                  |
+| `PRODUCTION_SSH_KEY` | Private SSH key for production server                              |
+| `GHCR_REPO`          | GitHub Container Registry repo (lowercase, e.g., `owner/myfinpro`) |
 
 ### Application Secrets (per environment)
 
 These must be configured in each GitHub Environment (`staging` / `production`):
 
-| Secret                 | Description                                          | Example |
-|------------------------|------------------------------------------------------|---------|
-| `MYSQL_ROOT_PASSWORD`  | MySQL root password                                  | `openssl rand -base64 48` |
-| `MYSQL_DATABASE`       | Database name                                        | `myfinpro_staging` |
-| `MYSQL_USER`           | Database user                                        | `myfinpro_staging` |
-| `MYSQL_PASSWORD`       | Database user password                               | `openssl rand -base64 48` |
-| `DATABASE_URL`         | Full MySQL connection string                         | `mysql://user:pass@mysql:3306/db` |
-| `JWT_SECRET`           | JWT access token signing secret (min 32 chars)       | `openssl rand -base64 48` |
-| `JWT_REFRESH_SECRET`   | JWT refresh token signing secret (min 32 chars)      | `openssl rand -base64 48` |
-| `REDIS_URL`            | Redis connection string                              | `redis://redis:6379` |
-| `CORS_ORIGIN`          | Allowed CORS origins (production only)               | `https://myfinpro.example.com` |
-| `NEXT_PUBLIC_API_URL`  | Public API URL (production only)                     | `https://myfinpro.example.com/api` |
+| Secret                | Description                                     | Example                            |
+| --------------------- | ----------------------------------------------- | ---------------------------------- |
+| `MYSQL_ROOT_PASSWORD` | MySQL root password                             | `openssl rand -base64 48`          |
+| `MYSQL_DATABASE`      | Database name                                   | `myfinpro_staging`                 |
+| `MYSQL_USER`          | Database user                                   | `myfinpro_staging`                 |
+| `MYSQL_PASSWORD`      | Database user password                          | `openssl rand -base64 48`          |
+| `DATABASE_URL`        | Full MySQL connection string                    | `mysql://user:pass@mysql:3306/db`  |
+| `JWT_SECRET`          | JWT access token signing secret (min 32 chars)  | `openssl rand -base64 48`          |
+| `JWT_REFRESH_SECRET`  | JWT refresh token signing secret (min 32 chars) | `openssl rand -base64 48`          |
+| `REDIS_URL`           | Redis connection string                         | `redis://redis:6379`               |
+| `CORS_ORIGIN`         | Allowed CORS origins (production only)          | `https://myfinpro.example.com`     |
+| `NEXT_PUBLIC_API_URL` | Public API URL (production only)                | `https://myfinpro.example.com/api` |
 
 ### Non-Secret Config (hardcoded in workflow)
 
 These values are set directly in the workflow files:
 
-| Variable            | Staging Value       | Production Value     |
-|---------------------|---------------------|----------------------|
-| `NODE_ENV`          | `staging`           | `production`         |
-| `API_PORT`          | `3001`              | `3001`               |
-| `CORS_ORIGIN`       | `*`                 | From secret          |
-| `LOG_LEVEL`         | `debug`             | `warn`               |
-| `SWAGGER_ENABLED`   | `true`              | `false`              |
-| `RATE_LIMIT_TTL`    | `60000`             | `60000`              |
-| `RATE_LIMIT_MAX`    | `60`                | `30`                 |
-| `NEXT_PUBLIC_API_URL` | `/api`            | From secret          |
-| `API_INTERNAL_URL`  | `http://api:3001`   | `http://api:3001`    |
-| `IMAGE_TAG`         | `staging`           | `latest`             |
+| Variable              | Staging Value     | Production Value  |
+| --------------------- | ----------------- | ----------------- |
+| `NODE_ENV`            | `staging`         | `production`      |
+| `API_PORT`            | `3001`            | `3001`            |
+| `CORS_ORIGIN`         | `*`               | From secret       |
+| `LOG_LEVEL`           | `debug`           | `warn`            |
+| `SWAGGER_ENABLED`     | `true`            | `false`           |
+| `RATE_LIMIT_TTL`      | `60000`           | `60000`           |
+| `RATE_LIMIT_MAX`      | `60`              | `30`              |
+| `NEXT_PUBLIC_API_URL` | `/api`            | From secret       |
+| `API_INTERNAL_URL`    | `http://api:3001` | `http://api:3001` |
+| `IMAGE_TAG`           | `staging`         | `latest`          |
 
 ### GitHub Environments
 
@@ -152,6 +152,7 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 ### Deploy to Staging
 
 **Automatic:** Push to the `develop` branch. The pipeline will:
+
 1. Wait for CI to pass
 2. Build & push Docker images tagged `staging`
 3. SSH into the staging server
@@ -165,6 +166,7 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 ### Deploy to Production
 
 **Automatic:** Push to the `main` branch (typically via PR merge from `develop`). The pipeline will:
+
 1. Require manual approval in the `production` environment
 2. Build & push Docker images tagged `latest` and version tag
 3. SSH into the production server
@@ -174,6 +176,7 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 7. Verify health checks
 
 **Manual:** Go to **Actions → Deploy Production → Run workflow**:
+
 - Type `deploy-production` in the confirmation field
 - Optionally provide a version tag (e.g., `v1.2.3`)
 
@@ -211,6 +214,7 @@ cd /opt/myfinpro/staging    # or /opt/myfinpro/production
 ```
 
 The rollback script:
+
 1. Stops the current API and Web containers
 2. Reverts to previously cached Docker images
 3. Restarts all services
@@ -247,8 +251,8 @@ docker stats --no-stream
 
 ### Health Check Endpoints
 
-| Service | URL                             |
-|---------|----------------------------------|
+| Service | URL                              |
+| ------- | -------------------------------- |
 | API     | `http://localhost/api/v1/health` |
 | Web     | `http://localhost/`              |
 | Nginx   | `http://localhost/health`        |

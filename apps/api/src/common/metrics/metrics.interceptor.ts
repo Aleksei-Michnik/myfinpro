@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -37,11 +32,7 @@ export class MetricsInterceptor implements NestInterceptor {
     );
   }
 
-  private recordMetric(
-    request: Request,
-    response: Response,
-    startTime: number,
-  ): void {
+  private recordMetric(request: Request, response: Response, startTime: number): void {
     this.metricsService.recordRequest({
       method: request.method,
       path: request.url,

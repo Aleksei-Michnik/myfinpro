@@ -1,8 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  HealthIndicator,
-  HealthIndicatorResult,
-} from '@nestjs/terminus';
+import { HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
 
 /**
  * Placeholder Redis health indicator.

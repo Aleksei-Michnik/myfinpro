@@ -107,7 +107,7 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
-          source: "docker-compose.staging.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh"
+          source: 'docker-compose.staging.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh'
           target: /opt/myfinpro/staging
           overwrite: true
 
@@ -127,12 +127,12 @@ jobs:
           REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
           # ── Non-secret config ──
           NODE_ENV: staging
-          API_PORT: "3001"
-          CORS_ORIGIN: "*"
+          API_PORT: '3001'
+          CORS_ORIGIN: '*'
           LOG_LEVEL: debug
-          SWAGGER_ENABLED: "true"
-          RATE_LIMIT_TTL: "60000"
-          RATE_LIMIT_MAX: "60"
+          SWAGGER_ENABLED: 'true'
+          RATE_LIMIT_TTL: '60000'
+          RATE_LIMIT_MAX: '60'
           NEXT_PUBLIC_API_URL: /api
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──

@@ -12,14 +12,15 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - '${MYSQL_PORT:-3306}:3306'
     volumes:
       - mysql_data:/var/lib/mysql
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - myfinpro-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test:
+        ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-p${MYSQL_ROOT_PASSWORD}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,13 +36,13 @@ services:
     container_name: myfinpro-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     networks:
       - myfinpro-net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,7 +64,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - "${API_PORT:-3001}:3001"
+      - '${API_PORT:-3001}:3001'
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages:/app/packages
@@ -77,7 +78,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/api/v1/health',
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -97,7 +106,7 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost/api
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - '${WEB_PORT:-3000}:3000'
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages
@@ -110,7 +119,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -122,7 +131,7 @@ services:
     container_name: myfinpro-nginx
     restart: unless-stopped
     ports:
-      - "${NGINX_PORT:-80}:80"
+      - '${NGINX_PORT:-80}:80'
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
@@ -134,7 +143,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
       interval: 15s
       timeout: 5s
       retries: 3

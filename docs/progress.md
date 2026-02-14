@@ -12,19 +12,19 @@
 
 ### Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend (Web) | Next.js 15 + TypeScript |
-| Frontend i18n | next-intl |
-| Backend API | NestJS + TypeScript |
-| Database | MySQL + Prisma |
-| Cache / Queue | Redis + BullMQ |
-| Telegram Bot | grammy.js |
-| API Docs | @nestjs/swagger |
-| Testing | Jest, Vitest, Playwright, Testcontainers |
-| CI/CD | GitHub Actions |
-| Infrastructure | Docker Compose + Nginx |
-| Rate Limiting | @nestjs/throttler |
+| Layer          | Technology                               |
+| -------------- | ---------------------------------------- |
+| Frontend (Web) | Next.js 15 + TypeScript                  |
+| Frontend i18n  | next-intl                                |
+| Backend API    | NestJS + TypeScript                      |
+| Database       | MySQL + Prisma                           |
+| Cache / Queue  | Redis + BullMQ                           |
+| Telegram Bot   | grammy.js                                |
+| API Docs       | @nestjs/swagger                          |
+| Testing        | Jest, Vitest, Playwright, Testcontainers |
+| CI/CD          | GitHub Actions                           |
+| Infrastructure | Docker Compose + Nginx                   |
+| Rate Limiting  | @nestjs/throttler                        |
 
 ### Architecture
 
@@ -36,23 +36,23 @@
 
 ## 2. Implementation Progress
 
-| Phase | Name | Iterations | Status | Completion Date |
-|-------|------|-----------|--------|----------------|
-| 0 | Foundation | 8/8 | ✅ Complete | 2026-02-13 |
-| 1 | Basic Authentication | 0/12 | ⬜ Not Started | — |
-| 2 | Google Authentication | 0/4 | ⬜ Not Started | — |
-| 3 | Telegram Authentication | 0/4 | ⬜ Not Started | — |
-| 4 | Family/Group Management | 0/14 | ⬜ Not Started | — |
-| 5 | Income Management | 0/10 | ⬜ Not Started | — |
-| 6 | Expense Management | 0/13 | ⬜ Not Started | — |
-| 7 | Budgets & Spending Targets | 0/10 | ⬜ Not Started | — |
-| 8 | Receipt Processing | 0/8 | ⬜ Not Started | — |
-| 9 | Purchase Analytics | 0/8 | ⬜ Not Started | — |
-| 10 | Telegram Bot | 0/16 | ⬜ Not Started | — |
-| 11 | Telegram Mini App | 0/10 | ⬜ Not Started | — |
-| 12 | Bot Receipt Processing | 0/8 | ⬜ Not Started | — |
-| 13 | Bot Analytics | 0/4 | ⬜ Not Started | — |
-| 14 | LLM Assistant | 0/8 | ⬜ Not Started | — |
+| Phase | Name                       | Iterations | Status         | Completion Date |
+| ----- | -------------------------- | ---------- | -------------- | --------------- |
+| 0     | Foundation                 | 8/8        | ✅ Complete    | 2026-02-13      |
+| 1     | Basic Authentication       | 0/12       | ⬜ Not Started | —               |
+| 2     | Google Authentication      | 0/4        | ⬜ Not Started | —               |
+| 3     | Telegram Authentication    | 0/4        | ⬜ Not Started | —               |
+| 4     | Family/Group Management    | 0/14       | ⬜ Not Started | —               |
+| 5     | Income Management          | 0/10       | ⬜ Not Started | —               |
+| 6     | Expense Management         | 0/13       | ⬜ Not Started | —               |
+| 7     | Budgets & Spending Targets | 0/10       | ⬜ Not Started | —               |
+| 8     | Receipt Processing         | 0/8        | ⬜ Not Started | —               |
+| 9     | Purchase Analytics         | 0/8        | ⬜ Not Started | —               |
+| 10    | Telegram Bot               | 0/16       | ⬜ Not Started | —               |
+| 11    | Telegram Mini App          | 0/10       | ⬜ Not Started | —               |
+| 12    | Bot Receipt Processing     | 0/8        | ⬜ Not Started | —               |
+| 13    | Bot Analytics              | 0/4        | ⬜ Not Started | —               |
+| 14    | LLM Assistant              | 0/8        | ⬜ Not Started | —               |
 
 **Total iterations:** 127 | **Completed:** 8 | **Remaining:** 119
 
@@ -63,6 +63,7 @@
 ### Iteration 0.1 + 0.2: Local Dev Readiness & Project Scaffolding
 
 **What was implemented:**
+
 - Docker Compose configuration for MySQL, Redis, and all services
 - Environment templates (`.env.example`, `.env.staging.example`, `.env.production.example`)
 - Monorepo structure with pnpm workspaces
@@ -75,6 +76,7 @@
 - Prisma ORM with MySQL schema and seed script
 
 **Key files created:**
+
 - [`docker-compose.yml`](../docker-compose.yml) — Local dev services
 - [`pnpm-workspace.yaml`](../pnpm-workspace.yaml) — Workspace configuration
 - [`apps/api/src/main.ts`](../apps/api/src/main.ts) — API entry point
@@ -92,11 +94,13 @@
 - [`infrastructure/mysql/init/01-create-databases.sql`](../infrastructure/mysql/init/01-create-databases.sql) — DB initialization
 
 **Tests added:**
+
 - [`apps/api/src/app.controller.spec.ts`](../apps/api/src/app.controller.spec.ts) — Controller unit tests
 - [`apps/api/test/integration/app.integration.spec.ts`](../apps/api/test/integration/app.integration.spec.ts) — Integration smoke tests
 - [`apps/web/e2e/smoke.spec.ts`](../apps/web/e2e/smoke.spec.ts) — E2E smoke test
 
 **Acceptance criteria met:**
+
 - ✅ Dev stack runs with `docker compose up`
 - ✅ Repo builds end-to-end
 - ✅ OpenAPI docs accessible at `/api/docs`
@@ -108,6 +112,7 @@
 ### Iteration 0.3: Shared DTOs
 
 **What was implemented:**
+
 - Pagination DTOs with cursor-based pagination support
 - Error response DTOs with standardized error codes
 - Currency types with ISO 4217 support
@@ -115,6 +120,7 @@
 - Shared constants
 
 **Key files created:**
+
 - [`packages/shared/src/dto/pagination.dto.ts`](../packages/shared/src/dto/pagination.dto.ts) — Pagination request/response DTOs
 - [`packages/shared/src/dto/api-response.dto.ts`](../packages/shared/src/dto/api-response.dto.ts) — Standard API response envelope
 - [`packages/shared/src/dto/error-response.dto.ts`](../packages/shared/src/dto/error-response.dto.ts) — Error response DTO
@@ -123,11 +129,13 @@
 - [`packages/shared/src/index.ts`](../packages/shared/src/index.ts) — Package exports
 
 **Tests added:**
+
 - [`packages/shared/src/__tests__/common.test.ts`](../packages/shared/src/__tests__/common.test.ts) — Common type tests
 - [`packages/shared/src/__tests__/currency.test.ts`](../packages/shared/src/__tests__/currency.test.ts) — Currency type tests
 - [`packages/shared/src/__tests__/pagination.test.ts`](../packages/shared/src/__tests__/pagination.test.ts) — Pagination DTO tests
 
 **Acceptance criteria met:**
+
 - ✅ Shared types importable across packages
 - ✅ All DTOs have unit tests
 
@@ -136,6 +144,7 @@
 ### Iteration 0.4: Baseline CI
 
 **What was implemented:**
+
 - GitHub Actions CI pipeline with lint, typecheck, unit test, and build jobs
 - PR check workflow blocking merges on CI failure
 - Dependabot configuration for automated dependency updates
@@ -143,6 +152,7 @@
 - Branch protection documentation
 
 **Key files created:**
+
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — Main CI pipeline
 - [`.github/workflows/pr-check.yml`](../.github/workflows/pr-check.yml) — PR check workflow
 - [`.github/dependabot.yml`](../.github/dependabot.yml) — Dependabot config
@@ -150,6 +160,7 @@
 - [`.github/BRANCH_PROTECTION.md`](../.github/BRANCH_PROTECTION.md) — Branch protection guide
 
 **Acceptance criteria met:**
+
 - ✅ PRs blocked on CI failure
 - ✅ Lint, typecheck, and test checks run automatically
 
@@ -158,6 +169,7 @@
 ### Iteration 0.5: Basic CD
 
 **What was implemented:**
+
 - Staging deployment workflow (deploy on push to `main`)
 - Production deployment workflow (manual trigger with approval)
 - Docker Compose configurations for staging and production
@@ -165,6 +177,7 @@
 - Rollback script
 
 **Key files created:**
+
 - [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deploy pipeline
 - [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Production deploy pipeline
 - [`docker-compose.staging.yml`](../docker-compose.staging.yml) — Staging Docker Compose
@@ -175,11 +188,13 @@
 - [`.env.production.example`](../.env.production.example) — Production env template
 
 **Acceptance criteria met:**
+
 - ✅ Staging environment reachable after deploy
 - ✅ Production deploy with manual approval gate
 - ✅ Zero-downtime deployment strategy
 
 **Security improvement (post-Phase 0):**
+
 - Migrated to ephemeral secret injection pattern — GitHub Secrets as single source of truth
 - Deploy workflow: write temp `.env` → `docker compose up` → `shred .env`
 - Docker Compose uses `env_file:` directive (not `environment:`) to prevent `docker inspect` exposure
@@ -191,6 +206,7 @@
 ### Iteration 0.6: Backup Strategy
 
 **What was implemented:**
+
 - Automated MySQL backup script with compression
 - Restore script with verification
 - Backup age alerting (alert if > 26 hours old)
@@ -199,6 +215,7 @@
 - Backup documentation
 
 **Key files created:**
+
 - [`scripts/backup.sh`](../scripts/backup.sh) — Backup script
 - [`scripts/restore.sh`](../scripts/restore.sh) — Restore script
 - [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) — Backup age monitor
@@ -208,6 +225,7 @@
 - [`docs/backup.md`](backup.md) — Backup documentation
 
 **Acceptance criteria met:**
+
 - ✅ Backups verified and restorable
 - ✅ Alert if backup older than 26 hours
 - ✅ CI verification job configured
@@ -217,6 +235,7 @@
 ### Iteration 0.7: Observability Baseline
 
 **What was implemented:**
+
 - Structured JSON logging with request context (correlation IDs)
 - Health check endpoints (`/health`) with database, Redis, and memory indicators
 - Prometheus-compatible metrics collection
@@ -224,6 +243,7 @@
 - Request context middleware for tracing
 
 **Key files created:**
+
 - [`apps/api/src/common/logger/logger.service.ts`](../apps/api/src/common/logger/logger.service.ts) — Structured logger
 - [`apps/api/src/common/logger/logger.module.ts`](../apps/api/src/common/logger/logger.module.ts) — Logger module
 - [`apps/api/src/health/health.controller.ts`](../apps/api/src/health/health.controller.ts) — Health check endpoint
@@ -240,11 +260,13 @@
 - [`apps/api/src/common/interceptors/transform.interceptor.ts`](../apps/api/src/common/interceptors/transform.interceptor.ts) — Response transform
 
 **Tests added:**
+
 - [`apps/api/src/health/health.controller.spec.ts`](../apps/api/src/health/health.controller.spec.ts) — Health endpoint tests
 - [`apps/api/src/common/logger/logger.service.spec.ts`](../apps/api/src/common/logger/logger.service.spec.ts) — Logger tests
 - [`apps/api/src/common/metrics/metrics.service.spec.ts`](../apps/api/src/common/metrics/metrics.service.spec.ts) — Metrics tests
 
 **Acceptance criteria met:**
+
 - ✅ Health endpoint returns component status
 - ✅ Structured JSON logs with correlation IDs
 - ✅ Metrics collection active
@@ -254,12 +276,14 @@
 ### Iteration 0.8: Rate Limiting
 
 **What was implemented:**
+
 - @nestjs/throttler global rate limiting
 - Proxy-aware rate limiting guard (trust X-Forwarded-For)
 - Custom `@Throttle()` decorator for per-endpoint overrides
 - Throttler configuration module with environment-based settings
 
 **Key files created:**
+
 - [`apps/api/src/common/throttler/throttler.module.ts`](../apps/api/src/common/throttler/throttler.module.ts) — Throttler module
 - [`apps/api/src/common/throttler/throttler.guard.ts`](../apps/api/src/common/throttler/throttler.guard.ts) — Custom throttler guard
 - [`apps/api/src/common/throttler/throttler-behind-proxy.guard.ts`](../apps/api/src/common/throttler/throttler-behind-proxy.guard.ts) — Proxy-aware guard
@@ -267,10 +291,12 @@
 - [`apps/api/src/config/throttler.config.ts`](../apps/api/src/config/throttler.config.ts) — Throttler config
 
 **Tests added:**
+
 - [`apps/api/src/common/throttler/throttler.guard.spec.ts`](../apps/api/src/common/throttler/throttler.guard.spec.ts) — Guard tests
 - [`apps/api/src/common/decorators/throttle.decorator.spec.ts`](../apps/api/src/common/decorators/throttle.decorator.spec.ts) — Decorator tests
 
 **Acceptance criteria met:**
+
 - ✅ Rate limiting active on all endpoints
 - ✅ Proxy-aware IP extraction
 - ✅ Per-endpoint override capability
@@ -326,14 +352,14 @@ myfinpro/
 
 ## 5. Quality Metrics
 
-| Metric | Result |
-|--------|--------|
-| **Lint** | 0 errors, 0 warnings |
-| **Typecheck** | 0 errors |
-| **Tests** | 90 passing (44 API + 46 shared) |
-| **Build** | All packages successful |
-| **E2E Config** | Playwright configured |
-| **Integration Tests** | Testcontainers setup ready |
+| Metric                | Result                          |
+| --------------------- | ------------------------------- |
+| **Lint**              | 0 errors, 0 warnings            |
+| **Typecheck**         | 0 errors                        |
+| **Tests**             | 90 passing (44 API + 46 shared) |
+| **Build**             | All packages successful         |
+| **E2E Config**        | Playwright configured           |
+| **Integration Tests** | Testcontainers setup ready      |
 
 ---
 
@@ -354,37 +380,37 @@ ccdb29f docs: add server setup guide for staging and production environments
 
 ## 7. Documentation Index
 
-| Document | Description |
-|----------|-------------|
-| [`docs/phase-0-design.md`](phase-0-design.md) | Phase 0 architecture design decisions |
-| [`docs/deployment.md`](deployment.md) | Deployment procedures (staging + production) |
-| [`docs/backup.md`](backup.md) | Backup strategy, schedules, and restore procedures |
-| [`docs/server-setup-guide.md`](server-setup-guide.md) | Server provisioning guide for Ubuntu + Docker |
-| [`docs/progress.md`](progress.md) | This document — project progress tracking |
-| [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) | Full implementation roadmap (15 phases, 127 iterations) |
-| [`SPECIFICATION-USER-STORIES.md`](../SPECIFICATION-USER-STORIES.md) | User stories and requirements |
-| [`.github/BRANCH_PROTECTION.md`](../.github/BRANCH_PROTECTION.md) | Branch protection rules |
-| [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) | Pull request template |
+| Document                                                                  | Description                                             |
+| ------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`docs/phase-0-design.md`](phase-0-design.md)                             | Phase 0 architecture design decisions                   |
+| [`docs/deployment.md`](deployment.md)                                     | Deployment procedures (staging + production)            |
+| [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
+| [`docs/server-setup-guide.md`](server-setup-guide.md)                     | Server provisioning guide for Ubuntu + Docker           |
+| [`docs/progress.md`](progress.md)                                         | This document — project progress tracking               |
+| [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md)                     | Full implementation roadmap (15 phases, 127 iterations) |
+| [`SPECIFICATION-USER-STORIES.md`](../SPECIFICATION-USER-STORIES.md)       | User stories and requirements                           |
+| [`.github/BRANCH_PROTECTION.md`](../.github/BRANCH_PROTECTION.md)         | Branch protection rules                                 |
+| [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) | Pull request template                                   |
 
 ---
 
 ## 8. Infrastructure Status
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Local development | ✅ Ready | Docker Compose with MySQL, Redis, all services |
-| CI pipeline | ✅ Configured | GitHub Actions: lint, typecheck, test, build |
-| CD pipeline — Staging | ✅ Configured | Auto-deploy on push to `main` |
-| CD pipeline — Production | ✅ Configured | Manual trigger with approval gate |
-| PR checks | ✅ Configured | Block merge on CI failure |
-| Dependabot | ✅ Configured | Automated dependency updates |
-| Backup scripts | ✅ Configured | Automated MySQL backup + restore + alerting |
-| Backup verification | ✅ Configured | CI job validates backup integrity |
-| Health checks | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators |
-| Metrics | ✅ Configured | Prometheus-compatible metrics endpoint |
-| Structured logging | ✅ Configured | JSON logs with correlation IDs |
-| Rate limiting | ✅ Configured | Global + per-endpoint throttling |
-| Server provisioning | ⬜ Pending | Guide available at `docs/server-setup-guide.md` |
+| Component                | Status        | Notes                                                |
+| ------------------------ | ------------- | ---------------------------------------------------- |
+| Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services       |
+| CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build         |
+| CD pipeline — Staging    | ✅ Configured | Auto-deploy on push to `main`                        |
+| CD pipeline — Production | ✅ Configured | Manual trigger with approval gate                    |
+| PR checks                | ✅ Configured | Block merge on CI failure                            |
+| Dependabot               | ✅ Configured | Automated dependency updates                         |
+| Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting          |
+| Backup verification      | ✅ Configured | CI job validates backup integrity                    |
+| Health checks            | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators |
+| Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint               |
+| Structured logging       | ✅ Configured | JSON logs with correlation IDs                       |
+| Rate limiting            | ✅ Configured | Global + per-endpoint throttling                     |
+| Server provisioning      | ⬜ Pending    | Guide available at `docs/server-setup-guide.md`      |
 
 ---
 
@@ -392,20 +418,20 @@ ccdb29f docs: add server setup guide for staging and production environments
 
 ### Phase 1: Basic Authentication (12 iterations)
 
-| Iteration | Objective |
-|-----------|-----------|
-| 1.1 | User schema — Users table with currency preferences, Prisma migrations |
-| 1.2 | Registration API — NestJS endpoint with class-validator |
-| 1.3 | Password hashing — Argon2 hashing + validation |
-| 1.4 | Login API — Passport local strategy |
-| 1.5 | JWT issuance — Access token (15min) + refresh token (7d) |
-| 1.6 | Token refresh API — Refresh endpoint with token rotation |
-| 1.7 | Login UI — Next.js login page |
-| 1.8 | Registration UI — Next.js registration page |
-| 1.9 | Frontend auth integration — JWT storage, auto-refresh, auth context |
-| 1.10 | Protected routes — NestJS JWT guards + frontend route guards |
-| 1.11 | Error handling — Global exception filter, React error boundary, toast system |
-| 1.12 | Auth rate limiting — Strict limits on auth endpoints (5/min) |
+| Iteration | Objective                                                                    |
+| --------- | ---------------------------------------------------------------------------- |
+| 1.1       | User schema — Users table with currency preferences, Prisma migrations       |
+| 1.2       | Registration API — NestJS endpoint with class-validator                      |
+| 1.3       | Password hashing — Argon2 hashing + validation                               |
+| 1.4       | Login API — Passport local strategy                                          |
+| 1.5       | JWT issuance — Access token (15min) + refresh token (7d)                     |
+| 1.6       | Token refresh API — Refresh endpoint with token rotation                     |
+| 1.7       | Login UI — Next.js login page                                                |
+| 1.8       | Registration UI — Next.js registration page                                  |
+| 1.9       | Frontend auth integration — JWT storage, auto-refresh, auth context          |
+| 1.10      | Protected routes — NestJS JWT guards + frontend route guards                 |
+| 1.11      | Error handling — Global exception filter, React error boundary, toast system |
+| 1.12      | Auth rate limiting — Strict limits on auth endpoints (5/min)                 |
 
 ### Other Upcoming Work
 

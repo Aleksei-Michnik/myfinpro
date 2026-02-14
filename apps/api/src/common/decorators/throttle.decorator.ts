@@ -8,17 +8,14 @@ export const NoRateLimit = () => SkipThrottle();
 /**
  * Strict rate limit for auth endpoints: 5 requests per minute
  */
-export const AuthRateLimit = () =>
-  Throttle({ default: { ttl: 60000, limit: 5 } });
+export const AuthRateLimit = () => Throttle({ default: { ttl: 60000, limit: 5 } });
 
 /**
  * Strict rate limit for public endpoints: 5 requests per minute
  */
-export const PublicRateLimit = () =>
-  Throttle({ default: { ttl: 60000, limit: 5 } });
+export const PublicRateLimit = () => Throttle({ default: { ttl: 60000, limit: 5 } });
 
 /**
  * Relaxed rate limit for read-heavy endpoints: 120 requests per minute
  */
-export const RelaxedRateLimit = () =>
-  Throttle({ default: { ttl: 60000, limit: 120 } });
+export const RelaxedRateLimit = () => Throttle({ default: { ttl: 60000, limit: 120 } });

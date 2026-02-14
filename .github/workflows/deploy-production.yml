@@ -142,7 +142,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          source: "docker-compose.production.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh"
+          source: 'docker-compose.production.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh'
           target: /opt/myfinpro/production
           overwrite: true
 
@@ -162,12 +162,12 @@ jobs:
           REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
           # ── Non-secret config ──
           NODE_ENV: production
-          API_PORT: "3001"
+          API_PORT: '3001'
           CORS_ORIGIN: ${{ secrets.PRODUCTION_CORS_ORIGIN }}
           LOG_LEVEL: warn
-          SWAGGER_ENABLED: "false"
-          RATE_LIMIT_TTL: "60000"
-          RATE_LIMIT_MAX: "30"
+          SWAGGER_ENABLED: 'false'
+          RATE_LIMIT_TTL: '60000'
+          RATE_LIMIT_MAX: '30'
           NEXT_PUBLIC_API_URL: ${{ secrets.PRODUCTION_NEXT_PUBLIC_API_URL }}
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──

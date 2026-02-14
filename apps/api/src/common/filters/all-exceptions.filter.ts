@@ -27,14 +27,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // If it's an HttpException, let the HttpExceptionFilter handle it
     // This filter is the catch-all for non-HTTP exceptions
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
     const errorResponse = {
       statusCode: status,
@@ -43,16 +39,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : typeof message === 'string'
           ? message
           : (message as Record<string, unknown>).message || message,
-      error:
-        exception instanceof HttpException
-          ? exception.name
-          : 'InternalServerError',
+      error: exception instanceof HttpException ? exception.name : 'InternalServerError',
       timestamp: new Date().toISOString(),
       path: request.url,
       requestId,
       // Include stack trace in development only
-      ...(!isProduction &&
-        exception instanceof Error && { stack: exception.stack }),
+      ...(!isProduction && exception instanceof Error && { stack: exception.stack }),
     };
 
     const logContext = {
@@ -61,10 +53,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method: request.method,
       path: request.url,
       statusCode: status,
-      exceptionType:
-        exception instanceof Error
-          ? exception.constructor.name
-          : typeof exception,
+      exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
     };
 
     this.logger.error(

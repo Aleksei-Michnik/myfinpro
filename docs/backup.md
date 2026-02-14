@@ -6,12 +6,12 @@ MyFinPro uses automated MySQL database backups with verification, retention poli
 
 **Key parameters:**
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Daily retention | 7 | Number of daily backups to keep |
-| Weekly retention | 4 | Number of weekly backups to keep |
-| Max backup age | 26 hours | Alert threshold for stale backups |
-| Schedule | 2:00 AM daily | Cron-based backup schedule |
+| Parameter        | Default       | Description                       |
+| ---------------- | ------------- | --------------------------------- |
+| Daily retention  | 7             | Number of daily backups to keep   |
+| Weekly retention | 4             | Number of weekly backups to keep  |
+| Max backup age   | 26 hours      | Alert threshold for stale backups |
+| Schedule         | 2:00 AM daily | Cron-based backup schedule        |
 
 ## Architecture
 
@@ -166,6 +166,7 @@ The `check-backup-age.sh` script is designed to be run periodically (every 6 hou
 ```
 
 **Exit codes:**
+
 - `0` — Backup is within the acceptable age threshold
 - `1` — Backup is too old or missing
 
@@ -250,9 +251,9 @@ curl -s http://localhost:3000/api/health | jq .
 
 Backups follow a tiered retention policy:
 
-| Tier | Retention | Description |
-|------|-----------|-------------|
-| Daily | 7 backups | The 7 most recent backups are always kept |
+| Tier   | Retention | Description                                      |
+| ------ | --------- | ------------------------------------------------ |
+| Daily  | 7 backups | The 7 most recent backups are always kept        |
 | Weekly | 4 backups | One backup per week is kept for the last 4 weeks |
 
 The cleanup runs automatically after each backup. Backups that don't fall within either retention tier are deleted.
@@ -269,25 +270,25 @@ Older:     Automatically deleted
 
 All configuration is done via environment variables. See [`backup.env.example`](../infrastructure/backup/backup.env.example) for the full template.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKUP_DIR` | `/var/backups/myfinpro` | Backup storage directory |
-| `BACKUP_RETENTION_DAILY` | `7` | Daily backups to retain |
-| `BACKUP_RETENTION_WEEKLY` | `4` | Weekly backups to retain |
-| `BACKUP_MAX_AGE_HOURS` | `26` | Alert threshold in hours |
-| `MYSQL_HOST` | `localhost` | MySQL host |
-| `MYSQL_PORT` | `3306` | MySQL port |
-| `MYSQL_USER` | `myfinpro` | MySQL user |
-| `MYSQL_PASSWORD` | — | MySQL password |
-| `MYSQL_DATABASE` | `myfinpro` | MySQL database name |
-| `DOCKER_CONTAINER_NAME` | `myfinpro-mysql-1` | Docker container name |
-| `ALERT_WEBHOOK_URL` | — | Webhook URL for alerts |
+| Variable                  | Default                 | Description              |
+| ------------------------- | ----------------------- | ------------------------ |
+| `BACKUP_DIR`              | `/var/backups/myfinpro` | Backup storage directory |
+| `BACKUP_RETENTION_DAILY`  | `7`                     | Daily backups to retain  |
+| `BACKUP_RETENTION_WEEKLY` | `4`                     | Weekly backups to retain |
+| `BACKUP_MAX_AGE_HOURS`    | `26`                    | Alert threshold in hours |
+| `MYSQL_HOST`              | `localhost`             | MySQL host               |
+| `MYSQL_PORT`              | `3306`                  | MySQL port               |
+| `MYSQL_USER`              | `myfinpro`              | MySQL user               |
+| `MYSQL_PASSWORD`          | —                       | MySQL password           |
+| `MYSQL_DATABASE`          | `myfinpro`              | MySQL database name      |
+| `DOCKER_CONTAINER_NAME`   | `myfinpro-mysql-1`      | Docker container name    |
+| `ALERT_WEBHOOK_URL`       | —                       | Webhook URL for alerts   |
 
 ## Script Reference
 
-| Script | Purpose |
-|--------|---------|
-| [`scripts/backup.sh`](../scripts/backup.sh) | Create compressed database backup |
-| [`scripts/restore.sh`](../scripts/restore.sh) | Restore database from backup |
-| [`scripts/verify-backup.sh`](../scripts/verify-backup.sh) | Verify backup existence and integrity |
-| [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) | Check backup age and alert |
+| Script                                                          | Purpose                               |
+| --------------------------------------------------------------- | ------------------------------------- |
+| [`scripts/backup.sh`](../scripts/backup.sh)                     | Create compressed database backup     |
+| [`scripts/restore.sh`](../scripts/restore.sh)                   | Restore database from backup          |
+| [`scripts/verify-backup.sh`](../scripts/verify-backup.sh)       | Verify backup existence and integrity |
+| [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) | Check backup age and alert            |

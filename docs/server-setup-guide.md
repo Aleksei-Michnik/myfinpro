@@ -38,11 +38,11 @@ export GITHUB_REPO="<YOUR_GITHUB_USERNAME>/myfinpro"    # owner/repo (lowercase)
 
 **Conventions used in this guide:**
 
-| Convention | Meaning |
-|---|---|
-| `# (as root)` | Run as root or with `sudo` |
-| `# (as deploy)` | Run as the `deploy` user |
-| `# (local)` | Run on your local machine |
+| Convention               | Meaning                             |
+| ------------------------ | ----------------------------------- |
+| `# (as root)`            | Run as root or with `sudo`          |
+| `# (as deploy)`          | Run as the `deploy` user            |
+| `# (local)`              | Run on your local machine           |
 | `staging` / `production` | Replace with the target environment |
 
 ---
@@ -138,6 +138,7 @@ sshd -t && systemctl restart sshd
 ```
 
 > ⚠️ **Before disconnecting**, verify you can log in as the deploy user from another terminal:
+>
 > ```bash
 > ssh $DEPLOY_USER@$SERVER_IP
 > ```
@@ -588,15 +589,15 @@ Go to your GitHub repository → **Settings** → **Secrets and variables** → 
 
 #### SSH & Infrastructure Secrets
 
-| Secret | Value | Description |
-|---|---|---|
-| `STAGING_HOST` | `<YOUR_SERVER_IP>` | Staging server IP or hostname |
-| `STAGING_USER` | `deploy` | SSH user for staging server |
-| `STAGING_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging |
-| `PRODUCTION_HOST` | `<YOUR_SERVER_IP>` | Production server IP or hostname |
-| `PRODUCTION_USER` | `deploy` | SSH user for production server |
-| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production |
-| `GHCR_REPO` | `<YOUR_GITHUB_USERNAME>/myfinpro` | GHCR repository (lowercase) |
+| Secret               | Value                                | Description                      |
+| -------------------- | ------------------------------------ | -------------------------------- |
+| `STAGING_HOST`       | `<YOUR_SERVER_IP>`                   | Staging server IP or hostname    |
+| `STAGING_USER`       | `deploy`                             | SSH user for staging server      |
+| `STAGING_SSH_KEY`    | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging      |
+| `PRODUCTION_HOST`    | `<YOUR_SERVER_IP>`                   | Production server IP or hostname |
+| `PRODUCTION_USER`    | `deploy`                             | SSH user for production server   |
+| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production   |
+| `GHCR_REPO`          | `<YOUR_GITHUB_USERNAME>/myfinpro`    | GHCR repository (lowercase)      |
 
 To copy the private key:
 
@@ -610,18 +611,18 @@ cat ~/.ssh/myfinpro-deploy
 
 Configure these in each GitHub Environment (`staging` / `production`):
 
-| Secret | Description | How to generate |
-|---|---|---|
-| `MYSQL_ROOT_PASSWORD` | MySQL root password | `openssl rand -base64 48` |
-| `MYSQL_DATABASE` | Database name | `myfinpro_staging` / `myfinpro` |
-| `MYSQL_USER` | Database user | `myfinpro_staging` / `myfinpro_prod` |
-| `MYSQL_PASSWORD` | Database user password | `openssl rand -base64 48` |
-| `DATABASE_URL` | Full connection string | `mysql://USER:PASS@mysql:3306/DB_NAME` |
-| `JWT_SECRET` | JWT access token secret | `openssl rand -base64 48` |
-| `JWT_REFRESH_SECRET` | JWT refresh token secret | `openssl rand -base64 48` |
-| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
-| `CORS_ORIGIN` | Allowed CORS origins (prod) | `https://<YOUR_PRODUCTION_DOMAIN>` |
-| `NEXT_PUBLIC_API_URL` | Public API URL (prod) | `https://<YOUR_PRODUCTION_DOMAIN>/api` |
+| Secret                | Description                 | How to generate                        |
+| --------------------- | --------------------------- | -------------------------------------- |
+| `MYSQL_ROOT_PASSWORD` | MySQL root password         | `openssl rand -base64 48`              |
+| `MYSQL_DATABASE`      | Database name               | `myfinpro_staging` / `myfinpro`        |
+| `MYSQL_USER`          | Database user               | `myfinpro_staging` / `myfinpro_prod`   |
+| `MYSQL_PASSWORD`      | Database user password      | `openssl rand -base64 48`              |
+| `DATABASE_URL`        | Full connection string      | `mysql://USER:PASS@mysql:3306/DB_NAME` |
+| `JWT_SECRET`          | JWT access token secret     | `openssl rand -base64 48`              |
+| `JWT_REFRESH_SECRET`  | JWT refresh token secret    | `openssl rand -base64 48`              |
+| `REDIS_URL`           | Redis connection string     | `redis://redis:6379`                   |
+| `CORS_ORIGIN`         | Allowed CORS origins (prod) | `https://<YOUR_PRODUCTION_DOMAIN>`     |
+| `NEXT_PUBLIC_API_URL` | Public API URL (prod)       | `https://<YOUR_PRODUCTION_DOMAIN>/api` |
 
 ### 4.3 Create GitHub Environments
 
@@ -657,6 +658,7 @@ docker pull ghcr.io/$GITHUB_REPO/api:staging 2>&1 | head -5
 ```
 
 > 💡 The Docker login credentials are saved in `~/.docker/config.json`. Protect this file:
+>
 > ```bash
 > chmod 600 ~/.docker/config.json
 > ```
@@ -685,6 +687,7 @@ The recommended way to do the first deployment is through GitHub Actions:
 3. Or go to **Actions → Deploy Staging → Run workflow** for manual trigger
 
 The workflow will automatically:
+
 1. Build and push Docker images to GHCR
 2. Copy deployment files to the server
 3. Write ephemeral `.env` from GitHub Secrets
@@ -768,10 +771,10 @@ docker compose -f docker-compose.staging.yml logs --tail=20 web
 
 Point your domain to the server IP. Add these DNS records with your DNS provider:
 
-| Type | Name | Value | TTL |
-|---|---|---|---|
-| `A` | `<YOUR_PRODUCTION_DOMAIN>` | `<YOUR_PRODUCTION_SERVER_IP>` | 300 |
-| `A` | `<YOUR_STAGING_DOMAIN>` | `<YOUR_STAGING_SERVER_IP>` | 300 |
+| Type | Name                       | Value                         | TTL |
+| ---- | -------------------------- | ----------------------------- | --- |
+| `A`  | `<YOUR_PRODUCTION_DOMAIN>` | `<YOUR_PRODUCTION_SERVER_IP>` | 300 |
+| `A`  | `<YOUR_STAGING_DOMAIN>`    | `<YOUR_STAGING_SERVER_IP>`    | 300 |
 
 **Verification:**
 
@@ -1020,20 +1023,20 @@ docker compose -f $COMPOSE_FILE exec mysql mysql -u root -p
 
 ### Differences from Production
 
-| Setting | Staging | Production |
-|---|---|---|
-| Compose file | `docker-compose.staging.yml` | `docker-compose.production.yml` |
-| Deploy directory | `/opt/myfinpro/staging/` | `/opt/myfinpro/production/` |
-| Image tag | `staging` | `latest` / version tag |
-| MySQL port exposed | Yes (3306) | No (internal only) |
-| Redis port exposed | Yes (6379) | No (internal only) |
-| API port exposed | Yes (3001) | No (internal only) |
-| Web port exposed | Yes (3000) | No (internal only) |
-| Resource limits | None | CPU & memory limits |
-| Log rotation | Default | `json-file` with max-size |
-| Swagger | Enabled | Disabled |
-| Log level | `debug` | `warn` |
-| SSL | Optional | Required |
+| Setting            | Staging                      | Production                      |
+| ------------------ | ---------------------------- | ------------------------------- |
+| Compose file       | `docker-compose.staging.yml` | `docker-compose.production.yml` |
+| Deploy directory   | `/opt/myfinpro/staging/`     | `/opt/myfinpro/production/`     |
+| Image tag          | `staging`                    | `latest` / version tag          |
+| MySQL port exposed | Yes (3306)                   | No (internal only)              |
+| Redis port exposed | Yes (6379)                   | No (internal only)              |
+| API port exposed   | Yes (3001)                   | No (internal only)              |
+| Web port exposed   | Yes (3000)                   | No (internal only)              |
+| Resource limits    | None                         | CPU & memory limits             |
+| Log rotation       | Default                      | `json-file` with max-size       |
+| Swagger            | Enabled                      | Disabled                        |
+| Log level          | `debug`                      | `warn`                          |
+| SSL                | Optional                     | Required                        |
 
 ### Optional: Basic Auth for Staging
 
@@ -1060,12 +1063,12 @@ Staging typically runs on a smaller server (1–2 vCPU, 2 GB RAM). The default s
 The production compose file (`docker-compose.production.yml`) includes resource limits:
 
 | Service | CPU Limit | Memory Limit | Memory Reservation |
-|---|---|---|---|
-| MySQL | 1.0 | 1 GB | 512 MB |
-| Redis | 0.5 | 768 MB | 256 MB |
-| API | 1.0 | 512 MB | 256 MB |
-| Web | 1.0 | 512 MB | 256 MB |
-| Nginx | 0.5 | 256 MB | 128 MB |
+| ------- | --------- | ------------ | ------------------ |
+| MySQL   | 1.0       | 1 GB         | 512 MB             |
+| Redis   | 0.5       | 768 MB       | 256 MB             |
+| API     | 1.0       | 512 MB       | 256 MB             |
+| Web     | 1.0       | 512 MB       | 256 MB             |
+| Nginx   | 0.5       | 256 MB       | 128 MB             |
 
 **Recommended server:** 2+ vCPU, 4+ GB RAM for production.
 
@@ -1077,8 +1080,8 @@ Production compose already configures Docker JSON file log rotation:
 logging:
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "5"
+    max-size: '10m'
+    max-file: '5'
 ```
 
 For system-level log rotation:
@@ -1125,13 +1128,13 @@ sequenceDiagram
 
 ### Why This Pattern?
 
-| Threat | Mitigation |
-|--------|------------|
-| Secrets in git history | Never committed — injected at deploy time from GitHub Secrets |
-| Secrets persisted on server disk | `.env` is shredded after `docker compose up` |
-| `docker inspect` leaking secrets | Using `env_file:` directive instead of `environment:` |
-| Secret rotation complexity | Update GitHub Secret → redeploy (no SSH needed) |
-| Audit trail | GitHub Secrets provides built-in audit logging |
+| Threat                           | Mitigation                                                    |
+| -------------------------------- | ------------------------------------------------------------- |
+| Secrets in git history           | Never committed — injected at deploy time from GitHub Secrets |
+| Secrets persisted on server disk | `.env` is shredded after `docker compose up`                  |
+| `docker inspect` leaking secrets | Using `env_file:` directive instead of `environment:`         |
+| Secret rotation complexity       | Update GitHub Secret → redeploy (no SSH needed)               |
+| Audit trail                      | GitHub Secrets provides built-in audit logging                |
 
 ### What This Means for Server Setup
 
@@ -1261,15 +1264,15 @@ docker exec myfinpro-prod-nginx nginx -s reload
 
 ### Key Paths
 
-| Path | Description |
-|---|---|
-| `/opt/myfinpro/staging/` | Staging application root |
-| `/opt/myfinpro/production/` | Production application root |
-| `/opt/myfinpro/*/scripts/` | Deploy, rollback, backup scripts |
-| `/opt/myfinpro/*/infrastructure/` | Nginx configs, MySQL init |
-| `/var/backups/myfinpro/` | Database backups |
-| `/var/log/myfinpro/` | Application logs (backup, cron) |
-| `/etc/letsencrypt/` | SSL certificates |
+| Path                              | Description                      |
+| --------------------------------- | -------------------------------- |
+| `/opt/myfinpro/staging/`          | Staging application root         |
+| `/opt/myfinpro/production/`       | Production application root      |
+| `/opt/myfinpro/*/scripts/`        | Deploy, rollback, backup scripts |
+| `/opt/myfinpro/*/infrastructure/` | Nginx configs, MySQL init        |
+| `/var/backups/myfinpro/`          | Database backups                 |
+| `/var/log/myfinpro/`              | Application logs (backup, cron)  |
+| `/etc/letsencrypt/`               | SSL certificates                 |
 
 ### Key Commands
 
@@ -1292,8 +1295,8 @@ See [Part 4](#part-4-github-actions--secrets-configuration) for full list.
 
 ### Health Check Endpoints
 
-| Service | URL |
-|---|---|
-| API | `http://localhost/api/v1/health` |
-| Web | `http://localhost/` |
-| Nginx | `http://localhost/health` |
+| Service | URL                              |
+| ------- | -------------------------------- |
+| API     | `http://localhost/api/v1/health` |
+| Web     | `http://localhost/`              |
+| Nginx   | `http://localhost/health`        |

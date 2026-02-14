@@ -209,14 +209,15 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - '${MYSQL_PORT:-3306}:3306'
     volumes:
       - mysql_data:/var/lib/mysql
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - myfinpro-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test:
+        ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-p${MYSQL_ROOT_PASSWORD}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -232,13 +233,13 @@ services:
     container_name: myfinpro-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     networks:
       - myfinpro-net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -260,7 +261,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - "${API_PORT:-3001}:3001"
+      - '${API_PORT:-3001}:3001'
     volumes:
       - ./apps/api:/app/apps/api
       - ./packages:/app/packages
@@ -274,7 +275,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/api/v1/health',
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -294,7 +303,7 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost/api
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - '${WEB_PORT:-3000}:3000'
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages
@@ -307,7 +316,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -319,7 +328,7 @@ services:
     container_name: myfinpro-nginx
     restart: unless-stopped
     ports:
-      - "${NGINX_PORT:-80}:80"
+      - '${NGINX_PORT:-80}:80'
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
@@ -331,7 +340,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -358,11 +367,11 @@ This file is auto-loaded by Docker Compose in development and can add debug port
 services:
   mysql:
     ports:
-      - "${MYSQL_EXTERNAL_PORT:-3307}:3306"
+      - '${MYSQL_EXTERNAL_PORT:-3307}:3306'
 
   redis:
     ports:
-      - "${REDIS_EXTERNAL_PORT:-6380}:6379"
+      - '${REDIS_EXTERNAL_PORT:-6380}:6379'
 ```
 
 ### 2.2 Dockerfiles
@@ -833,8 +842,8 @@ echo "✅ Seed completed"
 
 ```yaml
 packages:
-  - "apps/*"
-  - "packages/*"
+  - 'apps/*'
+  - 'packages/*'
 ```
 
 #### `.npmrc`
@@ -861,7 +870,7 @@ auto-install-peers=true
   "packageManager": "pnpm@10.28.2",
   "engines": {
     "node": ">=22.0.0",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=10.0.0",
   },
   "scripts": {
     // ── Development ──
@@ -906,13 +915,13 @@ auto-install-peers=true
 
     // ── Utilities ──
     "clean": "turbo run clean && rm -rf node_modules",
-    "prepare": "echo 'Monorepo ready'"
+    "prepare": "echo 'Monorepo ready'",
   },
   "devDependencies": {
     "turbo": "^2.8.3",
     "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
-  }
+    "typescript": "^5.9.3",
+  },
 }
 ```
 
@@ -927,36 +936,36 @@ auto-install-peers=true
   "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", ".next/**"],
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
     },
     "lint:fix": {
       "dependsOn": ["^build"],
-      "cache": false
+      "cache": false,
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
     },
     "test:unit": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
     },
     "test:coverage": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
     },
     "clean": {
-      "cache": false
-    }
-  }
+      "cache": false,
+    },
+  },
 }
 ```
 
@@ -986,12 +995,7 @@ flowchart TD
   "publishConfig": {
     "access": "public"
   },
-  "files": [
-    "base.json",
-    "nestjs.json",
-    "nextjs.json",
-    "node.json"
-  ]
+  "files": ["base.json", "nestjs.json", "nextjs.json", "node.json"]
 }
 ```
 
@@ -1068,9 +1072,7 @@ flowchart TD
     "jsx": "preserve",
     "noEmit": true,
     "incremental": true,
-    "plugins": [
-      { "name": "next" }
-    ],
+    "plugins": [{ "name": "next" }],
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"]
@@ -1111,11 +1113,7 @@ Uses flat config format (ESLint v10 — flat config is now the only format).
   "private": true,
   "license": "MIT",
   "main": "base.js",
-  "files": [
-    "base.js",
-    "nestjs.js",
-    "nextjs.js"
-  ],
+  "files": ["base.js", "nestjs.js", "nextjs.js"],
   "dependencies": {
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
@@ -1147,7 +1145,7 @@ module.exports = [
     },
     plugins: {
       '@typescript-eslint': require('@typescript-eslint/eslint-plugin'),
-      'import': require('eslint-plugin-import'),
+      import: require('eslint-plugin-import'),
     },
     rules: {
       // TypeScript
@@ -1689,8 +1687,8 @@ export function setupSwagger(app: INestApplication, globalPrefix: string): void 
     .setTitle('MyFinPro API')
     .setDescription(
       'Personal/Family Finance Management API. ' +
-      'All monetary amounts are stored as integer cents. ' +
-      'Currency codes follow ISO 4217.',
+        'All monetary amounts are stored as integer cents. ' +
+        'Currency codes follow ISO 4217.',
     )
     .setVersion('1.0')
     .addBearerAuth(
@@ -1783,14 +1781,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
     const errorResponse = {
       statusCode: status,
@@ -1813,12 +1807,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 #### `apps/api/src/common/interceptors/transform.interceptor.ts`
 
 ```typescript
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -1828,13 +1817,8 @@ export interface ResponseEnvelope<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ResponseEnvelope<T>>
-{
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<ResponseEnvelope<T>> {
+export class TransformInterceptor<T> implements NestInterceptor<T, ResponseEnvelope<T>> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<ResponseEnvelope<T>> {
     return next.handle().pipe(
       map((data) => {
         // If data already has 'data' key (paginated responses), pass through
@@ -1942,9 +1926,7 @@ export const createValidationPipe = (options?: ValidationPipeOptions) =>
     "paths": {
       "@/*": ["./src/*"]
     },
-    "plugins": [
-      { "name": "next" }
-    ]
+    "plugins": [{ "name": "next" }]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules", ".next", "coverage", "e2e"]
@@ -2040,11 +2022,7 @@ export const metadata: Metadata = {
   description: 'Personal and Family Finance Management Application',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>
@@ -2060,12 +2038,8 @@ export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <h1 className="text-4xl font-bold">MyFinPro</h1>
-      <p className="mt-4 text-lg text-gray-600">
-        Personal &amp; Family Finance Management
-      </p>
-      <p className="mt-2 text-sm text-gray-400">
-        Phase 0 — Foundation
-      </p>
+      <p className="mt-4 text-lg text-gray-600">Personal &amp; Family Finance Management</p>
+      <p className="mt-2 text-sm text-gray-400">Phase 0 — Foundation</p>
     </main>
   );
 }
@@ -2161,7 +2135,7 @@ export const apiClient = new ApiClient();
 #### `apps/web/src/styles/globals.css`
 
 ```css
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-primary-50: #f0f9ff;
@@ -2359,6 +2333,7 @@ model HealthCheck {
 ```
 
 **Prisma integration notes**:
+
 - Schema lives at `apps/api/prisma/schema.prisma`
 - The `prisma` field in `apps/api/package.json` points to this location
 - Migrations stored in `apps/api/prisma/migrations/`
@@ -2384,6 +2359,7 @@ flowchart LR
 ```
 
 **Design decisions**:
+
 1. The `globalPrefix` is set to `api/v1` — all controllers are automatically under this prefix
 2. The health endpoint is accessible at `/api/v1/health` for Docker health checks
 3. Swagger docs are served at `/api/docs` (outside the versioned prefix for convenience)
@@ -2394,6 +2370,7 @@ flowchart LR
 Swagger is configured in `apps/api/src/config/swagger.config.ts` (see [section 3.7](#appsapisrcconfigswaggerconfigts)) and activated in `main.ts`.
 
 **Key features**:
+
 - Auto-generated from decorators (`@ApiTags`, `@ApiOperation`, `@ApiProperty`)
 - Bearer auth scheme registered for JWT tokens
 - Served at `/api/docs`
@@ -2671,21 +2648,21 @@ afterEach(() => {
 
 **API (NestJS)** uses **Jest** — configured inline in `apps/api/package.json` (see [section 3.7](#appsapipackagejson)). Key config:
 
-| Setting | Value |
-|---|---|
-| Test runner | Jest 30 + ts-jest |
-| Test pattern | `*.spec.ts` (unit), `*.integration.spec.ts` (integration) |
+| Setting            | Value                                                               |
+| ------------------ | ------------------------------------------------------------------- |
+| Test runner        | Jest 30 + ts-jest                                                   |
+| Test pattern       | `*.spec.ts` (unit), `*.integration.spec.ts` (integration)           |
 | Coverage threshold | 60% global, 80% for services (enforced in CI, added in later phase) |
-| Module aliases | `@/*` → `src/*` |
+| Module aliases     | `@/*` → `src/*`                                                     |
 
 **Web (Next.js)** uses **Vitest** — configured in `apps/web/vitest.config.ts` (see [section 3.8](#appswebvitestconfigts)). Key config:
 
-| Setting | Value |
-|---|---|
-| Test runner | Vitest 4 + React plugin |
-| Environment | jsdom |
+| Setting      | Value                                                   |
+| ------------ | ------------------------------------------------------- |
+| Test runner  | Vitest 4 + React plugin                                 |
+| Environment  | jsdom                                                   |
 | Test pattern | `*.test.ts` / `*.spec.ts` / `*.test.tsx` / `*.spec.tsx` |
-| Coverage | v8 provider |
+| Coverage     | v8 provider                                             |
 
 ### 3.16 Git Configuration
 
@@ -2747,27 +2724,27 @@ docker-compose.override.yml
 
 Critical version pins to ensure reproducibility. Non-critical versions use `^` for minor/patch updates.
 
-| Package | Version | Reason for Pin |
-|---|---|---|
-| `node` | `>=22.0.0` | LTS, required by all packages |
-| `pnpm` | `10.28.2` | Workspace support, corepack |
-| `typescript` | `^5.9.3` | Decorator metadata, latest features |
-| `@nestjs/core` | `^11.1.13` | Latest stable NestJS 11 |
-| `@nestjs/swagger` | `^11.2.6` | OpenAPI 3.1 support |
-| `@prisma/client` | `^7.3.0` | Latest Prisma with MySQL support |
-| `next` | `^16.1.6` | App Router, React 19 support |
-| `react` | `^19.2.4` | Latest React |
-| `tailwindcss` | `^4.1.18` | Utility-first CSS (v4, CSS-first config) |
-| `playwright` | `^1.58.2` | E2E testing |
-| `testcontainers` | `^11.11.0` | Integration test containers |
-| `vitest` | `^4.0.18` | Frontend unit testing |
-| `jest` | `^30.2.0` | Backend unit testing |
-| `turbo` | `^2.8.3` | Monorepo task runner |
-| `eslint` | `^10.0.0` | Linting (flat config only) |
-| `prettier` | `^3.8.1` | Code formatting |
-| `mysql` (Docker) | `8.4` | Database server (LTS) |
-| `redis` (Docker) | `8-alpine` | Cache/queue backend |
-| `nginx` (Docker) | `1.28-alpine` | Reverse proxy |
+| Package           | Version       | Reason for Pin                           |
+| ----------------- | ------------- | ---------------------------------------- |
+| `node`            | `>=22.0.0`    | LTS, required by all packages            |
+| `pnpm`            | `10.28.2`     | Workspace support, corepack              |
+| `typescript`      | `^5.9.3`      | Decorator metadata, latest features      |
+| `@nestjs/core`    | `^11.1.13`    | Latest stable NestJS 11                  |
+| `@nestjs/swagger` | `^11.2.6`     | OpenAPI 3.1 support                      |
+| `@prisma/client`  | `^7.3.0`      | Latest Prisma with MySQL support         |
+| `next`            | `^16.1.6`     | App Router, React 19 support             |
+| `react`           | `^19.2.4`     | Latest React                             |
+| `tailwindcss`     | `^4.1.18`     | Utility-first CSS (v4, CSS-first config) |
+| `playwright`      | `^1.58.2`     | E2E testing                              |
+| `testcontainers`  | `^11.11.0`    | Integration test containers              |
+| `vitest`          | `^4.0.18`     | Frontend unit testing                    |
+| `jest`            | `^30.2.0`     | Backend unit testing                     |
+| `turbo`           | `^2.8.3`      | Monorepo task runner                     |
+| `eslint`          | `^10.0.0`     | Linting (flat config only)               |
+| `prettier`        | `^3.8.1`      | Code formatting                          |
+| `mysql` (Docker)  | `8.4`         | Database server (LTS)                    |
+| `redis` (Docker)  | `8-alpine`    | Cache/queue backend                      |
+| `nginx` (Docker)  | `1.28-alpine` | Reverse proxy                            |
 
 ---
 
@@ -2882,98 +2859,98 @@ This checklist maps every file to its creation phase and provides implementation
 
 ### Phase 0.1 Files (create first)
 
-| # | File | Purpose |
-|---|---|---|
-| 1 | `.env.example` | Root environment template |
-| 2 | `apps/api/.env.example` | API environment template |
-| 3 | `apps/web/.env.example` | Web environment template |
-| 4 | `infrastructure/mysql/init/01-create-databases.sql` | Init SQL for test DB |
-| 5 | `infrastructure/nginx/nginx.conf` | Nginx main config |
-| 6 | `infrastructure/nginx/conf.d/default.conf` | Nginx site config |
-| 7 | `infrastructure/docker/api.Dockerfile` | API container |
-| 8 | `infrastructure/docker/web.Dockerfile` | Web container |
-| 9 | `docker-compose.yml` | Full service orchestration |
-| 10 | `docker-compose.override.yml` | Dev overrides |
-| 11 | `scripts/dev.sh` | Dev startup script |
-| 12 | `scripts/seed.sh` | Seed runner script |
+| #   | File                                                | Purpose                    |
+| --- | --------------------------------------------------- | -------------------------- |
+| 1   | `.env.example`                                      | Root environment template  |
+| 2   | `apps/api/.env.example`                             | API environment template   |
+| 3   | `apps/web/.env.example`                             | Web environment template   |
+| 4   | `infrastructure/mysql/init/01-create-databases.sql` | Init SQL for test DB       |
+| 5   | `infrastructure/nginx/nginx.conf`                   | Nginx main config          |
+| 6   | `infrastructure/nginx/conf.d/default.conf`          | Nginx site config          |
+| 7   | `infrastructure/docker/api.Dockerfile`              | API container              |
+| 8   | `infrastructure/docker/web.Dockerfile`              | Web container              |
+| 9   | `docker-compose.yml`                                | Full service orchestration |
+| 10  | `docker-compose.override.yml`                       | Dev overrides              |
+| 11  | `scripts/dev.sh`                                    | Dev startup script         |
+| 12  | `scripts/seed.sh`                                   | Seed runner script         |
 
 ### Phase 0.2 Files (create second)
 
-| # | File | Purpose |
-|---|---|---|
-| 13 | `pnpm-workspace.yaml` | Workspace definition |
-| 14 | `.npmrc` | pnpm settings |
-| 15 | `package.json` | Root package.json |
-| 16 | `turbo.json` | Turborepo config |
-| 17 | `.gitignore` | Git ignore rules |
-| 18 | `.prettierrc` | Prettier config |
-| 19 | `.prettierignore` | Prettier ignore |
-| 20 | `packages/tsconfig/package.json` | TSConfig package |
-| 21 | `packages/tsconfig/base.json` | Base TS config |
-| 22 | `packages/tsconfig/nestjs.json` | NestJS TS config |
-| 23 | `packages/tsconfig/nextjs.json` | Next.js TS config |
-| 24 | `packages/tsconfig/node.json` | Node TS config |
-| 25 | `packages/eslint-config/package.json` | ESLint package |
-| 26 | `packages/eslint-config/base.js` | Base ESLint config |
-| 27 | `packages/eslint-config/nestjs.js` | NestJS ESLint config |
-| 28 | `packages/eslint-config/nextjs.js` | Next.js ESLint config |
-| 29 | `packages/shared/package.json` | Shared package |
-| 30 | `packages/shared/tsconfig.json` | Shared TS config |
-| 31 | `packages/shared/src/index.ts` | Shared barrel export |
-| 32 | `packages/shared/src/constants/index.ts` | App constants |
-| 33 | `packages/shared/src/types/index.ts` | Shared types |
-| 34 | `packages/shared/src/dto/index.ts` | Shared DTOs (placeholder) |
-| 35 | `apps/api/package.json` | API package.json |
-| 36 | `apps/api/tsconfig.json` | API TS config |
-| 37 | `apps/api/tsconfig.build.json` | API build TS config |
-| 38 | `apps/api/nest-cli.json` | NestJS CLI config |
-| 39 | `apps/api/prisma/schema.prisma` | Prisma schema |
-| 40 | `apps/api/prisma/seed.ts` | Seed script |
-| 41 | `apps/api/src/main.ts` | API entry point |
-| 42 | `apps/api/src/app.module.ts` | Root module |
-| 43 | `apps/api/src/app.controller.ts` | Root controller |
-| 44 | `apps/api/src/app.controller.spec.ts` | Root controller test |
-| 45 | `apps/api/src/app.service.ts` | Root service |
-| 46 | `apps/api/src/config/app.config.ts` | App config |
-| 47 | `apps/api/src/config/database.config.ts` | DB config |
-| 48 | `apps/api/src/config/swagger.config.ts` | Swagger config |
-| 49 | `apps/api/src/health/health.module.ts` | Health module |
-| 50 | `apps/api/src/health/health.controller.ts` | Health controller |
-| 51 | `apps/api/src/common/filters/http-exception.filter.ts` | Exception filter |
-| 52 | `apps/api/src/common/interceptors/transform.interceptor.ts` | Response interceptor |
-| 53 | `apps/api/src/common/decorators/api-version.decorator.ts` | Version decorator |
-| 54 | `apps/api/src/common/pipes/validation.pipe.ts` | Validation pipe |
-| 55 | `apps/api/jest.integration.config.ts` | Integration test config |
-| 56 | `apps/api/test/setup.ts` | Unit test setup |
-| 57 | `apps/api/test/integration/setup.ts` | Integration test setup |
-| 58 | `apps/api/test/integration/app.integration.spec.ts` | Integration smoke test |
-| 59 | `apps/api/test/helpers/testcontainers.ts` | Testcontainers helper |
-| 60 | `apps/web/package.json` | Web package.json |
-| 61 | `apps/web/tsconfig.json` | Web TS config |
-| 62 | `apps/web/next.config.ts` | Next.js config |
-| 63 | `apps/web/postcss.config.js` | PostCSS config |
-| 64 | `apps/web/vitest.config.ts` | Vitest config |
-| 65 | `apps/web/playwright.config.ts` | Playwright config |
-| 66 | `apps/web/src/app/layout.tsx` | Root layout |
-| 67 | `apps/web/src/app/page.tsx` | Home page |
-| 68 | `apps/web/src/app/api/health/route.ts` | Web health endpoint |
-| 69 | `apps/web/src/lib/api-client.ts` | API client |
-| 70 | `apps/web/src/styles/globals.css` | Global styles |
-| 71 | `apps/web/src/i18n/request.ts` | i18n request config |
-| 72 | `apps/web/src/test-setup.ts` | Vitest setup |
-| 73 | `apps/web/messages/en.json` | English translations |
-| 74 | `apps/web/messages/he.json` | Hebrew translations |
-| 75 | `apps/web/e2e/smoke.spec.ts` | E2E smoke test |
-| 76 | `apps/web/src/components/ui/.gitkeep` | UI components dir |
-| 77 | `apps/web/src/hooks/.gitkeep` | Hooks dir |
-| 78 | `apps/web/public/.gitkeep` | Public assets dir |
-| 79 | `apps/web/e2e/fixtures/.gitkeep` | E2E fixtures dir |
-| 80 | `apps/bot/.env.example` | Bot env template |
-| 81 | `apps/bot/package.json` | Bot package.json |
-| 82 | `apps/bot/tsconfig.json` | Bot TS config |
-| 83 | `apps/bot/src/main.ts` | Bot entry point (placeholder) |
-| 84 | `apps/bot/src/bot.module.ts` | Bot module (placeholder) |
-| 85 | `infrastructure/docker/bot.Dockerfile` | Bot container |
+| #   | File                                                        | Purpose                       |
+| --- | ----------------------------------------------------------- | ----------------------------- |
+| 13  | `pnpm-workspace.yaml`                                       | Workspace definition          |
+| 14  | `.npmrc`                                                    | pnpm settings                 |
+| 15  | `package.json`                                              | Root package.json             |
+| 16  | `turbo.json`                                                | Turborepo config              |
+| 17  | `.gitignore`                                                | Git ignore rules              |
+| 18  | `.prettierrc`                                               | Prettier config               |
+| 19  | `.prettierignore`                                           | Prettier ignore               |
+| 20  | `packages/tsconfig/package.json`                            | TSConfig package              |
+| 21  | `packages/tsconfig/base.json`                               | Base TS config                |
+| 22  | `packages/tsconfig/nestjs.json`                             | NestJS TS config              |
+| 23  | `packages/tsconfig/nextjs.json`                             | Next.js TS config             |
+| 24  | `packages/tsconfig/node.json`                               | Node TS config                |
+| 25  | `packages/eslint-config/package.json`                       | ESLint package                |
+| 26  | `packages/eslint-config/base.js`                            | Base ESLint config            |
+| 27  | `packages/eslint-config/nestjs.js`                          | NestJS ESLint config          |
+| 28  | `packages/eslint-config/nextjs.js`                          | Next.js ESLint config         |
+| 29  | `packages/shared/package.json`                              | Shared package                |
+| 30  | `packages/shared/tsconfig.json`                             | Shared TS config              |
+| 31  | `packages/shared/src/index.ts`                              | Shared barrel export          |
+| 32  | `packages/shared/src/constants/index.ts`                    | App constants                 |
+| 33  | `packages/shared/src/types/index.ts`                        | Shared types                  |
+| 34  | `packages/shared/src/dto/index.ts`                          | Shared DTOs (placeholder)     |
+| 35  | `apps/api/package.json`                                     | API package.json              |
+| 36  | `apps/api/tsconfig.json`                                    | API TS config                 |
+| 37  | `apps/api/tsconfig.build.json`                              | API build TS config           |
+| 38  | `apps/api/nest-cli.json`                                    | NestJS CLI config             |
+| 39  | `apps/api/prisma/schema.prisma`                             | Prisma schema                 |
+| 40  | `apps/api/prisma/seed.ts`                                   | Seed script                   |
+| 41  | `apps/api/src/main.ts`                                      | API entry point               |
+| 42  | `apps/api/src/app.module.ts`                                | Root module                   |
+| 43  | `apps/api/src/app.controller.ts`                            | Root controller               |
+| 44  | `apps/api/src/app.controller.spec.ts`                       | Root controller test          |
+| 45  | `apps/api/src/app.service.ts`                               | Root service                  |
+| 46  | `apps/api/src/config/app.config.ts`                         | App config                    |
+| 47  | `apps/api/src/config/database.config.ts`                    | DB config                     |
+| 48  | `apps/api/src/config/swagger.config.ts`                     | Swagger config                |
+| 49  | `apps/api/src/health/health.module.ts`                      | Health module                 |
+| 50  | `apps/api/src/health/health.controller.ts`                  | Health controller             |
+| 51  | `apps/api/src/common/filters/http-exception.filter.ts`      | Exception filter              |
+| 52  | `apps/api/src/common/interceptors/transform.interceptor.ts` | Response interceptor          |
+| 53  | `apps/api/src/common/decorators/api-version.decorator.ts`   | Version decorator             |
+| 54  | `apps/api/src/common/pipes/validation.pipe.ts`              | Validation pipe               |
+| 55  | `apps/api/jest.integration.config.ts`                       | Integration test config       |
+| 56  | `apps/api/test/setup.ts`                                    | Unit test setup               |
+| 57  | `apps/api/test/integration/setup.ts`                        | Integration test setup        |
+| 58  | `apps/api/test/integration/app.integration.spec.ts`         | Integration smoke test        |
+| 59  | `apps/api/test/helpers/testcontainers.ts`                   | Testcontainers helper         |
+| 60  | `apps/web/package.json`                                     | Web package.json              |
+| 61  | `apps/web/tsconfig.json`                                    | Web TS config                 |
+| 62  | `apps/web/next.config.ts`                                   | Next.js config                |
+| 63  | `apps/web/postcss.config.js`                                | PostCSS config                |
+| 64  | `apps/web/vitest.config.ts`                                 | Vitest config                 |
+| 65  | `apps/web/playwright.config.ts`                             | Playwright config             |
+| 66  | `apps/web/src/app/layout.tsx`                               | Root layout                   |
+| 67  | `apps/web/src/app/page.tsx`                                 | Home page                     |
+| 68  | `apps/web/src/app/api/health/route.ts`                      | Web health endpoint           |
+| 69  | `apps/web/src/lib/api-client.ts`                            | API client                    |
+| 70  | `apps/web/src/styles/globals.css`                           | Global styles                 |
+| 71  | `apps/web/src/i18n/request.ts`                              | i18n request config           |
+| 72  | `apps/web/src/test-setup.ts`                                | Vitest setup                  |
+| 73  | `apps/web/messages/en.json`                                 | English translations          |
+| 74  | `apps/web/messages/he.json`                                 | Hebrew translations           |
+| 75  | `apps/web/e2e/smoke.spec.ts`                                | E2E smoke test                |
+| 76  | `apps/web/src/components/ui/.gitkeep`                       | UI components dir             |
+| 77  | `apps/web/src/hooks/.gitkeep`                               | Hooks dir                     |
+| 78  | `apps/web/public/.gitkeep`                                  | Public assets dir             |
+| 79  | `apps/web/e2e/fixtures/.gitkeep`                            | E2E fixtures dir              |
+| 80  | `apps/bot/.env.example`                                     | Bot env template              |
+| 81  | `apps/bot/package.json`                                     | Bot package.json              |
+| 82  | `apps/bot/tsconfig.json`                                    | Bot TS config                 |
+| 83  | `apps/bot/src/main.ts`                                      | Bot entry point (placeholder) |
+| 84  | `apps/bot/src/bot.module.ts`                                | Bot module (placeholder)      |
+| 85  | `infrastructure/docker/bot.Dockerfile`                      | Bot container                 |
 
 **Total files**: 85
 

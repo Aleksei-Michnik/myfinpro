@@ -4,7 +4,6 @@ import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '@prisma/client';
 import { MySqlContainer, StartedMySqlContainer } from '@testcontainers/mysql';
 
-
 /**
  * Testcontainers helper for integration tests.
  * Spins up an isolated MySQL container per test suite.

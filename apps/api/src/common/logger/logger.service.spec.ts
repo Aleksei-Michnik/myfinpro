@@ -82,9 +82,6 @@ describe('AppLoggerService', () => {
 
   it('should work without context', () => {
     service.info('test message');
-    expect(mockPinoLogger.info).toHaveBeenCalledWith(
-      expect.any(Object),
-      'test message',
-    );
+    expect(mockPinoLogger.info).toHaveBeenCalledWith(expect.any(Object), 'test message');
   });
 });

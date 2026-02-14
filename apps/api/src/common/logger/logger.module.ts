@@ -37,11 +37,7 @@ interface PinoSerializedResponse {
             level: logLevel,
             // Generate request ID from context or header
             genReqId: (req: IncomingMessage) => {
-              return (
-                getRequestId() ||
-                (req.headers?.['x-request-id'] as string) ||
-                'unknown'
-              );
+              return getRequestId() || (req.headers?.['x-request-id'] as string) || 'unknown';
             },
             // Redact sensitive fields
             redact: {
@@ -66,9 +62,7 @@ interface PinoSerializedResponse {
                 query: req.query,
                 params: req.params,
                 // Don't log full headers in production
-                ...(isProduction
-                  ? {}
-                  : { headers: req.headers }),
+                ...(isProduction ? {} : { headers: req.headers }),
               }),
               res: (res: PinoSerializedResponse) => ({
                 statusCode: res.statusCode,

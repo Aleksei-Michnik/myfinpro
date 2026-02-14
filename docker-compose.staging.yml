@@ -13,14 +13,14 @@ services:
     env_file:
       - .env
     ports:
-      - "3306:3306"
+      - '3306:3306'
     volumes:
       - myfinpro-staging-mysql:/var/lib/mysql
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - myfinpro-staging
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,13 +36,13 @@ services:
     container_name: myfinpro-staging-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - myfinpro-staging-redis:/data
     networks:
       - myfinpro-staging
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,7 +56,7 @@ services:
     env_file:
       - .env
     ports:
-      - "3001:3001"
+      - '3001:3001'
     networks:
       - myfinpro-staging
     depends_on:
@@ -65,7 +65,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/api/v1/health',
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -79,14 +87,14 @@ services:
     env_file:
       - .env
     ports:
-      - "3000:3000"
+      - '3000:3000'
     networks:
       - myfinpro-staging
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
       interval: 15s
       timeout: 5s
       retries: 3
@@ -98,7 +106,7 @@ services:
     container_name: myfinpro-staging-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - '80:80'
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
@@ -110,7 +118,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
       interval: 15s
       timeout: 5s
       retries: 3

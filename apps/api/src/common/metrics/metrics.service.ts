@@ -97,31 +97,21 @@ export class MetricsService {
         total: this.totalRequests,
         byMethod: Object.fromEntries(this.requestsByMethod),
         byStatusCode: Object.fromEntries(
-          [...this.requestsByStatusCode.entries()].map(([k, v]) => [
-            String(k),
-            v,
-          ]),
+          [...this.requestsByStatusCode.entries()].map(([k, v]) => [String(k), v]),
         ),
         byPath: Object.fromEntries(this.requestsByPath),
       },
       errors: {
         total: this.totalErrors,
         byStatusCode: Object.fromEntries(
-          [...this.errorsByStatusCode.entries()].map(([k, v]) => [
-            String(k),
-            v,
-          ]),
+          [...this.errorsByStatusCode.entries()].map(([k, v]) => [String(k), v]),
         ),
       },
       latency: {
         p50: this.percentile(sorted, 50),
         p95: this.percentile(sorted, 95),
         p99: this.percentile(sorted, 99),
-        avg: sorted.length
-          ? Math.round(
-              sorted.reduce((a, b) => a + b, 0) / sorted.length,
-            )
-          : 0,
+        avg: sorted.length ? Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length) : 0,
       },
       activeConnections: this.activeConnections,
     };
@@ -143,10 +133,7 @@ export class MetricsService {
     const basePath = path.split('?')[0];
     // Replace UUIDs and numeric IDs with :id
     return basePath
-      .replace(
-        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-        ':id',
-      )
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
       .replace(/\/\d+/g, '/:id');
   }
 

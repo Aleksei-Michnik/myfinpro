@@ -10,12 +10,12 @@ The `main` branch represents production-ready code. Apply these protection rules
 
 Enable **"Require status checks to pass before merging"** with the following checks:
 
-| Status Check         | Workflow       | Description                           |
-| -------------------- | -------------- | ------------------------------------- |
-| `Lint & Typecheck`   | `ci.yml`       | ESLint, TypeScript, Prettier          |
-| `Unit Tests`         | `ci.yml`       | All unit test suites must pass        |
-| `Build`              | `ci.yml`       | Full monorepo build must succeed      |
-| `PR Title Convention`| `pr-check.yml` | Conventional Commits format enforced  |
+| Status Check          | Workflow       | Description                          |
+| --------------------- | -------------- | ------------------------------------ |
+| `Lint & Typecheck`    | `ci.yml`       | ESLint, TypeScript, Prettier         |
+| `Unit Tests`          | `ci.yml`       | All unit test suites must pass       |
+| `Build`               | `ci.yml`       | Full monorepo build must succeed     |
+| `PR Title Convention` | `pr-check.yml` | Conventional Commits format enforced |
 
 Enable **"Require branches to be up to date before merging"** to ensure PRs are tested against the latest `main`.
 
@@ -43,11 +43,11 @@ The `develop` branch is the integration branch for features. Apply similar but s
 
 Same as `main`:
 
-| Status Check         | Workflow       |
-| -------------------- | -------------- |
-| `Lint & Typecheck`   | `ci.yml`       |
-| `Unit Tests`         | `ci.yml`       |
-| `Build`              | `ci.yml`       |
+| Status Check       | Workflow |
+| ------------------ | -------- |
+| `Lint & Typecheck` | `ci.yml` |
+| `Unit Tests`       | `ci.yml` |
+| `Build`            | `ci.yml` |
 
 Enable **"Require branches to be up to date before merging"**.
 

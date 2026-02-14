@@ -1,4 +1,9 @@
-import { AuthRateLimit, NoRateLimit, PublicRateLimit, RelaxedRateLimit } from './throttle.decorator';
+import {
+  AuthRateLimit,
+  NoRateLimit,
+  PublicRateLimit,
+  RelaxedRateLimit,
+} from './throttle.decorator';
 
 // In @nestjs/throttler v6, metadata keys are concatenated with the throttler name
 // e.g. "THROTTLER:SKIPdefault", "THROTTLER:TTLdefault", "THROTTLER:LIMITdefault"

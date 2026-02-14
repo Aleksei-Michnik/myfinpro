@@ -9,9 +9,7 @@ export interface RequestContextData {
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContextData>();
 
-export function createRequestContext(
-  requestId?: string,
-): RequestContextData {
+export function createRequestContext(requestId?: string): RequestContextData {
   return {
     requestId: requestId || randomUUID(),
     startTime: Date.now(),

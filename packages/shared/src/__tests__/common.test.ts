@@ -49,7 +49,7 @@ describe('Common Types', () => {
     });
 
     it('should have default locale in supported locales', () => {
-      expect((LOCALES as readonly Locale[])).toContain(DEFAULT_LOCALE);
+      expect(LOCALES as readonly Locale[]).toContain(DEFAULT_LOCALE);
     });
   });
 });

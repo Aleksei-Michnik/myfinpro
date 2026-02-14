@@ -191,7 +191,10 @@ describe('CustomThrottlerGuard', () => {
       };
 
       await expect(
-        (guard as unknown as TestableThrottlerGuard).throwThrottlingException(mockContext, throttlerLimitDetail),
+        (guard as unknown as TestableThrottlerGuard).throwThrottlingException(
+          mockContext,
+          throttlerLimitDetail,
+        ),
       ).rejects.toThrow();
 
       expect(incrementErrorsSpy).toHaveBeenCalledWith(429);
