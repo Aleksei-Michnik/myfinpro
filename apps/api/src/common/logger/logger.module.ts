@@ -29,7 +29,7 @@ interface PinoSerializedResponse {
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const nodeEnv = configService.get<string>('NODE_ENV', 'development');
-        const isProduction = nodeEnv === 'production';
+        const isDevelopment = nodeEnv === 'development';
         const logLevel = configService.get<string>('LOG_LEVEL', 'info');
 
         return {
@@ -61,8 +61,8 @@ interface PinoSerializedResponse {
                 url: req.url,
                 query: req.query,
                 params: req.params,
-                // Don't log full headers in production
-                ...(isProduction ? {} : { headers: req.headers }),
+                // Don't log full headers outside development
+                ...(isDevelopment ? { headers: req.headers } : {}),
               }),
               res: (res: PinoSerializedResponse) => ({
                 statusCode: res.statusCode,
@@ -86,9 +86,8 @@ interface PinoSerializedResponse {
             customErrorMessage: (req: IncomingMessage, res: ServerResponse) => {
               return `${req.method} ${req.url} ${res.statusCode}`;
             },
-            transport: isProduction
-              ? undefined
-              : {
+            transport: isDevelopment
+              ? {
                   target: 'pino-pretty',
                   options: {
                     colorize: true,
@@ -96,7 +95,8 @@ interface PinoSerializedResponse {
                     translateTime: 'SYS:standard',
                     ignore: 'pid,hostname',
                   },
-                },
+                }
+              : undefined,
           },
         };
       },
