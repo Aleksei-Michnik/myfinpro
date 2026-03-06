@@ -29,6 +29,8 @@ RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \
 
 # ───── Production Stage ─────
 FROM node:22-alpine AS production
+# Install wget for Docker health checks (BusyBox wget lacks --no-verbose/--tries flags)
+RUN apk add --no-cache wget
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
