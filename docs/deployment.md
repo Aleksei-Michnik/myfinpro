@@ -2,16 +2,17 @@
 
 ## Overview
 
-MyFinPro deploys to a dedicated Ubuntu server using Docker Compose with **ephemeral secret injection**. The CD pipeline builds Docker images, pushes them to GitHub Container Registry (GHCR), then deploys via SSH with secrets injected at deploy time and shredded immediately after.
+MyFinPro deploys to a dedicated Ubuntu server using Docker Compose with **direct environment variable injection**. The CD pipeline builds Docker images, pushes them to GitHub Container Registry (GHCR), then deploys via SSH with secrets exported as shell environment variables — no files are ever written to disk.
 
 **Security Pattern:**
 
 ```
 GitHub Secrets (source of truth)
     → SSH into server
-    → Write temp .env file
-    → docker compose up (reads .env)
-    → shred .env (secrets never persist on disk)
+    → Export env vars in shell session
+    → Process nginx SSL template (envsubst)
+    → docker compose up (resolves ${VAR} from shell)
+    → No files written to disk
 ```
 
 **Environments:**
@@ -25,26 +26,26 @@ GitHub Secrets (source of truth)
 
 ## Security Architecture
 
-### Ephemeral Secret Injection
+### Direct Environment Variable Injection
 
-Secrets are **never stored persistently** on the server. The deployment follows this pattern:
+Secrets are **never stored on the server** — not even temporarily. The deployment follows this pattern:
 
 1. **GitHub Secrets** is the single source of truth for all application secrets
 2. The deploy workflow passes secrets via SSH environment variables using `appleboy/ssh-action@v1` `envs` parameter
-3. On the server, a temporary `.env` file is written with `chmod 600`
-4. `docker compose up -d` reads the `.env` via the `env_file:` directive
-5. The `.env` file is immediately **shredded** (`shred -vfz -n 3`) after compose starts
-6. Docker Compose uses `env_file:` (not `environment:`) to avoid exposure via `docker inspect`
+3. On the server, secrets are exported as shell environment variables
+4. Nginx SSL config is generated from `ssl.conf.template` via `envsubst '$SERVER_NAME'`
+5. `docker compose up -d` resolves `${VAR}` references in the compose file directly from the shell environment
+6. No files are written to disk — secrets exist only in process memory
 
 ### Why This Pattern?
 
-| Concern                   | Solution                                    |
-| ------------------------- | ------------------------------------------- |
-| Secrets in git history    | Never committed — injected at deploy time   |
-| Secrets on server disk    | Shredded after compose up                   |
-| `docker inspect` exposure | Using `env_file:` instead of `environment:` |
-| Secret rotation           | Update GitHub Secret → redeploy             |
-| Audit trail               | GitHub Secrets audit log                    |
+| Concern                | Solution                                                              |
+| ---------------------- | --------------------------------------------------------------------- |
+| Secrets in git history | Never committed — injected at deploy time from GitHub Secrets         |
+| Secrets on server disk | No files written to disk — secrets exist only in process memory       |
+| Secret rotation        | Update GitHub Secret → redeploy                                      |
+| Audit trail            | GitHub Secrets audit log                                              |
+| Nginx config           | Generated from template via `envsubst` — domain never stored in repo |
 
 ---
 
@@ -81,51 +82,54 @@ See [`server-setup-guide.md`](server-setup-guide.md) for full server provisionin
 
 Configure these in **Settings → Secrets and variables → Actions**.
 
-### SSH & Infrastructure Secrets (per environment)
+### SSH & Infrastructure Secrets
 
-| Secret               | Description                                                        |
-| -------------------- | ------------------------------------------------------------------ |
-| `STAGING_HOST`       | Staging server IP or hostname                                      |
-| `STAGING_USER`       | SSH username on staging server                                     |
-| `STAGING_SSH_KEY`    | Private SSH key for staging server                                 |
-| `PRODUCTION_HOST`    | Production server IP or hostname                                   |
-| `PRODUCTION_USER`    | SSH username on production server                                  |
-| `PRODUCTION_SSH_KEY` | Private SSH key for production server                              |
-| `GHCR_REPO`          | GitHub Container Registry repo (lowercase, e.g., `owner/myfinpro`) |
+| Secret               | Description                        |
+| -------------------- | ---------------------------------- |
+| `STAGING_HOST`       | Staging server IP or hostname      |
+| `STAGING_USER`       | SSH username on staging server     |
+| `STAGING_SSH_KEY`    | Private SSH key for staging server |
+| `PRODUCTION_HOST`    | Production server IP or hostname   |
+| `PRODUCTION_USER`    | SSH username on production server  |
+| `PRODUCTION_SSH_KEY` | Private SSH key for production server |
 
-### Application Secrets (per environment)
+### Application Secrets (per environment — staging uses `STAGING_` prefix, production uses `PRODUCTION_` prefix)
 
-These must be configured in each GitHub Environment (`staging` / `production`):
+| Secret                  | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `*_MYSQL_ROOT_PASSWORD` | MySQL root password                             |
+| `*_MYSQL_DATABASE`      | Database name                                   |
+| `*_MYSQL_USER`          | Database user                                   |
+| `*_MYSQL_PASSWORD`      | Database user password                          |
+| `*_DATABASE_URL`        | Full MySQL connection string                    |
+| `*_JWT_SECRET`          | JWT access token signing secret (min 32 chars)  |
+| `*_JWT_REFRESH_SECRET`  | JWT refresh token signing secret (min 32 chars) |
+| `*_REDIS_URL`           | Redis connection string                         |
 
-| Secret                | Description                                     | Example                            |
-| --------------------- | ----------------------------------------------- | ---------------------------------- |
-| `MYSQL_ROOT_PASSWORD` | MySQL root password                             | `openssl rand -base64 48`          |
-| `MYSQL_DATABASE`      | Database name                                   | `myfinpro_staging`                 |
-| `MYSQL_USER`          | Database user                                   | `myfinpro_staging`                 |
-| `MYSQL_PASSWORD`      | Database user password                          | `openssl rand -base64 48`          |
-| `DATABASE_URL`        | Full MySQL connection string                    | `mysql://user:pass@mysql:3306/db`  |
-| `JWT_SECRET`          | JWT access token signing secret (min 32 chars)  | `openssl rand -base64 48`          |
-| `JWT_REFRESH_SECRET`  | JWT refresh token signing secret (min 32 chars) | `openssl rand -base64 48`          |
-| `REDIS_URL`           | Redis connection string                         | `redis://redis:6379`               |
-| `CORS_ORIGIN`         | Allowed CORS origins (production only)          | `https://myfinpro.example.com`     |
-| `NEXT_PUBLIC_API_URL` | Public API URL (production only)                | `https://myfinpro.example.com/api` |
+### Domain Secrets
+
+| Secret                            | Description                            |
+| --------------------------------- | -------------------------------------- |
+| `CLOUDFLARE_STAGING_SUBDOMAIN`    | Domain for the staging environment     |
+| `CLOUDFLARE_PRODUCTION_SUBDOMAIN` | Domain for the production environment  |
 
 ### Non-Secret Config (hardcoded in workflow)
 
 These values are set directly in the workflow files:
 
-| Variable              | Staging Value     | Production Value  |
-| --------------------- | ----------------- | ----------------- |
-| `NODE_ENV`            | `staging`         | `production`      |
-| `API_PORT`            | `3001`            | `3001`            |
-| `CORS_ORIGIN`         | `*`               | From secret       |
-| `LOG_LEVEL`           | `debug`           | `warn`            |
-| `SWAGGER_ENABLED`     | `true`            | `false`           |
-| `RATE_LIMIT_TTL`      | `60000`           | `60000`           |
-| `RATE_LIMIT_MAX`      | `60`              | `30`              |
-| `NEXT_PUBLIC_API_URL` | `/api`            | From secret       |
-| `API_INTERNAL_URL`    | `http://api:3001` | `http://api:3001` |
-| `IMAGE_TAG`           | `staging`         | `latest`          |
+| Variable              | Staging           | Production                                    |
+| --------------------- | ----------------- | --------------------------------------------- |
+| `NODE_ENV`            | `staging`         | `production`                                  |
+| `API_PORT`            | `3001`            | `3001`                                        |
+| `CORS_ORIGIN`         | `*`               | Derived from `CLOUDFLARE_PRODUCTION_SUBDOMAIN` |
+| `LOG_LEVEL`           | `debug`           | `warn`                                        |
+| `SWAGGER_ENABLED`     | `true`            | `false`                                       |
+| `RATE_LIMIT_TTL`      | `60000`           | `60000`                                       |
+| `RATE_LIMIT_MAX`      | `60`              | `30`                                          |
+| `NEXT_PUBLIC_API_URL` | `/api`            | `/api`                                        |
+| `API_INTERNAL_URL`    | `http://api:3001` | `http://api:3001`                             |
+| `IMAGE_TAG`           | `staging`         | `latest`                                      |
+| `GHCR_REPO`           | `aleksei-michnik/myfinpro` | `aleksei-michnik/myfinpro`           |
 
 ### GitHub Environments
 
@@ -143,7 +147,7 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 3. Trigger a new deployment (push to branch or manual dispatch)
 4. The new secret value is automatically injected on the next deploy
 
-**Important:** Since secrets are ephemeral, rotating a secret is as simple as updating it in GitHub and redeploying. No need to SSH into servers to update `.env` files.
+Since no files are written to disk, rotating a secret is as simple as updating it in GitHub and redeploying. No need to SSH into servers.
 
 ---
 
@@ -156,9 +160,9 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 1. Wait for CI to pass
 2. Build & push Docker images tagged `staging`
 3. SSH into the staging server
-4. Write ephemeral `.env` with secrets from GitHub
-5. Pull images, run `docker compose up -d`
-6. Shred the `.env` file
+4. Export secrets as shell environment variables
+5. Generate nginx config from SSL template via `envsubst`
+6. Pull images, run `docker compose up -d` (resolves `${VAR}` from shell)
 7. Verify health checks
 
 **Manual:** Go to **Actions → Deploy Staging → Run workflow**.
@@ -170,9 +174,9 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 1. Require manual approval in the `production` environment
 2. Build & push Docker images tagged `latest` and version tag
 3. SSH into the production server
-4. Write ephemeral `.env` with production secrets
-5. Pull images, run `docker compose up -d`
-6. Shred the `.env` file
+4. Export secrets as shell environment variables
+5. Generate nginx config from SSL template via `envsubst`
+6. Pull images, run `docker compose up -d` (resolves `${VAR}` from shell)
 7. Verify health checks
 
 **Manual:** Go to **Actions → Deploy Production → Run workflow**:
@@ -182,19 +186,50 @@ Create two [GitHub Environments](https://docs.github.com/en/actions/deployment/t
 
 ### Manual Deployment (via CLI)
 
-For manual deployment without GitHub Actions, export required env vars and run:
+For manual deployment without GitHub Actions, export required env vars and run docker compose directly:
 
 ```bash
-# Export all required env vars (see .env.staging.template for the list)
+# SSH into the server
+ssh deploy@<YOUR_SERVER_IP>
+cd /opt/myfinpro/staging
+
+# Export all required secrets (see .env.staging.template for the full list)
 export MYSQL_ROOT_PASSWORD="..."
 export MYSQL_DATABASE="..."
-# ... (all vars from the template)
+export MYSQL_USER="..."
+export MYSQL_PASSWORD="..."
+export DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}"
+export JWT_SECRET="..."
+export JWT_REFRESH_SECRET="..."
+export REDIS_URL="redis://redis:6379"
 
-cd /opt/myfinpro/staging
-./scripts/deploy.sh staging
+# Export application config
+export NODE_ENV="staging"
+export API_PORT="3001"
+export CORS_ORIGIN="*"
+export LOG_LEVEL="debug"
+export SWAGGER_ENABLED="true"
+export RATE_LIMIT_TTL="60000"
+export RATE_LIMIT_MAX="60"
+export NEXT_PUBLIC_API_URL="/api"
+export API_INTERNAL_URL="http://api:3001"
+export GHCR_REPO="aleksei-michnik/myfinpro"
+export IMAGE_TAG="staging"
+
+# Export domain (from CLOUDFLARE_STAGING_SUBDOMAIN GitHub Secret)
+export SERVER_NAME="<domain from CLOUDFLARE_STAGING_SUBDOMAIN>"
+
+# Generate nginx config from template
+envsubst '$SERVER_NAME' < infrastructure/nginx/conf.d/ssl.conf.template \
+  > infrastructure/nginx/conf.d/default.conf
+
+# Pull images and start services
+docker compose -f docker-compose.staging.yml pull
+docker compose -f docker-compose.staging.yml up -d
+
+# Verify health
+curl -sf http://localhost/api/v1/health | jq .
 ```
-
-The deploy script will write the `.env`, run compose, and shred on exit.
 
 ---
 
@@ -228,7 +263,8 @@ To deploy a specific version, re-run the deploy workflow with the required secre
 # Set IMAGE_TAG to the desired version
 export IMAGE_TAG=staging-abc1234
 # ... export other required env vars ...
-./scripts/deploy.sh staging
+docker compose -f docker-compose.staging.yml pull
+docker compose -f docker-compose.staging.yml up -d
 ```
 
 ---
@@ -297,7 +333,7 @@ docker compose -f docker-compose.staging.yml exec api npx prisma migrate reset -
 echo "$GITHUB_PAT" | docker login ghcr.io -u USERNAME --password-stdin
 
 # Verify image exists
-docker pull ghcr.io/your-repo/api:staging
+docker pull ghcr.io/aleksei-michnik/myfinpro/api:staging
 ```
 
 ### Health check failing
@@ -355,7 +391,7 @@ flowchart LR
 
     Repo -->|develop / main| Actions
     Actions -->|Build & push GHCR| Actions
-    Actions -->|SSH + inject secrets| Server
+    Actions -->|SSH + export env vars| Server
     Secrets -->|envs via SSH| Actions
 
     Nginx --> API
@@ -375,9 +411,9 @@ sequenceDiagram
 
     GH->>GA: Secrets via envs parameter
     GA->>SSH: appleboy/ssh-action with envs
-    SSH->>Srv: Write .env (chmod 600)
+    SSH->>Srv: export VAR=value (in shell)
+    SSH->>Srv: envsubst ssl.conf.template → ssl.conf
     SSH->>Srv: docker compose up -d
-    Srv->>Srv: Containers read env_file: .env
-    SSH->>Srv: shred -vfz -n 3 .env
-    Note over Srv: .env no longer exists on disk
+    Srv->>Srv: Compose resolves ${VAR} from shell env
+    Note over Srv: No files written — secrets in process memory only
 ```

@@ -2984,3 +2984,30 @@ This checklist maps every file to its creation phase and provides implementation
 - [ ] `@myfinpro/shared` types are importable from both API and Web
 - [ ] Bot placeholder builds without errors
 - [ ] Turbo caches parallel builds correctly
+
+---
+
+## Appendix C: Infrastructure Acceptance Requirements
+
+### SSL/HTTPS Requirements
+
+- [ ] **Both staging and production environments must be accessible via HTTPS only**
+  - HTTP requests should be automatically redirected to HTTPS
+  - SSL/TLS certificates must be properly configured and valid
+  - This applies to **both** staging and production environments (not optional for staging)
+
+### CloudFlare Proxy Configuration
+
+- [ ] **CloudFlare must be used as the reverse proxy/SSL termination layer**
+  - All traffic to subdomains should be proxied through CloudFlare
+  - CloudFlare SSL/TLS settings should be configured to "Full" or "Full (strict)" mode
+  - The application should be configured to trust CloudFlare's proxy headers (X-Forwarded-For, X-Forwarded-Proto)
+
+### Subdomain Configuration via GitHub Secrets
+
+- [ ] **Subdomains must be configurable via GitHub secrets**
+  - The following subdomain configurations should be stored as GitHub secrets:
+    - `CLOUDFLARE_STAGING_SUBDOMAIN` - subdomain for staging environment (e.g., `staging.myfinpro.example.com`)
+    - `CLOUDFLARE_PRODUCTION_SUBDOMAIN` - subdomain for production environment (e.g., `myfinpro.example.com`)
+  - GitHub Actions workflows should use these secrets to configure DNS and deployment settings
+  - Subdomains should be automatically configured when deploying via CI/CD

@@ -1,6 +1,6 @@
 # .github/workflows/deploy-staging.yml
 # Staging Deployment — Triggered on push to develop or manual dispatch
-# Security: GitHub Secrets → SSH → write temp .env → compose up → shred .env
+# Security: GitHub Secrets → SSH → export env vars → compose up
 
 name: Deploy Staging
 
@@ -110,7 +110,7 @@ jobs:
           target: /opt/myfinpro/staging
           overwrite: true
 
-      - name: Inject secrets, deploy, and shred
+      - name: Deploy with environment variables
         uses: appleboy/ssh-action@v1
         env:
           # ── Database secrets (mapped from STAGING_* GitHub secrets) ──
@@ -138,7 +138,7 @@ jobs:
           GHCR_REPO: aleksei-michnik/myfinpro
           IMAGE_TAG: staging
           # ── Server config ──
-          SERVER_NAME: ${{ secrets.STAGING_SERVER_NAME }}
+          SERVER_NAME: ${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
@@ -149,39 +149,36 @@ jobs:
             DEPLOY_DIR="/opt/myfinpro/staging"
             cd "$DEPLOY_DIR"
 
-            echo "── Writing ephemeral .env ──"
-            cat > .env << ENVEOF
-            MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-            MYSQL_DATABASE=${MYSQL_DATABASE}
-            MYSQL_USER=${MYSQL_USER}
-            MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            DATABASE_URL=${DATABASE_URL}
-            JWT_SECRET=${JWT_SECRET}
-            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-            REDIS_URL=${REDIS_URL}
-            NODE_ENV=${NODE_ENV}
-            API_PORT=${API_PORT}
-            CORS_ORIGIN=${CORS_ORIGIN}
-            LOG_LEVEL=${LOG_LEVEL}
-            SWAGGER_ENABLED=${SWAGGER_ENABLED}
-            RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
-            RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
-            NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-            API_INTERNAL_URL=${API_INTERNAL_URL}
-            GHCR_REPO=${GHCR_REPO}
-            IMAGE_TAG=${IMAGE_TAG}
-            SERVER_NAME=${SERVER_NAME}
-            ENVEOF
-            chmod 600 .env
+            echo "── Exporting environment variables ──"
+            export MYSQL_ROOT_PASSWORD
+            export MYSQL_DATABASE
+            export MYSQL_USER
+            export MYSQL_PASSWORD
+            export DATABASE_URL
+            export JWT_SECRET
+            export JWT_REFRESH_SECRET
+            export REDIS_URL
+            export NODE_ENV
+            export API_PORT
+            export CORS_ORIGIN
+            export LOG_LEVEL
+            export SWAGGER_ENABLED
+            export RATE_LIMIT_TTL
+            export RATE_LIMIT_MAX
+            export NEXT_PUBLIC_API_URL
+            export API_INTERNAL_URL
+            export GHCR_REPO
+            export IMAGE_TAG
+            export SERVER_NAME
+
+            echo "── Processing nginx SSL template ──"
+            envsubst '$SERVER_NAME' < infrastructure/nginx/conf.d/ssl.conf.template > infrastructure/nginx/conf.d/default.conf
 
             echo "── Pulling latest images ──"
             docker compose -f docker-compose.staging.yml pull api web
 
             echo "── Starting services ──"
             docker compose -f docker-compose.staging.yml up -d
-
-            echo "── Shredding .env ──"
-            shred -vfz -n 3 .env 2>/dev/null || rm -f .env
 
             echo "── Cleaning up dangling images ──"
             docker image prune -f 2>/dev/null || true

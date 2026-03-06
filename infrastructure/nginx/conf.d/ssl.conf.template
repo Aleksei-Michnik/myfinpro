@@ -1,0 +1,126 @@
+# ssl.conf.template — Staging/Production SSL config
+# Processed at deploy time: envsubst '$SERVER_NAME' < ssl.conf.template > default.conf
+# Only ${SERVER_NAME} is substituted; all nginx variables ($host, $request_uri, etc.) are preserved.
+
+# Upstream definitions
+upstream api_upstream {
+    server api:3001;
+}
+
+upstream web_upstream {
+    server web:3000;
+}
+
+# CloudFlare IP ranges — trust CloudFlare proxy for real IP detection
+# https://www.cloudflare.com/en-gb/ips/
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 103.21.244.0/24;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 172.80.0.0/12;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 172.96.0.0/12;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/32;
+set_real_ip_from 2803:f800::/32;
+set_real_ip_from 2405:b500::/32;
+set_real_ip_from 2405:8100::/32;
+set_real_ip_from 2a06:98c0::/29;
+set_real_ip_from 2c0f:f248::/32;
+
+real_ip_header CF-Connecting-IP;
+
+# ─── HTTP Server: Redirect to HTTPS (except health check) ───
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${SERVER_NAME};
+
+    # Health check endpoint — available over HTTP for load balancer probes
+    location = /health {
+        access_log off;
+        return 200 '{"status":"ok","service":"nginx"}';
+        add_header Content-Type application/json;
+    }
+
+    # Redirect all other HTTP requests to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ─── HTTPS Server ───
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${SERVER_NAME};
+
+    # SSL certificates (Let's Encrypt / Certbot)
+    ssl_certificate /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+
+    # SSL security settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305';
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # HSTS — enforce HTTPS for all subdomains
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # ─── Health check endpoint for Nginx itself ───
+    location = /health {
+        access_log off;
+        return 200 '{"status":"ok","service":"nginx"}';
+        add_header Content-Type application/json;
+    }
+
+    # ─── API: Proxy /api/* to NestJS ───
+    location /api/ {
+        proxy_pass http://api_upstream/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # ─── Swagger docs: accessible at /api/docs ───
+    location /api/docs {
+        proxy_pass http://api_upstream/api/docs;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ─── Web: Proxy everything else to Next.js ───
+    location / {
+        proxy_pass http://web_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}

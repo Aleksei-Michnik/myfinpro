@@ -10,7 +10,7 @@
 - [Variables & Conventions](#variables--conventions)
 - [Part 1: Initial Server Setup](#part-1-initial-server-setup) (~30 min)
 - [Part 2: Application Directory Setup](#part-2-application-directory-setup) (~10 min)
-- [Part 3: SSL/TLS Setup (Production)](#part-3-ssltls-setup-production) (~15 min)
+- [Part 3: SSL/TLS Setup](#part-3-ssltls-setup) (~15 min)
 - [Part 4: GitHub Actions & Secrets Configuration](#part-4-github-actions--secrets-configuration) (~20 min)
 - [Part 5: First Deployment](#part-5-first-deployment) (~15 min)
 - [Part 6: Backup Configuration](#part-6-backup-configuration) (~15 min)
@@ -29,11 +29,12 @@ Define these variables **before** running any commands. Replace placeholder valu
 ```bash
 # ── Set these on your LOCAL machine and on the server ──
 export SERVER_IP="<YOUR_SERVER_IP>"                    # Your server's public IP
-export DOMAIN="<YOUR_PRODUCTION_DOMAIN>"               # Production domain
-export STAGING_DOMAIN="<YOUR_STAGING_DOMAIN>"           # Staging domain
 export DEPLOY_USER="deploy"                             # Non-root deploy user
 export GITHUB_USERNAME="<YOUR_GITHUB_USERNAME>"         # GitHub username (lowercase)
 export GITHUB_REPO="<YOUR_GITHUB_USERNAME>/myfinpro"    # owner/repo (lowercase)
+
+# Domains are stored in GitHub Secrets (CLOUDFLARE_STAGING_SUBDOMAIN, CLOUDFLARE_PRODUCTION_SUBDOMAIN)
+# and injected at deploy time — never hardcoded in config files or scripts.
 ```
 
 **Conventions used in this guide:**
@@ -359,12 +360,13 @@ for env in staging production; do
     scripts \
     infrastructure/nginx/conf.d \
     infrastructure/mysql/init \
+    infrastructure/ssl \
     infrastructure/backup \
     logs
 done
 ```
 
-> **Note:** No `.env` files are created on the server. Secrets are injected ephemerally by the deploy workflow from GitHub Secrets. See [Part 10: Security Architecture](#part-10-security-architecture).
+> **Note:** No secret files are created on the server. Secrets are exported as shell environment variables by the deploy workflow from GitHub Secrets. See [Part 10: Security Architecture](#part-10-security-architecture).
 
 **Verification:**
 
@@ -376,174 +378,71 @@ ls -la /opt/myfinpro/production/
 
 ---
 
-## Part 3: SSL/TLS Setup (Production)
+## Part 3: SSL/TLS Setup
 
 > ⏱ Estimated time: **15 minutes**
 >
-> Skip this section for staging if you're not using HTTPS. For staging, HTTP on port 80 is usually sufficient (or use a self-signed cert).
+> SSL certificates are managed via **CloudFlare Origin Certificates**. The domain is stored in the `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret and resolved at deploy time.
 
-### 3.1 Install Certbot
+### 3.1 Generate CloudFlare Origin Certificate
+
+1. Log in to the **CloudFlare dashboard**
+2. Select your domain → **SSL/TLS** → **Origin Server**
+3. Click **Create Certificate**
+4. Choose:
+   - **Generate private key and CSR with Cloudflare** (recommended)
+   - **Key type:** RSA (2048) or ECDSA
+   - **Hostnames:** Enter the domain stored in the `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret
+   - **Certificate validity:** 15 years (recommended)
+5. Copy the **Origin Certificate** (PEM) and **Private Key** (PEM)
+
+> ⚠️ **Save the private key immediately** — CloudFlare will not show it again after you close the dialog.
+
+### 3.2 Place Certificate Files on the Server
+
+The SSL directory structure uses the domain from the `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret:
 
 ```bash
-# (as root)
-snap install --classic certbot
-ln -sf /snap/bin/certbot /usr/bin/certbot
-```
+# (as deploy) — Set the domain variable (from CLOUDFLARE_*_SUBDOMAIN GitHub Secret)
+DOMAIN="<domain from CLOUDFLARE_*_SUBDOMAIN>"
+ENV="production"  # or "staging"
 
-### 3.2 Obtain SSL Certificate
+# Create the SSL directory
+sudo mkdir -p /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN
 
-Before obtaining the cert, ensure DNS is already pointing to your server and port 80 is accessible.
+# Write certificate files
+sudo tee /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/fullchain.pem << 'EOF'
+<paste Origin Certificate PEM here>
+EOF
 
-```bash
-# (as root)
-# Stop anything on port 80 first (if Nginx container is running)
-docker compose -f /opt/myfinpro/production/docker-compose.production.yml down nginx 2>/dev/null || true
+sudo tee /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/privkey.pem << 'EOF'
+<paste Private Key PEM here>
+EOF
 
-# Obtain the certificate
-certbot certonly --standalone \
-  -d $DOMAIN \
-  --email admin@$DOMAIN \
-  --agree-tos \
-  --non-interactive
+# Secure permissions
+sudo chmod 600 /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/privkey.pem
+sudo chmod 644 /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/fullchain.pem
+sudo chown -R $USER:$USER /opt/myfinpro/$ENV/infrastructure/ssl/
 ```
 
 **Verification:**
 
 ```bash
-ls -la /etc/letsencrypt/live/$DOMAIN/
-# Should contain: fullchain.pem, privkey.pem, cert.pem, chain.pem
+ls -la /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/
+# Should contain: fullchain.pem, privkey.pem
 ```
 
-### 3.3 Configure Nginx for HTTPS
+### 3.3 Nginx SSL Configuration
 
-Create a production Nginx config with SSL:
+The Nginx SSL config is **not manually created**. Instead, the deploy workflow generates it from a template:
 
-```bash
-# (as deploy)
-cat > /opt/myfinpro/production/infrastructure/nginx/conf.d/production-ssl.conf << 'NGINXEOF'
-upstream api_upstream {
-    server api:3001;
-}
+- **Template:** `infrastructure/nginx/conf.d/ssl.conf.template` (committed to the repo)
+- **At deploy time:** `envsubst '$SERVER_NAME'` processes the template, replacing `$SERVER_NAME` with the domain from the `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret
+- **Output:** `infrastructure/nginx/conf.d/ssl.conf` (generated on the server, not committed)
 
-upstream web_upstream {
-    server web:3000;
-}
+The cert paths in the template reference `/etc/letsencrypt/live/$SERVER_NAME/fullchain.pem` and `/etc/letsencrypt/live/$SERVER_NAME/privkey.pem`, which are mounted from the host's SSL directory via Docker volumes.
 
-# ─── Redirect HTTP → HTTPS ───
-server {
-    listen 80;
-    server_name _;
-
-    # Allow Let's Encrypt challenge
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    # Health check (keep accessible on HTTP for internal checks)
-    location = /health {
-        access_log off;
-        return 200 '{"status":"ok","service":"nginx"}';
-        add_header Content-Type application/json;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-# ─── HTTPS Server ───
-server {
-    listen 443 ssl http2;
-    server_name _;
-
-    # SSL certificates (Let's Encrypt)
-    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
-
-    # SSL settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    # HSTS (enable after confirming SSL works)
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-
-    # Health check
-    location = /health {
-        access_log off;
-        return 200 '{"status":"ok","service":"nginx"}';
-        add_header Content-Type application/json;
-    }
-
-    # API: Proxy /api/* to NestJS
-    location /api/ {
-        proxy_pass http://api_upstream/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 60s;
-        proxy_send_timeout 60s;
-    }
-
-    # Web: Proxy everything else to Next.js
-    location / {
-        proxy_pass http://web_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-NGINXEOF
-
-# Replace the domain placeholder with your actual domain
-sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" /opt/myfinpro/production/infrastructure/nginx/conf.d/production-ssl.conf
-```
-
-Then update `docker-compose.production.yml` to mount Let's Encrypt certs. Uncomment the SSL volume line:
-
-```bash
-# (as deploy)
-cd /opt/myfinpro/production
-# Edit docker-compose.production.yml — uncomment the letsencrypt volume:
-#   - /etc/letsencrypt:/etc/letsencrypt:ro
-```
-
-### 3.4 Auto-Renewal
-
-Certbot's snap automatically installs a systemd timer for renewal. Verify:
-
-```bash
-# (as root)
-systemctl list-timers | grep certbot
-# Should show: snap.certbot.renew.timer
-
-# Test renewal (dry run)
-certbot renew --dry-run
-```
-
-To reload Nginx after renewal, add a deploy hook:
-
-```bash
-# (as root)
-cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh << 'EOF'
-#!/bin/bash
-docker exec myfinpro-prod-nginx nginx -s reload 2>/dev/null || true
-EOF
-
-chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-```
+> **Note:** CloudFlare origin certificates do not require auto-renewal — they are valid for up to 15 years. If you need to rotate the certificate, generate a new one in the CloudFlare dashboard and replace the files on the server.
 
 ---
 
@@ -589,15 +488,14 @@ Go to your GitHub repository → **Settings** → **Secrets and variables** → 
 
 #### SSH & Infrastructure Secrets
 
-| Secret               | Value                                | Description                      |
-| -------------------- | ------------------------------------ | -------------------------------- |
-| `STAGING_HOST`       | `<YOUR_SERVER_IP>`                   | Staging server IP or hostname    |
-| `STAGING_USER`       | `deploy`                             | SSH user for staging server      |
-| `STAGING_SSH_KEY`    | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging      |
-| `PRODUCTION_HOST`    | `<YOUR_SERVER_IP>`                   | Production server IP or hostname |
-| `PRODUCTION_USER`    | `deploy`                             | SSH user for production server   |
-| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production   |
-| `GHCR_REPO`          | `<YOUR_GITHUB_USERNAME>/myfinpro`    | GHCR repository (lowercase)      |
+| Secret               | Value                                | Description                        |
+| -------------------- | ------------------------------------ | ---------------------------------- |
+| `STAGING_HOST`       | `<YOUR_SERVER_IP>`                   | Staging server IP or hostname      |
+| `STAGING_USER`       | `deploy`                             | SSH user for staging server        |
+| `STAGING_SSH_KEY`    | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging        |
+| `PRODUCTION_HOST`    | `<YOUR_SERVER_IP>`                   | Production server IP or hostname   |
+| `PRODUCTION_USER`    | `deploy`                             | SSH user for production server     |
+| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production     |
 
 To copy the private key:
 
@@ -607,22 +505,25 @@ cat ~/.ssh/myfinpro-deploy
 # Copy the entire output including -----BEGIN OPENSSH PRIVATE KEY----- and -----END OPENSSH PRIVATE KEY-----
 ```
 
-#### Application Secrets (per GitHub Environment)
+#### Application Secrets (per environment — staging uses `STAGING_` prefix, production uses `PRODUCTION_` prefix)
 
-Configure these in each GitHub Environment (`staging` / `production`):
+| Secret                  | Description                                     | How to generate                        |
+| ----------------------- | ----------------------------------------------- | -------------------------------------- |
+| `*_MYSQL_ROOT_PASSWORD` | MySQL root password                             | `openssl rand -base64 48`              |
+| `*_MYSQL_DATABASE`      | Database name                                   | `myfinpro_staging` / `myfinpro`        |
+| `*_MYSQL_USER`          | Database user                                   | `myfinpro_staging` / `myfinpro_prod`   |
+| `*_MYSQL_PASSWORD`      | Database user password                          | `openssl rand -base64 48`              |
+| `*_DATABASE_URL`        | Full MySQL connection string                    | `mysql://USER:PASS@mysql:3306/DB_NAME` |
+| `*_JWT_SECRET`          | JWT access token signing secret (min 32 chars)  | `openssl rand -base64 48`              |
+| `*_JWT_REFRESH_SECRET`  | JWT refresh token signing secret (min 32 chars) | `openssl rand -base64 48`              |
+| `*_REDIS_URL`           | Redis connection string                         | `redis://redis:6379`                   |
 
-| Secret                | Description                 | How to generate                        |
-| --------------------- | --------------------------- | -------------------------------------- |
-| `MYSQL_ROOT_PASSWORD` | MySQL root password         | `openssl rand -base64 48`              |
-| `MYSQL_DATABASE`      | Database name               | `myfinpro_staging` / `myfinpro`        |
-| `MYSQL_USER`          | Database user               | `myfinpro_staging` / `myfinpro_prod`   |
-| `MYSQL_PASSWORD`      | Database user password      | `openssl rand -base64 48`              |
-| `DATABASE_URL`        | Full connection string      | `mysql://USER:PASS@mysql:3306/DB_NAME` |
-| `JWT_SECRET`          | JWT access token secret     | `openssl rand -base64 48`              |
-| `JWT_REFRESH_SECRET`  | JWT refresh token secret    | `openssl rand -base64 48`              |
-| `REDIS_URL`           | Redis connection string     | `redis://redis:6379`                   |
-| `CORS_ORIGIN`         | Allowed CORS origins (prod) | `https://<YOUR_PRODUCTION_DOMAIN>`     |
-| `NEXT_PUBLIC_API_URL` | Public API URL (prod)       | `https://<YOUR_PRODUCTION_DOMAIN>/api` |
+#### Domain Secrets
+
+| Secret                            | Description                           |
+| --------------------------------- | ------------------------------------- |
+| `CLOUDFLARE_STAGING_SUBDOMAIN`    | Domain for the staging environment    |
+| `CLOUDFLARE_PRODUCTION_SUBDOMAIN` | Domain for the production environment |
 
 ### 4.3 Create GitHub Environments
 
@@ -690,9 +591,9 @@ The workflow will automatically:
 
 1. Build and push Docker images to GHCR
 2. Copy deployment files to the server
-3. Write ephemeral `.env` from GitHub Secrets
-4. Pull images and start services with `docker compose up -d`
-5. Shred the `.env` file
+3. Export secrets as shell environment variables
+4. Generate nginx SSL config from template via `envsubst`
+5. Pull images and start services with `docker compose up -d` (resolves `${VAR}` from shell)
 6. Verify health checks
 
 ### 5.2 Manual First Deployment (Alternative)
@@ -708,14 +609,14 @@ scp scripts/deploy.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/scripts/
 scp scripts/rollback.sh $DEPLOY_USER@$SERVER_IP:/opt/myfinpro/staging/scripts/
 ```
 
-Then SSH in and run with required env vars:
+Then SSH in and export required env vars:
 
 ```bash
 # (as deploy) — on the server
 cd /opt/myfinpro/staging
 chmod +x scripts/*.sh
 
-# Export all required env vars
+# Export all required secrets
 export MYSQL_ROOT_PASSWORD="$(openssl rand -base64 48)"
 export MYSQL_DATABASE="myfinpro_staging"
 export MYSQL_USER="myfinpro_staging"
@@ -724,6 +625,8 @@ export DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_
 export JWT_SECRET="$(openssl rand -base64 48)"
 export JWT_REFRESH_SECRET="$(openssl rand -base64 48)"
 export REDIS_URL="redis://redis:6379"
+
+# Export application config
 export NODE_ENV="staging"
 export API_PORT="3001"
 export CORS_ORIGIN="*"
@@ -733,14 +636,22 @@ export RATE_LIMIT_TTL="60000"
 export RATE_LIMIT_MAX="60"
 export NEXT_PUBLIC_API_URL="/api"
 export API_INTERNAL_URL="http://api:3001"
-export GHCR_REPO="<YOUR_GITHUB_USERNAME>/myfinpro"
+export GHCR_REPO="aleksei-michnik/myfinpro"
 export IMAGE_TAG="staging"
 
-# Run the deploy script (writes .env → compose up → shreds .env)
-./scripts/deploy.sh staging
+# Export domain (from CLOUDFLARE_STAGING_SUBDOMAIN GitHub Secret)
+export SERVER_NAME="<domain from CLOUDFLARE_STAGING_SUBDOMAIN>"
+
+# Generate nginx SSL config from template
+envsubst '$SERVER_NAME' < infrastructure/nginx/conf.d/ssl.conf.template \
+  > infrastructure/nginx/conf.d/default.conf
+
+# Pull images and start services (compose resolves ${VAR} from shell)
+docker compose -f docker-compose.staging.yml pull
+docker compose -f docker-compose.staging.yml up -d
 ```
 
-> ⚠️ **Important:** After manual deployment, add these same secret values to GitHub Secrets so future CI/CD deployments use the same credentials.
+> ⚠️ **Important:** After manual deployment, add these same secret values to GitHub Secrets so future CI/CD deployments use the same credentials. No files are written to disk — secrets exist only in the shell session.
 
 ### 5.3 Verify Deployment
 
@@ -769,21 +680,20 @@ docker compose -f docker-compose.staging.yml logs --tail=20 web
 
 ### 5.4 Set Up DNS
 
-Point your domain to the server IP. Add these DNS records with your DNS provider:
+DNS is managed via CloudFlare. Point the domains (stored in `CLOUDFLARE_STAGING_SUBDOMAIN` and `CLOUDFLARE_PRODUCTION_SUBDOMAIN` GitHub Secrets) to the corresponding server IPs:
 
-| Type | Name                       | Value                         | TTL |
-| ---- | -------------------------- | ----------------------------- | --- |
-| `A`  | `<YOUR_PRODUCTION_DOMAIN>` | `<YOUR_PRODUCTION_SERVER_IP>` | 300 |
-| `A`  | `<YOUR_STAGING_DOMAIN>`    | `<YOUR_STAGING_SERVER_IP>`    | 300 |
+| Type | Name                                           | Value            | Proxy   | TTL  |
+| ---- | ---------------------------------------------- | ---------------- | ------- | ---- |
+| `A`  | Domain from `CLOUDFLARE_PRODUCTION_SUBDOMAIN`  | Production server IP | Proxied | Auto |
+| `A`  | Domain from `CLOUDFLARE_STAGING_SUBDOMAIN`     | Staging server IP    | Proxied | Auto |
+
+> **Note:** With CloudFlare proxy enabled, ensure SSL mode is set to **Full (strict)** in the CloudFlare dashboard to use the origin certificates created in Part 3.
 
 **Verification:**
 
 ```bash
-# (local)
-dig +short $DOMAIN
-# Should return your server IP
-
-curl -sf https://$DOMAIN/api/v1/health
+# (local) — replace with the actual domain from the GitHub Secret
+curl -sf https://<domain from CLOUDFLARE_*_SUBDOMAIN>/api/v1/health
 # Should return health status
 ```
 
@@ -1105,9 +1015,9 @@ EOF
 
 ## Part 10: Security Architecture
 
-### Ephemeral Secret Injection Pattern
+### Direct Environment Variable Injection
 
-MyFinPro uses an **ephemeral secret injection** pattern for deployments:
+MyFinPro uses a **direct environment variable injection** pattern for deployments — no files are ever written to disk:
 
 ```mermaid
 sequenceDiagram
@@ -1118,36 +1028,38 @@ sequenceDiagram
     participant DC as Docker Compose
 
     GS->>GA: Secrets via envs parameter
-    GA->>SSH: appleboy/ssh-action
-    SSH->>Srv: Write .env (chmod 600)
+    GA->>SSH: appleboy/ssh-action with envs
+    SSH->>Srv: export VAR=value (in shell)
+    SSH->>Srv: envsubst ssl.conf.template → ssl.conf
     SSH->>DC: docker compose up -d
-    DC->>DC: Read env_file: .env
-    SSH->>Srv: shred -vfz -n 3 .env
-    Note over Srv: Secrets no longer on disk
+    DC->>DC: Resolve ${VAR} from shell environment
+    Note over Srv: No files written — secrets in process memory only
 ```
 
 ### Why This Pattern?
 
-| Threat                           | Mitigation                                                    |
-| -------------------------------- | ------------------------------------------------------------- |
-| Secrets in git history           | Never committed — injected at deploy time from GitHub Secrets |
-| Secrets persisted on server disk | `.env` is shredded after `docker compose up`                  |
-| `docker inspect` leaking secrets | Using `env_file:` directive instead of `environment:`         |
-| Secret rotation complexity       | Update GitHub Secret → redeploy (no SSH needed)               |
-| Audit trail                      | GitHub Secrets provides built-in audit logging                |
+| Threat                           | Mitigation                                                              |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| Secrets in git history           | Never committed — injected at deploy time from GitHub Secrets           |
+| Secrets on server disk           | No files written to disk — secrets exist only in process memory         |
+| Secret rotation complexity       | Update GitHub Secret → redeploy (no SSH needed)                         |
+| Audit trail                      | GitHub Secrets provides built-in audit logging                          |
+| Nginx config with domain         | Generated from template via `envsubst` — domain never stored in repo   |
 
 ### What This Means for Server Setup
 
-- **No `.env` files are created during server provisioning**
+- **No secret files are created during server provisioning**
 - **No secrets need to be manually placed on the server**
 - All secrets are managed in **GitHub → Settings → Secrets and variables → Actions**
-- The deploy workflow handles writing and shredding the `.env` file automatically
-- For manual deployments, export env vars and use `scripts/deploy.sh` which handles the secure pattern
+- The deploy workflow exports secrets as shell environment variables
+- Docker Compose resolves `${VAR}` references directly from the shell environment
+- Nginx SSL config is generated from `ssl.conf.template` via `envsubst '$SERVER_NAME'`
+- For manual deployments, export env vars in the shell and run `docker compose up -d` directly
 
 ### How to Rotate Secrets
 
 1. Go to **GitHub → Settings → Secrets and variables → Actions**
-2. Update the secret value (e.g., `JWT_SECRET`)
+2. Update the secret value (e.g., `STAGING_JWT_SECRET`)
 3. Trigger a new deployment (push to branch or manual dispatch)
 4. The new secret value is injected on the next deploy
 5. No need to SSH into any server
@@ -1247,12 +1159,21 @@ docker compose -f $COMPOSE_FILE up -d web nginx
 
 #### ❌ SSL certificate expired
 
-```bash
-# (as root)
-certbot renew
+CloudFlare origin certificates are valid for up to 15 years. If you need to rotate:
 
-# If renewal fails, re-obtain:
-certbot certonly --standalone -d $DOMAIN --force-renewal
+1. Generate a new origin certificate in the **CloudFlare dashboard** (SSL/TLS → Origin Server)
+2. Replace the certificate files on the server:
+
+```bash
+# (as deploy) — replace with your environment and domain from CLOUDFLARE_*_SUBDOMAIN
+ENV="production"
+DOMAIN="<domain from CLOUDFLARE_*_SUBDOMAIN>"
+sudo tee /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/fullchain.pem << 'EOF'
+<paste new Origin Certificate PEM>
+EOF
+sudo tee /opt/myfinpro/$ENV/infrastructure/ssl/live/$DOMAIN/privkey.pem << 'EOF'
+<paste new Private Key PEM>
+EOF
 
 # Reload Nginx
 docker exec myfinpro-prod-nginx nginx -s reload
@@ -1272,7 +1193,7 @@ docker exec myfinpro-prod-nginx nginx -s reload
 | `/opt/myfinpro/*/infrastructure/` | Nginx configs, MySQL init        |
 | `/var/backups/myfinpro/`          | Database backups                 |
 | `/var/log/myfinpro/`              | Application logs (backup, cron)  |
-| `/etc/letsencrypt/`               | SSL certificates                 |
+| `/opt/myfinpro/*/infrastructure/ssl/` | CloudFlare origin SSL certificates |
 
 ### Key Commands
 

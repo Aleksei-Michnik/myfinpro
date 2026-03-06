@@ -1,6 +1,6 @@
 # docker-compose.staging.yml
-# Staging deployment — standalone compose file with ephemeral secret injection
-# Secrets are injected via env_file (.env) written by the deploy workflow and shredded after startup
+# Staging deployment — standalone compose file, environment variables injected from shell
+# Variables are exported by the deploy workflow (GitHub Actions) before `docker compose up`
 # Working directory: /opt/myfinpro/staging/
 # Usage: docker compose -f docker-compose.staging.yml up -d
 
@@ -10,8 +10,11 @@ services:
     image: mysql:8.4
     container_name: myfinpro-staging-mysql
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - '3306:3306'
     volumes:
@@ -52,8 +55,20 @@ services:
     image: ghcr.io/${GHCR_REPO}/api:${IMAGE_TAG:-staging}
     container_name: myfinpro-staging-api
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      NODE_ENV: ${NODE_ENV}
+      API_PORT: ${API_PORT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      LOG_LEVEL: ${LOG_LEVEL}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED}
+      RATE_LIMIT_TTL: ${RATE_LIMIT_TTL}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
     ports:
       - '3001:3001'
     networks:
@@ -83,8 +98,10 @@ services:
     image: ghcr.io/${GHCR_REPO}/web:${IMAGE_TAG:-staging}
     container_name: myfinpro-staging-web
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+      NODE_ENV: ${NODE_ENV}
     ports:
       - '3000:3000'
     networks:
