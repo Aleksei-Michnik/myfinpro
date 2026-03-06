@@ -39,12 +39,12 @@ Secrets are **never stored on the server** — not even temporarily. The deploym
 
 ### Why This Pattern?
 
-| Concern                | Solution                                                              |
-| ---------------------- | --------------------------------------------------------------------- |
-| Secrets in git history | Never committed — injected at deploy time from GitHub Secrets         |
-| Secrets on server disk | No files written to disk — secrets exist only in process memory       |
+| Concern                | Solution                                                             |
+| ---------------------- | -------------------------------------------------------------------- |
+| Secrets in git history | Never committed — injected at deploy time from GitHub Secrets        |
+| Secrets on server disk | No files written to disk — secrets exist only in process memory      |
 | Secret rotation        | Update GitHub Secret → redeploy                                      |
-| Audit trail            | GitHub Secrets audit log                                              |
+| Audit trail            | GitHub Secrets audit log                                             |
 | Nginx config           | Generated from template via `envsubst` — domain never stored in repo |
 
 ---
@@ -84,13 +84,13 @@ Configure these in **Settings → Secrets and variables → Actions**.
 
 ### SSH & Infrastructure Secrets
 
-| Secret               | Description                        |
-| -------------------- | ---------------------------------- |
-| `STAGING_HOST`       | Staging server IP or hostname      |
-| `STAGING_USER`       | SSH username on staging server     |
-| `STAGING_SSH_KEY`    | Private SSH key for staging server |
-| `PRODUCTION_HOST`    | Production server IP or hostname   |
-| `PRODUCTION_USER`    | SSH username on production server  |
+| Secret               | Description                           |
+| -------------------- | ------------------------------------- |
+| `STAGING_HOST`       | Staging server IP or hostname         |
+| `STAGING_USER`       | SSH username on staging server        |
+| `STAGING_SSH_KEY`    | Private SSH key for staging server    |
+| `PRODUCTION_HOST`    | Production server IP or hostname      |
+| `PRODUCTION_USER`    | SSH username on production server     |
 | `PRODUCTION_SSH_KEY` | Private SSH key for production server |
 
 ### Application Secrets (per environment — staging uses `STAGING_` prefix, production uses `PRODUCTION_` prefix)
@@ -108,28 +108,28 @@ Configure these in **Settings → Secrets and variables → Actions**.
 
 ### Domain Secrets
 
-| Secret                            | Description                            |
-| --------------------------------- | -------------------------------------- |
-| `CLOUDFLARE_STAGING_SUBDOMAIN`    | Domain for the staging environment     |
-| `CLOUDFLARE_PRODUCTION_SUBDOMAIN` | Domain for the production environment  |
+| Secret                            | Description                           |
+| --------------------------------- | ------------------------------------- |
+| `CLOUDFLARE_STAGING_SUBDOMAIN`    | Domain for the staging environment    |
+| `CLOUDFLARE_PRODUCTION_SUBDOMAIN` | Domain for the production environment |
 
 ### Non-Secret Config (hardcoded in workflow)
 
 These values are set directly in the workflow files:
 
-| Variable              | Staging           | Production                                    |
-| --------------------- | ----------------- | --------------------------------------------- |
-| `NODE_ENV`            | `staging`         | `production`                                  |
-| `API_PORT`            | `3001`            | `3001`                                        |
-| `CORS_ORIGIN`         | `*`               | Derived from `CLOUDFLARE_PRODUCTION_SUBDOMAIN` |
-| `LOG_LEVEL`           | `debug`           | `warn`                                        |
-| `SWAGGER_ENABLED`     | `true`            | `false`                                       |
-| `RATE_LIMIT_TTL`      | `60000`           | `60000`                                       |
-| `RATE_LIMIT_MAX`      | `60`              | `30`                                          |
-| `NEXT_PUBLIC_API_URL` | `/api`            | `/api`                                        |
-| `API_INTERNAL_URL`    | `http://api:3001` | `http://api:3001`                             |
-| `IMAGE_TAG`           | `staging`         | `latest`                                      |
-| `GHCR_REPO`           | `aleksei-michnik/myfinpro` | `aleksei-michnik/myfinpro`           |
+| Variable              | Staging                    | Production                                     |
+| --------------------- | -------------------------- | ---------------------------------------------- |
+| `NODE_ENV`            | `staging`                  | `production`                                   |
+| `API_PORT`            | `3001`                     | `3001`                                         |
+| `CORS_ORIGIN`         | `*`                        | Derived from `CLOUDFLARE_PRODUCTION_SUBDOMAIN` |
+| `LOG_LEVEL`           | `debug`                    | `warn`                                         |
+| `SWAGGER_ENABLED`     | `true`                     | `false`                                        |
+| `RATE_LIMIT_TTL`      | `60000`                    | `60000`                                        |
+| `RATE_LIMIT_MAX`      | `60`                       | `30`                                           |
+| `NEXT_PUBLIC_API_URL` | `/api`                     | `/api`                                         |
+| `API_INTERNAL_URL`    | `http://api:3001`          | `http://api:3001`                              |
+| `IMAGE_TAG`           | `staging`                  | `latest`                                       |
+| `GHCR_REPO`           | `aleksei-michnik/myfinpro` | `aleksei-michnik/myfinpro`                     |
 
 ### GitHub Environments
 

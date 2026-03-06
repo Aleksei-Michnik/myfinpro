@@ -163,7 +163,7 @@ jobs:
           # ── Non-secret config ──
           NODE_ENV: production
           API_PORT: '3001'
-          CORS_ORIGIN: "https://${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}"
+          CORS_ORIGIN: 'https://${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}'
           LOG_LEVEL: warn
           SWAGGER_ENABLED: 'false'
           RATE_LIMIT_TTL: '60000'

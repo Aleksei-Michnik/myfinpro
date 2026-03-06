@@ -488,14 +488,14 @@ Go to your GitHub repository → **Settings** → **Secrets and variables** → 
 
 #### SSH & Infrastructure Secrets
 
-| Secret               | Value                                | Description                        |
-| -------------------- | ------------------------------------ | ---------------------------------- |
-| `STAGING_HOST`       | `<YOUR_SERVER_IP>`                   | Staging server IP or hostname      |
-| `STAGING_USER`       | `deploy`                             | SSH user for staging server        |
-| `STAGING_SSH_KEY`    | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging        |
-| `PRODUCTION_HOST`    | `<YOUR_SERVER_IP>`                   | Production server IP or hostname   |
-| `PRODUCTION_USER`    | `deploy`                             | SSH user for production server     |
-| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production     |
+| Secret               | Value                                | Description                      |
+| -------------------- | ------------------------------------ | -------------------------------- |
+| `STAGING_HOST`       | `<YOUR_SERVER_IP>`                   | Staging server IP or hostname    |
+| `STAGING_USER`       | `deploy`                             | SSH user for staging server      |
+| `STAGING_SSH_KEY`    | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for staging      |
+| `PRODUCTION_HOST`    | `<YOUR_SERVER_IP>`                   | Production server IP or hostname |
+| `PRODUCTION_USER`    | `deploy`                             | SSH user for production server   |
+| `PRODUCTION_SSH_KEY` | Contents of `~/.ssh/myfinpro-deploy` | Private SSH key for production   |
 
 To copy the private key:
 
@@ -682,10 +682,10 @@ docker compose -f docker-compose.staging.yml logs --tail=20 web
 
 DNS is managed via CloudFlare. Point the domains (stored in `CLOUDFLARE_STAGING_SUBDOMAIN` and `CLOUDFLARE_PRODUCTION_SUBDOMAIN` GitHub Secrets) to the corresponding server IPs:
 
-| Type | Name                                           | Value            | Proxy   | TTL  |
-| ---- | ---------------------------------------------- | ---------------- | ------- | ---- |
-| `A`  | Domain from `CLOUDFLARE_PRODUCTION_SUBDOMAIN`  | Production server IP | Proxied | Auto |
-| `A`  | Domain from `CLOUDFLARE_STAGING_SUBDOMAIN`     | Staging server IP    | Proxied | Auto |
+| Type | Name                                          | Value                | Proxy   | TTL  |
+| ---- | --------------------------------------------- | -------------------- | ------- | ---- |
+| `A`  | Domain from `CLOUDFLARE_PRODUCTION_SUBDOMAIN` | Production server IP | Proxied | Auto |
+| `A`  | Domain from `CLOUDFLARE_STAGING_SUBDOMAIN`    | Staging server IP    | Proxied | Auto |
 
 > **Note:** With CloudFlare proxy enabled, ensure SSL mode is set to **Full (strict)** in the CloudFlare dashboard to use the origin certificates created in Part 3.
 
@@ -1038,13 +1038,13 @@ sequenceDiagram
 
 ### Why This Pattern?
 
-| Threat                           | Mitigation                                                              |
-| -------------------------------- | ----------------------------------------------------------------------- |
-| Secrets in git history           | Never committed — injected at deploy time from GitHub Secrets           |
-| Secrets on server disk           | No files written to disk — secrets exist only in process memory         |
-| Secret rotation complexity       | Update GitHub Secret → redeploy (no SSH needed)                         |
-| Audit trail                      | GitHub Secrets provides built-in audit logging                          |
-| Nginx config with domain         | Generated from template via `envsubst` — domain never stored in repo   |
+| Threat                     | Mitigation                                                           |
+| -------------------------- | -------------------------------------------------------------------- |
+| Secrets in git history     | Never committed — injected at deploy time from GitHub Secrets        |
+| Secrets on server disk     | No files written to disk — secrets exist only in process memory      |
+| Secret rotation complexity | Update GitHub Secret → redeploy (no SSH needed)                      |
+| Audit trail                | GitHub Secrets provides built-in audit logging                       |
+| Nginx config with domain   | Generated from template via `envsubst` — domain never stored in repo |
 
 ### What This Means for Server Setup
 
@@ -1185,14 +1185,14 @@ docker exec myfinpro-prod-nginx nginx -s reload
 
 ### Key Paths
 
-| Path                              | Description                      |
-| --------------------------------- | -------------------------------- |
-| `/opt/myfinpro/staging/`          | Staging application root         |
-| `/opt/myfinpro/production/`       | Production application root      |
-| `/opt/myfinpro/*/scripts/`        | Deploy, rollback, backup scripts |
-| `/opt/myfinpro/*/infrastructure/` | Nginx configs, MySQL init        |
-| `/var/backups/myfinpro/`          | Database backups                 |
-| `/var/log/myfinpro/`              | Application logs (backup, cron)  |
+| Path                                  | Description                        |
+| ------------------------------------- | ---------------------------------- |
+| `/opt/myfinpro/staging/`              | Staging application root           |
+| `/opt/myfinpro/production/`           | Production application root        |
+| `/opt/myfinpro/*/scripts/`            | Deploy, rollback, backup scripts   |
+| `/opt/myfinpro/*/infrastructure/`     | Nginx configs, MySQL init          |
+| `/var/backups/myfinpro/`              | Database backups                   |
+| `/var/log/myfinpro/`                  | Application logs (backup, cron)    |
 | `/opt/myfinpro/*/infrastructure/ssl/` | CloudFlare origin SSL certificates |
 
 ### Key Commands
