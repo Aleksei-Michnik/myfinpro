@@ -30,6 +30,8 @@ RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo /app/apps/api/tsconfig.build
 
 # ───── Production Stage ─────
 FROM base AS production
+# Install wget for Docker health checks (BusyBox wget lacks --no-verbose/--tries flags)
+RUN apk add --no-cache wget
 WORKDIR /app
 # Copy everything needed from the build stage
 COPY --from=build /app/node_modules ./node_modules
