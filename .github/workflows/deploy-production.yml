@@ -190,7 +190,7 @@ jobs:
           # ── Non-secret config ──
           NODE_ENV: production
           API_PORT: '3001'
-          CORS_ORIGIN: 'https://${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}'
+          CORS_ORIGINS: 'https://${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}'
           LOG_LEVEL: warn
           SWAGGER_ENABLED: 'false'
           RATE_LIMIT_TTL: '60000'
@@ -206,7 +206,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGIN,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             set -euo pipefail
             DEPLOY_DIR="/opt/myfinpro/production"
@@ -223,7 +223,7 @@ jobs:
             export REDIS_URL
             export NODE_ENV
             export API_PORT
-            export CORS_ORIGIN
+            export CORS_ORIGINS
             export LOG_LEVEL
             export SWAGGER_ENABLED
             export RATE_LIMIT_TTL
