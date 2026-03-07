@@ -1,6 +1,7 @@
 # docker-compose.production.infra.yml
 # Long-lived infrastructure services for production.
 # Managed separately from application deploys (blue-green slots).
+# Nginx is in docker-compose.shared-nginx.yml (shared across environments).
 # Network: myfinpro-production-net (created externally before first deploy)
 # Usage: docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d
 
@@ -68,41 +69,6 @@ services:
           cpus: '0.5'
         reservations:
           memory: 256M
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '5'
-
-  # ───── Nginx Reverse Proxy ─────
-  nginx:
-    image: nginx:1.28-alpine
-    container_name: myfinpro-prod-nginx
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-    environment:
-      - SERVER_NAME=${SERVER_NAME}
-      - ACTIVE_SLOT=${ACTIVE_SLOT:-blue}
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./infrastructure/ssl:/etc/letsencrypt:ro
-    networks:
-      - myfinpro-production-net
-    healthcheck:
-      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
     logging:
       driver: json-file
       options:

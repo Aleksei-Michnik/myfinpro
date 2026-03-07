@@ -137,6 +137,7 @@ jobs:
           source: >-
             docker-compose.staging.infra.yml,
             docker-compose.staging.app.yml,
+            docker-compose.shared-nginx.yml,
             infrastructure/nginx/,
             infrastructure/mysql/,
             scripts/deploy.sh,
@@ -205,8 +206,23 @@ jobs:
             export IMAGE_TAG
             export SERVER_NAME
 
-            echo "── Ensuring Docker network exists ──"
+            echo "── Ensuring Docker networks exist ──"
             docker network create myfinpro-staging-net 2>/dev/null || true
+            docker network create myfinpro-production-net 2>/dev/null || true
+
+            echo "── Setting up shared nginx directory ──"
+            mkdir -p /opt/myfinpro/shared/nginx/conf.d
+            mkdir -p /opt/myfinpro/shared/ssl
+            cp infrastructure/nginx/nginx.conf /opt/myfinpro/shared/nginx/nginx.conf
+            cp infrastructure/nginx/conf.d/cloudflare-ips.conf /opt/myfinpro/shared/nginx/conf.d/cloudflare-ips.conf
+            # Remove old default.conf from shared dir (we use per-env configs now)
+            rm -f /opt/myfinpro/shared/nginx/conf.d/default.conf
+            cp docker-compose.shared-nginx.yml /opt/myfinpro/shared/docker-compose.shared-nginx.yml
+
+            echo "── Ensuring shared nginx is running ──"
+            cd /opt/myfinpro/shared
+            docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml up -d
+            cd /opt/myfinpro/staging
 
             echo "── Ensuring infrastructure is running ──"
             docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d
