@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-02-13
-> **Current Phase:** Phase 0 — Foundation ✅ Complete
+> **Last updated:** 2026-03-07
+> **Current Phase:** Phase 0 — Foundation ✅ Complete | Blue-Green Deployment ✅ Live
 > **Next Phase:** Phase 1 — Basic Authentication
 
 ---
@@ -303,6 +303,113 @@
 
 ---
 
+## 3b. Blue-Green Deployment — Post-Phase 0 Infrastructure Upgrade (2026-03-07)
+
+### Overview
+
+Upgraded the deployment system from monolithic Docker Compose to a **blue-green deployment** architecture with a shared Nginx reverse proxy, enabling zero-downtime deployments for both staging and production on a single VPS.
+
+### What was implemented:
+
+**Blue-Green Deployment System:**
+- [`scripts/deploy.sh`](../scripts/deploy.sh) — Blue-green deploy script with slot alternation, health checks, nginx config generation, and smart cleanup
+- [`scripts/rollback.sh`](../scripts/rollback.sh) — Rollback script that reverts to previous slot
+- [`scripts/cleanup-images.sh`](../scripts/cleanup-images.sh) — Smart Docker image cleanup per environment
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — Staging app services (blue/green slots)
+- [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml) — Staging infrastructure (MySQL, Redis)
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Production app services
+- [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml) — Production infrastructure
+- [`docker-compose.shared-nginx.yml`](../docker-compose.shared-nginx.yml) — Shared Nginx reverse proxy
+
+**Shared Nginx Architecture:**
+- Single Nginx container (`myfinpro-nginx`) serves both staging and production
+- Connected to both `myfinpro-staging-net` and `myfinpro-production-net` Docker networks
+- Per-environment configs generated at deploy time via `envsubst` from [`infrastructure/nginx/conf.d/ssl.conf.template`](../infrastructure/nginx/conf.d/ssl.conf.template)
+- [`infrastructure/nginx/conf.d/_default.conf`](../infrastructure/nginx/conf.d/_default.conf) — Default server with `/health` endpoint
+- [`infrastructure/nginx/conf.d/cloudflare-ips.conf`](../infrastructure/nginx/conf.d/cloudflare-ips.conf) — Cloudflare IP trust for real IP detection
+
+**CI/CD Workflows:**
+- [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deploy (auto on push to `develop`)
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Production deploy (auto on push to `main`, manual with confirmation)
+- [`.github/workflows/infra-maintenance.yml`](../.github/workflows/infra-maintenance.yml) — Infrastructure maintenance (cleanup + Cloudflare DNS setup)
+
+**Cloudflare Integration:**
+- DNS records managed via Cloudflare API in infra-maintenance workflow
+- SSL mode: Flexible (Cloudflare handles HTTPS, origin serves HTTP)
+- Staging: `stage-myfin.michnik.pro` (single-level subdomain for Universal SSL compatibility)
+- Production: `myfin.michnik.pro`
+
+**Documentation:**
+- [`docs/blue-green-deployment.md`](blue-green-deployment.md) — Blue-green deployment architecture and procedures
+
+### Issues encountered and resolved:
+
+1. **Port 80 conflict** — Old per-environment nginx containers held port 80. Fixed by stopping old containers before starting shared nginx.
+2. **Invalid Cloudflare IP in trust proxy** — `104.16.0/12` is not valid CIDR. Fixed to `104.16.0.0/13` + `104.24.0.0/14`.
+3. **Missing database tables** — Prisma migrations not run on first deploy. Added `prisma db push` to deploy script.
+4. **Multi-level subdomain SSL** — `stage.myfin.michnik.pro` not covered by Cloudflare Universal SSL wildcard. Changed to `stage-myfin.michnik.pro`.
+5. **Missing Cloudflare secrets** — `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` needed for DNS automation.
+
+### Deployment verification (2026-03-07):
+
+| URL | Expected | Result |
+|-----|----------|--------|
+| `https://stage-myfin.michnik.pro` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
+| `http://stage-myfin.michnik.pro` | 301 → HTTPS | ✅ `301 Moved Permanently` |
+| `https://myfin.michnik.pro` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
+| `http://myfin.michnik.pro` | 301 → HTTPS | ✅ `301 Moved Permanently` |
+
+### Server architecture:
+
+```mermaid
+graph TB
+    subgraph Internet
+        CF[Cloudflare<br/>HTTPS Proxy + SSL]
+    end
+
+    CF -->|HTTP :80| NGINX
+
+    subgraph VPS["Single VPS Server"]
+        NGINX["myfinpro-nginx<br/>:80 / :443"]
+
+        subgraph StagingNet["Staging Network<br/>(myfinpro-staging-net)"]
+            S_API_B["api-blue :3001"]
+            S_API_G["api-green :3001"]
+            S_WEB_B["web-blue :3000"]
+            S_WEB_G["web-green :3000"]
+            S_MYSQL["mysql :3306"]
+            S_REDIS["redis :6379"]
+        end
+
+        subgraph ProdNet["Production Network<br/>(myfinpro-production-net)"]
+            P_API_B["api-blue :3001"]
+            P_API_G["api-green :3001"]
+            P_WEB_B["web-blue :3000"]
+            P_WEB_G["web-green :3000"]
+            P_MYSQL["mysql (internal)"]
+            P_REDIS["redis (internal)"]
+        end
+
+        NGINX -->|staging.conf| S_API_B
+        NGINX -->|staging.conf| S_WEB_B
+        NGINX -->|production.conf| P_API_B
+        NGINX -->|production.conf| P_WEB_B
+    end
+
+    style S_API_B fill:#4CAF50,color:#fff
+    style S_WEB_B fill:#4CAF50,color:#fff
+    style P_API_B fill:#4CAF50,color:#fff
+    style P_WEB_B fill:#4CAF50,color:#fff
+    style S_API_G fill:#9E9E9E,color:#fff
+    style S_WEB_G fill:#9E9E9E,color:#fff
+    style P_API_G fill:#9E9E9E,color:#fff
+    style P_WEB_G fill:#9E9E9E,color:#fff
+```
+
+> Green-highlighted containers are the active (blue) slot. Grey containers are the inactive (green) slot, started during the next deployment.
+
+---
+
 ## 4. Current Project Structure
 
 ```
@@ -384,6 +491,7 @@ ccdb29f docs: add server setup guide for staging and production environments
 | ------------------------------------------------------------------------- | ------------------------------------------------------- |
 | [`docs/phase-0-design.md`](phase-0-design.md)                             | Phase 0 architecture design decisions                   |
 | [`docs/deployment.md`](deployment.md)                                     | Deployment procedures (staging + production)            |
+| [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
 | [`docs/server-setup-guide.md`](server-setup-guide.md)                     | Server provisioning guide for Ubuntu + Docker           |
 | [`docs/progress.md`](progress.md)                                         | This document — project progress tracking               |
@@ -400,8 +508,8 @@ ccdb29f docs: add server setup guide for staging and production environments
 | ------------------------ | ------------- | ---------------------------------------------------- |
 | Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services       |
 | CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build         |
-| CD pipeline — Staging    | ✅ Configured | Auto-deploy on push to `main`                        |
-| CD pipeline — Production | ✅ Configured | Manual trigger with approval gate                    |
+| CD pipeline — Staging    | ✅ Live       | Blue-green deploy on push to `develop`               |
+| CD pipeline — Production | ✅ Live       | Blue-green deploy on push to `main` + manual trigger |
 | PR checks                | ✅ Configured | Block merge on CI failure                            |
 | Dependabot               | ✅ Configured | Automated dependency updates                         |
 | Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting          |
@@ -410,7 +518,9 @@ ccdb29f docs: add server setup guide for staging and production environments
 | Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint               |
 | Structured logging       | ✅ Configured | JSON logs with correlation IDs                       |
 | Rate limiting            | ✅ Configured | Global + per-endpoint throttling                     |
-| Server provisioning      | ⬜ Pending    | Guide available at `docs/server-setup-guide.md`      |
+| Blue-green deployment    | ✅ Live       | Shared nginx, blue/green slots, Cloudflare DNS       |
+| Cloudflare DNS           | ✅ Configured | Automated via infra-maintenance workflow              |
+| Server provisioning      | ✅ Complete   | VPS running at 83.229.73.140                         |
 
 ---
 
