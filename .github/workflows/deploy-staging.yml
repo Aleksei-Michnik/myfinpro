@@ -215,13 +215,18 @@ jobs:
             mkdir -p /opt/myfinpro/shared/ssl
             cp infrastructure/nginx/nginx.conf /opt/myfinpro/shared/nginx/nginx.conf
             cp infrastructure/nginx/conf.d/cloudflare-ips.conf /opt/myfinpro/shared/nginx/conf.d/cloudflare-ips.conf
+            cp infrastructure/nginx/conf.d/_default.conf /opt/myfinpro/shared/nginx/conf.d/_default.conf
             # Remove old default.conf from shared dir (we use per-env configs now)
             rm -f /opt/myfinpro/shared/nginx/conf.d/default.conf
             cp docker-compose.shared-nginx.yml /opt/myfinpro/shared/docker-compose.shared-nginx.yml
 
             echo "── Ensuring shared nginx is running ──"
             cd /opt/myfinpro/shared
-            docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml up -d
+            # Stop any old per-environment nginx that might hold port 80
+            docker stop myfinpro-prod-nginx myfinpro-staging-nginx 2>/dev/null || true
+            docker rm myfinpro-prod-nginx myfinpro-staging-nginx 2>/dev/null || true
+            # Recreate shared nginx (handles config changes + port conflicts)
+            docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml up -d --force-recreate
             cd /opt/myfinpro/staging
 
             echo "── Ensuring infrastructure is running ──"
