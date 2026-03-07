@@ -233,6 +233,21 @@ test:
       path: coverage/cobertura-coverage.xml
 ```
 
+#### Staging Integration Tests
+
+After each staging deployment, a dedicated workflow runs integration and E2E tests against the live staging environment:
+
+- **API HTTP-based integration tests** (Jest): Run against the staging API URL. Test suites cover health endpoints, API root, Swagger docs, and rate limiting — verifying the deployed API is fully functional.
+- **Playwright E2E tests**: Run against the staging frontend URL. Test suites cover homepage rendering, API proxy forwarding, i18n locale switching, and responsive layout — verifying the deployed frontend works end-to-end.
+- **Auto-triggered**: The `test-staging.yml` workflow runs automatically after each successful staging deployment via `workflow_run` trigger.
+- **Manual trigger**: Can also be triggered manually via `workflow_dispatch` for ad-hoc validation.
+- **Production gate**: Results gate production deployment — the `deploy-production.yml` workflow verifies the latest staging test run was successful and less than 24 hours old before proceeding. If staging tests are stale or failed, production deployment is blocked.
+
+| Test Type              | Framework   | Suites | Tests | What it validates                            |
+| ---------------------- | ----------- | ------ | ----- | -------------------------------------------- |
+| API staging tests      | Jest (HTTP) | 4      | 16    | Health, API root, Swagger, rate limiting     |
+| Playwright staging E2E | Playwright  | 4      | 14    | Homepage, API proxy, i18n, responsive layout |
+
 ### 3.6 Internationalization (i18n) Plan
 
 Full localization can be deferred, but the foundation should be set early to avoid costly refactoring.
@@ -758,45 +773,37 @@ Production backups must be verified with actual data, not mock or test data:
 - **Retention**: Keep last 30 daily backups, last 12 weekly backups, last 6 monthly backups
 - **Alerting**: Failed verification triggers Telegram/Slack notification immediately
 
-### 8.8 Example CI/CD Workflow (GitHub Actions)
+### 8.8 CI/CD Pipeline (GitHub Actions)
 
-```yaml
-name: ci
-on:
-  pull_request:
-  push:
-    branches: [main]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run lint
-      - run: pnpm run test
-      - run: pnpm run build
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to production
-        run: ./scripts/deploy.sh
-      - name: Notify success
-        if: success()
-        run: ./scripts/notify.sh success
-      - name: Notify failure
-        if: failure()
-        run: ./scripts/notify.sh failure
+The full pipeline consists of four workflows:
+
+```mermaid
+flowchart TB
+    subgraph develop["Push to develop"]
+        CI_S["ci.yml<br/>lint, typecheck, unit tests, build"]
+        DS["deploy-staging.yml<br/>blue-green deploy to staging"]
+        TS["test-staging.yml<br/>API integration + Playwright E2E"]
+        CI_S --> DS --> TS
+    end
+
+    subgraph main["Push to main"]
+        CI_P["ci.yml<br/>lint, typecheck, unit tests, build"]
+        VST["deploy-production.yml<br/>staging-tests-check job<br/>(verify pass within 24h)"]
+        DP["deploy-production.yml<br/>blue-green deploy to production"]
+        CI_P --> VST --> DP
+    end
+
+    TS -.->|results gate| VST
 ```
+
+| Workflow          | File                    | Trigger                       | Purpose                                     |
+| ----------------- | ----------------------- | ----------------------------- | ------------------------------------------- |
+| CI                | `ci.yml`                | PR or push to develop/main    | Lint, typecheck, unit tests, build          |
+| Deploy Staging    | `deploy-staging.yml`    | Push to develop / manual      | Blue-green deploy to staging                |
+| Test Staging      | `test-staging.yml`      | After staging deploy / manual | API integration + Playwright E2E vs staging |
+| Deploy Production | `deploy-production.yml` | Push to main / manual         | Staging test gate + blue-green deploy       |
+
+**Production deployment gating**: `deploy-production.yml` includes a `staging-tests-check` job that queries the GitHub API for the latest `test-staging.yml` run. It verifies the run was successful and completed within the last 24 hours. If either check fails, production deployment is blocked with a clear error message.
 
 ## 9. Sequencing and Critical Path
 

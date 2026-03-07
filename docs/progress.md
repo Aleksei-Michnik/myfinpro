@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-03-07
-> **Current Phase:** Phase 0 — Foundation ✅ Complete | Blue-Green Deployment ✅ Live
+> **Current Phase:** Phase 0 — Foundation ✅ Complete | Blue-Green Deployment ✅ Live | Testing Pipeline ✅ Live
 > **Next Phase:** Phase 1 — Basic Authentication
 
 ---
@@ -312,6 +312,7 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 ### What was implemented:
 
 **Blue-Green Deployment System:**
+
 - [`scripts/deploy.sh`](../scripts/deploy.sh) — Blue-green deploy script with slot alternation, health checks, nginx config generation, and smart cleanup
 - [`scripts/rollback.sh`](../scripts/rollback.sh) — Rollback script that reverts to previous slot
 - [`scripts/cleanup-images.sh`](../scripts/cleanup-images.sh) — Smart Docker image cleanup per environment
@@ -322,6 +323,7 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 - [`docker-compose.shared-nginx.yml`](../docker-compose.shared-nginx.yml) — Shared Nginx reverse proxy
 
 **Shared Nginx Architecture:**
+
 - Single Nginx container (`myfinpro-nginx`) serves both staging and production
 - Connected to both `myfinpro-staging-net` and `myfinpro-production-net` Docker networks
 - Per-environment configs generated at deploy time via `envsubst` from [`infrastructure/nginx/conf.d/ssl.conf.template`](../infrastructure/nginx/conf.d/ssl.conf.template)
@@ -329,17 +331,20 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 - [`infrastructure/nginx/conf.d/cloudflare-ips.conf`](../infrastructure/nginx/conf.d/cloudflare-ips.conf) — Cloudflare IP trust for real IP detection
 
 **CI/CD Workflows:**
+
 - [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deploy (auto on push to `develop`)
 - [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Production deploy (auto on push to `main`, manual with confirmation)
 - [`.github/workflows/infra-maintenance.yml`](../.github/workflows/infra-maintenance.yml) — Infrastructure maintenance (cleanup + Cloudflare DNS setup)
 
 **Cloudflare Integration:**
+
 - DNS records managed via Cloudflare API in infra-maintenance workflow
 - SSL mode: Flexible (Cloudflare handles HTTPS, origin serves HTTP)
-- Staging: `stage-myfin.michnik.pro` (single-level subdomain for Universal SSL compatibility)
-- Production: `myfin.michnik.pro`
+- Staging: staging domain (single-level subdomain for Universal SSL compatibility)
+- Production: production domain
 
 **Documentation:**
+
 - [`docs/blue-green-deployment.md`](blue-green-deployment.md) — Blue-green deployment architecture and procedures
 
 ### Issues encountered and resolved:
@@ -347,17 +352,17 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 1. **Port 80 conflict** — Old per-environment nginx containers held port 80. Fixed by stopping old containers before starting shared nginx.
 2. **Invalid Cloudflare IP in trust proxy** — `104.16.0/12` is not valid CIDR. Fixed to `104.16.0.0/13` + `104.24.0.0/14`.
 3. **Missing database tables** — Prisma migrations not run on first deploy. Added `prisma db push` to deploy script.
-4. **Multi-level subdomain SSL** — `stage.myfin.michnik.pro` not covered by Cloudflare Universal SSL wildcard. Changed to `stage-myfin.michnik.pro`.
+4. **Multi-level subdomain SSL** — `<old staging domain>` not covered by Cloudflare Universal SSL wildcard. Changed to staging domain.
 5. **Missing Cloudflare secrets** — `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID` needed for DNS automation.
 
 ### Deployment verification (2026-03-07):
 
-| URL | Expected | Result |
-|-----|----------|--------|
-| `https://stage-myfin.michnik.pro` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
-| `http://stage-myfin.michnik.pro` | 301 → HTTPS | ✅ `301 Moved Permanently` |
-| `https://myfin.michnik.pro` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
-| `http://myfin.michnik.pro` | 301 → HTTPS | ✅ `301 Moved Permanently` |
+| URL                           | Expected       | Result                     |
+| ----------------------------- | -------------- | -------------------------- |
+| `https://<staging domain>`    | HTTPS response | ✅ `HTTP/2 307` → `/en`    |
+| `http://<staging domain>`     | 301 → HTTPS    | ✅ `301 Moved Permanently` |
+| `https://<production domain>` | HTTPS response | ✅ `HTTP/2 307` → `/en`    |
+| `http://<production domain>`  | 301 → HTTPS    | ✅ `301 Moved Permanently` |
 
 ### Server architecture:
 
@@ -410,6 +415,105 @@ graph TB
 
 ---
 
+## 3c. Testing & Deployment Pipeline — Post-Phase 0 Enhancement (2026-03-07)
+
+### Overview
+
+Implemented a comprehensive testing and deployment pipeline that covers unit tests, staging integration tests, and a test-gated production deployment workflow. This ensures every production deploy is validated against the staging environment.
+
+### Pipeline Architecture
+
+```mermaid
+flowchart TB
+    subgraph develop["Push to develop"]
+        CI_S[CI<br/>lint, typecheck,<br/>unit tests, build]
+        DS[Deploy Staging<br/>blue-green]
+        TS[Test Staging<br/>API integration +<br/>Playwright E2E]
+        CI_S --> DS --> TS
+    end
+
+    subgraph main["Push to main"]
+        CI_P[CI<br/>lint, typecheck,<br/>unit tests, build]
+        VST[Verify Staging Tests<br/>passed within 24h]
+        DP[Deploy Production<br/>blue-green]
+        CI_P --> VST --> DP
+    end
+
+    TS -.->|results gate| VST
+```
+
+### What was implemented:
+
+**Unit Tests — API (Jest, 13 suites, ~90 tests):**
+
+- [`apps/api/src/app.controller.spec.ts`](../apps/api/src/app.controller.spec.ts) — App controller tests
+- [`apps/api/src/app.service.spec.ts`](../apps/api/src/app.service.spec.ts) — App service tests
+- [`apps/api/src/health/health.controller.spec.ts`](../apps/api/src/health/health.controller.spec.ts) — Health endpoint tests
+- [`apps/api/src/common/logger/logger.service.spec.ts`](../apps/api/src/common/logger/logger.service.spec.ts) — Logger tests
+- [`apps/api/src/common/metrics/metrics.service.spec.ts`](../apps/api/src/common/metrics/metrics.service.spec.ts) — Metrics tests
+- [`apps/api/src/common/throttler/throttler.guard.spec.ts`](../apps/api/src/common/throttler/throttler.guard.spec.ts) — Throttler guard tests
+- [`apps/api/src/common/decorators/throttle.decorator.spec.ts`](../apps/api/src/common/decorators/throttle.decorator.spec.ts) — Throttle decorator tests
+- [`apps/api/src/prisma/prisma.service.spec.ts`](../apps/api/src/prisma/prisma.service.spec.ts) — Prisma service tests
+- [`apps/api/src/common/filters/all-exceptions.filter.spec.ts`](../apps/api/src/common/filters/all-exceptions.filter.spec.ts) — Exception filter tests
+- [`apps/api/src/common/interceptors/transform.interceptor.spec.ts`](../apps/api/src/common/interceptors/transform.interceptor.spec.ts) — Transform interceptor tests
+- [`apps/api/src/common/pipes/validation.pipe.spec.ts`](../apps/api/src/common/pipes/validation.pipe.spec.ts) — Validation pipe tests
+- [`apps/api/src/common/context/request-context.middleware.spec.ts`](../apps/api/src/common/context/request-context.middleware.spec.ts) — Request context middleware tests
+- [`apps/api/src/common/context/request-context.spec.ts`](../apps/api/src/common/context/request-context.spec.ts) — Request context tests
+
+**Unit Tests — Web (Vitest, 3 suites, 35 tests):**
+
+- [`apps/web/src/components/ui/Button.spec.tsx`](../apps/web/src/components/ui/Button.spec.tsx) — Button component tests
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Header component tests
+- [`apps/web/src/lib/api-client.spec.ts`](../apps/web/src/lib/api-client.spec.ts) — API client tests
+
+**Unit Tests — Shared (Vitest, 3 suites, 46 tests):**
+
+- [`packages/shared/src/__tests__/common.test.ts`](../packages/shared/src/__tests__/common.test.ts) — Common type tests
+- [`packages/shared/src/__tests__/currency.test.ts`](../packages/shared/src/__tests__/currency.test.ts) — Currency type tests
+- [`packages/shared/src/__tests__/pagination.test.ts`](../packages/shared/src/__tests__/pagination.test.ts) — Pagination DTO tests
+
+**Staging Integration Tests — API (Jest HTTP-based, 4 suites, 16 tests):**
+
+- [`apps/api/test/staging/health.staging.spec.ts`](../apps/api/test/staging/health.staging.spec.ts) — Health endpoint against live staging
+- [`apps/api/test/staging/api-root.staging.spec.ts`](../apps/api/test/staging/api-root.staging.spec.ts) — API root endpoint tests
+- [`apps/api/test/staging/swagger.staging.spec.ts`](../apps/api/test/staging/swagger.staging.spec.ts) — Swagger docs accessibility
+- [`apps/api/test/staging/rate-limiting.staging.spec.ts`](../apps/api/test/staging/rate-limiting.staging.spec.ts) — Rate limiting verification
+- [`apps/api/test/staging/helpers.ts`](../apps/api/test/staging/helpers.ts) — Staging test helpers
+- [`apps/api/test/staging/setup.ts`](../apps/api/test/staging/setup.ts) — Staging test setup
+- [`apps/api/jest.staging.config.ts`](../apps/api/jest.staging.config.ts) — Staging Jest config
+
+**Staging E2E Tests — Playwright (4 suites, 14 tests):**
+
+- [`apps/web/e2e/staging/homepage.staging.spec.ts`](../apps/web/e2e/staging/homepage.staging.spec.ts) — Homepage loads, key elements present
+- [`apps/web/e2e/staging/api-proxy.staging.spec.ts`](../apps/web/e2e/staging/api-proxy.staging.spec.ts) — Frontend API proxy forwarding
+- [`apps/web/e2e/staging/i18n.staging.spec.ts`](../apps/web/e2e/staging/i18n.staging.spec.ts) — i18n locale switching
+- [`apps/web/e2e/staging/responsive.staging.spec.ts`](../apps/web/e2e/staging/responsive.staging.spec.ts) — Responsive layout
+- [`apps/web/playwright.staging.config.ts`](../apps/web/playwright.staging.config.ts) — Staging Playwright config
+
+**Workflow files created/modified:**
+
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — CI pipeline (lint, typecheck, unit tests, build)
+- [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deployment (blue-green)
+- [`.github/workflows/test-staging.yml`](../.github/workflows/test-staging.yml) — **New**: Staging tests (API + Playwright E2E)
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — **Updated**: Production deployment with staging test gate
+
+**Production Deployment Gating:**
+
+- Production deploy verifies latest `test-staging.yml` run was successful and < 24 hours old
+- Blocks deployment with clear error message if staging tests are stale or failed
+- Ensures every production deploy is validated against the staging environment
+
+### Quality metrics after this enhancement:
+
+| Metric              | Count | Breakdown                                                                         |
+| ------------------- | ----- | --------------------------------------------------------------------------------- |
+| **Unit Tests**      | ~171  | API: 13 suites / ~90 tests, Web: 3 suites / 35 tests, Shared: 3 suites / 46 tests |
+| **Staging Tests**   | 30    | API integration: 4 suites / 16 tests, Playwright E2E: 4 suites / 14 tests         |
+| **Total Tests**     | ~201  | All automated, running in CI/CD pipeline                                          |
+| **Test Frameworks** | 3     | Jest (API), Vitest (Web + Shared), Playwright (E2E)                               |
+
+---
+
 ## 4. Current Project Structure
 
 ```
@@ -422,9 +526,9 @@ myfinpro/
 │   │   │   ├── config/         # App, database, swagger, throttler config
 │   │   │   ├── health/         # Health check endpoints & indicators
 │   │   │   └── prisma/         # Prisma service module
-│   │   └── test/               # Test setup, helpers, integration tests
+│   │   └── test/               # Test setup, helpers, integration tests, staging tests
 │   ├── web/                    # Next.js frontend
-│   │   ├── e2e/                # Playwright E2E tests
+│   │   ├── e2e/                # Playwright E2E tests (smoke + staging)
 │   │   ├── messages/           # i18n translation files (en, he)
 │   │   ├── src/
 │   │   │   ├── app/            # App router pages & layouts
@@ -459,14 +563,17 @@ myfinpro/
 
 ## 5. Quality Metrics
 
-| Metric                | Result                          |
-| --------------------- | ------------------------------- |
-| **Lint**              | 0 errors, 0 warnings            |
-| **Typecheck**         | 0 errors                        |
-| **Tests**             | 90 passing (44 API + 46 shared) |
-| **Build**             | All packages successful         |
-| **E2E Config**        | Playwright configured           |
-| **Integration Tests** | Testcontainers setup ready      |
+| Metric                  | Result                                                          |
+| ----------------------- | --------------------------------------------------------------- |
+| **Lint**                | 0 errors, 0 warnings                                            |
+| **Typecheck**           | 0 errors                                                        |
+| **Unit Tests**          | ~171 passing (API: ~90, Web: 35, Shared: 46)                    |
+| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting) |
+| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)    |
+| **Total Tests**         | ~201 across all test types                                      |
+| **Build**               | All packages successful                                         |
+| **Integration Tests**   | Testcontainers setup ready for local integration                |
+| **Production Gate**     | Staging tests must pass within 24h before production deploy     |
 
 ---
 
@@ -490,7 +597,7 @@ ccdb29f docs: add server setup guide for staging and production environments
 | Document                                                                  | Description                                             |
 | ------------------------------------------------------------------------- | ------------------------------------------------------- |
 | [`docs/phase-0-design.md`](phase-0-design.md)                             | Phase 0 architecture design decisions                   |
-| [`docs/deployment.md`](deployment.md)                                     | Deployment procedures (staging + production)            |
+| [`docs/deployment.md`](deployment.md)                                     | Deployment guide — full pipeline, test gating, rollback |
 | [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
 | [`docs/server-setup-guide.md`](server-setup-guide.md)                     | Server provisioning guide for Ubuntu + Docker           |
@@ -504,23 +611,25 @@ ccdb29f docs: add server setup guide for staging and production environments
 
 ## 8. Infrastructure Status
 
-| Component                | Status        | Notes                                                |
-| ------------------------ | ------------- | ---------------------------------------------------- |
-| Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services       |
-| CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build         |
-| CD pipeline — Staging    | ✅ Live       | Blue-green deploy on push to `develop`               |
-| CD pipeline — Production | ✅ Live       | Blue-green deploy on push to `main` + manual trigger |
-| PR checks                | ✅ Configured | Block merge on CI failure                            |
-| Dependabot               | ✅ Configured | Automated dependency updates                         |
-| Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting          |
-| Backup verification      | ✅ Configured | CI job validates backup integrity                    |
-| Health checks            | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators |
-| Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint               |
-| Structured logging       | ✅ Configured | JSON logs with correlation IDs                       |
-| Rate limiting            | ✅ Configured | Global + per-endpoint throttling                     |
-| Blue-green deployment    | ✅ Live       | Shared nginx, blue/green slots, Cloudflare DNS       |
-| Cloudflare DNS           | ✅ Configured | Automated via infra-maintenance workflow              |
-| Server provisioning      | ✅ Complete   | VPS running at 83.229.73.140                         |
+| Component                | Status        | Notes                                                                                |
+| ------------------------ | ------------- | ------------------------------------------------------------------------------------ |
+| Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services                                       |
+| CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build                                         |
+| CD pipeline — Staging    | ✅ Live       | Blue-green deploy on push to `develop`                                               |
+| CD pipeline — Production | ✅ Live       | Blue-green deploy on push to `main` + manual trigger                                 |
+| PR checks                | ✅ Configured | Block merge on CI failure                                                            |
+| Dependabot               | ✅ Configured | Automated dependency updates                                                         |
+| Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting                                          |
+| Backup verification      | ✅ Configured | CI job validates backup integrity                                                    |
+| Health checks            | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators                                 |
+| Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint                                               |
+| Structured logging       | ✅ Configured | JSON logs with correlation IDs                                                       |
+| Rate limiting            | ✅ Configured | Global + per-endpoint throttling                                                     |
+| Blue-green deployment    | ✅ Live       | Shared nginx, blue/green slots, Cloudflare DNS                                       |
+| Staging tests            | ✅ Configured | API integration (16 tests) + Playwright E2E (14 tests) auto-run after staging deploy |
+| Production test gate     | ✅ Configured | Production deploy blocked unless staging tests passed within 24h                     |
+| Cloudflare DNS           | ✅ Configured | Automated via infra-maintenance workflow                                             |
+| Server provisioning      | ✅ Complete   | VPS running (IP stored in GitHub Secrets)                                            |
 
 ---
 

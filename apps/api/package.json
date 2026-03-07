@@ -19,6 +19,7 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "jest --config jest.integration.config.ts --runInBand",
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
+    "test:staging": "jest --config jest.staging.config.ts --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",

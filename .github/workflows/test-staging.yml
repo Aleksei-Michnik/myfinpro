@@ -1,0 +1,116 @@
+# .github/workflows/test-staging.yml
+# Staging Tests — Runs integration and E2E tests against the staging environment
+# Triggered after successful staging deployment or manually via workflow_dispatch
+
+name: Test Staging
+
+on:
+  workflow_run:
+    workflows: ['Deploy Staging']
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: test-staging
+  cancel-in-progress: true
+
+jobs:
+  # ───── API Staging Integration Tests ─────
+  api-staging-tests:
+    name: API Staging Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run API staging tests
+        env:
+          STAGING_API_URL: https://${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}/api/v1
+        run: pnpm test:staging
+
+      - name: Log failure
+        if: failure()
+        run: |
+          echo "❌ API staging integration tests failed."
+          echo "Check the test output above for details."
+
+  # ───── Playwright Staging E2E Tests ─────
+  e2e-staging-tests:
+    name: Playwright Staging E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run Playwright staging tests
+        env:
+          STAGING_URL: https://${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}
+        run: pnpm test:e2e:staging
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-staging-report
+          path: apps/web/playwright-report/staging/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ───── Staging Tests Summary ─────
+  staging-tests-summary:
+    name: Staging Tests Summary
+    runs-on: ubuntu-latest
+    needs: [api-staging-tests, e2e-staging-tests]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "═══════════════════════════════════════"
+          echo "  Staging Tests Summary"
+          echo "═══════════════════════════════════════"
+          echo ""
+          echo "API Staging Tests:      ${{ needs.api-staging-tests.result }}"
+          echo "E2E Staging Tests:      ${{ needs.e2e-staging-tests.result }}"
+          echo ""
+
+          if [ "${{ needs.api-staging-tests.result }}" != "success" ] || [ "${{ needs.e2e-staging-tests.result }}" != "success" ]; then
+            echo "❌ One or more staging test jobs failed or were skipped."
+            exit 1
+          fi
+
+          echo "✅ All staging tests passed successfully."
