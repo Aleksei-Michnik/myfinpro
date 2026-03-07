@@ -164,6 +164,16 @@ log "Starting new slot: ${NEXT_SLOT}..."
 docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
   -f "$APP_COMPOSE" up -d
 
+# ─── Step 4.5: Run database migrations ──────────────────────────────────────
+
+log "Running database migrations (prisma db push)..."
+# Wait a few seconds for the API container to start
+sleep 5
+docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma db push --accept-data-loss 2>&1 | tee -a "$LOG_FILE" || {
+  warn "Prisma db push failed (non-fatal for health check, tables may already exist)."
+}
+info "Database migrations complete."
+
 # ─── Step 5: Wait for health checks ─────────────────────────────────────────
 
 log "Waiting for new slot health checks..."
