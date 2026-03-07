@@ -25,6 +25,8 @@
     "test:unit": "turbo run test:unit",
     "test:integration": "pnpm --filter api test:integration",
     "test:e2e": "pnpm --filter web test:e2e",
+    "test:staging": "pnpm --filter api test:staging",
+    "test:e2e:staging": "pnpm --filter web test:e2e:staging",
     "test:coverage": "turbo run test:coverage",
     "db:migrate": "pnpm --filter api exec prisma migrate dev",
     "db:migrate:prod": "pnpm --filter api exec prisma migrate deploy",
