@@ -30,12 +30,26 @@ jobs:
             docker system df 2>/dev/null || true
             echo ""
 
-            echo "=== Stopping old monolithic stacks (if running) ==="
+            echo "=== Stopping ALL known docker compose projects ==="
+            # Shared nginx
+            cd /opt/myfinpro/shared 2>/dev/null && docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml down 2>/dev/null || true
+            # Staging stacks
+            cd /opt/myfinpro/staging 2>/dev/null && docker compose -p myfinpro-staging-blue -f docker-compose.staging.app.yml down 2>/dev/null || true
+            cd /opt/myfinpro/staging 2>/dev/null && docker compose -p myfinpro-staging-green -f docker-compose.staging.app.yml down 2>/dev/null || true
+            cd /opt/myfinpro/staging 2>/dev/null && docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml down 2>/dev/null || true
+            # Production stacks
+            cd /opt/myfinpro/production 2>/dev/null && docker compose -p myfinpro-production-blue -f docker-compose.production.app.yml down 2>/dev/null || true
+            cd /opt/myfinpro/production 2>/dev/null && docker compose -p myfinpro-production-green -f docker-compose.production.app.yml down 2>/dev/null || true
+            cd /opt/myfinpro/production 2>/dev/null && docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml down 2>/dev/null || true
+            # Old monolithic stacks (legacy)
             cd /opt/myfinpro/staging 2>/dev/null && docker compose -f docker-compose.staging.yml down 2>/dev/null || true
             cd /opt/myfinpro/production 2>/dev/null && docker compose -f docker-compose.production.yml down 2>/dev/null || true
 
-            echo "=== Removing old containers ==="
-            docker container prune -f 2>/dev/null || true
+            echo "=== Stopping any remaining containers ==="
+            docker stop $(docker ps -q) 2>/dev/null || true
+
+            echo "=== Removing ALL containers ==="
+            docker rm $(docker ps -aq) 2>/dev/null || true
 
             echo "=== Removing unused images (keep nothing - first deploy) ==="
             docker image prune -af 2>/dev/null || true
