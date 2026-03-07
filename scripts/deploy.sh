@@ -2,15 +2,16 @@
 # scripts/deploy.sh — Blue-green deployment for MyFinPro
 #
 # Deploys application services into alternating blue/green slots,
-# switches Nginx traffic with zero downtime, and cleans up old images.
+# switches shared Nginx traffic with zero downtime, and cleans up old images.
 #
 # Usage:
 #   ./scripts/deploy.sh <staging|production> <image_tag>
 #
 # Prerequisites:
 #   - All application env vars must be exported (from CI or shell)
-#   - Docker network myfinpro-{env}-net must exist (created by workflow)
-#   - Infrastructure stack must be running (ensured by this script)
+#   - Docker networks myfinpro-{staging,production}-net must exist
+#   - Shared nginx must be running (myfinpro-nginx container)
+#   - Infrastructure stack must be running (mysql, redis)
 
 set -euo pipefail
 
@@ -27,6 +28,7 @@ fi
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 DEPLOY_DIR="/opt/myfinpro/${ENVIRONMENT}"
+SHARED_DIR="/opt/myfinpro/shared"
 INFRA_COMPOSE="docker-compose.${ENVIRONMENT}.infra.yml"
 APP_COMPOSE="docker-compose.${ENVIRONMENT}.app.yml"
 NETWORK_NAME="myfinpro-${ENVIRONMENT}-net"
@@ -41,6 +43,9 @@ if [ "$ENVIRONMENT" = "production" ]; then
 else
   CONTAINER_PREFIX="myfinpro-staging"
 fi
+
+# Shared nginx container name
+NGINX_CONTAINER="myfinpro-nginx"
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -166,19 +171,24 @@ wait_for_container_health "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 90
 wait_for_container_health "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 90
 info "New slot ${NEXT_SLOT} is healthy!"
 
-# ─── Step 6: Switch Nginx to new slot ───────────────────────────────────────
+# ─── Step 6: Switch shared Nginx to new slot ─────────────────────────────────
 
-log "Switching Nginx traffic to slot: ${NEXT_SLOT}..."
+log "Switching shared Nginx traffic to slot: ${NEXT_SLOT} for ${ENVIRONMENT}..."
 
-# Generate new nginx config pointing to the new slot
+# Generate per-environment nginx config pointing to the new slot
 export ACTIVE_SLOT="$NEXT_SLOT"
-envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+export ENVIRONMENT
+envsubst '$SERVER_NAME $ACTIVE_SLOT $ENVIRONMENT' \
   < infrastructure/nginx/conf.d/ssl.conf.template \
-  > infrastructure/nginx/conf.d/default.conf
+  > "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
+
+log "Generated ${ENVIRONMENT}.conf in shared nginx config directory."
 
 # Test nginx config before reloading
-docker exec "${CONTAINER_PREFIX}-nginx" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
+docker exec "${NGINX_CONTAINER}" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
   error "Nginx config test failed! Aborting traffic switch."
+  # Remove the bad config
+  rm -f "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
   # Stop the new slot since we can't switch to it
   docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
     -f "$APP_COMPOSE" down 2>/dev/null || true
@@ -186,8 +196,8 @@ docker exec "${CONTAINER_PREFIX}-nginx" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
 }
 
 # Graceful reload — no dropped connections
-docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
-info "Nginx reloaded — traffic now flows to ${NEXT_SLOT}."
+docker exec "${NGINX_CONTAINER}" nginx -s reload
+info "Nginx reloaded — traffic now flows to ${NEXT_SLOT} for ${ENVIRONMENT}."
 
 # ─── Step 7: Drain & verify ─────────────────────────────────────────────────
 
@@ -198,7 +208,7 @@ log "Verifying deployment through Nginx..."
 VERIFY_RETRIES=10
 VERIFY_OK=false
 for i in $(seq 1 "$VERIFY_RETRIES"); do
-  if curl -sf "http://localhost/api/v1/health" > /dev/null 2>&1; then
+  if curl -sf -H "Host: ${SERVER_NAME}" "http://localhost/api/v1/health" > /dev/null 2>&1; then
     VERIFY_OK=true
     break
   fi
@@ -212,11 +222,15 @@ if [ "$VERIFY_OK" = false ]; then
 
   if [ "$CURRENT_SLOT" != "none" ]; then
     export ACTIVE_SLOT="$CURRENT_SLOT"
-    envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+    envsubst '$SERVER_NAME $ACTIVE_SLOT $ENVIRONMENT' \
       < infrastructure/nginx/conf.d/ssl.conf.template \
-      > infrastructure/nginx/conf.d/default.conf
-    docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
-    warn "Nginx reverted to slot: ${CURRENT_SLOT}"
+      > "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
+    docker exec "${NGINX_CONTAINER}" nginx -s reload
+    warn "Nginx reverted to slot: ${CURRENT_SLOT} for ${ENVIRONMENT}"
+  else
+    # First deploy, nothing to revert to — remove the env config
+    rm -f "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
+    docker exec "${NGINX_CONTAINER}" nginx -s reload 2>/dev/null || true
   fi
 
   # Stop the failed new slot

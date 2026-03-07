@@ -25,6 +25,7 @@ fi
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 DEPLOY_DIR="/opt/myfinpro/${ENVIRONMENT}"
+SHARED_DIR="/opt/myfinpro/shared"
 APP_COMPOSE="docker-compose.${ENVIRONMENT}.app.yml"
 ACTIVE_SLOT_FILE="${DEPLOY_DIR}/.active-slot"
 METADATA_FILE="${DEPLOY_DIR}/.deploy-metadata"
@@ -36,6 +37,9 @@ if [ "$ENVIRONMENT" = "production" ]; then
 else
   CONTAINER_PREFIX="myfinpro-staging"
 fi
+
+# Shared nginx container name
+NGINX_CONTAINER="myfinpro-nginx"
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -153,20 +157,21 @@ info "Rollback slot ${ROLLBACK_SLOT} is healthy!"
 
 # ─── Step 4: Switch Nginx to previous slot ───────────────────────────────────
 
-log "Switching Nginx traffic to rollback slot: ${ROLLBACK_SLOT}..."
+log "Switching shared Nginx traffic to rollback slot: ${ROLLBACK_SLOT} for ${ENVIRONMENT}..."
 
 export ACTIVE_SLOT="$ROLLBACK_SLOT"
-envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+export ENVIRONMENT
+envsubst '$SERVER_NAME $ACTIVE_SLOT $ENVIRONMENT' \
   < infrastructure/nginx/conf.d/ssl.conf.template \
-  > infrastructure/nginx/conf.d/default.conf
+  > "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
 
-docker exec "${CONTAINER_PREFIX}-nginx" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
+docker exec "${NGINX_CONTAINER}" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
   error "Nginx config test failed during rollback!"
   exit 1
 }
 
-docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
-info "Nginx reloaded — traffic now flows to ${ROLLBACK_SLOT}."
+docker exec "${NGINX_CONTAINER}" nginx -s reload
+info "Nginx reloaded — traffic now flows to ${ROLLBACK_SLOT} for ${ENVIRONMENT}."
 
 # Allow drain
 sleep 5
@@ -175,7 +180,7 @@ sleep 5
 log "Verifying rollback through Nginx..."
 VERIFY_OK=false
 for i in $(seq 1 10); do
-  if curl -sf "http://localhost/api/v1/health" > /dev/null 2>&1; then
+  if curl -sf -H "Host: ${SERVER_NAME}" "http://localhost/api/v1/health" > /dev/null 2>&1; then
     VERIFY_OK=true
     break
   fi
