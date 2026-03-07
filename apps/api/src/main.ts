@@ -53,17 +53,6 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>('API_GLOBAL_PREFIX', 'api/v1');
   app.setGlobalPrefix(apiPrefix);
 
-  // ── Unversioned /api/health — lightweight health probe endpoint ──
-  // Registered as Express middleware (runs before NestJS routing) to
-  // bypass the /api/v1 prefix. Used by load balancers, uptime monitors,
-  // and the Playwright E2E staging tests.
-  app.use('/api/health', (req: any, res: any, next: any) => {
-    if (req.method === 'GET') {
-      return res.json({ status: 'ok', service: 'api', timestamp: new Date().toISOString() });
-    }
-    next();
-  });
-
   // ── Validation pipe ──
   app.useGlobalPipes(
     new ValidationPipe({
