@@ -53,6 +53,14 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>('API_GLOBAL_PREFIX', 'api/v1');
   app.setGlobalPrefix(apiPrefix);
 
+  // ── Unversioned /api/health — lightweight health probe endpoint ──
+  // Registered directly on Express to bypass the /api/v1 prefix.
+  // Used by load balancers, uptime monitors, and the Playwright E2E tests.
+  const httpServer = app.getHttpAdapter();
+  httpServer.get('/api/health', (_req: any, res: any) => {
+    res.json({ status: 'ok', service: 'api', timestamp: new Date().toISOString() });
+  });
+
   // ── Validation pipe ──
   app.useGlobalPipes(
     new ValidationPipe({
