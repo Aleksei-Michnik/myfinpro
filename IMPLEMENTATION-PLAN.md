@@ -243,10 +243,10 @@ After each staging deployment, a dedicated workflow runs integration and E2E tes
 - **Manual trigger**: Can also be triggered manually via `workflow_dispatch` for ad-hoc validation.
 - **Production gate**: Results gate production deployment — the `deploy-production.yml` workflow verifies the latest staging test run was successful and less than 24 hours old before proceeding. If staging tests are stale or failed, production deployment is blocked.
 
-| Test Type              | Framework  | Suites | Tests | What it validates                                  |
-| ---------------------- | ---------- | ------ | ----- | -------------------------------------------------- |
-| API staging tests      | Jest (HTTP)| 4      | 16    | Health, API root, Swagger, rate limiting           |
-| Playwright staging E2E | Playwright | 4      | 14    | Homepage, API proxy, i18n, responsive layout       |
+| Test Type              | Framework   | Suites | Tests | What it validates                            |
+| ---------------------- | ----------- | ------ | ----- | -------------------------------------------- |
+| API staging tests      | Jest (HTTP) | 4      | 16    | Health, API root, Swagger, rate limiting     |
+| Playwright staging E2E | Playwright  | 4      | 14    | Homepage, API proxy, i18n, responsive layout |
 
 ### 3.6 Internationalization (i18n) Plan
 
@@ -796,12 +796,12 @@ flowchart TB
     TS -.->|results gate| VST
 ```
 
-| Workflow                   | File                        | Trigger                          | Purpose                                    |
-| -------------------------- | --------------------------- | -------------------------------- | ------------------------------------------ |
-| CI                         | `ci.yml`                    | PR or push to develop/main       | Lint, typecheck, unit tests, build         |
-| Deploy Staging             | `deploy-staging.yml`        | Push to develop / manual         | Blue-green deploy to staging               |
-| Test Staging               | `test-staging.yml`          | After staging deploy / manual    | API integration + Playwright E2E vs staging |
-| Deploy Production          | `deploy-production.yml`     | Push to main / manual            | Staging test gate + blue-green deploy      |
+| Workflow          | File                    | Trigger                       | Purpose                                     |
+| ----------------- | ----------------------- | ----------------------------- | ------------------------------------------- |
+| CI                | `ci.yml`                | PR or push to develop/main    | Lint, typecheck, unit tests, build          |
+| Deploy Staging    | `deploy-staging.yml`    | Push to develop / manual      | Blue-green deploy to staging                |
+| Test Staging      | `test-staging.yml`      | After staging deploy / manual | API integration + Playwright E2E vs staging |
+| Deploy Production | `deploy-production.yml` | Push to main / manual         | Staging test gate + blue-green deploy       |
 
 **Production deployment gating**: `deploy-production.yml` includes a `staging-tests-check` job that queries the GitHub API for the latest `test-staging.yml` run. It verifies the run was successful and completed within the last 24 hours. If either check fails, production deployment is blocked with a clear error message.
 

@@ -5,7 +5,9 @@
 export function getStagingApiUrl(): string {
   const url = (globalThis as any).__STAGING_API_URL__;
   if (!url) {
-    throw new Error('STAGING_API_URL is not set. Provide it via the STAGING_API_URL environment variable.');
+    throw new Error(
+      'STAGING_API_URL is not set. Provide it via the STAGING_API_URL environment variable.',
+    );
   }
   return url;
 }
@@ -13,10 +15,7 @@ export function getStagingApiUrl(): string {
 /**
  * Make an HTTP request to the staging API.
  */
-export async function stagingFetch(
-  path: string,
-  options?: RequestInit,
-): Promise<Response> {
+export async function stagingFetch(path: string, options?: RequestInit): Promise<Response> {
   const baseUrl = getStagingApiUrl();
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   return fetch(url, {

@@ -4,7 +4,12 @@ const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '.integration.spec.ts$', '.staging.spec.ts$'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    '.integration.spec.ts$',
+    '.staging.spec.ts$',
+  ],
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },

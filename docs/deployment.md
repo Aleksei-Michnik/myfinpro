@@ -13,10 +13,10 @@ MyFinPro deploys to a dedicated Ubuntu server using Docker Compose with **blue-g
 
 **Environments:**
 
-| Environment | Branch    | Frontend URL                                    | API URL                                          |
-| ----------- | --------- | ----------------------------------------------- | ------------------------------------------------ |
-| Staging     | `develop` | `https://<CLOUDFLARE_STAGING_SUBDOMAIN>`        | `https://<CLOUDFLARE_STAGING_SUBDOMAIN>/api/v1`  |
-| Production  | `main`    | `https://<CLOUDFLARE_PRODUCTION_SUBDOMAIN>`     | `https://<CLOUDFLARE_PRODUCTION_SUBDOMAIN>/api/v1` |
+| Environment | Branch    | Frontend URL                                | API URL                                            |
+| ----------- | --------- | ------------------------------------------- | -------------------------------------------------- |
+| Staging     | `develop` | `https://<CLOUDFLARE_STAGING_SUBDOMAIN>`    | `https://<CLOUDFLARE_STAGING_SUBDOMAIN>/api/v1`    |
+| Production  | `main`    | `https://<CLOUDFLARE_PRODUCTION_SUBDOMAIN>` | `https://<CLOUDFLARE_PRODUCTION_SUBDOMAIN>/api/v1` |
 
 > Domain values are stored as GitHub Secrets (`CLOUDFLARE_STAGING_SUBDOMAIN`, `CLOUDFLARE_PRODUCTION_SUBDOMAIN`).
 
@@ -86,21 +86,21 @@ lint-and-typecheck → unit-tests (parallel with build)
 
 **API tests** (4 suites, 16 tests):
 
-| Suite          | What it verifies                                        |
-| -------------- | ------------------------------------------------------- |
-| `health`       | Health endpoint returns OK with component statuses      |
-| `api-root`     | API root responds with correct version and metadata     |
-| `swagger`      | Swagger/OpenAPI docs are accessible and valid           |
-| `rate-limiting` | Rate limiting headers present, 429 on excess requests  |
+| Suite           | What it verifies                                      |
+| --------------- | ----------------------------------------------------- |
+| `health`        | Health endpoint returns OK with component statuses    |
+| `api-root`      | API root responds with correct version and metadata   |
+| `swagger`       | Swagger/OpenAPI docs are accessible and valid         |
+| `rate-limiting` | Rate limiting headers present, 429 on excess requests |
 
 **Playwright tests** (4 suites, 14 tests):
 
-| Suite        | What it verifies                                           |
-| ------------ | ---------------------------------------------------------- |
-| `homepage`   | Homepage loads, renders key elements, navigation works     |
-| `api-proxy`  | Frontend API proxy correctly forwards to backend           |
+| Suite        | What it verifies                                            |
+| ------------ | ----------------------------------------------------------- |
+| `homepage`   | Homepage loads, renders key elements, navigation works      |
+| `api-proxy`  | Frontend API proxy correctly forwards to backend            |
 | `i18n`       | English and Hebrew localization, URL-based locale switching |
-| `responsive` | Layout adapts correctly to mobile, tablet, desktop         |
+| `responsive` | Layout adapts correctly to mobile, tablet, desktop          |
 
 ### Production Deployment
 

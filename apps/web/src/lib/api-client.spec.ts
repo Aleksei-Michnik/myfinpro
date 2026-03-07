@@ -99,17 +99,13 @@ describe('ApiClient', () => {
 
   describe('error handling', () => {
     it('throws Error with message from JSON error response body', async () => {
-      mockFetch.mockResolvedValue(
-        createJsonResponse({ message: 'Not found' }, 404, false),
-      );
+      mockFetch.mockResolvedValue(createJsonResponse({ message: 'Not found' }, 404, false));
 
       await expect(apiClient.get('/missing')).rejects.toThrow('Not found');
     });
 
     it('throws Error with HTTP status when response body has no message', async () => {
-      mockFetch.mockResolvedValue(
-        createJsonResponse({}, 500, false),
-      );
+      mockFetch.mockResolvedValue(createJsonResponse({}, 500, false));
 
       await expect(apiClient.get('/error')).rejects.toThrow('HTTP 500');
     });

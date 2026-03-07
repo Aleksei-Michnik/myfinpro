@@ -312,6 +312,7 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 ### What was implemented:
 
 **Blue-Green Deployment System:**
+
 - [`scripts/deploy.sh`](../scripts/deploy.sh) — Blue-green deploy script with slot alternation, health checks, nginx config generation, and smart cleanup
 - [`scripts/rollback.sh`](../scripts/rollback.sh) — Rollback script that reverts to previous slot
 - [`scripts/cleanup-images.sh`](../scripts/cleanup-images.sh) — Smart Docker image cleanup per environment
@@ -322,6 +323,7 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 - [`docker-compose.shared-nginx.yml`](../docker-compose.shared-nginx.yml) — Shared Nginx reverse proxy
 
 **Shared Nginx Architecture:**
+
 - Single Nginx container (`myfinpro-nginx`) serves both staging and production
 - Connected to both `myfinpro-staging-net` and `myfinpro-production-net` Docker networks
 - Per-environment configs generated at deploy time via `envsubst` from [`infrastructure/nginx/conf.d/ssl.conf.template`](../infrastructure/nginx/conf.d/ssl.conf.template)
@@ -329,17 +331,20 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 - [`infrastructure/nginx/conf.d/cloudflare-ips.conf`](../infrastructure/nginx/conf.d/cloudflare-ips.conf) — Cloudflare IP trust for real IP detection
 
 **CI/CD Workflows:**
+
 - [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deploy (auto on push to `develop`)
 - [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Production deploy (auto on push to `main`, manual with confirmation)
 - [`.github/workflows/infra-maintenance.yml`](../.github/workflows/infra-maintenance.yml) — Infrastructure maintenance (cleanup + Cloudflare DNS setup)
 
 **Cloudflare Integration:**
+
 - DNS records managed via Cloudflare API in infra-maintenance workflow
 - SSL mode: Flexible (Cloudflare handles HTTPS, origin serves HTTP)
 - Staging: staging domain (single-level subdomain for Universal SSL compatibility)
 - Production: production domain
 
 **Documentation:**
+
 - [`docs/blue-green-deployment.md`](blue-green-deployment.md) — Blue-green deployment architecture and procedures
 
 ### Issues encountered and resolved:
@@ -352,12 +357,12 @@ Upgraded the deployment system from monolithic Docker Compose to a **blue-green 
 
 ### Deployment verification (2026-03-07):
 
-| URL | Expected | Result |
-|-----|----------|--------|
-| `https://<staging domain>` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
-| `http://<staging domain>` | 301 → HTTPS | ✅ `301 Moved Permanently` |
-| `https://<production domain>` | HTTPS response | ✅ `HTTP/2 307` → `/en` |
-| `http://<production domain>` | 301 → HTTPS | ✅ `301 Moved Permanently` |
+| URL                           | Expected       | Result                     |
+| ----------------------------- | -------------- | -------------------------- |
+| `https://<staging domain>`    | HTTPS response | ✅ `HTTP/2 307` → `/en`    |
+| `http://<staging domain>`     | 301 → HTTPS    | ✅ `301 Moved Permanently` |
+| `https://<production domain>` | HTTPS response | ✅ `HTTP/2 307` → `/en`    |
+| `http://<production domain>`  | 301 → HTTPS    | ✅ `301 Moved Permanently` |
 
 ### Server architecture:
 
@@ -440,6 +445,7 @@ flowchart TB
 ### What was implemented:
 
 **Unit Tests — API (Jest, 13 suites, ~90 tests):**
+
 - [`apps/api/src/app.controller.spec.ts`](../apps/api/src/app.controller.spec.ts) — App controller tests
 - [`apps/api/src/app.service.spec.ts`](../apps/api/src/app.service.spec.ts) — App service tests
 - [`apps/api/src/health/health.controller.spec.ts`](../apps/api/src/health/health.controller.spec.ts) — Health endpoint tests
@@ -455,16 +461,19 @@ flowchart TB
 - [`apps/api/src/common/context/request-context.spec.ts`](../apps/api/src/common/context/request-context.spec.ts) — Request context tests
 
 **Unit Tests — Web (Vitest, 3 suites, 35 tests):**
+
 - [`apps/web/src/components/ui/Button.spec.tsx`](../apps/web/src/components/ui/Button.spec.tsx) — Button component tests
 - [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Header component tests
 - [`apps/web/src/lib/api-client.spec.ts`](../apps/web/src/lib/api-client.spec.ts) — API client tests
 
 **Unit Tests — Shared (Vitest, 3 suites, 46 tests):**
+
 - [`packages/shared/src/__tests__/common.test.ts`](../packages/shared/src/__tests__/common.test.ts) — Common type tests
 - [`packages/shared/src/__tests__/currency.test.ts`](../packages/shared/src/__tests__/currency.test.ts) — Currency type tests
 - [`packages/shared/src/__tests__/pagination.test.ts`](../packages/shared/src/__tests__/pagination.test.ts) — Pagination DTO tests
 
 **Staging Integration Tests — API (Jest HTTP-based, 4 suites, 16 tests):**
+
 - [`apps/api/test/staging/health.staging.spec.ts`](../apps/api/test/staging/health.staging.spec.ts) — Health endpoint against live staging
 - [`apps/api/test/staging/api-root.staging.spec.ts`](../apps/api/test/staging/api-root.staging.spec.ts) — API root endpoint tests
 - [`apps/api/test/staging/swagger.staging.spec.ts`](../apps/api/test/staging/swagger.staging.spec.ts) — Swagger docs accessibility
@@ -474,6 +483,7 @@ flowchart TB
 - [`apps/api/jest.staging.config.ts`](../apps/api/jest.staging.config.ts) — Staging Jest config
 
 **Staging E2E Tests — Playwright (4 suites, 14 tests):**
+
 - [`apps/web/e2e/staging/homepage.staging.spec.ts`](../apps/web/e2e/staging/homepage.staging.spec.ts) — Homepage loads, key elements present
 - [`apps/web/e2e/staging/api-proxy.staging.spec.ts`](../apps/web/e2e/staging/api-proxy.staging.spec.ts) — Frontend API proxy forwarding
 - [`apps/web/e2e/staging/i18n.staging.spec.ts`](../apps/web/e2e/staging/i18n.staging.spec.ts) — i18n locale switching
@@ -481,24 +491,26 @@ flowchart TB
 - [`apps/web/playwright.staging.config.ts`](../apps/web/playwright.staging.config.ts) — Staging Playwright config
 
 **Workflow files created/modified:**
+
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — CI pipeline (lint, typecheck, unit tests, build)
 - [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Staging deployment (blue-green)
 - [`.github/workflows/test-staging.yml`](../.github/workflows/test-staging.yml) — **New**: Staging tests (API + Playwright E2E)
 - [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — **Updated**: Production deployment with staging test gate
 
 **Production Deployment Gating:**
+
 - Production deploy verifies latest `test-staging.yml` run was successful and < 24 hours old
 - Blocks deployment with clear error message if staging tests are stale or failed
 - Ensures every production deploy is validated against the staging environment
 
 ### Quality metrics after this enhancement:
 
-| Metric              | Count   | Breakdown                                                         |
-| ------------------- | ------- | ----------------------------------------------------------------- |
-| **Unit Tests**      | ~171    | API: 13 suites / ~90 tests, Web: 3 suites / 35 tests, Shared: 3 suites / 46 tests |
-| **Staging Tests**   | 30      | API integration: 4 suites / 16 tests, Playwright E2E: 4 suites / 14 tests          |
-| **Total Tests**     | ~201    | All automated, running in CI/CD pipeline                          |
-| **Test Frameworks** | 3       | Jest (API), Vitest (Web + Shared), Playwright (E2E)               |
+| Metric              | Count | Breakdown                                                                         |
+| ------------------- | ----- | --------------------------------------------------------------------------------- |
+| **Unit Tests**      | ~171  | API: 13 suites / ~90 tests, Web: 3 suites / 35 tests, Shared: 3 suites / 46 tests |
+| **Staging Tests**   | 30    | API integration: 4 suites / 16 tests, Playwright E2E: 4 suites / 14 tests         |
+| **Total Tests**     | ~201  | All automated, running in CI/CD pipeline                                          |
+| **Test Frameworks** | 3     | Jest (API), Vitest (Web + Shared), Playwright (E2E)                               |
 
 ---
 
@@ -551,17 +563,17 @@ myfinpro/
 
 ## 5. Quality Metrics
 
-| Metric                     | Result                                                                       |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| **Lint**                   | 0 errors, 0 warnings                                                        |
-| **Typecheck**              | 0 errors                                                                     |
-| **Unit Tests**             | ~171 passing (API: ~90, Web: 35, Shared: 46)                                |
-| **Staging Integration**    | 16 passing (4 suites: health, api-root, swagger, rate-limiting)             |
-| **Staging E2E**            | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)                |
-| **Total Tests**            | ~201 across all test types                                                   |
-| **Build**                  | All packages successful                                                      |
-| **Integration Tests**      | Testcontainers setup ready for local integration                            |
-| **Production Gate**        | Staging tests must pass within 24h before production deploy                 |
+| Metric                  | Result                                                          |
+| ----------------------- | --------------------------------------------------------------- |
+| **Lint**                | 0 errors, 0 warnings                                            |
+| **Typecheck**           | 0 errors                                                        |
+| **Unit Tests**          | ~171 passing (API: ~90, Web: 35, Shared: 46)                    |
+| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting) |
+| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)    |
+| **Total Tests**         | ~201 across all test types                                      |
+| **Build**               | All packages successful                                         |
+| **Integration Tests**   | Testcontainers setup ready for local integration                |
+| **Production Gate**     | Staging tests must pass within 24h before production deploy     |
 
 ---
 
@@ -599,25 +611,25 @@ ccdb29f docs: add server setup guide for staging and production environments
 
 ## 8. Infrastructure Status
 
-| Component                | Status        | Notes                                                |
-| ------------------------ | ------------- | ---------------------------------------------------- |
-| Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services       |
-| CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build         |
-| CD pipeline — Staging    | ✅ Live       | Blue-green deploy on push to `develop`               |
-| CD pipeline — Production | ✅ Live       | Blue-green deploy on push to `main` + manual trigger |
-| PR checks                | ✅ Configured | Block merge on CI failure                            |
-| Dependabot               | ✅ Configured | Automated dependency updates                         |
-| Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting          |
-| Backup verification      | ✅ Configured | CI job validates backup integrity                    |
-| Health checks            | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators |
-| Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint               |
-| Structured logging       | ✅ Configured | JSON logs with correlation IDs                       |
-| Rate limiting            | ✅ Configured | Global + per-endpoint throttling                     |
-| Blue-green deployment    | ✅ Live       | Shared nginx, blue/green slots, Cloudflare DNS       |
+| Component                | Status        | Notes                                                                                |
+| ------------------------ | ------------- | ------------------------------------------------------------------------------------ |
+| Local development        | ✅ Ready      | Docker Compose with MySQL, Redis, all services                                       |
+| CI pipeline              | ✅ Configured | GitHub Actions: lint, typecheck, test, build                                         |
+| CD pipeline — Staging    | ✅ Live       | Blue-green deploy on push to `develop`                                               |
+| CD pipeline — Production | ✅ Live       | Blue-green deploy on push to `main` + manual trigger                                 |
+| PR checks                | ✅ Configured | Block merge on CI failure                                                            |
+| Dependabot               | ✅ Configured | Automated dependency updates                                                         |
+| Backup scripts           | ✅ Configured | Automated MySQL backup + restore + alerting                                          |
+| Backup verification      | ✅ Configured | CI job validates backup integrity                                                    |
+| Health checks            | ✅ Configured | `/health` endpoint with DB, Redis, memory indicators                                 |
+| Metrics                  | ✅ Configured | Prometheus-compatible metrics endpoint                                               |
+| Structured logging       | ✅ Configured | JSON logs with correlation IDs                                                       |
+| Rate limiting            | ✅ Configured | Global + per-endpoint throttling                                                     |
+| Blue-green deployment    | ✅ Live       | Shared nginx, blue/green slots, Cloudflare DNS                                       |
 | Staging tests            | ✅ Configured | API integration (16 tests) + Playwright E2E (14 tests) auto-run after staging deploy |
-| Production test gate     | ✅ Configured | Production deploy blocked unless staging tests passed within 24h |
-| Cloudflare DNS           | ✅ Configured | Automated via infra-maintenance workflow              |
-| Server provisioning      | ✅ Complete   | VPS running (IP stored in GitHub Secrets)             |
+| Production test gate     | ✅ Configured | Production deploy blocked unless staging tests passed within 24h                     |
+| Cloudflare DNS           | ✅ Configured | Automated via infra-maintenance workflow                                             |
+| Server provisioning      | ✅ Complete   | VPS running (IP stored in GitHub Secrets)                                            |
 
 ---
 
