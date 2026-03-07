@@ -1,6 +1,7 @@
 # .github/workflows/deploy-production.yml
-# Production Deployment — Triggered on push to main or manual dispatch with approval
-# Security: GitHub Secrets → SSH → export env vars → compose up
+# Production Deployment — Blue-green strategy with zero-downtime
+# Triggered on push to main or manual dispatch with approval
+# Security: GitHub Secrets → SSH → export env vars → deploy.sh (blue-green)
 
 name: Deploy Production
 
@@ -169,12 +170,19 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          source: 'docker-compose.production.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh'
+          source: >-
+            docker-compose.production.infra.yml,
+            docker-compose.production.app.yml,
+            infrastructure/nginx/,
+            infrastructure/mysql/,
+            scripts/deploy.sh,
+            scripts/rollback.sh,
+            scripts/cleanup-images.sh
           target: /opt/myfinpro/production
           overwrite: true
 
-      - name: Deploy with environment variables
-        uses: appleboy/ssh-action@v1
+      - name: Deploy with blue-green strategy
+        uses: appleboy/ssh-action@v1.2.2
         env:
           # ── Database secrets (mapped from PRODUCTION_* GitHub secrets) ──
           MYSQL_ROOT_PASSWORD: ${{ secrets.PRODUCTION_MYSQL_ROOT_PASSWORD }}
@@ -199,7 +207,7 @@ jobs:
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──
           GHCR_REPO: aleksei-michnik/myfinpro
-          IMAGE_TAG: latest
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.sha_short }}
           # ── Server config ──
           SERVER_NAME: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
         with:
@@ -209,8 +217,7 @@ jobs:
           envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             set -euo pipefail
-            DEPLOY_DIR="/opt/myfinpro/production"
-            cd "$DEPLOY_DIR"
+            cd /opt/myfinpro/production
 
             echo "── Exporting environment variables ──"
             export MYSQL_ROOT_PASSWORD
@@ -234,71 +241,56 @@ jobs:
             export IMAGE_TAG
             export SERVER_NAME
 
-            echo "── Processing nginx SSL template ──"
-            envsubst '$SERVER_NAME' < infrastructure/nginx/conf.d/ssl.conf.template > infrastructure/nginx/conf.d/default.conf
+            echo "── Ensuring Docker network exists ──"
+            docker network create myfinpro-production-net 2>/dev/null || true
 
-            echo "── Pulling latest images ──"
-            docker compose -f docker-compose.production.yml pull api web
+            echo "── Ensuring infrastructure is running ──"
+            docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d
 
-            echo "── Starting services ──"
-            docker compose -f docker-compose.production.yml up -d
-
-            echo "── Cleaning up dangling images ──"
-            docker image prune -f 2>/dev/null || true
-
-            echo "✅ Production deployment complete"
-
-      - name: Verify deployment health
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.PRODUCTION_HOST }}
-          username: ${{ secrets.PRODUCTION_USER }}
-          key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          script: |
-            echo "Waiting for services to stabilize..."
-            sleep 20
-
-            echo "Checking API health..."
-            for i in $(seq 1 15); do
-              if curl -sf http://localhost/api/v1/health > /dev/null 2>&1; then
-                echo "✅ API health check passed"
-                break
-              fi
-              if [ "$i" -eq 15 ]; then
-                echo "❌ API health check failed after 15 attempts"
-                exit 1
-              fi
-              echo "Attempt $i/15 — retrying in 5s..."
-              sleep 5
-            done
-
-            echo "Checking Web health..."
-            for i in $(seq 1 15); do
-              if curl -sf http://localhost/ > /dev/null 2>&1; then
-                echo "✅ Web health check passed"
-                break
-              fi
-              if [ "$i" -eq 15 ]; then
-                echo "❌ Web health check failed after 15 attempts"
-                exit 1
-              fi
-              echo "Attempt $i/15 — retrying in 5s..."
-              sleep 5
-            done
-
-            echo "🚀 Production deployment verified successfully!"
+            echo "── Deploying application with blue-green strategy ──"
+            chmod +x scripts/deploy.sh scripts/rollback.sh scripts/cleanup-images.sh
+            bash scripts/deploy.sh production "$IMAGE_TAG"
 
       - name: Rollback on failure
         if: failure()
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.PRODUCTION_MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.PRODUCTION_MYSQL_DATABASE }}
+          MYSQL_USER: ${{ secrets.PRODUCTION_MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.PRODUCTION_MYSQL_PASSWORD }}
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.PRODUCTION_JWT_REFRESH_SECRET }}
+          REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
+          NODE_ENV: production
+          API_PORT: '3001'
+          CORS_ORIGINS: 'https://${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}'
+          LOG_LEVEL: warn
+          SWAGGER_ENABLED: 'false'
+          RATE_LIMIT_TTL: '60000'
+          RATE_LIMIT_MAX: '30'
+          NEXT_PUBLIC_API_URL: /api
+          API_INTERNAL_URL: http://api:3001
+          GHCR_REPO: aleksei-michnik/myfinpro
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.sha_short }}
+          SERVER_NAME: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             echo "⚠️ Production deployment failed — initiating rollback..."
             cd /opt/myfinpro/production
+
+            export MYSQL_ROOT_PASSWORD MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD
+            export DATABASE_URL JWT_SECRET JWT_REFRESH_SECRET REDIS_URL
+            export NODE_ENV API_PORT CORS_ORIGINS LOG_LEVEL SWAGGER_ENABLED
+            export RATE_LIMIT_TTL RATE_LIMIT_MAX NEXT_PUBLIC_API_URL API_INTERNAL_URL
+            export GHCR_REPO IMAGE_TAG SERVER_NAME
+
             if [ -f scripts/rollback.sh ]; then
               chmod +x scripts/rollback.sh
-              ./scripts/rollback.sh production
+              bash scripts/rollback.sh production
             fi

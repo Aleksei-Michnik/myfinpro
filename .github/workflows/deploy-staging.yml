@@ -1,6 +1,7 @@
 # .github/workflows/deploy-staging.yml
-# Staging Deployment — Triggered on push to develop or manual dispatch
-# Security: GitHub Secrets → SSH → export env vars → compose up
+# Staging Deployment — Blue-green strategy with zero-downtime
+# Triggered on push to develop or manual dispatch
+# Security: GitHub Secrets → SSH → export env vars → deploy.sh (blue-green)
 
 name: Deploy Staging
 
@@ -133,12 +134,19 @@ jobs:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
-          source: 'docker-compose.staging.yml,infrastructure/nginx/,infrastructure/mysql/,scripts/deploy.sh,scripts/rollback.sh'
+          source: >-
+            docker-compose.staging.infra.yml,
+            docker-compose.staging.app.yml,
+            infrastructure/nginx/,
+            infrastructure/mysql/,
+            scripts/deploy.sh,
+            scripts/rollback.sh,
+            scripts/cleanup-images.sh
           target: /opt/myfinpro/staging
           overwrite: true
 
-      - name: Deploy with environment variables
-        uses: appleboy/ssh-action@v1
+      - name: Deploy with blue-green strategy
+        uses: appleboy/ssh-action@v1.2.2
         env:
           # ── Database secrets (mapped from STAGING_* GitHub secrets) ──
           MYSQL_ROOT_PASSWORD: ${{ secrets.STAGING_MYSQL_ROOT_PASSWORD }}
@@ -163,7 +171,7 @@ jobs:
           API_INTERNAL_URL: http://api:3001
           # ── Image config ──
           GHCR_REPO: aleksei-michnik/myfinpro
-          IMAGE_TAG: staging
+          IMAGE_TAG: staging-${{ needs.build-and-push.outputs.sha_short }}
           # ── Server config ──
           SERVER_NAME: ${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}
         with:
@@ -173,8 +181,7 @@ jobs:
           envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             set -euo pipefail
-            DEPLOY_DIR="/opt/myfinpro/staging"
-            cd "$DEPLOY_DIR"
+            cd /opt/myfinpro/staging
 
             echo "── Exporting environment variables ──"
             export MYSQL_ROOT_PASSWORD
@@ -198,71 +205,56 @@ jobs:
             export IMAGE_TAG
             export SERVER_NAME
 
-            echo "── Processing nginx SSL template ──"
-            envsubst '$SERVER_NAME' < infrastructure/nginx/conf.d/ssl.conf.template > infrastructure/nginx/conf.d/default.conf
+            echo "── Ensuring Docker network exists ──"
+            docker network create myfinpro-staging-net 2>/dev/null || true
 
-            echo "── Pulling latest images ──"
-            docker compose -f docker-compose.staging.yml pull api web
+            echo "── Ensuring infrastructure is running ──"
+            docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d
 
-            echo "── Starting services ──"
-            docker compose -f docker-compose.staging.yml up -d
-
-            echo "── Cleaning up dangling images ──"
-            docker image prune -f 2>/dev/null || true
-
-            echo "✅ Staging deployment complete"
-
-      - name: Verify deployment health
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          script: |
-            echo "Waiting for services to stabilize..."
-            sleep 15
-
-            echo "Checking API health..."
-            for i in $(seq 1 10); do
-              if curl -sf http://localhost/api/v1/health > /dev/null 2>&1; then
-                echo "✅ API health check passed"
-                break
-              fi
-              if [ "$i" -eq 10 ]; then
-                echo "❌ API health check failed after 10 attempts"
-                exit 1
-              fi
-              echo "Attempt $i/10 — retrying in 5s..."
-              sleep 5
-            done
-
-            echo "Checking Web health..."
-            for i in $(seq 1 10); do
-              if curl -sf http://localhost/ > /dev/null 2>&1; then
-                echo "✅ Web health check passed"
-                break
-              fi
-              if [ "$i" -eq 10 ]; then
-                echo "❌ Web health check failed after 10 attempts"
-                exit 1
-              fi
-              echo "Attempt $i/10 — retrying in 5s..."
-              sleep 5
-            done
-
-            echo "🚀 Staging deployment verified successfully!"
+            echo "── Deploying application with blue-green strategy ──"
+            chmod +x scripts/deploy.sh scripts/rollback.sh scripts/cleanup-images.sh
+            bash scripts/deploy.sh staging "$IMAGE_TAG"
 
       - name: Rollback on failure
         if: failure()
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.STAGING_MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ secrets.STAGING_MYSQL_DATABASE }}
+          MYSQL_USER: ${{ secrets.STAGING_MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.STAGING_MYSQL_PASSWORD }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.STAGING_JWT_REFRESH_SECRET }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+          NODE_ENV: staging
+          API_PORT: '3001'
+          CORS_ORIGINS: '*'
+          LOG_LEVEL: debug
+          SWAGGER_ENABLED: 'true'
+          RATE_LIMIT_TTL: '60000'
+          RATE_LIMIT_MAX: '60'
+          NEXT_PUBLIC_API_URL: /api
+          API_INTERNAL_URL: http://api:3001
+          GHCR_REPO: aleksei-michnik/myfinpro
+          IMAGE_TAG: staging-${{ needs.build-and-push.outputs.sha_short }}
+          SERVER_NAME: ${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             echo "⚠️ Staging deployment failed — initiating rollback..."
             cd /opt/myfinpro/staging
+
+            export MYSQL_ROOT_PASSWORD MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD
+            export DATABASE_URL JWT_SECRET JWT_REFRESH_SECRET REDIS_URL
+            export NODE_ENV API_PORT CORS_ORIGINS LOG_LEVEL SWAGGER_ENABLED
+            export RATE_LIMIT_TTL RATE_LIMIT_MAX NEXT_PUBLIC_API_URL API_INTERNAL_URL
+            export GHCR_REPO IMAGE_TAG SERVER_NAME
+
             if [ -f scripts/rollback.sh ]; then
               chmod +x scripts/rollback.sh
-              ./scripts/rollback.sh staging
+              bash scripts/rollback.sh staging
             fi

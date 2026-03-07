@@ -1,0 +1,86 @@
+# docker-compose.staging.infra.yml
+# Long-lived infrastructure services for staging.
+# Managed separately from application deploys (blue-green slots).
+# Network: myfinpro-staging-net (created externally before first deploy)
+# Usage: docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d
+
+services:
+  # ───── MySQL Database ─────
+  mysql:
+    image: mysql:8.4
+    container_name: myfinpro-staging-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - '3306:3306'
+    volumes:
+      - myfinpro-staging-mysql:/var/lib/mysql
+      - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - myfinpro-staging-net
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+
+  # ───── Redis ─────
+  redis:
+    image: redis:8-alpine
+    container_name: myfinpro-staging-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - myfinpro-staging-redis:/data
+    networks:
+      - myfinpro-staging-net
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # ───── Nginx Reverse Proxy ─────
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: myfinpro-staging-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      - SERVER_NAME=${SERVER_NAME}
+      - ACTIVE_SLOT=${ACTIVE_SLOT:-blue}
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infrastructure/ssl:/etc/letsencrypt:ro
+    networks:
+      - myfinpro-staging-net
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  myfinpro-staging-mysql:
+    name: myfinpro-staging-mysql
+    driver: local
+  myfinpro-staging-redis:
+    name: myfinpro-staging-redis
+    driver: local
+
+networks:
+  myfinpro-staging-net:
+    external: true

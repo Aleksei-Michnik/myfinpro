@@ -1,0 +1,67 @@
+# docker-compose.staging.app.yml
+# Application services deployed as blue/green slots for staging.
+# DEPLOY_SLOT env var determines which slot this instance represents.
+# Usage: DEPLOY_SLOT=blue docker compose -p myfinpro-staging-blue -f docker-compose.staging.app.yml up -d
+
+services:
+  # ───── NestJS API ─────
+  api:
+    image: ghcr.io/${GHCR_REPO}/api:${IMAGE_TAG:-staging}
+    container_name: myfinpro-staging-api-${DEPLOY_SLOT:-blue}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      NODE_ENV: ${NODE_ENV}
+      API_PORT: ${API_PORT}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED}
+      RATE_LIMIT_TTL: ${RATE_LIMIT_TTL}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+    networks:
+      myfinpro-staging-net:
+        aliases:
+          - api-${DEPLOY_SLOT:-blue}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/api/v1/health',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ───── Next.js Web ─────
+  web:
+    image: ghcr.io/${GHCR_REPO}/web:${IMAGE_TAG:-staging}
+    container_name: myfinpro-staging-web-${DEPLOY_SLOT:-blue}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+      NODE_ENV: ${NODE_ENV}
+    networks:
+      myfinpro-staging-net:
+        aliases:
+          - web-${DEPLOY_SLOT:-blue}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  myfinpro-staging-net:
+    external: true

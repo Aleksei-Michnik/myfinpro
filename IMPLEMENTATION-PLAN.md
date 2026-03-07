@@ -629,40 +629,55 @@ This section mirrors the required order with short summaries. Detailed micro-ite
 
 ## 8. Deployment Strategy
 
+> **Detailed design**: See [`docs/blue-green-deployment.md`](docs/blue-green-deployment.md) for the full blue-green deployment design document with compose file restructuring, smart cleanup logic, and implementation details.
+
 ### 8.1 Environment Overview
 
-| Item          | Strategy                                               |
-| ------------- | ------------------------------------------------------ |
-| Environments  | dev, staging, production on Ubuntu via Docker Compose  |
-| Migrations    | Prisma migrations in CI/CD, gated by backup            |
-| Feature flags | Simple DB-backed flags or env flags                    |
-| Rollbacks     | Blue-green or container rollback with versioned images |
+| Item          | Strategy                                                                         |
+| ------------- | -------------------------------------------------------------------------------- |
+| Environments  | dev, staging, production on Hetzner VPS via Docker Compose                       |
+| Architecture  | Blue-green slots with Nginx traffic switching (see blue-green deployment design) |
+| Migrations    | Prisma migrations in CI/CD, gated by backup, expand-then-contract pattern        |
+| Feature flags | Simple DB-backed flags or env flags                                              |
+| Rollbacks     | Instant slot-based rollback using preserved N-1 images                           |
+| Cleanup       | Smart image cleanup: keep current + previous deployment, remove older images     |
+| Images        | Built in GitHub Actions CI, pushed to GHCR, tagged with git SHA                  |
 
-### 8.2 Zero-Downtime Deployment Procedure
+### 8.2 Blue-Green Zero-Downtime Deployment
 
-All production deployments follow this sequence to prevent service interruption:
+All staging and production deployments use **blue-green slots** to achieve zero-downtime:
 
-1. **Pull new images**: `docker compose pull` to fetch latest versioned images
-2. **Start new containers**: Launch new containers alongside old ones
-3. **Health check**: Wait for `/health` endpoint to return 200 on new containers
-4. **Switch Nginx upstream**: Update Nginx config to route traffic to new containers
-5. **Drain old containers**: Wait for in-flight requests to complete (30s grace period)
-6. **Remove old containers**: Stop and remove previous version containers
-7. **Verify**: Run post-deploy smoke test against production
+1. **Determine slots**: Read active slot (blue/green) from state file; deploy to the other
+2. **Pull new images**: Fetch versioned images from GHCR to the inactive slot
+3. **Ensure infrastructure**: Verify MySQL, Redis, Nginx are healthy (separate infra compose stack)
+4. **Run migrations**: Execute Prisma migrations via one-off container (must be backward-compatible)
+5. **Start new slot**: Launch new API + Web containers with network aliases for the new slot
+6. **Health check**: Wait for Docker health checks to report "healthy" on new slot containers
+7. **Switch Nginx upstream**: Generate nginx config pointing to new slot, `nginx -s reload`
+8. **Drain & verify**: Wait 5s for in-flight requests, verify via live health endpoint
+9. **Stop old slot**: Bring down previous slot containers
+10. **Save state**: Write active slot + deployment metadata to state files
+11. **Smart cleanup**: Remove old Docker images, keep current + N-1 for rollback
 
 ```mermaid
 flowchart LR
-    A[Pull Images] --> B[Start New]
-    B --> C[Health Check]
-    C --> D[Switch Nginx]
-    D --> E[Drain Old]
-    E --> F[Remove Old]
-    F --> G[Verify]
+    A[Determine Slot] --> B[Pull Images]
+    B --> C[Start New Slot]
+    C --> D[Health Check]
+    D --> E[Switch Nginx]
+    E --> F[Drain & Verify]
+    F --> G[Stop Old Slot]
+    G --> H[Smart Cleanup]
 ```
+
+**Compose file structure** (per environment):
+
+- `docker-compose.{env}.infra.yml` — MySQL, Redis, Nginx (long-lived, never recreated during deploys)
+- `docker-compose.{env}.app.yml` — API, Web (slot-aware, uses `DEPLOY_SLOT` env var for container names and network aliases)
 
 ### 8.3 Database Migration Safety
 
-Prisma migrations must follow the **expand-then-contract** pattern to maintain backward compatibility:
+Prisma migrations must follow the **expand-then-contract** pattern to maintain backward compatibility during blue-green overlap:
 
 | Step     | Action                  | Description                                        |
 | -------- | ----------------------- | -------------------------------------------------- |
@@ -675,18 +690,23 @@ Prisma migrations must follow the **expand-then-contract** pattern to maintain b
 - Never rename or remove a column in the same deploy as code changes
 - Always test migrations against a production-size dataset in staging
 - Run `prisma migrate diff` to review SQL before applying
+- During blue-green transition, both old and new API versions may briefly coexist — the schema MUST be compatible with both
 
 ### 8.4 Rollback Procedure
 
-Step-by-step documented rollback, tested periodically in CI:
+Rollback is an instant slot-switch operation (~30-45 seconds total):
 
 1. **Identify**: Alert triggers or manual detection of deployment issue
 2. **Decision**: If within 5 minutes of deploy, immediate rollback; otherwise, assess
-3. **Revert Nginx**: Point upstream back to previous container version
-4. **Verify old containers**: Ensure previous version still running and healthy
-5. **Database**: If migration was applied, run reverse migration (must be pre-tested)
-6. **Notify**: Post to Telegram/Slack channel with rollback details
-7. **Post-mortem**: Document cause and prevention plan
+3. **Start previous slot**: Launch containers from preserved N-1 images (already cached locally)
+4. **Health check**: Wait for previous slot containers to become healthy
+5. **Switch Nginx**: Generate config pointing to previous slot, `nginx -s reload`
+6. **Stop failed slot**: Bring down the broken slot containers
+7. **Database**: If migration was applied, run reverse migration (must be pre-tested)
+8. **Notify**: Post to Telegram/Slack channel with rollback details
+9. **Post-mortem**: Document cause and prevention plan
+
+> **Key advantage**: Since N-1 images are preserved locally by the smart cleanup, rollback avoids the slowest step (pulling images from GHCR).
 
 ### 8.5 Deployment Notifications
 

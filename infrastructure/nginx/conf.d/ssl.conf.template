@@ -1,14 +1,15 @@
-# ssl.conf.template — Staging/Production SSL config
-# Processed at deploy time: envsubst '$SERVER_NAME' < ssl.conf.template > default.conf
-# Only ${SERVER_NAME} is substituted; all nginx variables ($host, $request_uri, etc.) are preserved.
+# ssl.conf.template — Staging/Production SSL config (blue-green aware)
+# Processed at deploy time: envsubst '$SERVER_NAME $ACTIVE_SLOT' < ssl.conf.template > default.conf
+# Only ${SERVER_NAME} and ${ACTIVE_SLOT} are substituted;
+# all nginx variables ($host, $request_uri, etc.) are preserved.
 
-# Upstream definitions
+# Upstream definitions — point to the active blue/green slot
 upstream api_upstream {
-    server api:3001;
+    server api-${ACTIVE_SLOT}:3001;
 }
 
 upstream web_upstream {
-    server web:3000;
+    server web-${ACTIVE_SLOT}:3000;
 }
 
 # CloudFlare IP ranges — trust CloudFlare proxy for real IP detection

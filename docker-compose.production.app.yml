@@ -1,0 +1,93 @@
+# docker-compose.production.app.yml
+# Application services deployed as blue/green slots for production.
+# DEPLOY_SLOT env var determines which slot this instance represents.
+# Usage: DEPLOY_SLOT=blue docker compose -p myfinpro-production-blue -f docker-compose.production.app.yml up -d
+
+services:
+  # ───── NestJS API ─────
+  api:
+    image: ghcr.io/${GHCR_REPO}/api:${IMAGE_TAG:-latest}
+    container_name: myfinpro-prod-api-${DEPLOY_SLOT:-blue}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      NODE_ENV: ${NODE_ENV}
+      API_PORT: ${API_PORT}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED}
+      RATE_LIMIT_TTL: ${RATE_LIMIT_TTL}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+    # No exposed ports — accessed through Nginx only
+    networks:
+      myfinpro-production-net:
+        aliases:
+          - api-${DEPLOY_SLOT:-blue}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/api/v1/health',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  # ───── Next.js Web ─────
+  web:
+    image: ghcr.io/${GHCR_REPO}/web:${IMAGE_TAG:-latest}
+    container_name: myfinpro-prod-web-${DEPLOY_SLOT:-blue}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+      NODE_ENV: ${NODE_ENV}
+    # No exposed ports — accessed through Nginx only
+    networks:
+      myfinpro-production-net:
+        aliases:
+          - web-${DEPLOY_SLOT:-blue}
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+networks:
+  myfinpro-production-net:
+    external: true
