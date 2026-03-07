@@ -1,19 +1,41 @@
 #!/usr/bin/env bash
-# scripts/rollback.sh — Rollback MyFinPro to previous deployment
-# Usage: ./scripts/rollback.sh [staging|production]
+# scripts/rollback.sh — Instant rollback for MyFinPro blue-green deployments
+#
+# Reads .deploy-metadata to find the previous slot and image tag,
+# starts the previous slot, switches Nginx, and stops the failed slot.
+#
+# Usage:
+#   ./scripts/rollback.sh <staging|production>
+#
+# Prerequisites:
+#   - A previous successful deployment must exist (.deploy-metadata)
+#   - All application env vars must be exported (from CI or shell)
 
 set -euo pipefail
 
+# ─── Arguments ───────────────────────────────────────────────────────────────
+
+ENVIRONMENT="${1:?Usage: rollback.sh <staging|production>}"
+
+if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
+  echo "❌ Invalid environment: $ENVIRONMENT. Must be 'staging' or 'production'."
+  exit 1
+fi
+
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-ENVIRONMENT="${1:-staging}"
-DEPLOY_DIR="/opt/myfinpro"
-COMPOSE_FILE="docker-compose.${ENVIRONMENT}.yml"
-BACKUP_TAG_FILE="${DEPLOY_DIR}/.previous-image-tags"
-HEALTH_CHECK_URL="http://localhost/api/v1/health"
-HEALTH_CHECK_RETRIES=15
-HEALTH_CHECK_INTERVAL=5
+DEPLOY_DIR="/opt/myfinpro/${ENVIRONMENT}"
+APP_COMPOSE="docker-compose.${ENVIRONMENT}.app.yml"
+ACTIVE_SLOT_FILE="${DEPLOY_DIR}/.active-slot"
+METADATA_FILE="${DEPLOY_DIR}/.deploy-metadata"
 LOG_FILE="${DEPLOY_DIR}/rollback-$(date +%Y%m%d-%H%M%S).log"
+
+# Container name prefix varies by environment
+if [ "$ENVIRONMENT" = "production" ]; then
+  CONTAINER_PREFIX="myfinpro-prod"
+else
+  CONTAINER_PREFIX="myfinpro-staging"
+fi
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -25,125 +47,183 @@ NC='\033[0m'
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
-log()    { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE"; }
-info()   { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE"; }
-warn()   { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE"; }
-error()  { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE"; }
+log()   { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE"; }
+info()  { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE"; }
+warn()  { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE"; }
+error() { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE"; }
 
-# ─── Validation ──────────────────────────────────────────────────────────────
+# ─── Health check helper ────────────────────────────────────────────────────
 
-validate_environment() {
-  if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
-    error "Invalid environment: $ENVIRONMENT. Must be 'staging' or 'production'."
-    exit 1
-  fi
+wait_for_container_health() {
+  local container="$1"
+  local timeout="${2:-90}"
+  local elapsed=0
 
-  cd "$DEPLOY_DIR" || { error "Deploy directory $DEPLOY_DIR not found."; exit 1; }
-
-  if [ ! -f "$COMPOSE_FILE" ]; then
-    error "Compose file $COMPOSE_FILE not found."
-    exit 1
-  fi
-}
-
-# ─── Rollback to previous images ────────────────────────────────────────────
-
-rollback_images() {
-  log "Rolling back to previous image versions..."
-
-  if [ ! -f "$BACKUP_TAG_FILE" ]; then
-    warn "No previous image tags found at $BACKUP_TAG_FILE."
-    warn "Attempting to use previous Docker image layers..."
-
-    # Stop current containers
-    docker compose -f "$COMPOSE_FILE" stop api web
-
-    # Try to find previous images
-    local api_prev web_prev
-    api_prev=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep "/api:" | grep -v "staging\$\|latest\$" | head -1 || echo "")
-    web_prev=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep "/web:" | grep -v "staging\$\|latest\$" | head -1 || echo "")
-
-    if [ -n "$api_prev" ] && [ -n "$web_prev" ]; then
-      log "Found previous API image: $api_prev"
-      log "Found previous Web image: $web_prev"
-    else
-      error "No previous images found for rollback. Manual intervention required."
-      exit 1
+  log "Waiting for ${container} to become healthy (timeout: ${timeout}s)..."
+  while [ $elapsed -lt "$timeout" ]; do
+    local status
+    status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "not_found")
+    case "$status" in
+      healthy)
+        info "${container} is healthy."
+        return 0
+        ;;
+      unhealthy)
+        error "${container} is unhealthy!"
+        docker logs --tail 20 "$container" 2>&1 | tee -a "$LOG_FILE" || true
+        return 1
+        ;;
+    esac
+    sleep 5
+    elapsed=$((elapsed + 5))
+    if [ $((elapsed % 15)) -eq 0 ]; then
+      log "  ${container} status: ${status} (${elapsed}s/${timeout}s)"
     fi
-  else
-    log "Found previous image tags file."
-    cat "$BACKUP_TAG_FILE" | tee -a "$LOG_FILE"
-  fi
-}
-
-# ─── Restart services ───────────────────────────────────────────────────────
-
-restart_services() {
-  log "Restarting services with previous images..."
-
-  # Stop current containers gracefully
-  docker compose -f "$COMPOSE_FILE" stop api web nginx
-
-  # Start them back up (Docker will use cached images if pull was reverted)
-  docker compose -f "$COMPOSE_FILE" up -d mysql redis
-  sleep 5
-
-  docker compose -f "$COMPOSE_FILE" up -d api
-  sleep 10
-
-  docker compose -f "$COMPOSE_FILE" up -d web
-  sleep 10
-
-  docker compose -f "$COMPOSE_FILE" up -d nginx
-  sleep 3
-
-  info "Services restarted."
-}
-
-# ─── Verify health ──────────────────────────────────────────────────────────
-
-verify_health() {
-  log "Verifying rollback health..."
-
-  for i in $(seq 1 "$HEALTH_CHECK_RETRIES"); do
-    if curl -sf "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
-      info "Health check passed after rollback."
-      return 0
-    fi
-    if [ "$i" -eq "$HEALTH_CHECK_RETRIES" ]; then
-      error "Health check failed after rollback! Manual intervention required."
-      error "Check logs: docker compose -f $COMPOSE_FILE logs"
-      return 1
-    fi
-    log "  Health check attempt $i/$HEALTH_CHECK_RETRIES..."
-    sleep "$HEALTH_CHECK_INTERVAL"
   done
+
+  error "${container} did not become healthy within ${timeout}s."
+  return 1
 }
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
-main() {
-  log "═══════════════════════════════════════════════════════════════"
-  log "  MyFinPro Rollback — ${ENVIRONMENT^^}"
-  log "  Started at: $(date)"
-  log "═══════════════════════════════════════════════════════════════"
+cd "$DEPLOY_DIR" || { echo "❌ Deploy directory $DEPLOY_DIR not found."; exit 1; }
 
-  validate_environment
-  rollback_images
-  restart_services
+log "═══════════════════════════════════════════════════════════════"
+log "  MyFinPro Rollback — ${ENVIRONMENT^^}"
+log "  Started at: $(date)"
+log "═══════════════════════════════════════════════════════════════"
 
-  if verify_health; then
-    log "═══════════════════════════════════════════════════════════════"
-    info "🔄 Rollback to ${ENVIRONMENT} completed successfully!"
-    log "═══════════════════════════════════════════════════════════════"
-    exit 0
-  else
-    error "Rollback verification failed. Manual intervention required."
-    error "  1. Check container status: docker compose -f $COMPOSE_FILE ps"
-    error "  2. Check container logs:   docker compose -f $COMPOSE_FILE logs"
-    error "  3. If needed, restart all: docker compose -f $COMPOSE_FILE down && docker compose -f $COMPOSE_FILE up -d"
+# ─── Step 1: Read deployment metadata ────────────────────────────────────────
+
+if [ ! -f "$METADATA_FILE" ]; then
+  error "No deployment metadata found at $METADATA_FILE"
+  error "Cannot determine previous slot and image tag."
+  error "Manual intervention required."
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$METADATA_FILE"
+
+CURRENT_SLOT="${ACTIVE_SLOT:-}"
+ROLLBACK_SLOT="${PREVIOUS_SLOT:-}"
+ROLLBACK_TAG="${PREVIOUS_IMAGE_TAG:-}"
+
+if [ -z "$ROLLBACK_SLOT" ] || [ "$ROLLBACK_SLOT" = "none" ]; then
+  error "No previous slot found in metadata. Cannot rollback."
+  error "This may be the first deployment — no previous version exists."
+  exit 1
+fi
+
+if [ -z "$ROLLBACK_TAG" ]; then
+  error "No previous image tag found in metadata. Cannot rollback."
+  exit 1
+fi
+
+log "Rolling back: ${CURRENT_SLOT} → ${ROLLBACK_SLOT}"
+log "Rollback image tag: ${ROLLBACK_TAG}"
+
+# ─── Step 2: Start previous slot containers ──────────────────────────────────
+
+log "Starting rollback slot: ${ROLLBACK_SLOT} (tag: ${ROLLBACK_TAG})..."
+
+export DEPLOY_SLOT="$ROLLBACK_SLOT"
+export IMAGE_TAG="$ROLLBACK_TAG"
+
+# Try to start — images should still be cached locally
+docker compose -p "myfinpro-${ENVIRONMENT}-${ROLLBACK_SLOT}" \
+  -f "$APP_COMPOSE" up -d || {
+  warn "Failed to start with cached images — attempting pull..."
+  docker compose -p "myfinpro-${ENVIRONMENT}-${ROLLBACK_SLOT}" \
+    -f "$APP_COMPOSE" pull
+  docker compose -p "myfinpro-${ENVIRONMENT}-${ROLLBACK_SLOT}" \
+    -f "$APP_COMPOSE" up -d || {
+    error "Failed to start rollback slot even after pulling. Manual intervention required."
     exit 1
-  fi
+  }
 }
 
-main "$@"
+# ─── Step 3: Wait for health checks ─────────────────────────────────────────
+
+log "Waiting for rollback slot health checks..."
+wait_for_container_health "${CONTAINER_PREFIX}-api-${ROLLBACK_SLOT}" 90
+wait_for_container_health "${CONTAINER_PREFIX}-web-${ROLLBACK_SLOT}" 90
+info "Rollback slot ${ROLLBACK_SLOT} is healthy!"
+
+# ─── Step 4: Switch Nginx to previous slot ───────────────────────────────────
+
+log "Switching Nginx traffic to rollback slot: ${ROLLBACK_SLOT}..."
+
+export ACTIVE_SLOT="$ROLLBACK_SLOT"
+envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+  < infrastructure/nginx/conf.d/ssl.conf.template \
+  > infrastructure/nginx/conf.d/default.conf
+
+docker exec "${CONTAINER_PREFIX}-nginx" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
+  error "Nginx config test failed during rollback!"
+  exit 1
+}
+
+docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
+info "Nginx reloaded — traffic now flows to ${ROLLBACK_SLOT}."
+
+# Allow drain
+sleep 5
+
+# Verify
+log "Verifying rollback through Nginx..."
+VERIFY_OK=false
+for i in $(seq 1 10); do
+  if curl -sf "http://localhost/api/v1/health" > /dev/null 2>&1; then
+    VERIFY_OK=true
+    break
+  fi
+  log "  Health check attempt $i/10..."
+  sleep 3
+done
+
+if [ "$VERIFY_OK" = false ]; then
+  error "Health check failed after rollback! Manual intervention required."
+  error "  1. Check container status: docker ps"
+  error "  2. Check container logs: docker logs ${CONTAINER_PREFIX}-api-${ROLLBACK_SLOT}"
+  exit 1
+fi
+
+info "Post-rollback health check passed!"
+
+# ─── Step 5: Stop current (failed) slot ──────────────────────────────────────
+
+if [ -n "$CURRENT_SLOT" ] && [ "$CURRENT_SLOT" != "none" ]; then
+  log "Stopping failed slot: ${CURRENT_SLOT}..."
+  DEPLOY_SLOT="$CURRENT_SLOT" docker compose -p "myfinpro-${ENVIRONMENT}-${CURRENT_SLOT}" \
+    -f "$APP_COMPOSE" down 2>/dev/null || {
+    warn "Failed to stop slot ${CURRENT_SLOT} — may need manual cleanup."
+  }
+  info "Failed slot ${CURRENT_SLOT} stopped."
+fi
+
+# ─── Step 6: Update state files ─────────────────────────────────────────────
+
+echo "$ROLLBACK_SLOT" > "$ACTIVE_SLOT_FILE"
+
+cat > "$METADATA_FILE" << EOF
+DEPLOY_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ACTIVE_SLOT=${ROLLBACK_SLOT}
+PREVIOUS_SLOT=${CURRENT_SLOT}
+IMAGE_TAG=${ROLLBACK_TAG}
+PREVIOUS_IMAGE_TAG=${IMAGE_TAG}
+GIT_SHA=${PREVIOUS_GIT_SHA:-unknown}
+PREVIOUS_GIT_SHA=${GIT_SHA:-unknown}
+DEPLOY_STATUS=rollback
+EOF
+
+info "State updated: active=${ROLLBACK_SLOT}"
+
+# ─── Done ────────────────────────────────────────────────────────────────────
+
+log "═══════════════════════════════════════════════════════════════"
+info "🔄 Rollback to ${ENVIRONMENT} completed successfully!"
+info "   Active slot: ${ROLLBACK_SLOT}"
+info "   Image tag:   ${ROLLBACK_TAG}"
+log "═══════════════════════════════════════════════════════════════"

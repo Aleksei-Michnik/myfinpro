@@ -1,31 +1,46 @@
 #!/usr/bin/env bash
-# scripts/deploy.sh — Deploy MyFinPro services with ephemeral secret injection
+# scripts/deploy.sh — Blue-green deployment for MyFinPro
 #
-# Security pattern:
-#   1. Accept env vars (from CI) or read from GitHub Secrets via `gh` CLI
-#   2. Write temp .env file
-#   3. docker compose up
-#   4. shred .env (secrets never persist on disk)
+# Deploys application services into alternating blue/green slots,
+# switches Nginx traffic with zero downtime, and cleans up old images.
 #
 # Usage:
-#   ./scripts/deploy.sh [staging|production]
+#   ./scripts/deploy.sh <staging|production> <image_tag>
 #
-# When called from GitHub Actions, env vars are pre-set via SSH envs.
-# For manual deployment, ensure required env vars are exported or use `gh` CLI.
+# Prerequisites:
+#   - All application env vars must be exported (from CI or shell)
+#   - Docker network myfinpro-{env}-net must exist (created by workflow)
+#   - Infrastructure stack must be running (ensured by this script)
 
 set -euo pipefail
 
+# ─── Arguments ───────────────────────────────────────────────────────────────
+
+ENVIRONMENT="${1:?Usage: deploy.sh <staging|production> <image_tag>}"
+IMAGE_TAG="${2:?Usage: deploy.sh <staging|production> <image_tag>}"
+
+if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
+  echo "❌ Invalid environment: $ENVIRONMENT. Must be 'staging' or 'production'."
+  exit 1
+fi
+
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-ENVIRONMENT="${1:-staging}"
 DEPLOY_DIR="/opt/myfinpro/${ENVIRONMENT}"
-COMPOSE_FILE="docker-compose.${ENVIRONMENT}.yml"
-ENV_FILE=".env"
-HEALTH_CHECK_URL="http://localhost/api/v1/health"
-HEALTH_CHECK_RETRIES=20
-HEALTH_CHECK_INTERVAL=5
-BACKUP_TAG_FILE="${DEPLOY_DIR}/.previous-image-tags"
+INFRA_COMPOSE="docker-compose.${ENVIRONMENT}.infra.yml"
+APP_COMPOSE="docker-compose.${ENVIRONMENT}.app.yml"
+NETWORK_NAME="myfinpro-${ENVIRONMENT}-net"
+ACTIVE_SLOT_FILE="${DEPLOY_DIR}/.active-slot"
+METADATA_FILE="${DEPLOY_DIR}/.deploy-metadata"
+LOCK_FILE="${DEPLOY_DIR}/.deploy.lock"
 LOG_FILE="${DEPLOY_DIR}/deploy-$(date +%Y%m%d-%H%M%S).log"
+
+# Container name prefix varies by environment
+if [ "$ENVIRONMENT" = "production" ]; then
+  CONTAINER_PREFIX="myfinpro-prod"
+else
+  CONTAINER_PREFIX="myfinpro-staging"
+fi
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -33,257 +48,234 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
-log()    { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE"; }
-info()   { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE"; }
-warn()   { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE"; }
-error()  { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE"; }
+log()   { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE"; }
+info()  { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE"; }
+warn()  { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE"; }
+error() { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE"; }
 
-# ─── Validation ──────────────────────────────────────────────────────────────
+# ─── Lock ────────────────────────────────────────────────────────────────────
 
-validate_environment() {
-  if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
-    error "Invalid environment: $ENVIRONMENT. Must be 'staging' or 'production'."
-    exit 1
-  fi
+cd "$DEPLOY_DIR" || { echo "❌ Deploy directory $DEPLOY_DIR not found."; exit 1; }
+mkdir -p "$DEPLOY_DIR"
 
-  cd "$DEPLOY_DIR" || { error "Deploy directory $DEPLOY_DIR not found."; exit 1; }
+exec 200>"$LOCK_FILE"
+flock -n 200 || { error "Another deployment is in progress (lock: $LOCK_FILE)"; exit 1; }
 
-  if [ ! -f "$COMPOSE_FILE" ]; then
-    error "Compose file $COMPOSE_FILE not found in $DEPLOY_DIR."
-    exit 1
-  fi
+# ─── Step 1: Determine slots ────────────────────────────────────────────────
 
-  log "Deploying to ${ENVIRONMENT} environment..."
+log "═══════════════════════════════════════════════════════════════"
+log "  MyFinPro Blue-Green Deployment — ${ENVIRONMENT^^}"
+log "  Image tag: ${IMAGE_TAG}"
+log "  Started at: $(date)"
+log "═══════════════════════════════════════════════════════════════"
+
+CURRENT_SLOT=$(cat "$ACTIVE_SLOT_FILE" 2>/dev/null || echo "none")
+
+if [ "$CURRENT_SLOT" = "blue" ]; then
+  NEXT_SLOT="green"
+elif [ "$CURRENT_SLOT" = "green" ]; then
+  NEXT_SLOT="blue"
+else
+  NEXT_SLOT="blue"
+  CURRENT_SLOT="none"
+fi
+
+log "Current active slot: ${CURRENT_SLOT}"
+log "Deploying to slot:   ${NEXT_SLOT}"
+
+# Load previous deployment metadata (for tracking previous image tag)
+PREV_IMAGE_TAG=""
+PREV_GIT_SHA=""
+if [ -f "$METADATA_FILE" ]; then
+  # shellcheck source=/dev/null
+  source "$METADATA_FILE" 2>/dev/null || true
+  PREV_IMAGE_TAG="${IMAGE_TAG:-}"
+  PREV_GIT_SHA="${GIT_SHA:-}"
+fi
+
+# Export variables needed by compose files
+export DEPLOY_SLOT="$NEXT_SLOT"
+export IMAGE_TAG
+export ACTIVE_SLOT="$NEXT_SLOT"
+
+# ─── Step 2: Pull new images ────────────────────────────────────────────────
+
+log "Pulling new images (tag: ${IMAGE_TAG})..."
+docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+  -f "$APP_COMPOSE" pull || {
+  error "Failed to pull images."
+  exit 1
 }
+info "Images pulled successfully."
 
-# ─── Write ephemeral .env file ───────────────────────────────────────────────
+# ─── Step 3: Ensure infrastructure is running ────────────────────────────────
 
-write_env_file() {
-  log "Writing ephemeral .env file..."
+log "Ensuring infrastructure services are running..."
+docker compose -p "myfinpro-${ENVIRONMENT}-infra" \
+  -f "$INFRA_COMPOSE" up -d
 
-  # Required variables — check they are set
-  local required_vars=(
-    MYSQL_ROOT_PASSWORD MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD
-    DATABASE_URL JWT_SECRET JWT_REFRESH_SECRET REDIS_URL
-    NODE_ENV API_PORT CORS_ORIGIN LOG_LEVEL SWAGGER_ENABLED
-    RATE_LIMIT_TTL RATE_LIMIT_MAX NEXT_PUBLIC_API_URL API_INTERNAL_URL
-    GHCR_REPO IMAGE_TAG
-  )
+wait_for_container_health() {
+  local container="$1"
+  local timeout="${2:-90}"
+  local elapsed=0
 
-  for var in "${required_vars[@]}"; do
-    if [ -z "${!var:-}" ]; then
-      error "Required env var $var is not set. Set it as an environment variable or configure GitHub Secrets."
-      exit 1
+  log "Waiting for ${container} to become healthy (timeout: ${timeout}s)..."
+  while [ $elapsed -lt "$timeout" ]; do
+    local status
+    status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "not_found")
+    case "$status" in
+      healthy)
+        info "${container} is healthy."
+        return 0
+        ;;
+      unhealthy)
+        error "${container} is unhealthy!"
+        docker logs --tail 20 "$container" 2>&1 | tee -a "$LOG_FILE" || true
+        return 1
+        ;;
+    esac
+    sleep 5
+    elapsed=$((elapsed + 5))
+    if [ $((elapsed % 15)) -eq 0 ]; then
+      log "  ${container} status: ${status} (${elapsed}s/${timeout}s)"
     fi
   done
 
-  cat > "$ENV_FILE" << EOF
-MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-MYSQL_DATABASE=${MYSQL_DATABASE}
-MYSQL_USER=${MYSQL_USER}
-MYSQL_PASSWORD=${MYSQL_PASSWORD}
-DATABASE_URL=${DATABASE_URL}
-JWT_SECRET=${JWT_SECRET}
-JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-REDIS_URL=${REDIS_URL}
-NODE_ENV=${NODE_ENV}
-API_PORT=${API_PORT}
-CORS_ORIGIN=${CORS_ORIGIN}
-LOG_LEVEL=${LOG_LEVEL}
-SWAGGER_ENABLED=${SWAGGER_ENABLED}
-RATE_LIMIT_TTL=${RATE_LIMIT_TTL}
-RATE_LIMIT_MAX=${RATE_LIMIT_MAX}
-NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-API_INTERNAL_URL=${API_INTERNAL_URL}
-GHCR_REPO=${GHCR_REPO}
+  error "${container} did not become healthy within ${timeout}s."
+  return 1
+}
+
+wait_for_container_health "${CONTAINER_PREFIX}-mysql" 60
+wait_for_container_health "${CONTAINER_PREFIX}-redis" 30
+info "Infrastructure services are healthy."
+
+# ─── Step 4: Start new slot ─────────────────────────────────────────────────
+
+log "Starting new slot: ${NEXT_SLOT}..."
+docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+  -f "$APP_COMPOSE" up -d
+
+# ─── Step 5: Wait for health checks ─────────────────────────────────────────
+
+log "Waiting for new slot health checks..."
+wait_for_container_health "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 90
+wait_for_container_health "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 90
+info "New slot ${NEXT_SLOT} is healthy!"
+
+# ─── Step 6: Switch Nginx to new slot ───────────────────────────────────────
+
+log "Switching Nginx traffic to slot: ${NEXT_SLOT}..."
+
+# Generate new nginx config pointing to the new slot
+export ACTIVE_SLOT="$NEXT_SLOT"
+envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+  < infrastructure/nginx/conf.d/ssl.conf.template \
+  > infrastructure/nginx/conf.d/default.conf
+
+# Test nginx config before reloading
+docker exec "${CONTAINER_PREFIX}-nginx" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
+  error "Nginx config test failed! Aborting traffic switch."
+  # Stop the new slot since we can't switch to it
+  docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+    -f "$APP_COMPOSE" down 2>/dev/null || true
+  exit 1
+}
+
+# Graceful reload — no dropped connections
+docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
+info "Nginx reloaded — traffic now flows to ${NEXT_SLOT}."
+
+# ─── Step 7: Drain & verify ─────────────────────────────────────────────────
+
+log "Allowing in-flight requests to drain (5s)..."
+sleep 5
+
+log "Verifying deployment through Nginx..."
+VERIFY_RETRIES=10
+VERIFY_OK=false
+for i in $(seq 1 "$VERIFY_RETRIES"); do
+  if curl -sf "http://localhost/api/v1/health" > /dev/null 2>&1; then
+    VERIFY_OK=true
+    break
+  fi
+  log "  Health check attempt $i/${VERIFY_RETRIES}..."
+  sleep 3
+done
+
+if [ "$VERIFY_OK" = false ]; then
+  error "CRITICAL: Health check through Nginx failed after switch!"
+  warn "Emergency: switching Nginx back to previous slot..."
+
+  if [ "$CURRENT_SLOT" != "none" ]; then
+    export ACTIVE_SLOT="$CURRENT_SLOT"
+    envsubst '$SERVER_NAME $ACTIVE_SLOT' \
+      < infrastructure/nginx/conf.d/ssl.conf.template \
+      > infrastructure/nginx/conf.d/default.conf
+    docker exec "${CONTAINER_PREFIX}-nginx" nginx -s reload
+    warn "Nginx reverted to slot: ${CURRENT_SLOT}"
+  fi
+
+  # Stop the failed new slot
+  docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+    -f "$APP_COMPOSE" down 2>/dev/null || true
+
+  exit 1
+fi
+
+info "Post-switch health check passed!"
+
+# ─── Step 8: Write state files ───────────────────────────────────────────────
+
+log "Saving deployment state..."
+echo "$NEXT_SLOT" > "$ACTIVE_SLOT_FILE"
+
+cat > "$METADATA_FILE" << EOF
+DEPLOY_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ACTIVE_SLOT=${NEXT_SLOT}
+PREVIOUS_SLOT=${CURRENT_SLOT}
 IMAGE_TAG=${IMAGE_TAG}
+PREVIOUS_IMAGE_TAG=${PREV_IMAGE_TAG}
+GIT_SHA=${IMAGE_TAG}
+PREVIOUS_GIT_SHA=${PREV_GIT_SHA}
+DEPLOY_STATUS=success
 EOF
 
-  chmod 600 "$ENV_FILE"
-  info "Ephemeral .env file written."
-}
+info "State saved: active=${NEXT_SLOT}, previous=${CURRENT_SLOT}"
 
-# ─── Shred .env file ────────────────────────────────────────────────────────
+# ─── Step 9: Stop old slot ──────────────────────────────────────────────────
 
-shred_env_file() {
-  log "Shredding ephemeral .env file..."
-  if [ -f "$ENV_FILE" ]; then
-    shred -vfz -n 3 "$ENV_FILE" 2>/dev/null || rm -f "$ENV_FILE"
-    info ".env file securely removed."
-  fi
-}
-
-# Ensure .env is shredded on exit (even on failure)
-trap shred_env_file EXIT
-
-# ─── Save current image tags for rollback ────────────────────────────────────
-
-save_current_tags() {
-  log "Saving current image tags for rollback..."
-  if docker compose -f "$COMPOSE_FILE" ps --format json 2>/dev/null | head -1 | grep -q "Service"; then
-    docker compose -f "$COMPOSE_FILE" config --images 2>/dev/null > "$BACKUP_TAG_FILE" || true
-  fi
-  docker inspect --format='{{.Config.Image}}' \
-    $(docker compose -f "$COMPOSE_FILE" ps -q api 2>/dev/null) 2>/dev/null >> "$BACKUP_TAG_FILE" || true
-  docker inspect --format='{{.Config.Image}}' \
-    $(docker compose -f "$COMPOSE_FILE" ps -q web 2>/dev/null) 2>/dev/null >> "$BACKUP_TAG_FILE" || true
-  info "Current image tags saved to $BACKUP_TAG_FILE"
-}
-
-# ─── Pull latest images ─────────────────────────────────────────────────────
-
-pull_images() {
-  log "Pulling latest Docker images..."
-  docker compose -f "$COMPOSE_FILE" pull api web || {
-    error "Failed to pull images."
-    exit 1
+if [ "$CURRENT_SLOT" != "none" ]; then
+  log "Stopping old slot: ${CURRENT_SLOT}..."
+  # Need to set DEPLOY_SLOT for the old slot's compose context
+  DEPLOY_SLOT="$CURRENT_SLOT" docker compose -p "myfinpro-${ENVIRONMENT}-${CURRENT_SLOT}" \
+    -f "$APP_COMPOSE" down 2>/dev/null || {
+    warn "Failed to stop old slot ${CURRENT_SLOT} — may need manual cleanup."
   }
-  info "Images pulled successfully."
-}
+  info "Old slot ${CURRENT_SLOT} stopped."
+else
+  log "No previous slot to stop (first deployment)."
+fi
 
-# ─── Run database migrations ─────────────────────────────────────────────────
+# ─── Step 10: Smart cleanup ─────────────────────────────────────────────────
 
-run_migrations() {
-  log "Running database migrations..."
-
-  # Ensure database is running first
-  docker compose -f "$COMPOSE_FILE" up -d mysql
-  log "Waiting for MySQL to be healthy..."
-  local retries=30
-  for i in $(seq 1 "$retries"); do
-    if docker compose -f "$COMPOSE_FILE" exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
-      info "MySQL is healthy."
-      break
-    fi
-    if [ "$i" -eq "$retries" ]; then
-      error "MySQL did not become healthy within timeout."
-      exit 1
-    fi
-    sleep 2
-  done
-
-  # Run Prisma migrations via the API container
-  docker compose -f "$COMPOSE_FILE" run --rm --no-deps api \
-    npx prisma migrate deploy --schema=prisma/schema.prisma 2>&1 | tee -a "$LOG_FILE" || {
-    error "Database migration failed!"
-    exit 1
+if [ -f scripts/cleanup-images.sh ]; then
+  log "Running smart image cleanup..."
+  bash scripts/cleanup-images.sh "$ENVIRONMENT" || {
+    warn "Cleanup encountered errors (non-fatal)."
   }
-  info "Database migrations completed successfully."
-}
-
-# ─── Zero-downtime service restart ───────────────────────────────────────────
-
-restart_services() {
-  log "Starting zero-downtime service restart..."
-
-  # 1. Ensure infrastructure services are up
-  log "Ensuring infrastructure services are running..."
-  docker compose -f "$COMPOSE_FILE" up -d mysql redis
-  sleep 5
-
-  # 2. Rolling restart — API first, then Web
-  log "Restarting API service..."
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate api
-  wait_for_health "api" "http://localhost:3001/api/v1/health" 30
-
-  log "Restarting Web service..."
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate web
-  wait_for_health "web" "http://localhost:3000" 30
-
-  # 3. Restart Nginx to pick up any upstream changes
-  log "Restarting Nginx..."
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate nginx
-  sleep 3
-
-  info "All services restarted successfully."
-}
-
-# ─── Wait for a service health check ─────────────────────────────────────────
-
-wait_for_health() {
-  local service_name="$1"
-  local health_url="$2"
-  local max_retries="${3:-20}"
-
-  log "Waiting for $service_name to become healthy..."
-  for i in $(seq 1 "$max_retries"); do
-    local health_status
-    health_status=$(docker compose -f "$COMPOSE_FILE" ps "$service_name" --format json 2>/dev/null | grep -o '"Health":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "unknown")
-    if [ "$health_status" = "healthy" ]; then
-      info "$service_name is healthy."
-      return 0
-    fi
-    if [ "$i" -eq "$max_retries" ]; then
-      error "$service_name did not become healthy within $max_retries attempts."
-      return 1
-    fi
-    log "  $service_name status: $health_status (attempt $i/$max_retries)"
-    sleep "$HEALTH_CHECK_INTERVAL"
-  done
-}
-
-# ─── Final health verification ───────────────────────────────────────────────
-
-verify_deployment() {
-  log "Running final health verification..."
-
-  for i in $(seq 1 "$HEALTH_CHECK_RETRIES"); do
-    if curl -sf "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
-      info "Final health check passed — deployment successful!"
-      return 0
-    fi
-    if [ "$i" -eq "$HEALTH_CHECK_RETRIES" ]; then
-      error "Final health check failed after $HEALTH_CHECK_RETRIES attempts."
-      return 1
-    fi
-    log "  Health check attempt $i/$HEALTH_CHECK_RETRIES..."
-    sleep "$HEALTH_CHECK_INTERVAL"
-  done
-}
-
-# ─── Cleanup old images ─────────────────────────────────────────────────────
-
-cleanup() {
-  log "Cleaning up dangling images..."
+else
+  log "Cleanup script not found — running basic prune..."
   docker image prune -f 2>/dev/null || true
-  info "Cleanup complete."
-}
+fi
 
-# ─── Main ────────────────────────────────────────────────────────────────────
+# ─── Done ────────────────────────────────────────────────────────────────────
 
-main() {
-  log "═══════════════════════════════════════════════════════════════"
-  log "  MyFinPro Deployment — ${ENVIRONMENT^^}"
-  log "  Started at: $(date)"
-  log "  Security: Ephemeral secret injection (write → compose up → shred)"
-  log "═══════════════════════════════════════════════════════════════"
-
-  validate_environment
-  write_env_file
-  save_current_tags
-  pull_images
-  run_migrations
-  restart_services
-
-  # .env is shredded by the EXIT trap after compose up reads it
-
-  if verify_deployment; then
-    cleanup
-    log "═══════════════════════════════════════════════════════════════"
-    info "🚀 Deployment to ${ENVIRONMENT} completed successfully!"
-    log "═══════════════════════════════════════════════════════════════"
-    exit 0
-  else
-    error "Deployment verification failed! Initiating rollback..."
-    if [ -f scripts/rollback.sh ]; then
-      bash scripts/rollback.sh "$ENVIRONMENT"
-    fi
-    exit 1
-  fi
-}
-
-main "$@"
+log "═══════════════════════════════════════════════════════════════"
+info "🚀 Blue-green deployment to ${ENVIRONMENT} completed successfully!"
+info "   Active slot: ${NEXT_SLOT}"
+info "   Image tag:   ${IMAGE_TAG}"
+log "═══════════════════════════════════════════════════════════════"

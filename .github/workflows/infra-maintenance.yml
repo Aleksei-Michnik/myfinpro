@@ -1,0 +1,181 @@
+name: Infrastructure Maintenance
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - cleanup-and-dns
+          - cleanup-only
+          - dns-only
+
+jobs:
+  server-cleanup:
+    if: contains(fromJSON('["cleanup-and-dns", "cleanup-only"]'), github.event.inputs.action)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup staging server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            echo "=== Disk space before cleanup ==="
+            df -h /
+            echo ""
+            echo "=== Docker disk usage ==="
+            docker system df 2>/dev/null || true
+            echo ""
+
+            echo "=== Stopping old monolithic stacks (if running) ==="
+            cd /opt/myfinpro/staging 2>/dev/null && docker compose -f docker-compose.staging.yml down 2>/dev/null || true
+            cd /opt/myfinpro/production 2>/dev/null && docker compose -f docker-compose.production.yml down 2>/dev/null || true
+
+            echo "=== Removing old containers ==="
+            docker container prune -f 2>/dev/null || true
+
+            echo "=== Removing unused images (keep nothing - first deploy) ==="
+            docker image prune -af 2>/dev/null || true
+
+            echo "=== Removing unused volumes (CAREFUL - only anonymous) ==="
+            docker volume prune -f 2>/dev/null || true
+
+            echo "=== Removing build cache ==="
+            docker builder prune -af 2>/dev/null || true
+
+            echo "=== Cleaning system logs ==="
+            sudo journalctl --vacuum-time=3d 2>/dev/null || true
+            sudo find /var/log -name '*.gz' -delete 2>/dev/null || true
+            sudo find /var/log -name '*.old' -delete 2>/dev/null || true
+
+            echo ""
+            echo "=== Disk space after cleanup ==="
+            df -h /
+            echo ""
+            echo "=== Docker disk usage after ==="
+            docker system df 2>/dev/null || true
+
+            echo ""
+            echo "=== Creating directory structure ==="
+            sudo mkdir -p /opt/myfinpro/staging
+            sudo mkdir -p /opt/myfinpro/production
+            sudo chown -R $USER:$USER /opt/myfinpro
+
+            echo "=== Cleanup complete ==="
+
+      # If production is on a different host, add a second step
+      # For now, assuming same server
+
+  setup-dns:
+    if: contains(fromJSON('["cleanup-and-dns", "dns-only"]'), github.event.inputs.action)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Cloudflare DNS records
+        uses: actions/github-script@v7
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          STAGING_DOMAIN: ${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}
+          PRODUCTION_DOMAIN: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
+          SERVER_IP: ${{ secrets.STAGING_HOST }}
+        with:
+          script: |
+            const cfToken = process.env.CF_API_TOKEN;
+            const zoneId = process.env.CF_ZONE_ID;
+            const serverIp = process.env.SERVER_IP;
+            const domains = [
+              process.env.STAGING_DOMAIN,
+              process.env.PRODUCTION_DOMAIN
+            ];
+
+            const headers = {
+              'Authorization': `Bearer ${cfToken}`,
+              'Content-Type': 'application/json'
+            };
+
+            for (const domain of domains) {
+              if (!domain) {
+                core.warning('Domain secret is empty, skipping');
+                continue;
+              }
+
+              core.info(`\nProcessing domain: ${domain}`);
+
+              // Check if record exists
+              const listUrl = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?name=${domain}&type=A`;
+              const listResp = await fetch(listUrl, { headers });
+              const listData = await listResp.json();
+
+              if (!listData.success) {
+                core.error(`Failed to query DNS for ${domain}: ${JSON.stringify(listData.errors)}`);
+                continue;
+              }
+
+              if (listData.result.length > 0) {
+                // Record exists — update it
+                const recordId = listData.result[0].id;
+                const currentIp = listData.result[0].content;
+                core.info(`  Record exists (${currentIp}), updating to ${serverIp}`);
+
+                const updateUrl = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${recordId}`;
+                const updateResp = await fetch(updateUrl, {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({
+                    type: 'A',
+                    name: domain,
+                    content: serverIp,
+                    proxied: true,
+                    ttl: 1
+                  })
+                });
+                const updateData = await updateResp.json();
+
+                if (updateData.success) {
+                  core.info(`  ✅ Updated ${domain} → ${serverIp} (proxied)`);
+                } else {
+                  core.error(`  ❌ Failed to update: ${JSON.stringify(updateData.errors)}`);
+                }
+              } else {
+                // Record doesn't exist — create it
+                core.info(`  No record found, creating A record → ${serverIp}`);
+
+                const createUrl = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`;
+                const createResp = await fetch(createUrl, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({
+                    type: 'A',
+                    name: domain,
+                    content: serverIp,
+                    proxied: true,
+                    ttl: 1
+                  })
+                });
+                const createData = await createResp.json();
+
+                if (createData.success) {
+                  core.info(`  ✅ Created ${domain} → ${serverIp} (proxied)`);
+                } else {
+                  core.error(`  ❌ Failed to create: ${JSON.stringify(createData.errors)}`);
+                }
+              }
+            }
+
+            core.info('\n✅ DNS setup complete');
+
+      - name: Verify DNS propagation
+        run: |
+          echo "Waiting 30s for DNS propagation..."
+          sleep 30
+          echo "Checking DNS resolution..."
+
+          # Use Cloudflare's DNS to check (fastest propagation)
+          echo "=== Staging domain ==="
+          dig +short @1.1.1.1 "${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}" A || echo "Not resolving yet"
+
+          echo "=== Production domain ==="
+          dig +short @1.1.1.1 "${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}" A || echo "Not resolving yet"

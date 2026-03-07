@@ -2752,6 +2752,8 @@ Critical version pins to ensure reproducibility. Non-critical versions use `^` f
 
 ### 5.1 Docker Compose Service Topology
 
+**Local Development** uses a single `docker-compose.yml` with all services on one network:
+
 ```mermaid
 flowchart TB
     subgraph docker[Docker Compose Network: myfinpro-net]
@@ -2768,6 +2770,8 @@ flowchart TB
     dev -->|:3001| api
     dev -->|:3000| web
 ```
+
+**Staging/Production** deployments use a blue-green strategy with compose files split into infrastructure and application stacks on a shared Docker network. See [`docs/blue-green-deployment.md`](blue-green-deployment.md) for the full design.
 
 ### 5.2 Monorepo Dependency Graph
 
@@ -2988,6 +2992,15 @@ This checklist maps every file to its creation phase and provides implementation
 ---
 
 ## Appendix C: Infrastructure Acceptance Requirements
+
+### Deployment Strategy
+
+- [ ] **Blue-green deployment must be used for staging and production**
+  - Infrastructure services (MySQL, Redis, Nginx) run as a persistent stack
+  - Application services (API, Web) deploy into alternating blue/green slots
+  - Nginx switches traffic via `nginx -s reload` for zero-downtime transitions
+  - Smart image cleanup preserves current + N-1 deployment images for rollback
+  - Full design: [`docs/blue-green-deployment.md`](blue-green-deployment.md)
 
 ### SSL/HTTPS Requirements
 
