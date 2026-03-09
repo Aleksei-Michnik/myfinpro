@@ -35,6 +35,6 @@ export async function stagingFetchJson<T = Record<string, unknown>>(
   options?: RequestInit,
 ): Promise<{ status: number; body: T }> {
   const response = await stagingFetch(path, options);
-  const body = await response.json();
+  const body = (await response.json()) as T;
   return { status: response.status, body };
 }

@@ -46,7 +46,7 @@ describe('Staging – Swagger docs', () => {
     const response = await fetch(getDocsUrl('/docs-json'));
     expect(response.status).toBe(200);
 
-    const body = await response.json();
+    const body = (await response.json()) as Record<string, unknown>;
     expect(body.openapi).toBeDefined();
     expect(typeof body.openapi).toBe('string');
   });
