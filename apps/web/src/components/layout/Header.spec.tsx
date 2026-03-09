@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { Header } from './Header';
 
 // Mock next-intl hooks
 vi.mock('next-intl', () => ({
@@ -25,8 +26,6 @@ vi.mock('@/i18n/routing', () => ({
     defaultLocale: 'en',
   },
 }));
-
-import { Header } from './Header';
 
 describe('Header', () => {
   it('renders the header element', () => {

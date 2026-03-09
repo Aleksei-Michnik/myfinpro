@@ -1,7 +1,6 @@
 import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
-
-import { AllExceptionsFilter } from './all-exceptions.filter';
 import { MetricsService } from '../metrics/metrics.service';
+import { AllExceptionsFilter } from './all-exceptions.filter';
 
 // Mock the request-context module
 jest.mock('../context/request-context', () => ({

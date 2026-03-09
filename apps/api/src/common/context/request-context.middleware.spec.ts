@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-
-import { RequestContextMiddleware } from './request-context.middleware';
 import { requestContextStorage, createRequestContext } from './request-context';
+import { RequestContextMiddleware } from './request-context.middleware';
 
 interface RequestWithId extends Record<string, unknown> {
   requestId?: string;
