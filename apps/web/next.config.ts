@@ -19,8 +19,7 @@ nextConfig.output = 'standalone';
 
 // Trust proxy for CloudFlare in production
 if (process.env.NODE_ENV === 'production') {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (nextConfig as any).trustProxy = true;
+  (nextConfig as unknown as Record<string, boolean>).trustProxy = true;
 }
 
 // Proxy API requests in development

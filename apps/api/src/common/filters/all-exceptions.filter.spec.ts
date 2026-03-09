@@ -1,6 +1,7 @@
 import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 
 import { AllExceptionsFilter } from './all-exceptions.filter';
+import { MetricsService } from '../metrics/metrics.service';
 
 // Mock the request-context module
 jest.mock('../context/request-context', () => ({
@@ -200,7 +201,7 @@ describe('AllExceptionsFilter', () => {
       const mockMetricsService = {
         incrementErrors: jest.fn(),
       };
-      const filterWithMetrics = new AllExceptionsFilter(mockMetricsService as any);
+      const filterWithMetrics = new AllExceptionsFilter(mockMetricsService as unknown as MetricsService);
       const exception = new Error('Test');
 
       filterWithMetrics.catch(exception, mockHost);

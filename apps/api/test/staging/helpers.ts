@@ -3,7 +3,7 @@
  */
 
 export function getStagingApiUrl(): string {
-  const url = (globalThis as any).__STAGING_API_URL__;
+  const url = (globalThis as unknown as Record<string, string>).__STAGING_API_URL__;
   if (!url) {
     throw new Error(
       'STAGING_API_URL is not set. Provide it via the STAGING_API_URL environment variable.',
@@ -30,7 +30,7 @@ export async function stagingFetch(path: string, options?: RequestInit): Promise
 /**
  * Make a request and parse JSON response.
  */
-export async function stagingFetchJson<T = any>(
+export async function stagingFetchJson<T = Record<string, unknown>>(
   path: string,
   options?: RequestInit,
 ): Promise<{ status: number; body: T }> {

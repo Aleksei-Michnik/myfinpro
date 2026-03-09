@@ -6,7 +6,7 @@
 const STAGING_API_URL = process.env.STAGING_API_URL;
 
 // Make it available to all tests via a global
-(globalThis as any).__STAGING_API_URL__ = STAGING_API_URL;
+(globalThis as unknown as Record<string, string | undefined>).__STAGING_API_URL__ = STAGING_API_URL;
 
 // Set a reasonable timeout for HTTP requests to staging
 jest.setTimeout(30_000);

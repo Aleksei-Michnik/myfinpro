@@ -3,6 +3,10 @@ import { Request, Response, NextFunction } from 'express';
 import { RequestContextMiddleware } from './request-context.middleware';
 import { requestContextStorage, createRequestContext } from './request-context';
 
+interface RequestWithId extends Record<string, unknown> {
+  requestId?: string;
+}
+
 // Mock the request-context module
 jest.mock('./request-context', () => ({
   requestContextStorage: {
@@ -44,7 +48,7 @@ describe('RequestContextMiddleware', () => {
       middleware.use(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(createRequestContext).toHaveBeenCalledWith('custom-request-id-abc');
-      expect((mockRequest as any).requestId).toBe('custom-request-id-abc');
+      expect((mockRequest as unknown as RequestWithId).requestId).toBe('custom-request-id-abc');
     });
 
     it('should generate a UUID if x-request-id header is not present', () => {
@@ -55,7 +59,7 @@ describe('RequestContextMiddleware', () => {
       middleware.use(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(createRequestContext).toHaveBeenCalledWith('generated-uuid-1234');
-      expect((mockRequest as any).requestId).toBe('generated-uuid-1234');
+      expect((mockRequest as unknown as RequestWithId).requestId).toBe('generated-uuid-1234');
     });
 
     it('should call next() within the requestContextStorage.run callback', () => {
@@ -76,7 +80,7 @@ describe('RequestContextMiddleware', () => {
 
       middleware.use(mockRequest as Request, mockResponse as Response, nextFunction);
 
-      expect((mockRequest as any).requestId).toBe('header-id');
+      expect((mockRequest as unknown as RequestWithId).requestId).toBe('header-id');
     });
 
     it('should pass the created context to requestContextStorage.run', () => {
