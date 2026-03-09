@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
-
 import { getRequestId } from '../context/request-context';
 
 @Injectable()

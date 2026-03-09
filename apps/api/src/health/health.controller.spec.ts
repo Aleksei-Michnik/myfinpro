@@ -1,8 +1,6 @@
 import { DiskHealthIndicator, TerminusModule } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
-
 import { PrismaService } from '../prisma/prisma.service';
-
 import { HealthController } from './health.controller';
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
 import { MemoryHealthIndicator } from './indicators/memory.indicator';

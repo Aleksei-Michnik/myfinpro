@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
-
 import { Header } from '@/components/layout/Header';
 import { routing } from '@/i18n/routing';
 

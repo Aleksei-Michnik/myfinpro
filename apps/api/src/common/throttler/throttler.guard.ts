@@ -6,7 +6,6 @@ import {
   ThrottlerModuleOptions,
   ThrottlerStorage,
 } from '@nestjs/throttler';
-
 import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()

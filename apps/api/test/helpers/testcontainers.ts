@@ -1,5 +1,4 @@
 import { execSync } from 'child_process';
-
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '@prisma/client';
 import { MySqlContainer, StartedMySqlContainer } from '@testcontainers/mysql';

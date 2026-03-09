@@ -1,11 +1,8 @@
 import { IncomingMessage, ServerResponse } from 'http';
-
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
-
 import { getRequestId } from '../context/request-context';
-
 import { AppLoggerService } from './logger.service';
 
 /** Serialized request object shape from pino-std-serializers */

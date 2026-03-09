@@ -6,9 +6,7 @@ import {
   HealthCheckResult,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
-
 import { NoRateLimit } from '../common/decorators/throttle.decorator';
-
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
 import { MemoryHealthIndicator } from './indicators/memory.indicator';
 import { RedisHealthIndicator } from './indicators/redis.indicator';

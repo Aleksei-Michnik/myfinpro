@@ -1,6 +1,5 @@
 import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { of, lastValueFrom } from 'rxjs';
-
 import { TransformInterceptor } from './transform.interceptor';
 
 describe('TransformInterceptor', () => {

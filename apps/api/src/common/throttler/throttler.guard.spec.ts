@@ -1,9 +1,7 @@
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
-
 import { MetricsService } from '../metrics/metrics.service';
-
 import { CustomThrottlerGuard } from './throttler.guard';
 
 /** Helper type to access protected methods in tests */

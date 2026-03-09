@@ -2,7 +2,6 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nes
 import { Request, Response } from 'express';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-
 import { MetricsService } from './metrics.service';
 
 @Injectable()

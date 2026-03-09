@@ -1,5 +1,4 @@
 import { ValidationPipe as NestValidationPipe } from '@nestjs/common';
-
 import { createValidationPipe } from './validation.pipe';
 
 interface PipeInternals {

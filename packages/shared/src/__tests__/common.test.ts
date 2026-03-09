@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-
 import { LOCALES, DEFAULT_LOCALE } from '../constants';
 import type { Locale } from '../constants';
 import { isRTL, RTL_LOCALES } from '../types/common.types';

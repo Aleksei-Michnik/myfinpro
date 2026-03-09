@@ -1,6 +1,5 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
-
 import { getRequestId } from '../context/request-context';
 import { MetricsService } from '../metrics/metrics.service';
 

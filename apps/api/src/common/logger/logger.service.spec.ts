@@ -1,5 +1,4 @@
 import { PinoLogger } from 'nestjs-pino';
-
 import { AppLoggerService } from './logger.service';
 
 interface MockPinoLogger {

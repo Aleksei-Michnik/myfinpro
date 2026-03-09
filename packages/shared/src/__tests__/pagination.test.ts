@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-
 import { encodeCursor, decodeCursor, PAGINATION_DEFAULTS } from '../dto/pagination.dto';
 
 describe('Pagination', () => {
