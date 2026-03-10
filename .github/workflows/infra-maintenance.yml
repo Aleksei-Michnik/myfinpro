@@ -10,6 +10,27 @@ on:
           - cleanup-and-dns
           - cleanup-only
           - dns-only
+  workflow_call:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: string
+    secrets:
+      STAGING_HOST:
+        required: false
+      STAGING_USER:
+        required: false
+      STAGING_SSH_KEY:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ZONE_ID:
+        required: false
+      CLOUDFLARE_STAGING_SUBDOMAIN:
+        required: false
+      CLOUDFLARE_PRODUCTION_SUBDOMAIN:
+        required: false
 
 jobs:
   server-cleanup:
