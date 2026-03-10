@@ -200,7 +200,9 @@ describe('AllExceptionsFilter', () => {
       const mockMetricsService = {
         incrementErrors: jest.fn(),
       };
-      const filterWithMetrics = new AllExceptionsFilter(mockMetricsService as unknown as MetricsService);
+      const filterWithMetrics = new AllExceptionsFilter(
+        mockMetricsService as unknown as MetricsService,
+      );
       const exception = new Error('Test');
 
       filterWithMetrics.catch(exception, mockHost);
