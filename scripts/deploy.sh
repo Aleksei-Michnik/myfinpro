@@ -166,11 +166,11 @@ docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
 
 # ─── Step 4.5: Run database migrations ──────────────────────────────────────
 
-log "Running database migrations (prisma db push)..."
+log "Running database migrations (prisma migrate deploy)..."
 # Wait a few seconds for the API container to start
 sleep 5
-docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma db push --accept-data-loss 2>&1 | tee -a "$LOG_FILE" || {
-  warn "Prisma db push failed (non-fatal for health check, tables may already exist)."
+docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE" || {
+  warn "Prisma migrate deploy failed — check migration status."
 }
 info "Database migrations complete."
 
