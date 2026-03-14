@@ -43,7 +43,38 @@ body {
   font-family: var(--font-sans);
 }
 
+/* ── Toast slide-in animation ── */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
 /* ── RTL support ── */
 [dir='rtl'] {
   text-align: right;
+}
+
+[dir='rtl'] .animate-slide-in {
+  animation-name: slide-in-rtl;
+}
+
+@keyframes slide-in-rtl {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

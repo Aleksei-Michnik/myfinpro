@@ -5,6 +5,7 @@ import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { RegisterDto } from './dto/register.dto';
+import { AUTH_ERRORS } from './constants/auth-errors';
 
 @Injectable()
 export class AuthService {
@@ -24,7 +25,10 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('An account with this email already exists');
+      throw new ConflictException({
+        message: 'An account with this email already exists',
+        errorCode: AUTH_ERRORS.EMAIL_ALREADY_EXISTS,
+      });
     }
 
     // Hash password
@@ -181,7 +185,10 @@ export class AuthService {
     });
 
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('User not found or inactive');
+      throw new UnauthorizedException({
+        message: 'User not found or inactive',
+        errorCode: AUTH_ERRORS.REFRESH_FAILED,
+      });
     }
 
     // Generate new access token
@@ -231,7 +238,10 @@ export class AuthService {
       },
     });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException({
+        message: 'User not found',
+        errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+      });
     }
     return user;
   }

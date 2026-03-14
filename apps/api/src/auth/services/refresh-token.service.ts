@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TokenService } from './token.service';
+import { AUTH_ERRORS } from '../constants/auth-errors';
 
 @Injectable()
 export class RefreshTokenService {
@@ -28,7 +29,10 @@ export class RefreshTokenService {
     });
 
     if (!existingToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException({
+        message: 'Invalid refresh token',
+        errorCode: AUTH_ERRORS.TOKEN_INVALID,
+      });
     }
 
     // TOKEN REUSE DETECTION: if token was already revoked, this may be a stolen token replay
@@ -55,12 +59,18 @@ export class RefreshTokenService {
         },
       });
 
-      throw new UnauthorizedException('Token reuse detected. All sessions revoked.');
+      throw new UnauthorizedException({
+        message: 'Token reuse detected. All sessions revoked.',
+        errorCode: AUTH_ERRORS.TOKEN_REUSE_DETECTED,
+      });
     }
 
     // Check if token is expired
     if (existingToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token has expired');
+      throw new UnauthorizedException({
+        message: 'Refresh token has expired',
+        errorCode: AUTH_ERRORS.TOKEN_EXPIRED,
+      });
     }
 
     // Generate new refresh token

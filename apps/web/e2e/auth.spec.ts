@@ -37,9 +37,11 @@ test.describe('Authentication Flows', () => {
     // Initially disabled
     await expect(signInButton).toBeDisabled();
 
-    // Fill in both fields
-    await page.getByLabel(/email/i).fill('test@example.com');
-    await page.getByLabel(/password/i).fill('Password123');
+    // Fill in both fields — use click + pressSequentially for cross-browser compatibility
+    await page.getByLabel(/email/i).click();
+    await page.getByLabel(/email/i).pressSequentially('test@example.com');
+    await page.getByLabel(/password/i).click();
+    await page.getByLabel(/password/i).pressSequentially('Password123');
 
     // Now button should be enabled
     await expect(signInButton).toBeEnabled();

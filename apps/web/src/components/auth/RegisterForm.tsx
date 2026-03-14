@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useToast } from '@/components/ui/Toast';
 
 interface FieldErrors {
   name?: string;
@@ -20,6 +21,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function RegisterForm() {
   const t = useTranslations('auth');
   const { register } = useAuth();
+  const { addToast } = useToast();
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -86,6 +88,7 @@ export function RegisterForm() {
 
     try {
       await register({ email, password, name });
+      addToast('success', t('registrationSuccess'));
       router.push('/dashboard');
     } catch (err) {
       setGeneralError(err instanceof Error ? err.message : t('emailAlreadyExists'));

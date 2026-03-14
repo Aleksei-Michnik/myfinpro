@@ -61,7 +61,13 @@
     "requireLowercase": "אות קטנה אחת",
     "requireNumber": "ספרה אחת",
     "registrationSuccess": "החשבון נוצר בהצלחה!",
-    "loginSuccess": "ברוך שובך!"
+    "loginSuccess": "ברוך שובך!",
+    "logoutSuccess": "התנתקת בהצלחה.",
+    "sessionExpired": "תוקף ההפעלה שלך פג. אנא התחבר מחדש.",
+    "networkError": "שגיאת רשת. בדוק את החיבור שלך."
+  },
+  "toast": {
+    "dismiss": "סגור"
   },
   "dashboard": {
     "title": "לוח בקרה",

@@ -6,6 +6,7 @@ import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
+import { AUTH_ERRORS } from './constants/auth-errors';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -162,13 +163,23 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw ConflictException if email already exists', async () => {
+    it('should throw ConflictException with errorCode if email already exists', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
 
       await expect(service.register(registerDto, mockResponse)).rejects.toThrow(ConflictException);
-      await expect(service.register(registerDto, mockResponse)).rejects.toThrow(
-        'An account with this email already exists',
-      );
+
+      try {
+        await service.register(registerDto, mockResponse);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConflictException);
+        const response = (error as ConflictException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'An account with this email already exists',
+            errorCode: AUTH_ERRORS.EMAIL_ALREADY_EXISTS,
+          }),
+        );
+      }
     });
 
     it('should call PasswordService.hash() with the password', async () => {
@@ -500,19 +511,28 @@ describe('AuthService', () => {
       expect(result.accessToken).toBe('mock-jwt-access-token');
     });
 
-    it('should throw UnauthorizedException if user not found', async () => {
+    it('should throw UnauthorizedException with REFRESH_FAILED errorCode if user not found', async () => {
       mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
         userId: 'non-existent-user',
         newRefreshToken: 'new-refresh-token',
       });
       mockPrismaService.user.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.refreshTokens('old-refresh-token', mockResponse),
-      ).rejects.toThrow(UnauthorizedException);
+      try {
+        await service.refreshTokens('old-refresh-token', mockResponse);
+        fail('Expected UnauthorizedException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.REFRESH_FAILED,
+          }),
+        );
+      }
     });
 
-    it('should throw UnauthorizedException if user is inactive', async () => {
+    it('should throw UnauthorizedException with REFRESH_FAILED errorCode if user is inactive', async () => {
       mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
         userId: mockUser.id,
         newRefreshToken: 'new-refresh-token',
@@ -522,9 +542,18 @@ describe('AuthService', () => {
         isActive: false,
       });
 
-      await expect(
-        service.refreshTokens('old-refresh-token', mockResponse),
-      ).rejects.toThrow(UnauthorizedException);
+      try {
+        await service.refreshTokens('old-refresh-token', mockResponse);
+        fail('Expected UnauthorizedException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.REFRESH_FAILED,
+          }),
+        );
+      }
     });
 
     it('should propagate UnauthorizedException from rotateRefreshToken (reuse detection)', async () => {
@@ -567,11 +596,23 @@ describe('AuthService', () => {
       });
     });
 
-    it('should throw UnauthorizedException when user not found', async () => {
+    it('should throw UnauthorizedException with USER_NOT_FOUND errorCode when user not found', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(null);
 
       await expect(service.getUser('non-existent-id')).rejects.toThrow(UnauthorizedException);
-      await expect(service.getUser('non-existent-id')).rejects.toThrow('User not found');
+
+      try {
+        await service.getUser('non-existent-id');
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'User not found',
+            errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+          }),
+        );
+      }
     });
 
     it('should not expose passwordHash in returned data', async () => {

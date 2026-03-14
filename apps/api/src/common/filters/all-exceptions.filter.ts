@@ -31,20 +31,33 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const message =
       exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
-    const errorResponse = {
+    const messageObj =
+      typeof message === 'object' && message !== null
+        ? (message as Record<string, unknown>)
+        : null;
+    const errorCode = messageObj?.errorCode as string | undefined;
+
+    const errorResponse: Record<string, unknown> = {
       statusCode: status,
       message: isProduction
         ? 'Internal server error'
         : typeof message === 'string'
           ? message
-          : (message as Record<string, unknown>).message || message,
+          : messageObj?.message || message,
       error: exception instanceof HttpException ? exception.name : 'InternalServerError',
       timestamp: new Date().toISOString(),
       path: request.url,
       requestId,
-      // Include stack trace in development only
-      ...(!isProduction && exception instanceof Error && { stack: exception.stack }),
     };
+
+    if (errorCode && !isProduction) {
+      errorResponse.errorCode = errorCode;
+    }
+
+    // Include stack trace in development only
+    if (!isProduction && exception instanceof Error) {
+      errorResponse.stack = exception.stack;
+    }
 
     const logContext = {
       requestId,

@@ -61,7 +61,13 @@
     "requireLowercase": "One lowercase letter",
     "requireNumber": "One number",
     "registrationSuccess": "Account created successfully!",
-    "loginSuccess": "Welcome back!"
+    "loginSuccess": "Welcome back!",
+    "logoutSuccess": "Successfully signed out.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "networkError": "Network error. Please check your connection."
+  },
+  "toast": {
+    "dismiss": "Dismiss"
   },
   "dashboard": {
     "title": "Dashboard",

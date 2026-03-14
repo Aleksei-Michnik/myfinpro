@@ -26,6 +26,7 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { AUTH_ERRORS } from './constants/auth-errors';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -67,7 +68,10 @@ export class AuthController {
   ) {
     const user = await this.authService.validateUser(loginDto.email, loginDto.password);
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException({
+        message: 'Invalid email or password',
+        errorCode: AUTH_ERRORS.INVALID_CREDENTIALS,
+      });
     }
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
@@ -88,7 +92,10 @@ export class AuthController {
   ) {
     const refreshToken = request.cookies?.refresh_token;
     if (!refreshToken) {
-      throw new UnauthorizedException('No refresh token provided');
+      throw new UnauthorizedException({
+        message: 'No refresh token provided',
+        errorCode: AUTH_ERRORS.REFRESH_FAILED,
+      });
     }
 
     const ip = request.ip;

@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useToast } from '@/components/ui/Toast';
 
 export function LoginForm() {
   const t = useTranslations('auth');
   const { login } = useAuth();
+  const { addToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -25,6 +27,7 @@ export function LoginForm() {
 
     try {
       await login({ email, password });
+      addToast('success', t('loginSuccess'));
       const redirect = searchParams.get('redirect');
       router.push(redirect || '/dashboard');
     } catch (err) {

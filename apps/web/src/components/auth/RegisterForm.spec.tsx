@@ -35,6 +35,17 @@ vi.mock('@/lib/auth/auth-context', () => ({
   }),
 }));
 
+const mockAddToast = vi.fn();
+
+// Mock Toast
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({
+    addToast: mockAddToast,
+    removeToast: vi.fn(),
+    toasts: [],
+  }),
+}));
+
 describe('RegisterForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();

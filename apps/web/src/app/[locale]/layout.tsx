@@ -5,6 +5,8 @@ import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { Header } from '@/components/layout/Header';
 import { AuthProvider } from '@/lib/auth/auth-context';
+import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { routing } from '@/i18n/routing';
 
 import '../globals.css';
@@ -40,8 +42,13 @@ export default async function LocaleLayout({ children, params }: Props) {
       <body>
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
-            <Header />
-            {children}
+            <ToastProvider>
+              <Header />
+              <ErrorBoundary>
+                {children}
+              </ErrorBoundary>
+              <ToastContainer />
+            </ToastProvider>
           </AuthProvider>
         </NextIntlClientProvider>
       </body>

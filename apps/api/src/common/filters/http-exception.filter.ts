@@ -18,17 +18,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const isProduction = process.env.NODE_ENV === 'production';
     const requestId = getRequestId() || (request as Request & { requestId?: string }).requestId;
 
-    const errorResponse = {
+    const messageObj =
+      typeof message === 'object' && message !== null
+        ? (message as Record<string, unknown>)
+        : null;
+    const errorCode = messageObj?.errorCode as string | undefined;
+
+    const errorResponse: Record<string, unknown> = {
       statusCode: status,
       message:
         typeof message === 'string'
           ? message
-          : (message as Record<string, unknown>).message || message,
+          : messageObj?.message || message,
       error: exception.name,
       timestamp: new Date().toISOString(),
       path: request.url,
       requestId,
     };
+
+    if (errorCode) {
+      errorResponse.errorCode = errorCode;
+    }
 
     const logContext = {
       requestId,

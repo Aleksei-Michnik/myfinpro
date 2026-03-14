@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { AUTH_ERRORS } from './constants/auth-errors';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -144,15 +145,27 @@ describe('AuthController', () => {
       expect(result).toEqual(loginResponse);
     });
 
-    it('should throw UnauthorizedException for invalid credentials', async () => {
+    it('should throw UnauthorizedException with INVALID_CREDENTIALS errorCode for invalid credentials', async () => {
       mockAuthService.validateUser.mockResolvedValue(null);
 
       await expect(controller.login(loginDto, mockResponse, mockRequest)).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(controller.login(loginDto, mockResponse, mockRequest)).rejects.toThrow(
-        'Invalid email or password',
-      );
+
+      try {
+        mockAuthService.validateUser.mockResolvedValue(null);
+        await controller.login(loginDto, mockResponse, mockRequest);
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Invalid email or password',
+            errorCode: AUTH_ERRORS.INVALID_CREDENTIALS,
+          }),
+        );
+      }
+
       expect(mockAuthService.login).not.toHaveBeenCalled();
     });
   });
@@ -178,7 +191,7 @@ describe('AuthController', () => {
       expect(result).toEqual(refreshResult);
     });
 
-    it('should throw UnauthorizedException when no refresh token cookie', async () => {
+    it('should throw UnauthorizedException with REFRESH_FAILED errorCode when no refresh token cookie', async () => {
       const requestWithoutCookie = {
         ...mockRequest,
         cookies: {},
@@ -187,9 +200,20 @@ describe('AuthController', () => {
       await expect(controller.refresh(mockResponse, requestWithoutCookie)).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(controller.refresh(mockResponse, requestWithoutCookie)).rejects.toThrow(
-        'No refresh token provided',
-      );
+
+      try {
+        await controller.refresh(mockResponse, requestWithoutCookie);
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'No refresh token provided',
+            errorCode: AUTH_ERRORS.REFRESH_FAILED,
+          }),
+        );
+      }
+
       expect(mockAuthService.refreshTokens).not.toHaveBeenCalled();
     });
 
