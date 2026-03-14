@@ -538,6 +538,51 @@ describe('AuthService', () => {
     });
   });
 
+  describe('getUser()', () => {
+    const mockUser = {
+      id: 'test-uuid-1234',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+    };
+
+    it('should return user data when user exists', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.getUser('test-uuid-1234');
+
+      expect(result).toEqual(mockUser);
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'test-uuid-1234' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          defaultCurrency: true,
+          locale: true,
+          timezone: true,
+        },
+      });
+    });
+
+    it('should throw UnauthorizedException when user not found', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getUser('non-existent-id')).rejects.toThrow(UnauthorizedException);
+      await expect(service.getUser('non-existent-id')).rejects.toThrow('User not found');
+    });
+
+    it('should not expose passwordHash in returned data', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.getUser('test-uuid-1234');
+
+      expect((result as any).passwordHash).toBeUndefined();
+    });
+  });
+
   describe('logout()', () => {
     it('should revoke token, clear cookie, and log audit event', async () => {
       mockRefreshTokenService.revokeToken.mockResolvedValue(undefined);

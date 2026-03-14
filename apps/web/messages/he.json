@@ -62,5 +62,9 @@
     "requireNumber": "ספרה אחת",
     "registrationSuccess": "החשבון נוצר בהצלחה!",
     "loginSuccess": "ברוך שובך!"
+  },
+  "dashboard": {
+    "title": "לוח בקרה",
+    "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן."
   }
 }

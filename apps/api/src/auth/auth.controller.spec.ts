@@ -14,6 +14,7 @@ describe('AuthController', () => {
     login: jest.fn(),
     refreshTokens: jest.fn(),
     logout: jest.fn(),
+    getUser: jest.fn(),
   };
 
   const mockResponse = {
@@ -233,6 +234,56 @@ describe('AuthController', () => {
 
       expect(mockAuthService.logout).toHaveBeenCalledWith('', mockResponse);
       expect(result).toEqual(logoutResult);
+    });
+  });
+
+  describe('getMe()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    const mockUserData = {
+      id: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+    };
+
+    it('should call AuthService.getUser() with user sub from JWT payload', async () => {
+      mockAuthService.getUser.mockResolvedValue(mockUserData);
+
+      const result = await controller.getMe(mockJwtPayload);
+
+      expect(mockAuthService.getUser).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual(mockUserData);
+    });
+
+    it('should return user data from AuthService', async () => {
+      mockAuthService.getUser.mockResolvedValue(mockUserData);
+
+      const result = await controller.getMe(mockJwtPayload);
+
+      expect(result.id).toBe('test-uuid');
+      expect(result.email).toBe('test@example.com');
+      expect(result.name).toBe('Test User');
+      expect(result.defaultCurrency).toBe('USD');
+      expect(result.locale).toBe('en');
+      expect(result.timezone).toBe('UTC');
+    });
+
+    it('should propagate UnauthorizedException from AuthService', async () => {
+      const { UnauthorizedException } = jest.requireActual('@nestjs/common');
+      mockAuthService.getUser.mockRejectedValue(
+        new UnauthorizedException('User not found'),
+      );
+
+      await expect(controller.getMe(mockJwtPayload)).rejects.toThrow(
+        'User not found',
+      );
     });
   });
 });

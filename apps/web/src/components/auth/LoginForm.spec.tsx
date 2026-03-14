@@ -10,6 +10,11 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+// Mock next/navigation
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Mock @/i18n/navigation (Link, useRouter, etc.)
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (

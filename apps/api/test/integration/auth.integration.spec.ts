@@ -320,6 +320,51 @@ describe('Auth Integration Tests', () => {
     });
   });
 
+  describe('GET /api/v1/auth/me', () => {
+    it('should return 401 without token', () => {
+      return request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .expect(401);
+    });
+
+    it('should return user data with valid token', async () => {
+      // Register a user to get an access token
+      const registerRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: 'me-test@example.com',
+          password: 'SecurePass123',
+          name: 'Me Test User',
+        })
+        .expect(201);
+
+      const accessToken = registerRes.body.accessToken;
+      expect(accessToken).toBeDefined();
+
+      // Use the access token to get user profile
+      return request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200)
+        .expect((res: request.Response) => {
+          expect(res.body.id).toBeDefined();
+          expect(res.body.email).toBe('me-test@example.com');
+          expect(res.body.name).toBe('Me Test User');
+          expect(res.body.defaultCurrency).toBe('USD');
+          expect(res.body.locale).toBe('en');
+          expect(res.body.timezone).toBeDefined();
+          expect(res.body.passwordHash).toBeUndefined();
+        });
+    });
+
+    it('should return 401 with invalid token', () => {
+      return request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', 'Bearer invalid-token')
+        .expect(401);
+    });
+  });
+
   describe('Full auth flow: register → refresh → logout', () => {
     it('should complete the entire auth lifecycle', async () => {
       // Step 1: Register

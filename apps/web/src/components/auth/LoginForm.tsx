@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -11,6 +12,7 @@ export function LoginForm() {
   const t = useTranslations('auth');
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +25,8 @@ export function LoginForm() {
 
     try {
       await login({ email, password });
-      router.push('/dashboard');
+      const redirect = searchParams.get('redirect');
+      router.push(redirect || '/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('invalidCredentials'));
     } finally {
