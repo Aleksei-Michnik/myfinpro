@@ -62,6 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    if (res.status === 429) {
+      throw new Error('Too many attempts. Please try again later.');
+    }
     if (!res.ok) {
       const error = await res.json().catch(() => ({ message: 'Login failed' }));
       throw new Error(
@@ -80,6 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    if (res.status === 429) {
+      throw new Error('Too many attempts. Please try again later.');
+    }
     if (!res.ok) {
       const error = await res
         .json()

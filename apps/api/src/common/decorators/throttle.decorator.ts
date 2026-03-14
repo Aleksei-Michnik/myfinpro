@@ -6,6 +6,13 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 export const NoRateLimit = () => SkipThrottle();
 
 /**
+ * Custom per-endpoint rate limit.
+ * @param options - { limit: max requests, ttl: time window in ms }
+ */
+export const CustomThrottle = (options: { limit: number; ttl: number }) =>
+  Throttle({ default: { ttl: options.ttl, limit: options.limit } });
+
+/**
  * Strict rate limit for auth endpoints: 5 requests per minute
  */
 export const AuthRateLimit = () => Throttle({ default: { ttl: 60000, limit: 5 } });

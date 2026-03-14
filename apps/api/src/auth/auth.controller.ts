@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiUnauthorizedResponse,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -27,12 +28,14 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { AUTH_ERRORS } from './constants/auth-errors';
+import { CustomThrottle } from '../common/decorators/throttle.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user account' })
@@ -42,6 +45,7 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiConflictResponse({ description: 'Email already exists' })
+  @ApiTooManyRequestsResponse({ description: 'Too many registration attempts' })
   async register(
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
@@ -52,6 +56,7 @@ export class AuthController {
     return this.authService.register(registerDto, response, ip, userAgent);
   }
 
+  @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -61,6 +66,7 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
+  @ApiTooManyRequestsResponse({ description: 'Too many login attempts' })
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -78,6 +84,7 @@ export class AuthController {
     return this.authService.login(user, response, ip, userAgent);
   }
 
+  @CustomThrottle({ limit: 10, ttl: 60000 })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
@@ -103,6 +110,7 @@ export class AuthController {
     return this.authService.refreshTokens(refreshToken, response, ip, userAgent);
   }
 
+  @CustomThrottle({ limit: 10, ttl: 60000 })
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout and revoke refresh token' })

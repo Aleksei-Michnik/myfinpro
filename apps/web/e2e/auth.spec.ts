@@ -21,13 +21,24 @@ test.describe('Authentication Flows', () => {
 
   test('should navigate between login and register', async ({ page }) => {
     await page.goto('/en/auth/login');
+
+    // Wait for the form to be fully rendered before interacting
+    await expect(page.locator('form')).toBeVisible();
+
     // Click the "Sign Up" link from the login form (not header)
-    await page.locator('form').getByRole('link', { name: /sign up/i }).click();
-    await expect(page).toHaveURL(/\/en\/auth\/register/);
+    const signUpLink = page.locator('form').getByRole('link', { name: /sign up/i });
+    await expect(signUpLink).toBeVisible();
+    await signUpLink.click();
+    await expect(page).toHaveURL(/\/en\/auth\/register/, { timeout: 10000 });
+
+    // Wait for the register form to be fully rendered
+    await expect(page.locator('form')).toBeVisible();
 
     // Click the "Sign In" link from the register form (not header)
-    await page.locator('form').getByRole('link', { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/en\/auth\/login/);
+    const signInLink = page.locator('form').getByRole('link', { name: /sign in/i });
+    await expect(signInLink).toBeVisible();
+    await signInLink.click();
+    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 10000 });
   });
 
   test('login form sign in button enables when fields are filled', async ({ page }) => {

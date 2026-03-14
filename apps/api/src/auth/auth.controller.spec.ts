@@ -6,6 +6,11 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AUTH_ERRORS } from './constants/auth-errors';
 
+// Internal metadata keys used by @nestjs/throttler's @Throttle() decorator
+// The decorator concatenates the base key with the throttler name (e.g., 'default')
+const THROTTLER_LIMIT_KEY = 'THROTTLER:LIMITdefault';
+const THROTTLER_TTL_KEY = 'THROTTLER:TTLdefault';
+
 describe('AuthController', () => {
   let controller: AuthController;
 
@@ -308,6 +313,47 @@ describe('AuthController', () => {
       await expect(controller.getMe(mockJwtPayload)).rejects.toThrow(
         'User not found',
       );
+    });
+  });
+
+  describe('Rate limiting metadata', () => {
+    it('should have @Throttle metadata on register endpoint with limit 5 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.register);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.register);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should have @Throttle metadata on login endpoint with limit 5 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.login);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.login);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should have @Throttle metadata on refresh endpoint with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.refresh);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.refresh);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should have @Throttle metadata on logout endpoint with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.logout);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.logout);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should NOT have @Throttle metadata on getMe endpoint (uses global default)', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.getMe);
+
+      // getMe should not have per-endpoint throttle override
+      expect(limit).toBeUndefined();
     });
   });
 });

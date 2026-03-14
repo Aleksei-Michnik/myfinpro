@@ -64,7 +64,8 @@
     "loginSuccess": "Welcome back!",
     "logoutSuccess": "Successfully signed out.",
     "sessionExpired": "Your session has expired. Please sign in again.",
-    "networkError": "Network error. Please check your connection."
+    "networkError": "Network error. Please check your connection.",
+    "tooManyAttempts": "Too many attempts. Please try again later."
   },
   "toast": {
     "dismiss": "Dismiss"
