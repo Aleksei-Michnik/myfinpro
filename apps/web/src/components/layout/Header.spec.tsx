@@ -1,6 +1,20 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Header } from './Header';
+
+const mockLogout = vi.fn();
+
+// Default mock state — unauthenticated
+let mockAuthState = {
+  user: null as { name: string } | null,
+  isAuthenticated: false,
+  isLoading: false,
+  logout: mockLogout,
+  accessToken: null as string | null,
+  login: vi.fn(),
+  register: vi.fn(),
+  getAccessToken: () => null as string | null,
+};
 
 // Mock next-intl hooks
 vi.mock('next-intl', () => ({
@@ -27,7 +41,27 @@ vi.mock('@/i18n/routing', () => ({
   },
 }));
 
+// Mock auth context
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: () => mockAuthState,
+}));
+
 describe('Header', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset to unauthenticated
+    mockAuthState = {
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      logout: mockLogout,
+      accessToken: null,
+      login: vi.fn(),
+      register: vi.fn(),
+      getAccessToken: () => null,
+    };
+  });
+
   it('renders the header element', () => {
     render(<Header />);
     const header = screen.getByRole('banner');
@@ -36,7 +70,6 @@ describe('Header', () => {
 
   it('displays app name via translation key', () => {
     render(<Header />);
-    // useTranslations mock returns the key itself
     expect(screen.getByText('common.appName')).toBeInTheDocument();
   });
 
@@ -66,7 +99,6 @@ describe('Header', () => {
   it('highlights the current locale', () => {
     render(<Header />);
     const enLink = screen.getByText('EN');
-    // Current locale (en) should have active styling
     expect(enLink.className).toContain('bg-primary-100');
     expect(enLink.className).toContain('font-medium');
   });
@@ -78,17 +110,87 @@ describe('Header', () => {
     expect(heLink.className).toContain('text-gray-500');
   });
 
-  it('renders sign in navigation link', () => {
-    render(<Header />);
-    const signInLink = screen.getByText('nav.signIn');
-    expect(signInLink).toBeInTheDocument();
-    expect(signInLink.closest('a')).toHaveAttribute('href', '/auth/login');
+  describe('when unauthenticated', () => {
+    it('renders sign in navigation link', () => {
+      render(<Header />);
+      const signInLink = screen.getByText('nav.signIn');
+      expect(signInLink).toBeInTheDocument();
+      expect(signInLink.closest('a')).toHaveAttribute('href', '/auth/login');
+    });
+
+    it('renders sign up navigation link', () => {
+      render(<Header />);
+      const signUpLink = screen.getByText('nav.signUp');
+      expect(signUpLink).toBeInTheDocument();
+      expect(signUpLink.closest('a')).toHaveAttribute('href', '/auth/register');
+    });
+
+    it('does not render user name or logout', () => {
+      render(<Header />);
+      expect(screen.queryByTestId('user-name')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.logout')).not.toBeInTheDocument();
+    });
   });
 
-  it('renders sign up navigation link', () => {
-    render(<Header />);
-    const signUpLink = screen.getByText('nav.signUp');
-    expect(signUpLink).toBeInTheDocument();
-    expect(signUpLink.closest('a')).toHaveAttribute('href', '/auth/register');
+  describe('when authenticated', () => {
+    beforeEach(() => {
+      mockAuthState = {
+        user: { name: 'Test User' },
+        isAuthenticated: true,
+        isLoading: false,
+        logout: mockLogout,
+        accessToken: 'token',
+        login: vi.fn(),
+        register: vi.fn(),
+        getAccessToken: () => 'token',
+      };
+    });
+
+    it('renders user name', () => {
+      render(<Header />);
+      expect(screen.getByTestId('user-name')).toHaveTextContent('Test User');
+    });
+
+    it('renders dashboard link', () => {
+      render(<Header />);
+      const dashboardLink = screen.getByText('nav.dashboard');
+      expect(dashboardLink).toBeInTheDocument();
+      expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
+    });
+
+    it('renders logout button', () => {
+      render(<Header />);
+      const logoutBtn = screen.getByText('nav.logout');
+      expect(logoutBtn).toBeInTheDocument();
+      expect(logoutBtn.tagName).toBe('BUTTON');
+    });
+
+    it('calls logout when logout button clicked', () => {
+      render(<Header />);
+      fireEvent.click(screen.getByText('nav.logout'));
+      expect(mockLogout).toHaveBeenCalled();
+    });
+
+    it('does not render sign in/sign up links', () => {
+      render(<Header />);
+      expect(screen.queryByText('nav.signIn')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.signUp')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when loading', () => {
+    beforeEach(() => {
+      mockAuthState = {
+        ...mockAuthState,
+        isLoading: true,
+      };
+    });
+
+    it('does not render auth links while loading', () => {
+      render(<Header />);
+      expect(screen.queryByText('nav.signIn')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.signUp')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.logout')).not.toBeInTheDocument();
+    });
   });
 });

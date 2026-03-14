@@ -3,14 +3,20 @@
 import { useTranslations, useLocale } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
+import { useAuth } from '@/lib/auth/auth-context';
 
 /**
- * Basic header component with app name and locale switcher placeholder.
- * Will be expanded with full navigation in later phases.
+ * Header component with app name, auth-aware navigation, and locale switcher.
+ * Shows user name + logout when authenticated, sign in/up links when not.
  */
 export function Header() {
   const t = useTranslations();
   const currentLocale = useLocale();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
@@ -25,18 +31,44 @@ export function Header() {
           <Link href="/" className="text-sm text-gray-600 hover:text-primary-600 transition-colors">
             {t('nav.home')}
           </Link>
-          <Link
-            href="/auth/login"
-            className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            {t('nav.signIn')}
-          </Link>
-          <Link
-            href="/auth/register"
-            className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-          >
-            {t('nav.signUp')}
-          </Link>
+
+          {!isLoading && isAuthenticated && (
+            <>
+              <Link
+                href="/dashboard"
+                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                {t('nav.dashboard')}
+              </Link>
+              <span className="text-sm text-gray-700 font-medium" data-testid="user-name">
+                {user?.name}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-600 hover:text-red-600 transition-colors"
+                type="button"
+              >
+                {t('nav.logout')}
+              </button>
+            </>
+          )}
+
+          {!isLoading && !isAuthenticated && (
+            <>
+              <Link
+                href="/auth/login"
+                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                {t('nav.signIn')}
+              </Link>
+              <Link
+                href="/auth/register"
+                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                {t('nav.signUp')}
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Locale switcher */}

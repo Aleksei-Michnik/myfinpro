@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
 
 interface FieldErrors {
   name?: string;
@@ -18,6 +19,8 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function RegisterForm() {
   const t = useTranslations('auth');
+  const { register } = useAuth();
+  const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -82,13 +85,10 @@ export function RegisterForm() {
     setIsLoading(true);
 
     try {
-      // API call will be connected in iteration 1.9
-      console.log('Register attempt:', { name, email });
-
-      // Placeholder: will call authService.register() in iteration 1.9
-      throw new Error('Auth integration not yet implemented');
+      await register({ email, password, name });
+      router.push('/dashboard');
     } catch (err) {
-      setGeneralError(err instanceof Error ? err.message : t('error'));
+      setGeneralError(err instanceof Error ? err.message : t('emailAlreadyExists'));
     } finally {
       setIsLoading(false);
     }

@@ -1,13 +1,16 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RegisterForm } from './RegisterForm';
+
+const mockRegister = vi.fn();
+const mockPush = vi.fn();
 
 // Mock next-intl
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-// Mock @/i18n/navigation (Link, etc.)
+// Mock @/i18n/navigation (Link, useRouter, etc.)
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (
     <a href={href as string} {...props}>
@@ -15,10 +18,28 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
   usePathname: () => '/',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: mockPush, replace: vi.fn() }),
+}));
+
+// Mock auth context
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: () => ({
+    register: mockRegister,
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+    accessToken: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    getAccessToken: () => null,
+  }),
 }));
 
 describe('RegisterForm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders name input with label', () => {
     render(<RegisterForm />);
     const nameInput = screen.getByLabelText('name');
@@ -119,5 +140,45 @@ describe('RegisterForm', () => {
     render(<RegisterForm />);
     const passwordInput = screen.getByLabelText('password');
     expect(passwordInput).toHaveAttribute('autocomplete', 'new-password');
+  });
+
+  it('calls register and redirects to dashboard on success', async () => {
+    mockRegister.mockResolvedValueOnce(undefined);
+
+    render(<RegisterForm />);
+
+    fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
+    fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
+    fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
+    fireEvent.change(screen.getByLabelText('confirmPassword'), { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'signUp' }));
+
+    await waitFor(() => {
+      expect(mockRegister).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'Password1',
+        name: 'Test User',
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('shows error message on registration failure', async () => {
+    mockRegister.mockRejectedValueOnce(new Error('Email already exists'));
+
+    render(<RegisterForm />);
+
+    fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
+    fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
+    fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
+    fireEvent.change(screen.getByLabelText('confirmPassword'), { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'signUp' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Email already exists');
+    });
   });
 });

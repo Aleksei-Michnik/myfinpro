@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { Header } from '@/components/layout/Header';
+import { AuthProvider } from '@/lib/auth/auth-context';
 import { routing } from '@/i18n/routing';
 
 import '../globals.css';
@@ -38,8 +39,10 @@ export default async function LocaleLayout({ children, params }: Props) {
     <html lang={locale} dir={dir}>
       <body>
         <NextIntlClientProvider messages={messages}>
-          <Header />
-          {children}
+          <AuthProvider>
+            <Header />
+            {children}
+          </AuthProvider>
         </NextIntlClientProvider>
       </body>
     </html>

@@ -4,10 +4,13 @@ import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
 
 export function LoginForm() {
   const t = useTranslations('auth');
+  const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,12 +22,8 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      // API call will be connected in iteration 1.9
-      // For now, just log the attempt
-      console.log('Login attempt:', { email });
-
-      // Placeholder: will call authService.login() in iteration 1.9
-      throw new Error('Auth integration not yet implemented');
+      await login({ email, password });
+      router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('invalidCredentials'));
     } finally {

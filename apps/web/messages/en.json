@@ -16,7 +16,8 @@
     "budgets": "Budgets",
     "settings": "Settings",
     "signIn": "Sign In",
-    "signUp": "Sign Up"
+    "signUp": "Sign Up",
+    "logout": "Logout"
   },
   "home": {
     "title": "Personal & Family Finance Management",

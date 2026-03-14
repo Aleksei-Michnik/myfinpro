@@ -1,13 +1,16 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LoginForm } from './LoginForm';
+
+const mockLogin = vi.fn();
+const mockPush = vi.fn();
 
 // Mock next-intl
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-// Mock @/i18n/navigation (Link, etc.)
+// Mock @/i18n/navigation (Link, useRouter, etc.)
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (
     <a href={href as string} {...props}>
@@ -15,13 +18,30 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
   usePathname: () => '/',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: mockPush, replace: vi.fn() }),
+}));
+
+// Mock auth context
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: () => ({
+    login: mockLogin,
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+    accessToken: null,
+    register: vi.fn(),
+    logout: vi.fn(),
+    getAccessToken: () => null,
+  }),
 }));
 
 describe('LoginForm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders email input with label', () => {
     render(<LoginForm />);
-    // useTranslations mock returns the key: 'email'
     const emailInput = screen.getByLabelText('email');
     expect(emailInput).toBeInTheDocument();
     expect(emailInput).toHaveAttribute('type', 'email');
@@ -36,7 +56,6 @@ describe('LoginForm', () => {
 
   it('renders sign in button', () => {
     render(<LoginForm />);
-    // The button text comes from t('signIn') which returns 'signIn'
     const button = screen.getByRole('button', { name: 'signIn' });
     expect(button).toBeInTheDocument();
     expect(button).toHaveAttribute('type', 'submit');
@@ -91,5 +110,48 @@ describe('LoginForm', () => {
     render(<LoginForm />);
     const passwordInput = screen.getByLabelText('password');
     expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+  });
+
+  it('calls login and redirects to dashboard on success', async () => {
+    mockLogin.mockResolvedValueOnce(undefined);
+
+    render(<LoginForm />);
+
+    fireEvent.change(screen.getByLabelText('email'), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('password'), {
+      target: { value: 'Password1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'signIn' }));
+
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'Password1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('shows error message on login failure', async () => {
+    mockLogin.mockRejectedValueOnce(new Error('Invalid credentials'));
+
+    render(<LoginForm />);
+
+    fireEvent.change(screen.getByLabelText('email'), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('password'), {
+      target: { value: 'wrongpassword' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'signIn' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
+    });
   });
 });
