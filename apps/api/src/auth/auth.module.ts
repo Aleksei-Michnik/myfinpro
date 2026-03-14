@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
+import { RefreshTokenService } from './services/refresh-token.service';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -26,7 +27,14 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, PasswordService, TokenService, LocalStrategy, JwtStrategy],
-  exports: [AuthService, PasswordService, TokenService],
+  providers: [
+    AuthService,
+    PasswordService,
+    TokenService,
+    RefreshTokenService,
+    LocalStrategy,
+    JwtStrategy,
+  ],
+  exports: [AuthService, PasswordService, TokenService, RefreshTokenService],
 })
 export class AuthModule {}

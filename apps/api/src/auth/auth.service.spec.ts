@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
+import { RefreshTokenService } from './services/refresh-token.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 
@@ -38,6 +39,13 @@ describe('AuthService', () => {
     getRefreshExpirationMs: jest.fn().mockReturnValue(7 * 24 * 60 * 60 * 1000),
   };
 
+  const mockRefreshTokenService = {
+    rotateRefreshToken: jest.fn(),
+    revokeToken: jest.fn(),
+    revokeAllUserTokens: jest.fn(),
+    cleanupExpiredTokens: jest.fn(),
+  };
+
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
@@ -50,6 +58,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: PasswordService, useValue: mockPasswordService },
         { provide: TokenService, useValue: mockTokenService },
+        { provide: RefreshTokenService, useValue: mockRefreshTokenService },
       ],
     }).compile();
 
@@ -451,6 +460,120 @@ describe('AuthService', () => {
       const result = await service.login(userWithHash, mockResponse);
 
       expect((result.user as any).passwordHash).toBeUndefined();
+    });
+  });
+
+  describe('refreshTokens()', () => {
+    const mockUser = {
+      id: 'test-uuid-1234',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      isActive: true,
+    };
+
+    it('should rotate token and return new access token', async () => {
+      mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
+        userId: mockUser.id,
+        newRefreshToken: 'new-refresh-token',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.refreshTokens(
+        'old-refresh-token',
+        mockResponse,
+        '127.0.0.1',
+        'TestAgent',
+      );
+
+      expect(mockRefreshTokenService.rotateRefreshToken).toHaveBeenCalledWith(
+        'old-refresh-token',
+        '127.0.0.1',
+        'TestAgent',
+      );
+      expect(mockTokenService.generateAccessToken).toHaveBeenCalledWith(mockUser);
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
+        mockResponse,
+        'new-refresh-token',
+      );
+      expect(result.accessToken).toBe('mock-jwt-access-token');
+    });
+
+    it('should throw UnauthorizedException if user not found', async () => {
+      mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
+        userId: 'non-existent-user',
+        newRefreshToken: 'new-refresh-token',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.refreshTokens('old-refresh-token', mockResponse),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException if user is inactive', async () => {
+      mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
+        userId: mockUser.id,
+        newRefreshToken: 'new-refresh-token',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        isActive: false,
+      });
+
+      await expect(
+        service.refreshTokens('old-refresh-token', mockResponse),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should propagate UnauthorizedException from rotateRefreshToken (reuse detection)', async () => {
+      mockRefreshTokenService.rotateRefreshToken.mockRejectedValue(
+        new UnauthorizedException('Token reuse detected. All sessions revoked.'),
+      );
+
+      await expect(
+        service.refreshTokens('reused-token', mockResponse),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('logout()', () => {
+    it('should revoke token, clear cookie, and log audit event', async () => {
+      mockRefreshTokenService.revokeToken.mockResolvedValue(undefined);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.logout('some-refresh-token', mockResponse, 'user-uuid');
+
+      expect(mockTokenService.hashToken).toHaveBeenCalledWith('some-refresh-token');
+      expect(mockRefreshTokenService.revokeToken).toHaveBeenCalledWith('mock-hashed-token');
+      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-uuid',
+          action: 'USER_LOGOUT',
+          entity: 'User',
+          entityId: 'user-uuid',
+        },
+      });
+      expect(result).toEqual({ message: 'Logged out successfully' });
+    });
+
+    it('should handle logout without userId', async () => {
+      mockRefreshTokenService.revokeToken.mockResolvedValue(undefined);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.logout('some-refresh-token', mockResponse);
+
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: null,
+          action: 'USER_LOGOUT',
+          entity: 'User',
+          entityId: null,
+        },
+      });
+      expect(result).toEqual({ message: 'Logged out successfully' });
     });
   });
 });

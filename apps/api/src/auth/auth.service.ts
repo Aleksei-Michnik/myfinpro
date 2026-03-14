@@ -1,8 +1,9 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
+import { RefreshTokenService } from './services/refresh-token.service';
 import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
+    private readonly refreshTokenService: RefreshTokenService,
   ) {}
 
   async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
@@ -166,5 +168,53 @@ export class AuthService {
       },
       accessToken,
     };
+  }
+
+  async refreshTokens(refreshToken: string, response: Response, ip?: string, userAgent?: string) {
+    // Rotate: validate old token, revoke it, create new one
+    const { userId, newRefreshToken } =
+      await this.refreshTokenService.rotateRefreshToken(refreshToken, ip, userAgent);
+
+    // Fetch user for access token generation
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    // Generate new access token
+    const accessToken = this.tokenService.generateAccessToken(user);
+
+    // Set new refresh token cookie
+    this.tokenService.setRefreshTokenCookie(response, newRefreshToken);
+
+    this.logger.log(`Tokens refreshed for user: ${user.email} (${user.id})`);
+
+    return { accessToken };
+  }
+
+  async logout(refreshToken: string, response: Response, userId?: string) {
+    // Revoke the refresh token in DB
+    const tokenHash = this.tokenService.hashToken(refreshToken);
+    await this.refreshTokenService.revokeToken(tokenHash);
+
+    // Clear the refresh token cookie
+    this.tokenService.clearRefreshTokenCookie(response);
+
+    // Log audit event
+    await this.prisma.auditLog.create({
+      data: {
+        userId: userId || null,
+        action: 'USER_LOGOUT',
+        entity: 'User',
+        entityId: userId || null,
+      },
+    });
+
+    this.logger.log(`User logged out${userId ? `: ${userId}` : ''}`);
+
+    return { message: 'Logged out successfully' };
   }
 }

@@ -12,6 +12,8 @@ describe('AuthController', () => {
     register: jest.fn(),
     validateUser: jest.fn(),
     login: jest.fn(),
+    refreshTokens: jest.fn(),
+    logout: jest.fn(),
   };
 
   const mockResponse = {
@@ -24,6 +26,7 @@ describe('AuthController', () => {
     headers: {
       'user-agent': 'TestAgent/1.0',
     },
+    cookies: {},
   } as any;
 
   beforeEach(async () => {
@@ -150,6 +153,86 @@ describe('AuthController', () => {
         'Invalid email or password',
       );
       expect(mockAuthService.login).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refresh()', () => {
+    it('should call AuthService.refreshTokens() when cookie is present', async () => {
+      const requestWithCookie = {
+        ...mockRequest,
+        cookies: { refresh_token: 'valid-refresh-token' },
+      };
+
+      const refreshResult = { accessToken: 'new-access-token' };
+      mockAuthService.refreshTokens.mockResolvedValue(refreshResult);
+
+      const result = await controller.refresh(mockResponse, requestWithCookie);
+
+      expect(mockAuthService.refreshTokens).toHaveBeenCalledWith(
+        'valid-refresh-token',
+        mockResponse,
+        '127.0.0.1',
+        'TestAgent/1.0',
+      );
+      expect(result).toEqual(refreshResult);
+    });
+
+    it('should throw UnauthorizedException when no refresh token cookie', async () => {
+      const requestWithoutCookie = {
+        ...mockRequest,
+        cookies: {},
+      };
+
+      await expect(controller.refresh(mockResponse, requestWithoutCookie)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(controller.refresh(mockResponse, requestWithoutCookie)).rejects.toThrow(
+        'No refresh token provided',
+      );
+      expect(mockAuthService.refreshTokens).not.toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException when cookies is undefined', async () => {
+      const requestNoCookies = {
+        ...mockRequest,
+        cookies: undefined,
+      };
+
+      await expect(controller.refresh(mockResponse, requestNoCookies)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  describe('logout()', () => {
+    it('should call AuthService.logout() when refresh token cookie is present', async () => {
+      const requestWithCookie = {
+        ...mockRequest,
+        cookies: { refresh_token: 'some-refresh-token' },
+      };
+
+      const logoutResult = { message: 'Logged out successfully' };
+      mockAuthService.logout.mockResolvedValue(logoutResult);
+
+      const result = await controller.logout(mockResponse, requestWithCookie);
+
+      expect(mockAuthService.logout).toHaveBeenCalledWith('some-refresh-token', mockResponse);
+      expect(result).toEqual(logoutResult);
+    });
+
+    it('should call AuthService.logout() with empty string when no cookie', async () => {
+      const requestWithoutCookie = {
+        ...mockRequest,
+        cookies: {},
+      };
+
+      const logoutResult = { message: 'Logged out successfully' };
+      mockAuthService.logout.mockResolvedValue(logoutResult);
+
+      const result = await controller.logout(mockResponse, requestWithoutCookie);
+
+      expect(mockAuthService.logout).toHaveBeenCalledWith('', mockResponse);
+      expect(result).toEqual(logoutResult);
     });
   });
 });

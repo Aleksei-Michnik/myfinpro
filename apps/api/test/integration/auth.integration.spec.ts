@@ -206,4 +206,175 @@ describe('Auth Integration Tests', () => {
         .expect(400);
     });
   });
+
+  describe('POST /api/v1/auth/refresh', () => {
+    it('should refresh tokens with valid cookie and return new access token', async () => {
+      // Register a user to get a refresh token cookie
+      const registerRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: 'refresh-test@example.com',
+          password: 'SecurePass123',
+          name: 'Refresh Test User',
+        })
+        .expect(201);
+
+      // Extract refresh_token cookie
+      const cookies = registerRes.headers['set-cookie'];
+      const cookieArray = Array.isArray(cookies) ? cookies : [cookies];
+      const refreshCookie = cookieArray.find((c: string) => c.startsWith('refresh_token='));
+      expect(refreshCookie).toBeDefined();
+
+      // Use the cookie to refresh tokens
+      return request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [refreshCookie!])
+        .expect(200)
+        .expect((res: request.Response) => {
+          expect(res.body.accessToken).toBeDefined();
+          // Verify it's a real JWT
+          expect(res.body.accessToken.split('.')).toHaveLength(3);
+
+          // Should also set a new refresh cookie
+          const newCookies = res.headers['set-cookie'];
+          expect(newCookies).toBeDefined();
+          const newCookieArray = Array.isArray(newCookies) ? newCookies : [newCookies];
+          const newRefreshCookie = newCookieArray.find((c: string) =>
+            c.startsWith('refresh_token='),
+          );
+          expect(newRefreshCookie).toBeDefined();
+          expect(newRefreshCookie).toContain('HttpOnly');
+        });
+    });
+
+    it('should return 401 when no refresh token cookie is provided', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .expect(401)
+        .expect((res: request.Response) => {
+          expect(res.body.message).toBe('No refresh token provided');
+        });
+    });
+
+    it('should return 401 when using an invalid refresh token', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', ['refresh_token=invalid-token-value'])
+        .expect(401);
+    });
+  });
+
+  describe('POST /api/v1/auth/logout', () => {
+    it('should logout and clear cookie', async () => {
+      // Register a user to get a refresh token cookie
+      const registerRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: 'logout-test@example.com',
+          password: 'SecurePass123',
+          name: 'Logout Test User',
+        })
+        .expect(201);
+
+      // Extract refresh_token cookie
+      const cookies = registerRes.headers['set-cookie'];
+      const cookieArray = Array.isArray(cookies) ? cookies : [cookies];
+      const refreshCookie = cookieArray.find((c: string) => c.startsWith('refresh_token='));
+
+      // Logout
+      return request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('Cookie', [refreshCookie!])
+        .expect(200)
+        .expect((res: request.Response) => {
+          expect(res.body.message).toBe('Logged out successfully');
+
+          // Cookie should be cleared
+          const logoutCookies = res.headers['set-cookie'];
+          if (logoutCookies) {
+            const logoutCookieArray = Array.isArray(logoutCookies)
+              ? logoutCookies
+              : [logoutCookies];
+            const clearedCookie = logoutCookieArray.find((c: string) =>
+              c.startsWith('refresh_token='),
+            );
+            if (clearedCookie) {
+              // Should be expired or empty
+              expect(
+                clearedCookie.includes('Expires=Thu, 01 Jan 1970') ||
+                  clearedCookie.includes('Max-Age=0') ||
+                  clearedCookie === 'refresh_token=;',
+              ).toBeTruthy();
+            }
+          }
+        });
+    });
+
+    it('should return 200 even without a refresh token cookie', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .expect(200)
+        .expect((res: request.Response) => {
+          expect(res.body.message).toBe('Logged out successfully');
+        });
+    });
+  });
+
+  describe('Full auth flow: register → refresh → logout', () => {
+    it('should complete the entire auth lifecycle', async () => {
+      // Step 1: Register
+      const registerRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: 'full-flow@example.com',
+          password: 'SecurePass123',
+          name: 'Full Flow User',
+        })
+        .expect(201);
+
+      expect(registerRes.body.accessToken).toBeDefined();
+
+      // Extract refresh cookie
+      const regCookies = registerRes.headers['set-cookie'];
+      const regCookieArray = Array.isArray(regCookies) ? regCookies : [regCookies];
+      const regRefreshCookie = regCookieArray.find((c: string) =>
+        c.startsWith('refresh_token='),
+      );
+      expect(regRefreshCookie).toBeDefined();
+
+      // Step 2: Refresh tokens
+      const refreshRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [regRefreshCookie!])
+        .expect(200);
+
+      expect(refreshRes.body.accessToken).toBeDefined();
+
+      // Extract new refresh cookie
+      const refCookies = refreshRes.headers['set-cookie'];
+      const refCookieArray = Array.isArray(refCookies) ? refCookies : [refCookies];
+      const newRefreshCookie = refCookieArray.find((c: string) =>
+        c.startsWith('refresh_token='),
+      );
+      expect(newRefreshCookie).toBeDefined();
+
+      // Step 3: Old token should no longer work (already rotated)
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [regRefreshCookie!])
+        .expect(401);
+
+      // Step 4: Logout with the new token
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('Cookie', [newRefreshCookie!])
+        .expect(200);
+
+      // Step 5: After logout, the new token should no longer work
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', [newRefreshCookie!])
+        .expect(401);
+    });
+  });
 });

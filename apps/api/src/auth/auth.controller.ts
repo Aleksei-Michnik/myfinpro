@@ -67,4 +67,47 @@ export class AuthController {
     const userAgent = request.headers['user-agent'];
     return this.authService.login(user, response, ip, userAgent);
   }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token using refresh token cookie' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tokens refreshed successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })
+  async refresh(
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+  ) {
+    const refreshToken = request.cookies?.refresh_token;
+    if (!refreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
+
+    const ip = request.ip;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.refreshTokens(refreshToken, response, ip, userAgent);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout and revoke refresh token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logged out successfully',
+  })
+  async logout(
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+  ) {
+    const refreshToken = request.cookies?.refresh_token;
+
+    if (refreshToken) {
+      return this.authService.logout(refreshToken, response);
+    }
+
+    // Even without a cookie, clear it and return success
+    return this.authService.logout('', response);
+  }
 }
