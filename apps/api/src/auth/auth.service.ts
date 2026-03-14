@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordService } from './services/password.service';
+import { TokenService } from './services/token.service';
 import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
@@ -10,9 +12,10 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwordService: PasswordService,
+    private readonly tokenService: TokenService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -49,8 +52,24 @@ export class AuthService {
       },
     });
 
-    // Return user (without passwordHash) and placeholder accessToken
-    // JWT issuance will be implemented in iteration 1.5
+    // Generate tokens
+    const accessToken = this.tokenService.generateAccessToken(user);
+    const refreshToken = this.tokenService.generateRefreshToken();
+
+    // Store hashed refresh token in DB
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: this.tokenService.hashToken(refreshToken),
+        userId: user.id,
+        expiresAt: this.tokenService.getRefreshExpirationDate(),
+        ipAddress: ip,
+        userAgent: userAgent,
+      },
+    });
+
+    // Set refresh token as httpOnly cookie
+    this.tokenService.setRefreshTokenCookie(response, refreshToken);
+
     return {
       user: {
         id: user.id,
@@ -59,7 +78,7 @@ export class AuthService {
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
       },
-      accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+      accessToken,
     };
   }
 
@@ -100,7 +119,7 @@ export class AuthService {
     return result;
   }
 
-  async login(user: any) {
+  async login(user: any, response: Response, ip?: string, userAgent?: string) {
     // Update last login time
     await this.prisma.user.update({
       where: { id: user.id },
@@ -119,6 +138,24 @@ export class AuthService {
 
     this.logger.log(`User logged in: ${user.email} (${user.id})`);
 
+    // Generate tokens
+    const accessToken = this.tokenService.generateAccessToken(user);
+    const refreshToken = this.tokenService.generateRefreshToken();
+
+    // Store hashed refresh token in DB
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: this.tokenService.hashToken(refreshToken),
+        userId: user.id,
+        expiresAt: this.tokenService.getRefreshExpirationDate(),
+        ipAddress: ip,
+        userAgent: userAgent,
+      },
+    });
+
+    // Set refresh token as httpOnly cookie
+    this.tokenService.setRefreshTokenCookie(response, refreshToken);
+
     return {
       user: {
         id: user.id,
@@ -127,8 +164,7 @@ export class AuthService {
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
       },
-      // JWT issuance will be implemented in iteration 1.5
-      accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+      accessToken,
     };
   }
 }

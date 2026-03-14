@@ -14,6 +14,18 @@ describe('AuthController', () => {
     login: jest.fn(),
   };
 
+  const mockResponse = {
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+  } as any;
+
+  const mockRequest = {
+    ip: '127.0.0.1',
+    headers: {
+      'user-agent': 'TestAgent/1.0',
+    },
+  } as any;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -30,7 +42,7 @@ describe('AuthController', () => {
   });
 
   describe('register()', () => {
-    it('should call AuthService.register() with the DTO', async () => {
+    it('should call AuthService.register() with DTO, response, ip and userAgent', async () => {
       const registerDto: RegisterDto = {
         email: 'test@example.com',
         password: 'SecurePass123',
@@ -45,14 +57,19 @@ describe('AuthController', () => {
           defaultCurrency: 'USD',
           locale: 'en',
         },
-        accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+        accessToken: 'mock-jwt-token',
       };
 
       mockAuthService.register.mockResolvedValue(expectedResult);
 
-      const result = await controller.register(registerDto);
+      const result = await controller.register(registerDto, mockResponse, mockRequest);
 
-      expect(mockAuthService.register).toHaveBeenCalledWith(registerDto);
+      expect(mockAuthService.register).toHaveBeenCalledWith(
+        registerDto,
+        mockResponse,
+        '127.0.0.1',
+        'TestAgent/1.0',
+      );
       expect(result).toEqual(expectedResult);
     });
 
@@ -73,12 +90,12 @@ describe('AuthController', () => {
           defaultCurrency: 'EUR',
           locale: 'he',
         },
-        accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+        accessToken: 'mock-jwt-token',
       };
 
       mockAuthService.register.mockResolvedValue(expectedResult);
 
-      const result = await controller.register(registerDto);
+      const result = await controller.register(registerDto, mockResponse, mockRequest);
 
       expect(result).toEqual(expectedResult);
       expect(result.user.email).toBe('another@example.com');
@@ -99,30 +116,39 @@ describe('AuthController', () => {
       locale: 'en',
     };
 
-    it('should call validateUser and login for valid input', async () => {
+    it('should call validateUser and login with response, ip and userAgent', async () => {
       const loginResponse = {
         user: mockUser,
-        accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+        accessToken: 'mock-jwt-token',
       };
 
       mockAuthService.validateUser.mockResolvedValue(mockUser);
       mockAuthService.login.mockResolvedValue(loginResponse);
 
-      const result = await controller.login(loginDto);
+      const result = await controller.login(loginDto, mockResponse, mockRequest);
 
       expect(mockAuthService.validateUser).toHaveBeenCalledWith(
         loginDto.email,
         loginDto.password,
       );
-      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser);
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        mockUser,
+        mockResponse,
+        '127.0.0.1',
+        'TestAgent/1.0',
+      );
       expect(result).toEqual(loginResponse);
     });
 
     it('should throw UnauthorizedException for invalid credentials', async () => {
       mockAuthService.validateUser.mockResolvedValue(null);
 
-      await expect(controller.login(loginDto)).rejects.toThrow(UnauthorizedException);
-      await expect(controller.login(loginDto)).rejects.toThrow('Invalid email or password');
+      await expect(controller.login(loginDto, mockResponse, mockRequest)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(controller.login(loginDto, mockResponse, mockRequest)).rejects.toThrow(
+        'Invalid email or password',
+      );
       expect(mockAuthService.login).not.toHaveBeenCalled();
     });
   });
