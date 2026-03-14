@@ -62,4 +62,73 @@ export class AuthService {
       accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
     };
   }
+
+  async validateUser(email: string, password: string): Promise<any> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    // Generic error — don't reveal whether email exists or password is wrong
+    if (!user || !user.passwordHash) {
+      return null;
+    }
+
+    // Check if account is active
+    if (!user.isActive) {
+      return null;
+    }
+
+    const isPasswordValid = await this.passwordService.verify(user.passwordHash, password);
+    if (!isPasswordValid) {
+      // Log failed login attempt
+      await this.prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'LOGIN_FAILED',
+          entity: 'User',
+          entityId: user.id,
+          details: { reason: 'invalid_password' },
+        },
+      });
+      return null;
+    }
+
+    // Return user without password hash
+    const { passwordHash, ...result } = user;
+    return result;
+  }
+
+  async login(user: any) {
+    // Update last login time
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    // Log login event
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'USER_LOGIN',
+        entity: 'User',
+        entityId: user.id,
+      },
+    });
+
+    this.logger.log(`User logged in: ${user.email} (${user.id})`);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        defaultCurrency: user.defaultCurrency,
+        locale: user.locale,
+      },
+      // JWT issuance will be implemented in iteration 1.5
+      accessToken: 'placeholder-will-be-jwt-in-iteration-1.5',
+    };
+  }
 }

@@ -12,6 +12,7 @@ describe('AuthService', () => {
     user: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     },
     auditLog: {
       create: jest.fn(),
@@ -170,6 +171,165 @@ describe('AuthService', () => {
       });
       expect(result.user.defaultCurrency).toBe('EUR');
       expect(result.user.locale).toBe('he');
+    });
+  });
+
+  describe('validateUser()', () => {
+    const mockUser = {
+      id: 'test-uuid-1234',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      passwordHash: '$argon2id$hashed',
+      isActive: true,
+      emailVerified: false,
+      timezone: 'UTC',
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should return user (without passwordHash) for valid credentials', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockPasswordService.verify.mockResolvedValue(true);
+
+      const result = await service.validateUser('test@example.com', 'SecurePass123');
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe('test-uuid-1234');
+      expect(result.email).toBe('test@example.com');
+      expect(result.passwordHash).toBeUndefined();
+    });
+
+    it('should return null for non-existent email', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      const result = await service.validateUser('nonexistent@example.com', 'SomePass123');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null for wrong password', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockPasswordService.verify.mockResolvedValue(false);
+
+      const result = await service.validateUser('test@example.com', 'WrongPass123');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null for inactive user', async () => {
+      const inactiveUser = { ...mockUser, isActive: false };
+      mockPrismaService.user.findUnique.mockResolvedValue(inactiveUser);
+
+      const result = await service.validateUser('test@example.com', 'SecurePass123');
+
+      expect(result).toBeNull();
+      // Should not even attempt password verification
+      expect(mockPasswordService.verify).not.toHaveBeenCalled();
+    });
+
+    it('should return null for user without password hash (OAuth-only)', async () => {
+      const oauthUser = { ...mockUser, passwordHash: null };
+      mockPrismaService.user.findUnique.mockResolvedValue(oauthUser);
+
+      const result = await service.validateUser('test@example.com', 'SomePass123');
+
+      expect(result).toBeNull();
+      expect(mockPasswordService.verify).not.toHaveBeenCalled();
+    });
+
+    it('should log failed login attempt on wrong password', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockPasswordService.verify.mockResolvedValue(false);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.validateUser('test@example.com', 'WrongPass123');
+
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: mockUser.id,
+          action: 'LOGIN_FAILED',
+          entity: 'User',
+          entityId: mockUser.id,
+          details: { reason: 'invalid_password' },
+        },
+      });
+    });
+
+    it('should normalize email to lowercase and trimmed', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await service.validateUser('  Test@Example.COM  ', 'SomePass123');
+
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'test@example.com' },
+      });
+    });
+  });
+
+  describe('login()', () => {
+    const mockUser = {
+      id: 'test-uuid-1234',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+    };
+
+    it('should update lastLoginAt', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.login(mockUser);
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { lastLoginAt: expect.any(Date) },
+      });
+    });
+
+    it('should create audit log for login', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.login(mockUser);
+
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: mockUser.id,
+          action: 'USER_LOGIN',
+          entity: 'User',
+          entityId: mockUser.id,
+        },
+      });
+    });
+
+    it('should return user data and accessToken', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.login(mockUser);
+
+      expect(result.user).toEqual({
+        id: mockUser.id,
+        email: mockUser.email,
+        name: mockUser.name,
+        defaultCurrency: mockUser.defaultCurrency,
+        locale: mockUser.locale,
+      });
+      expect(result.accessToken).toBeDefined();
+    });
+
+    it('should not expose passwordHash in response', async () => {
+      const userWithHash = { ...mockUser, passwordHash: '$argon2id$secret' };
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.login(userWithHash);
+
+      expect((result.user as any).passwordHash).toBeUndefined();
     });
   });
 });
