@@ -14,11 +14,40 @@
     "dashboard": "Dashboard",
     "transactions": "Transactions",
     "budgets": "Budgets",
-    "settings": "Settings"
+    "settings": "Settings",
+    "signIn": "Sign In",
+    "signUp": "Sign Up"
   },
   "home": {
     "title": "Personal & Family Finance Management",
     "subtitle": "Track your income, expenses, and budgets",
     "welcome": "Welcome to MyFinPro"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "name": "Full Name",
+    "signInTitle": "Sign in to MyFinPro",
+    "signUpTitle": "Create your account",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "forgotPassword": "Forgot your password?",
+    "orSignInWith": "Or sign in with",
+    "google": "Google",
+    "telegram": "Telegram",
+    "signingIn": "Signing in...",
+    "signingUp": "Creating account...",
+    "invalidCredentials": "Invalid email or password",
+    "emailRequired": "Email is required",
+    "passwordRequired": "Password is required",
+    "passwordMinLength": "Password must be at least 8 characters",
+    "passwordRequirements": "Must contain uppercase, lowercase, and a number",
+    "nameRequired": "Name is required",
+    "emailAlreadyExists": "An account with this email already exists",
+    "registrationSuccess": "Account created successfully!",
+    "loginSuccess": "Welcome back!"
   }
 }

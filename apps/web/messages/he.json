@@ -14,11 +14,40 @@
     "dashboard": "לוח בקרה",
     "transactions": "תנועות",
     "budgets": "תקציבים",
-    "settings": "הגדרות"
+    "settings": "הגדרות",
+    "signIn": "התחברות",
+    "signUp": "הרשמה"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
     "subtitle": "עקוב אחרי הכנסות, הוצאות ותקציבים",
     "welcome": "ברוכים הבאים ל-MyFinPro"
+  },
+  "auth": {
+    "signIn": "התחברות",
+    "signUp": "הרשמה",
+    "email": "אימייל",
+    "password": "סיסמה",
+    "confirmPassword": "אישור סיסמה",
+    "name": "שם מלא",
+    "signInTitle": "התחבר ל-MyFinPro",
+    "signUpTitle": "צור חשבון חדש",
+    "noAccount": "אין לך חשבון?",
+    "hasAccount": "כבר יש לך חשבון?",
+    "forgotPassword": "שכחת סיסמה?",
+    "orSignInWith": "או התחבר עם",
+    "google": "Google",
+    "telegram": "Telegram",
+    "signingIn": "מתחבר...",
+    "signingUp": "יוצר חשבון...",
+    "invalidCredentials": "אימייל או סיסמה שגויים",
+    "emailRequired": "נדרש אימייל",
+    "passwordRequired": "נדרשת סיסמה",
+    "passwordMinLength": "הסיסמה חייבת להכיל לפחות 8 תווים",
+    "passwordRequirements": "חייבת להכיל אות גדולה, אות קטנה ומספר",
+    "nameRequired": "נדרש שם",
+    "emailAlreadyExists": "חשבון עם אימייל זה כבר קיים",
+    "registrationSuccess": "החשבון נוצר בהצלחה!",
+    "loginSuccess": "ברוך שובך!"
   }
 }

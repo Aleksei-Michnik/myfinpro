@@ -20,10 +20,22 @@ export function Header() {
           {t('common.appName')}
         </Link>
 
-        {/* Navigation placeholder */}
+        {/* Navigation */}
         <nav className="hidden md:flex items-center gap-6">
           <Link href="/" className="text-sm text-gray-600 hover:text-primary-600 transition-colors">
             {t('nav.home')}
+          </Link>
+          <Link
+            href="/auth/login"
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+          >
+            {t('nav.signIn')}
+          </Link>
+          <Link
+            href="/auth/register"
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+          >
+            {t('nav.signUp')}
           </Link>
         </nav>
 

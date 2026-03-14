@@ -77,4 +77,18 @@ describe('Header', () => {
     expect(heLink.className).not.toContain('bg-primary-100');
     expect(heLink.className).toContain('text-gray-500');
   });
+
+  it('renders sign in navigation link', () => {
+    render(<Header />);
+    const signInLink = screen.getByText('nav.signIn');
+    expect(signInLink).toBeInTheDocument();
+    expect(signInLink.closest('a')).toHaveAttribute('href', '/auth/login');
+  });
+
+  it('renders sign up navigation link', () => {
+    render(<Header />);
+    const signUpLink = screen.getByText('nav.signUp');
+    expect(signUpLink).toBeInTheDocument();
+    expect(signUpLink.closest('a')).toHaveAttribute('href', '/auth/register');
+  });
 });
