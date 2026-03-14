@@ -1,0 +1,181 @@
+'use client';
+
+import { useState, type FormEvent } from 'react';
+import { useTranslations } from 'next-intl';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { PasswordStrength } from '@/components/auth/PasswordStrength';
+import { Link } from '@/i18n/navigation';
+
+interface FieldErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function RegisterForm() {
+  const t = useTranslations('auth');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [generalError, setGeneralError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  function validateField(field: string, value: string): string | undefined {
+    switch (field) {
+      case 'name':
+        if (!value.trim()) return t('nameRequired');
+        if (value.length > 100) return t('nameMaxLength');
+        return undefined;
+      case 'email':
+        if (!value.trim()) return t('emailRequired');
+        if (!EMAIL_REGEX.test(value)) return t('emailInvalid');
+        return undefined;
+      case 'password':
+        if (!value) return t('passwordRequired');
+        if (value.length < 8) return t('passwordMinLength');
+        if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/\d/.test(value)) {
+          return t('passwordRequirements');
+        }
+        return undefined;
+      case 'confirmPassword':
+        if (value !== password) return t('passwordMismatch');
+        return undefined;
+      default:
+        return undefined;
+    }
+  }
+
+  function validateAll(): FieldErrors {
+    return {
+      name: validateField('name', name),
+      email: validateField('email', email),
+      password: validateField('password', password),
+      confirmPassword: validateField('confirmPassword', confirmPassword),
+    };
+  }
+
+  function handleBlur(field: string) {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const value = { name, email, password, confirmPassword }[field] ?? '';
+    const error = validateField(field, value);
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setGeneralError('');
+
+    const fieldErrors = validateAll();
+    setErrors(fieldErrors);
+    setTouched({ name: true, email: true, password: true, confirmPassword: true });
+
+    const hasErrors = Object.values(fieldErrors).some(Boolean);
+    if (hasErrors) return;
+
+    setIsLoading(true);
+
+    try {
+      // API call will be connected in iteration 1.9
+      console.log('Register attempt:', { name, email });
+
+      // Placeholder: will call authService.register() in iteration 1.9
+      throw new Error('Auth integration not yet implemented');
+    } catch (err) {
+      setGeneralError(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const isFormEmpty = !name && !email && !password && !confirmPassword;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {generalError && (
+        <div className="rounded-md bg-red-50 p-4" role="alert">
+          <p className="text-sm text-red-700">{generalError}</p>
+        </div>
+      )}
+
+      <Input
+        name="name"
+        type="text"
+        label={t('name')}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => handleBlur('name')}
+        error={touched.name ? errors.name : undefined}
+        required
+        autoComplete="name"
+        disabled={isLoading}
+      />
+
+      <Input
+        name="email"
+        type="email"
+        label={t('email')}
+        placeholder="user@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        onBlur={() => handleBlur('email')}
+        error={touched.email ? errors.email : undefined}
+        required
+        autoComplete="email"
+        disabled={isLoading}
+      />
+
+      <div>
+        <Input
+          name="password"
+          type="password"
+          label={t('password')}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onBlur={() => handleBlur('password')}
+          error={touched.password ? errors.password : undefined}
+          required
+          autoComplete="new-password"
+          disabled={isLoading}
+        />
+        <PasswordStrength password={password} />
+      </div>
+
+      <Input
+        name="confirmPassword"
+        type="password"
+        label={t('confirmPassword')}
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        onBlur={() => handleBlur('confirmPassword')}
+        error={touched.confirmPassword ? errors.confirmPassword : undefined}
+        required
+        autoComplete="new-password"
+        disabled={isLoading}
+      />
+
+      <Button
+        type="submit"
+        variant="primary"
+        size="lg"
+        className="w-full"
+        disabled={isLoading || isFormEmpty}
+      >
+        {isLoading ? t('signingUp') : t('signUp')}
+      </Button>
+
+      <p className="text-center text-sm text-gray-600">
+        {t('hasAccount')}{' '}
+        <Link href="/auth/login" className="text-primary-600 hover:text-primary-500 font-medium">
+          {t('signIn')}
+        </Link>
+      </p>
+    </form>
+  );
+}
