@@ -12,18 +12,6 @@ datasource db {
   provider = "mysql"
 }
 
-// ── Phase 0: Minimal User model placeholder for Prisma verification ──
-// Full user model will be defined in Phase 1.1
-
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique @db.VarChar(255)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("users")
-}
-
 // ── Phase 0: Baseline model for connection testing ──
 
 model HealthCheck {
@@ -32,4 +20,61 @@ model HealthCheck {
   checkedAt DateTime @default(now()) @map("checked_at")
 
   @@map("health_checks")
+}
+
+// ── Phase 1: Authentication models ──
+
+model User {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String?   @map("password_hash") @db.VarChar(255)
+  name            String    @db.VarChar(100)
+  defaultCurrency String    @default("USD") @map("default_currency") @db.VarChar(3)
+  locale          String    @default("en") @db.VarChar(5)
+  timezone        String    @default("UTC") @db.VarChar(50)
+  isActive        Boolean   @default(true) @map("is_active")
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  refreshTokens   RefreshToken[]
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.VarChar(36)
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  userId     String    @map("user_id") @db.VarChar(36)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime  @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by") @db.VarChar(36)
+  userAgent  String?   @map("user_agent") @db.VarChar(500)
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  userId    String?  @map("user_id") @db.VarChar(36)
+  action    String   @db.VarChar(100)
+  entity    String   @db.VarChar(100)
+  entityId  String?  @map("entity_id") @db.VarChar(36)
+  details   Json?
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

@@ -23,13 +23,12 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
-  "dependencies": {},
   "devDependencies": {
-    "@myfinpro/tsconfig": "workspace:*",
     "@myfinpro/eslint-config": "workspace:*",
-    "@types/node": "^22.15.0",
+    "@myfinpro/tsconfig": "workspace:*",
+    "@types/node": "^25.5.0",
+    "eslint": "^10.0.3",
     "typescript": "^5.9.3",
-    "eslint": "^9.0.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   }
 }

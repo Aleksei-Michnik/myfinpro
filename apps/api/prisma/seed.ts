@@ -1,8 +1,7 @@
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 
-const adapter = new PrismaMariaDb(process.env.DATABASE_URL ?? '');
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting database seed...');
@@ -11,22 +10,25 @@ async function main() {
   await prisma.$connect();
   console.log('✅ Database connection verified');
 
-  // Create a test user to verify Prisma works
-  const testUser = await prisma.user.upsert({
-    where: { email: 'test@myfinpro.dev' },
+  // Phase 1: Create development test user
+  // Password: "TestPass123" — hashed with Argon2id (will be updated when auth service is available)
+  // For now, use a placeholder hash. The actual hashing will be done in iteration 1.2+1.3
+  const devUser = await prisma.user.upsert({
+    where: { email: 'dev@myfinpro.test' },
     update: {},
     create: {
-      email: 'test@myfinpro.dev',
+      email: 'dev@myfinpro.test',
+      name: 'Dev User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+      isActive: true,
+      emailVerified: true,
+      // passwordHash will be set in iteration 1.2+1.3 when Argon2 is available
     },
   });
 
-  console.log(`✅ Test user created/verified: ${testUser.email} (id: ${testUser.id})`);
-
-  // Seed data will be added as models are created in later phases.
-  // Phase 1 will add: default user accounts for development
-  // Phase 4 will add: sample groups and memberships
-  // Phase 5 will add: sample income categories
-  // Phase 6 will add: sample expense categories
+  console.log(`✅ Dev user created/verified: ${devUser.email} (id: ${devUser.id})`);
 
   console.log('🌱 Seed completed successfully');
 }
