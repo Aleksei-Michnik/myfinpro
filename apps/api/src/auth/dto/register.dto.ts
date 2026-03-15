@@ -1,3 +1,4 @@
+import { CURRENCY_CODES, LOCALES } from '@myfinpro/shared';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -9,7 +10,6 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { CURRENCY_CODES, LOCALES } from '@myfinpro/shared';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com', description: 'User email address' })

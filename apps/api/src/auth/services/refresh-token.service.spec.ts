@@ -1,8 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { PrismaService } from '../../prisma/prisma.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { TokenService } from './token.service';
-import { PrismaService } from '../../prisma/prisma.service';
 
 describe('RefreshTokenService', () => {
   let service: RefreshTokenService;

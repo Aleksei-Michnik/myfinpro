@@ -1,8 +1,8 @@
 'use client';
 
-import { useAuth } from '@/lib/auth/auth-context';
-import { useRouter, usePathname } from '@/i18n/navigation';
 import { useEffect } from 'react';
+import { useRouter, usePathname } from '@/i18n/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

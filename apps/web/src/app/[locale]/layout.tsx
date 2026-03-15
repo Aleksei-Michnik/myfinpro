@@ -4,10 +4,10 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { Header } from '@/components/layout/Header';
-import { AuthProvider } from '@/lib/auth/auth-context';
-import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
 import { routing } from '@/i18n/routing';
+import { AuthProvider } from '@/lib/auth/auth-context';
 
 import '../globals.css';
 

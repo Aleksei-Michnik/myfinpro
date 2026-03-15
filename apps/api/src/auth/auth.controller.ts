@@ -20,15 +20,15 @@ import {
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
-import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { AuthResponseDto } from './dto/auth-response.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { CurrentUser } from './decorators/current-user.decorator';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { AUTH_ERRORS } from './constants/auth-errors';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
+import { AuthService } from './auth.service';
+import { AUTH_ERRORS } from './constants/auth-errors';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { AuthResponseDto } from './dto/auth-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @ApiTags('Authentication')
 @Controller('auth')

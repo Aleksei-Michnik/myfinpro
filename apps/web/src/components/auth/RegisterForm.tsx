@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { useState, type FormEvent } from 'react';
+import { PasswordStrength } from '@/components/auth/PasswordStrength';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { PasswordStrength } from '@/components/auth/PasswordStrength';
+import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { useToast } from '@/components/ui/Toast';
 
 interface FieldErrors {
   name?: string;

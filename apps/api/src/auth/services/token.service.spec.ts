@@ -1,6 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Test, TestingModule } from '@nestjs/testing';
+import { Response } from 'express';
 import { TokenService } from './token.service';
 
 describe('TokenService', () => {
@@ -158,9 +159,7 @@ describe('TokenService', () => {
 
   describe('setRefreshTokenCookie()', () => {
     it('should call response.cookie with correct params', () => {
-      const mockResponse = {
-        cookie: jest.fn(),
-      } as any;
+      const mockResponseObj = { cookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
         if (key === 'NODE_ENV') return 'test';
@@ -168,9 +167,9 @@ describe('TokenService', () => {
         return defaultValue;
       });
 
-      service.setRefreshTokenCookie(mockResponse, 'test-refresh-token');
+      service.setRefreshTokenCookie(mockResponseObj as unknown as Response, 'test-refresh-token');
 
-      expect(mockResponse.cookie).toHaveBeenCalledWith('refresh_token', 'test-refresh-token', {
+      expect(mockResponseObj.cookie).toHaveBeenCalledWith('refresh_token', 'test-refresh-token', {
         httpOnly: true,
         secure: false, // NODE_ENV is 'test', not 'production'
         sameSite: 'strict',
@@ -180,9 +179,7 @@ describe('TokenService', () => {
     });
 
     it('should set secure=true in production', () => {
-      const mockResponse = {
-        cookie: jest.fn(),
-      } as any;
+      const mockResponseObj = { cookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
         if (key === 'NODE_ENV') return 'production';
@@ -190,9 +187,9 @@ describe('TokenService', () => {
         return defaultValue;
       });
 
-      service.setRefreshTokenCookie(mockResponse, 'test-refresh-token');
+      service.setRefreshTokenCookie(mockResponseObj as unknown as Response, 'test-refresh-token');
 
-      expect(mockResponse.cookie).toHaveBeenCalledWith(
+      expect(mockResponseObj.cookie).toHaveBeenCalledWith(
         'refresh_token',
         'test-refresh-token',
         expect.objectContaining({
@@ -204,18 +201,16 @@ describe('TokenService', () => {
 
   describe('clearRefreshTokenCookie()', () => {
     it('should call response.clearCookie with correct params', () => {
-      const mockResponse = {
-        clearCookie: jest.fn(),
-      } as any;
+      const mockResponseObj = { clearCookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
         if (key === 'NODE_ENV') return 'test';
         return defaultValue;
       });
 
-      service.clearRefreshTokenCookie(mockResponse);
+      service.clearRefreshTokenCookie(mockResponseObj as unknown as Response);
 
-      expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token', {
+      expect(mockResponseObj.clearCookie).toHaveBeenCalledWith('refresh_token', {
         httpOnly: true,
         secure: false,
         sameSite: 'strict',

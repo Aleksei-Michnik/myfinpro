@@ -1,12 +1,14 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { PasswordService } from './services/password.service';
-import { TokenService } from './services/token.service';
-import { RefreshTokenService } from './services/refresh-token.service';
+import { Test, TestingModule } from '@nestjs/testing';
+import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto } from './dto/register.dto';
+import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
+import { RegisterDto } from './dto/register.dto';
+import { ValidatedUser } from './interfaces/validated-user.interface';
+import { PasswordService } from './services/password.service';
+import { RefreshTokenService } from './services/refresh-token.service';
+import { TokenService } from './services/token.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -50,7 +52,7 @@ describe('AuthService', () => {
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
-  } as any;
+  } as unknown as Response;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -111,7 +113,7 @@ describe('AuthService', () => {
       expect(result.user.locale).toBe('en');
       expect(result.accessToken).toBe('mock-jwt-access-token');
       // Must NOT expose passwordHash
-      expect((result.user as any).passwordHash).toBeUndefined();
+      expect(result.user).not.toHaveProperty('passwordHash');
     });
 
     it('should generate real JWT access token', async () => {
@@ -291,9 +293,9 @@ describe('AuthService', () => {
       const result = await service.validateUser('test@example.com', 'SecurePass123');
 
       expect(result).toBeDefined();
-      expect(result.id).toBe('test-uuid-1234');
-      expect(result.email).toBe('test@example.com');
-      expect(result.passwordHash).toBeUndefined();
+      expect(result!.id).toBe('test-uuid-1234');
+      expect(result!.email).toBe('test@example.com');
+      expect(result).not.toHaveProperty('passwordHash');
     });
 
     it('should return null for non-existent email', async () => {
@@ -364,12 +366,18 @@ describe('AuthService', () => {
   });
 
   describe('login()', () => {
-    const mockUser = {
+    const mockUser: ValidatedUser = {
       id: 'test-uuid-1234',
       email: 'test@example.com',
       name: 'Test User',
       defaultCurrency: 'USD',
       locale: 'en',
+      timezone: 'UTC',
+      isActive: true,
+      emailVerified: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
     };
 
     it('should update lastLoginAt', async () => {
@@ -470,7 +478,7 @@ describe('AuthService', () => {
 
       const result = await service.login(userWithHash, mockResponse);
 
-      expect((result.user as any).passwordHash).toBeUndefined();
+      expect(result.user).not.toHaveProperty('passwordHash');
     });
   });
 
@@ -620,7 +628,7 @@ describe('AuthService', () => {
 
       const result = await service.getUser('test-uuid-1234');
 
-      expect((result as any).passwordHash).toBeUndefined();
+      expect(result).not.toHaveProperty('passwordHash');
     });
   });
 

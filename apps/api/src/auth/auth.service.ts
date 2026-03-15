@@ -1,11 +1,12 @@
 import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { PasswordService } from './services/password.service';
-import { TokenService } from './services/token.service';
-import { RefreshTokenService } from './services/refresh-token.service';
-import { RegisterDto } from './dto/register.dto';
 import { AUTH_ERRORS } from './constants/auth-errors';
+import { RegisterDto } from './dto/register.dto';
+import { ValidatedUser } from './interfaces/validated-user.interface';
+import { PasswordService } from './services/password.service';
+import { RefreshTokenService } from './services/refresh-token.service';
+import { TokenService } from './services/token.service';
 
 @Injectable()
 export class AuthService {
@@ -88,7 +89,7 @@ export class AuthService {
     };
   }
 
-  async validateUser(email: string, password: string): Promise<any> {
+  async validateUser(email: string, password: string): Promise<ValidatedUser | null> {
     const normalizedEmail = email.toLowerCase().trim();
 
     const user = await this.prisma.user.findUnique({
@@ -125,7 +126,7 @@ export class AuthService {
     return result;
   }
 
-  async login(user: any, response: Response, ip?: string, userAgent?: string) {
+  async login(user: ValidatedUser, response: Response, ip?: string, userAgent?: string) {
     // Update last login time
     await this.prisma.user.update({
       where: { id: user.id },

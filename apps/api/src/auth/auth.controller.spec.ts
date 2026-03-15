@@ -1,10 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { Request, Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import { AUTH_ERRORS } from './constants/auth-errors';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 // Internal metadata keys used by @nestjs/throttler's @Throttle() decorator
 // The decorator concatenates the base key with the throttler name (e.g., 'default')
@@ -26,15 +27,16 @@ describe('AuthController', () => {
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
-  } as any;
+  } as unknown as Response;
 
-  const mockRequest = {
+  const mockRequestData = {
     ip: '127.0.0.1',
     headers: {
       'user-agent': 'TestAgent/1.0',
     },
-    cookies: {},
-  } as any;
+    cookies: {} as Record<string, string>,
+  };
+  const mockRequest = mockRequestData as unknown as Request;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -178,9 +180,9 @@ describe('AuthController', () => {
   describe('refresh()', () => {
     it('should call AuthService.refreshTokens() when cookie is present', async () => {
       const requestWithCookie = {
-        ...mockRequest,
+        ...mockRequestData,
         cookies: { refresh_token: 'valid-refresh-token' },
-      };
+      } as unknown as Request;
 
       const refreshResult = { accessToken: 'new-access-token' };
       mockAuthService.refreshTokens.mockResolvedValue(refreshResult);
@@ -198,9 +200,9 @@ describe('AuthController', () => {
 
     it('should throw UnauthorizedException with REFRESH_FAILED errorCode when no refresh token cookie', async () => {
       const requestWithoutCookie = {
-        ...mockRequest,
+        ...mockRequestData,
         cookies: {},
-      };
+      } as unknown as Request;
 
       await expect(controller.refresh(mockResponse, requestWithoutCookie)).rejects.toThrow(
         UnauthorizedException,
@@ -224,9 +226,9 @@ describe('AuthController', () => {
 
     it('should throw UnauthorizedException when cookies is undefined', async () => {
       const requestNoCookies = {
-        ...mockRequest,
+        ...mockRequestData,
         cookies: undefined,
-      };
+      } as unknown as Request;
 
       await expect(controller.refresh(mockResponse, requestNoCookies)).rejects.toThrow(
         UnauthorizedException,
@@ -237,9 +239,9 @@ describe('AuthController', () => {
   describe('logout()', () => {
     it('should call AuthService.logout() when refresh token cookie is present', async () => {
       const requestWithCookie = {
-        ...mockRequest,
+        ...mockRequestData,
         cookies: { refresh_token: 'some-refresh-token' },
-      };
+      } as unknown as Request;
 
       const logoutResult = { message: 'Logged out successfully' };
       mockAuthService.logout.mockResolvedValue(logoutResult);
@@ -252,9 +254,9 @@ describe('AuthController', () => {
 
     it('should call AuthService.logout() with empty string when no cookie', async () => {
       const requestWithoutCookie = {
-        ...mockRequest,
+        ...mockRequestData,
         cookies: {},
-      };
+      } as unknown as Request;
 
       const logoutResult = { message: 'Logged out successfully' };
       mockAuthService.logout.mockResolvedValue(logoutResult);

@@ -1,7 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TokenService } from './token.service';
 import { AUTH_ERRORS } from '../constants/auth-errors';
+import { TokenService } from './token.service';
 
 @Injectable()
 export class RefreshTokenService {
