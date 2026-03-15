@@ -771,14 +771,14 @@ Phase 1 implements a complete authentication system with email/password registra
 
 ### Test Summary
 
-| Category           | Count | Framework                                                        |
-| ------------------ | ----- | ---------------------------------------------------------------- |
-| API Unit Tests     | 176   | Jest                                                             |
-| API Integration    | ~15   | Jest + Testcontainers                                            |
-| Web Unit Tests     | 138   | Vitest + Testing Library                                         |
-| Playwright E2E     | 45    | Playwright (chromium, firefox, webkit, mobile-chrome, mobile-safari) |
-| Shared Package     | 15    | Vitest                                                           |
-| **Total**          | **~389** |                                                               |
+| Category        | Count    | Framework                                                            |
+| --------------- | -------- | -------------------------------------------------------------------- |
+| API Unit Tests  | 176      | Jest                                                                 |
+| API Integration | ~15      | Jest + Testcontainers                                                |
+| Web Unit Tests  | 138      | Vitest + Testing Library                                             |
+| Playwright E2E  | 45       | Playwright (chromium, firefox, webkit, mobile-chrome, mobile-safari) |
+| Shared Package  | 15       | Vitest                                                               |
+| **Total**       | **~389** |                                                                      |
 
 ### Security Measures
 
@@ -904,20 +904,20 @@ myfinpro/
 
 ## 6. Quality Metrics
 
-| Metric                  | Result                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| **Lint**                | 0 errors, 0 warnings                                                          |
-| **Typecheck**           | 0 errors                                                                       |
-| **API Unit Tests**      | 176 passing (Jest)                                                             |
-| **API Integration**     | ~15 passing (Jest + Testcontainers)                                            |
-| **Web Unit Tests**      | 138 passing (Vitest + Testing Library)                                         |
-| **Shared Unit Tests**   | 15 passing (Vitest)                                                            |
-| **Playwright E2E**      | 45 passing (chromium, firefox, webkit, mobile-chrome, mobile-safari)           |
-| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting)                |
-| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)                   |
-| **Total Tests**         | ~419 across all test types                                                     |
-| **Build**               | All packages successful                                                        |
-| **Production Gate**     | Staging tests must pass within 24h before production deploy                    |
+| Metric                  | Result                                                               |
+| ----------------------- | -------------------------------------------------------------------- |
+| **Lint**                | 0 errors, 0 warnings                                                 |
+| **Typecheck**           | 0 errors                                                             |
+| **API Unit Tests**      | 176 passing (Jest)                                                   |
+| **API Integration**     | ~15 passing (Jest + Testcontainers)                                  |
+| **Web Unit Tests**      | 138 passing (Vitest + Testing Library)                               |
+| **Shared Unit Tests**   | 15 passing (Vitest)                                                  |
+| **Playwright E2E**      | 45 passing (chromium, firefox, webkit, mobile-chrome, mobile-safari) |
+| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting)      |
+| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)         |
+| **Total Tests**         | ~419 across all test types                                           |
+| **Build**               | All packages successful                                              |
+| **Production Gate**     | Staging tests must pass within 24h before production deploy          |
 
 ---
 
@@ -1001,12 +1001,12 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 ### Phase 2: Google Authentication (4 iterations)
 
-| Iteration | Objective                                                          |
-| --------- | ------------------------------------------------------------------ |
-| 2.1       | Google OAuth setup — Client credentials, Passport Google strategy  |
-| 2.2       | Google login flow — Redirect, callback, account linking            |
-| 2.3       | Frontend Google login — Login button, OAuth redirect handling      |
-| 2.4       | Account linking — Link Google to existing email/password accounts  |
+| Iteration | Objective                                                         |
+| --------- | ----------------------------------------------------------------- |
+| 2.1       | Google OAuth setup — Client credentials, Passport Google strategy |
+| 2.2       | Google login flow — Redirect, callback, account linking           |
+| 2.3       | Frontend Google login — Login button, OAuth redirect handling     |
+| 2.4       | Account linking — Link Google to existing email/password accounts |
 
 ### Other Upcoming Work
 

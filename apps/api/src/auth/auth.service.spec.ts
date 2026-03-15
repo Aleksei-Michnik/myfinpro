@@ -569,9 +569,9 @@ describe('AuthService', () => {
         new UnauthorizedException('Token reuse detected. All sessions revoked.'),
       );
 
-      await expect(
-        service.refreshTokens('reused-token', mockResponse),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshTokens('reused-token', mockResponse)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

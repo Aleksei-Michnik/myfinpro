@@ -48,13 +48,22 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
     <div className="mt-2 space-y-2" data-testid="password-strength">
       {/* Strength bar */}
       <div className="flex items-center gap-2">
-        <div className="h-2 flex-1 rounded-full bg-gray-200" role="progressbar" aria-valuenow={strength} aria-valuemin={0} aria-valuemax={4} aria-label={t('passwordStrength')}>
+        <div
+          className="h-2 flex-1 rounded-full bg-gray-200"
+          role="progressbar"
+          aria-valuenow={strength}
+          aria-valuemin={0}
+          aria-valuemax={4}
+          aria-label={t('passwordStrength')}
+        >
           <div
             className={`h-full rounded-full transition-all duration-300 ${config.color} ${config.width}`}
           />
         </div>
         {config.label && (
-          <span className={`text-xs font-medium ${strength <= 1 ? 'text-red-600' : strength === 2 ? 'text-orange-600' : strength === 3 ? 'text-yellow-600' : 'text-green-600'}`}>
+          <span
+            className={`text-xs font-medium ${strength <= 1 ? 'text-red-600' : strength === 2 ? 'text-orange-600' : strength === 3 ? 'text-yellow-600' : 'text-green-600'}`}
+          >
             {t(config.label)}
           </span>
         )}
@@ -67,9 +76,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
             <span className={req.met ? 'text-green-500' : 'text-gray-400'} aria-hidden="true">
               {req.met ? '✓' : '○'}
             </span>
-            <span className={req.met ? 'text-green-700' : 'text-gray-500'}>
-              {req.label}
-            </span>
+            <span className={req.met ? 'text-green-700' : 'text-gray-500'}>{req.label}</span>
           </li>
         ))}
       </ul>

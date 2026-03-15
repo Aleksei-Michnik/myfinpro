@@ -6,7 +6,13 @@ const mockPush = vi.fn();
 let mockAuthState = {
   isAuthenticated: false,
   isLoading: false,
-  user: null as { id: string; email: string; name: string; defaultCurrency: string; locale: string } | null,
+  user: null as {
+    id: string;
+    email: string;
+    name: string;
+    defaultCurrency: string;
+    locale: string;
+  } | null,
   accessToken: null as string | null,
   login: vi.fn(),
   register: vi.fn(),
@@ -83,9 +89,7 @@ describe('ProtectedRoute', () => {
     );
 
     expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
-    expect(mockPush).toHaveBeenCalledWith(
-      '/auth/login?redirect=%2Fdashboard',
-    );
+    expect(mockPush).toHaveBeenCalledWith('/auth/login?redirect=%2Fdashboard');
   });
 
   it('shows loading spinner when isLoading is true', () => {

@@ -93,10 +93,7 @@ export class AuthController {
     description: 'Tokens refreshed successfully',
   })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })
-  async refresh(
-    @Res({ passthrough: true }) response: Response,
-    @Req() request: Request,
-  ) {
+  async refresh(@Res({ passthrough: true }) response: Response, @Req() request: Request) {
     const refreshToken = request.cookies?.refresh_token;
     if (!refreshToken) {
       throw new UnauthorizedException({
@@ -118,10 +115,7 @@ export class AuthController {
     status: 200,
     description: 'Logged out successfully',
   })
-  async logout(
-    @Res({ passthrough: true }) response: Response,
-    @Req() request: Request,
-  ) {
+  async logout(@Res({ passthrough: true }) response: Response, @Req() request: Request) {
     const refreshToken = request.cookies?.refresh_token;
 
     if (refreshToken) {

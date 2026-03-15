@@ -177,8 +177,11 @@ export class AuthService {
 
   async refreshTokens(refreshToken: string, response: Response, ip?: string, userAgent?: string) {
     // Rotate: validate old token, revoke it, create new one
-    const { userId, newRefreshToken } =
-      await this.refreshTokenService.rotateRefreshToken(refreshToken, ip, userAgent);
+    const { userId, newRefreshToken } = await this.refreshTokenService.rotateRefreshToken(
+      refreshToken,
+      ip,
+      userAgent,
+    );
 
     // Fetch user for access token generation
     const user = await this.prisma.user.findUnique({

@@ -44,9 +44,7 @@ export default async function LocaleLayout({ children, params }: Props) {
           <AuthProvider>
             <ToastProvider>
               <Header />
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
+              <ErrorBoundary>{children}</ErrorBoundary>
               <ToastContainer />
             </ToastProvider>
           </AuthProvider>

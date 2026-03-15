@@ -94,10 +94,7 @@ describe('Auth Integration Tests', () => {
     });
 
     it('should reject registration without required fields', () => {
-      return request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({})
-        .expect(400);
+      return request(app.getHttpServer()).post('/api/v1/auth/register').send({}).expect(400);
     });
   });
 
@@ -322,9 +319,7 @@ describe('Auth Integration Tests', () => {
 
   describe('GET /api/v1/auth/me', () => {
     it('should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/v1/auth/me')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/v1/auth/me').expect(401);
     });
 
     it('should return user data with valid token', async () => {
@@ -382,9 +377,7 @@ describe('Auth Integration Tests', () => {
       // Extract refresh cookie
       const regCookies = registerRes.headers['set-cookie'];
       const regCookieArray = Array.isArray(regCookies) ? regCookies : [regCookies];
-      const regRefreshCookie = regCookieArray.find((c: string) =>
-        c.startsWith('refresh_token='),
-      );
+      const regRefreshCookie = regCookieArray.find((c: string) => c.startsWith('refresh_token='));
       expect(regRefreshCookie).toBeDefined();
 
       // Step 2: Refresh tokens
@@ -398,9 +391,7 @@ describe('Auth Integration Tests', () => {
       // Extract new refresh cookie
       const refCookies = refreshRes.headers['set-cookie'];
       const refCookieArray = Array.isArray(refCookies) ? refCookies : [refCookies];
-      const newRefreshCookie = refCookieArray.find((c: string) =>
-        c.startsWith('refresh_token='),
-      );
+      const newRefreshCookie = refCookieArray.find((c: string) => c.startsWith('refresh_token='));
       expect(newRefreshCookie).toBeDefined();
 
       // Step 3: Old token should no longer work (already rotated)

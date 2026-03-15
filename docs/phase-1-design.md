@@ -119,21 +119,23 @@ Applied in [`apps/api/src/main.ts`](../apps/api/src/main.ts):
 ```typescript
 import helmet from 'helmet';
 // ...
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      upgradeInsecureRequests: [],
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
     },
-  },
-  crossOriginEmbedderPolicy: false,
-}));
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 ```
 
 ### 2c. Migration Flow in Deploy Script
@@ -147,12 +149,12 @@ docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma migrate deploy
 
 ### Files Changed
 
-| File | Change |
-|------|--------|
-| [`infrastructure/backup/crontab`](../infrastructure/backup/crontab) | Change to hourly backup schedule |
-| [`apps/api/package.json`](../apps/api/package.json) | Add `helmet` dependency |
-| [`apps/api/src/main.ts`](../apps/api/src/main.ts) | Add Helmet middleware |
-| [`scripts/deploy.sh`](../scripts/deploy.sh) | Switch prisma db push to prisma migrate deploy |
+| File                                                                | Change                                         |
+| ------------------------------------------------------------------- | ---------------------------------------------- |
+| [`infrastructure/backup/crontab`](../infrastructure/backup/crontab) | Change to hourly backup schedule               |
+| [`apps/api/package.json`](../apps/api/package.json)                 | Add `helmet` dependency                        |
+| [`apps/api/src/main.ts`](../apps/api/src/main.ts)                   | Add Helmet middleware                          |
+| [`scripts/deploy.sh`](../scripts/deploy.sh)                         | Switch prisma db push to prisma migrate deploy |
 
 ---
 
@@ -236,11 +238,11 @@ model AuditLog {
 
 ### Files Changed/Created
 
-| File | Change |
-|------|--------|
+| File                                                                | Change                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------- |
 | [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) | Update User model, add RefreshToken and AuditLog models |
-| `apps/api/prisma/migrations/YYYYMMDD_phase1_user_schema/` | New migration |
-| [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts) | Update seed for new User schema (dev user for testing) |
+| `apps/api/prisma/migrations/YYYYMMDD_phase1_user_schema/`           | New migration                                           |
+| [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts)             | Update seed for new User schema (dev user for testing)  |
 
 ---
 
@@ -263,7 +265,8 @@ class RegisterDto {
   @MinLength(8)
   @MaxLength(128)
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
-    message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+    message:
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number',
   })
   password: string;
 
@@ -295,7 +298,7 @@ class RegisterDto {
       name: string;
       defaultCurrency: string;
       locale: string;
-    };
+    }
     accessToken: string;
   }
 }
@@ -313,17 +316,17 @@ class RegisterDto {
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/auth.module.ts` | Auth module with all providers |
-| `apps/api/src/auth/auth.controller.ts` | Auth endpoints |
-| `apps/api/src/auth/auth.service.ts` | Auth business logic |
-| `apps/api/src/auth/dto/register.dto.ts` | Registration DTO |
-| `apps/api/src/auth/dto/login.dto.ts` | Login DTO (placeholder for 1.4) |
-| `apps/api/src/auth/dto/auth-response.dto.ts` | Auth response DTO |
-| `apps/api/src/auth/auth.controller.spec.ts` | Controller unit tests |
-| `apps/api/src/auth/auth.service.spec.ts` | Service unit tests |
-| `apps/api/test/integration/auth.integration.spec.ts` | Integration tests |
+| File                                                 | Purpose                         |
+| ---------------------------------------------------- | ------------------------------- |
+| `apps/api/src/auth/auth.module.ts`                   | Auth module with all providers  |
+| `apps/api/src/auth/auth.controller.ts`               | Auth endpoints                  |
+| `apps/api/src/auth/auth.service.ts`                  | Auth business logic             |
+| `apps/api/src/auth/dto/register.dto.ts`              | Registration DTO                |
+| `apps/api/src/auth/dto/login.dto.ts`                 | Login DTO (placeholder for 1.4) |
+| `apps/api/src/auth/dto/auth-response.dto.ts`         | Auth response DTO               |
+| `apps/api/src/auth/auth.controller.spec.ts`          | Controller unit tests           |
+| `apps/api/src/auth/auth.service.spec.ts`             | Service unit tests              |
+| `apps/api/test/integration/auth.integration.spec.ts` | Integration tests               |
 
 ---
 
@@ -338,11 +341,11 @@ import * as argon2 from 'argon2';
 @Injectable()
 export class PasswordService {
   private readonly hashOptions: argon2.Options = {
-    type: argon2.argon2id,     // Hybrid: resistant to both side-channel and GPU attacks
-    memoryCost: 65536,          // 64 MB memory
-    timeCost: 3,                // 3 iterations
-    parallelism: 4,             // 4 threads
-    hashLength: 32,             // 32 bytes output
+    type: argon2.argon2id, // Hybrid: resistant to both side-channel and GPU attacks
+    memoryCost: 65536, // 64 MB memory
+    timeCost: 3, // 3 iterations
+    parallelism: 4, // 4 threads
+    hashLength: 32, // 32 bytes output
   };
 
   async hash(password: string): Promise<string> {
@@ -373,10 +376,10 @@ export class PasswordService {
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/services/password.service.ts` | Password hashing/verification |
-| `apps/api/src/auth/services/password.service.spec.ts` | Password service tests |
+| File                                                  | Purpose                       |
+| ----------------------------------------------------- | ----------------------------- |
+| `apps/api/src/auth/services/password.service.ts`      | Password hashing/verification |
+| `apps/api/src/auth/services/password.service.spec.ts` | Password service tests        |
 
 ### Dependencies
 
@@ -439,11 +442,11 @@ Same format as registration — returns access token in body, refresh token in h
 
 ### Files Created/Modified
 
-| File | Purpose |
-|------|---------|
+| File                                             | Purpose                 |
+| ------------------------------------------------ | ----------------------- |
 | `apps/api/src/auth/strategies/local.strategy.ts` | Passport local strategy |
-| `apps/api/src/auth/guards/local-auth.guard.ts` | Local auth guard |
-| `apps/api/src/auth/dto/login.dto.ts` | Login DTO |
+| `apps/api/src/auth/guards/local-auth.guard.ts`   | Local auth guard        |
+| `apps/api/src/auth/dto/login.dto.ts`             | Login DTO               |
 
 ### Dependencies
 
@@ -455,10 +458,10 @@ Add to [`apps/api/package.json`](../apps/api/package.json): `@nestjs/passport`, 
 
 ### Token Configuration
 
-| Token | Expiry | Storage | Purpose |
-|-------|--------|---------|---------|
-| Access Token | 15 minutes | Response body → client memory/localStorage | API authentication |
-| Refresh Token | 7 days | httpOnly Secure SameSite=Strict cookie | Token refresh |
+| Token         | Expiry     | Storage                                    | Purpose            |
+| ------------- | ---------- | ------------------------------------------ | ------------------ |
+| Access Token  | 15 minutes | Response body → client memory/localStorage | API authentication |
+| Refresh Token | 7 days     | httpOnly Secure SameSite=Strict cookie     | Token refresh      |
 
 ### JWT Strategy
 
@@ -484,7 +487,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
 ```typescript
 interface JwtPayload {
-  sub: string;       // User ID (UUID)
+  sub: string; // User ID (UUID)
   email: string;
   name: string;
   iat: number;
@@ -499,10 +502,10 @@ interface JwtPayload {
 @Injectable()
 export class TokenService {
   generateAccessToken(user: User): string;
-  generateRefreshToken(): string;       // Random UUID, stored hashed in DB
+  generateRefreshToken(): string; // Random UUID, stored hashed in DB
   setRefreshTokenCookie(response: Response, token: string): void;
   clearRefreshTokenCookie(response: Response): void;
-  hashToken(token: string): string;     // SHA-256 for DB storage
+  hashToken(token: string): string; // SHA-256 for DB storage
 }
 ```
 
@@ -520,13 +523,13 @@ export class TokenService {
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/strategies/jwt.strategy.ts` | JWT strategy for Passport |
-| `apps/api/src/auth/guards/jwt-auth.guard.ts` | JWT auth guard |
-| `apps/api/src/auth/services/token.service.ts` | Token generation + cookie management |
-| `apps/api/src/auth/services/token.service.spec.ts` | Token service tests |
-| `apps/api/src/auth/interfaces/jwt-payload.interface.ts` | JWT payload type |
+| File                                                    | Purpose                              |
+| ------------------------------------------------------- | ------------------------------------ |
+| `apps/api/src/auth/strategies/jwt.strategy.ts`          | JWT strategy for Passport            |
+| `apps/api/src/auth/guards/jwt-auth.guard.ts`            | JWT auth guard                       |
+| `apps/api/src/auth/services/token.service.ts`           | Token generation + cookie management |
+| `apps/api/src/auth/services/token.service.spec.ts`      | Token service tests                  |
+| `apps/api/src/auth/interfaces/jwt-payload.interface.ts` | JWT payload type                     |
 
 ### Dependencies
 
@@ -565,6 +568,7 @@ sequenceDiagram
 ### Reuse Detection
 
 If a revoked refresh token is used (potential token theft):
+
 1. Find the token chain via `replacedBy` links
 2. Revoke ALL tokens in the family (all descendants)
 3. Return 401 with `token_reuse_detected` error code
@@ -585,12 +589,12 @@ async logout(refreshToken: string, response: Response): Promise<void> {
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/services/refresh-token.service.ts` | Refresh token CRUD + rotation |
-| `apps/api/src/auth/services/refresh-token.service.spec.ts` | Tests |
-| `apps/api/src/auth/services/audit.service.ts` | Audit logging service |
-| `apps/api/src/auth/services/audit.service.spec.ts` | Tests |
+| File                                                       | Purpose                       |
+| ---------------------------------------------------------- | ----------------------------- |
+| `apps/api/src/auth/services/refresh-token.service.ts`      | Refresh token CRUD + rotation |
+| `apps/api/src/auth/services/refresh-token.service.spec.ts` | Tests                         |
+| `apps/api/src/auth/services/audit.service.ts`              | Audit logging service         |
+| `apps/api/src/auth/services/audit.service.spec.ts`         | Tests                         |
 
 ---
 
@@ -673,13 +677,13 @@ Add to `messages/en.json` and `messages/he.json`:
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/app/[locale]/auth/login/page.tsx` | Login page |
-| `apps/web/src/components/auth/LoginForm.tsx` | Login form component |
-| `apps/web/src/components/auth/LoginForm.spec.tsx` | Login form tests |
-| `apps/web/messages/en.json` | Updated with auth i18n keys |
-| `apps/web/messages/he.json` | Updated with auth i18n keys |
+| File                                              | Purpose                     |
+| ------------------------------------------------- | --------------------------- |
+| `apps/web/src/app/[locale]/auth/login/page.tsx`   | Login page                  |
+| `apps/web/src/components/auth/LoginForm.tsx`      | Login form component        |
+| `apps/web/src/components/auth/LoginForm.spec.tsx` | Login form tests            |
+| `apps/web/messages/en.json`                       | Updated with auth i18n keys |
+| `apps/web/messages/he.json`                       | Updated with auth i18n keys |
 
 ---
 
@@ -734,15 +738,15 @@ Add to `messages/en.json` and `messages/he.json`:
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/app/[locale]/auth/register/page.tsx` | Registration page |
-| `apps/web/src/components/auth/RegisterForm.tsx` | Registration form component |
-| `apps/web/src/components/auth/RegisterForm.spec.tsx` | Registration form tests |
-| `apps/web/src/components/auth/PasswordStrength.tsx` | Password strength indicator |
-| `apps/web/src/components/auth/PasswordStrength.spec.tsx` | Password strength tests |
-| `apps/web/src/components/ui/Input.tsx` | Reusable input component |
-| `apps/web/src/components/ui/Input.spec.tsx` | Input component tests |
+| File                                                     | Purpose                     |
+| -------------------------------------------------------- | --------------------------- |
+| `apps/web/src/app/[locale]/auth/register/page.tsx`       | Registration page           |
+| `apps/web/src/components/auth/RegisterForm.tsx`          | Registration form component |
+| `apps/web/src/components/auth/RegisterForm.spec.tsx`     | Registration form tests     |
+| `apps/web/src/components/auth/PasswordStrength.tsx`      | Password strength indicator |
+| `apps/web/src/components/auth/PasswordStrength.spec.tsx` | Password strength tests     |
+| `apps/web/src/components/ui/Input.tsx`                   | Reusable input component    |
+| `apps/web/src/components/ui/Input.spec.tsx`              | Input component tests       |
 
 ---
 
@@ -788,13 +792,13 @@ Extend [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts) wit
 
 ### Files Created/Modified
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/lib/auth/auth-context.tsx` | React auth context provider |
-| `apps/web/src/lib/auth/auth-context.spec.tsx` | Auth context tests |
-| `apps/web/src/lib/auth/types.ts` | Auth-related types |
-| [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts) | Enhanced with auth headers + refresh interceptor |
-| [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx) | Wrap with AuthProvider |
+| File                                                                              | Purpose                                          |
+| --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `apps/web/src/lib/auth/auth-context.tsx`                                          | React auth context provider                      |
+| `apps/web/src/lib/auth/auth-context.spec.tsx`                                     | Auth context tests                               |
+| `apps/web/src/lib/auth/types.ts`                                                  | Auth-related types                               |
+| [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts)             | Enhanced with auth headers + refresh interceptor |
+| [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx) | Wrap with AuthProvider                           |
 
 ---
 
@@ -863,13 +867,13 @@ Create a simple `/[locale]/dashboard` page behind auth:
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
+| File                                                     | Purpose                           |
+| -------------------------------------------------------- | --------------------------------- |
 | `apps/api/src/auth/decorators/current-user.decorator.ts` | Extract current user from request |
-| `apps/web/src/components/auth/ProtectedRoute.tsx` | Client-side route protection |
-| `apps/web/src/components/auth/ProtectedRoute.spec.tsx` | Protected route tests |
-| `apps/web/src/app/[locale]/dashboard/page.tsx` | Protected dashboard page |
-| `apps/web/e2e/auth.spec.ts` | E2E auth flow tests (Playwright) |
+| `apps/web/src/components/auth/ProtectedRoute.tsx`        | Client-side route protection      |
+| `apps/web/src/components/auth/ProtectedRoute.spec.tsx`   | Protected route tests             |
+| `apps/web/src/app/[locale]/dashboard/page.tsx`           | Protected dashboard page          |
+| `apps/web/e2e/auth.spec.ts`                              | E2E auth flow tests (Playwright)  |
 
 ### Playwright E2E Tests
 
@@ -917,14 +921,14 @@ The existing [`AllExceptionsFilter`](../apps/api/src/common/filters/all-exceptio
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/constants/error-codes.ts` | Auth error code constants |
-| `apps/web/src/components/error/ErrorBoundary.tsx` | React error boundary |
-| `apps/web/src/components/error/ErrorBoundary.spec.tsx` | Error boundary tests |
-| `apps/web/src/components/ui/Toast.tsx` | Toast notification component |
-| `apps/web/src/components/ui/Toast.spec.tsx` | Toast tests |
-| `apps/web/src/lib/toast/toast-context.tsx` | Toast context provider |
+| File                                                   | Purpose                      |
+| ------------------------------------------------------ | ---------------------------- |
+| `apps/api/src/auth/constants/error-codes.ts`           | Auth error code constants    |
+| `apps/web/src/components/error/ErrorBoundary.tsx`      | React error boundary         |
+| `apps/web/src/components/error/ErrorBoundary.spec.tsx` | Error boundary tests         |
+| `apps/web/src/components/ui/Toast.tsx`                 | Toast notification component |
+| `apps/web/src/components/ui/Toast.spec.tsx`            | Toast tests                  |
+| `apps/web/src/lib/toast/toast-context.tsx`             | Toast context provider       |
 
 ---
 
@@ -932,13 +936,13 @@ The existing [`AllExceptionsFilter`](../apps/api/src/common/filters/all-exceptio
 
 ### Configuration
 
-| Endpoint | Rate Limit | Window |
-|----------|-----------|--------|
-| `POST /auth/register` | 5 requests | 60 seconds |
-| `POST /auth/login` | 5 requests | 60 seconds |
-| `POST /auth/refresh` | 10 requests | 60 seconds |
-| `POST /auth/logout` | 10 requests | 60 seconds |
-| All other endpoints | 60 requests | 60 seconds (existing) |
+| Endpoint              | Rate Limit  | Window                |
+| --------------------- | ----------- | --------------------- |
+| `POST /auth/register` | 5 requests  | 60 seconds            |
+| `POST /auth/login`    | 5 requests  | 60 seconds            |
+| `POST /auth/refresh`  | 10 requests | 60 seconds            |
+| `POST /auth/logout`   | 10 requests | 60 seconds            |
+| All other endpoints   | 60 requests | 60 seconds (existing) |
 
 ### Implementation
 
@@ -965,11 +969,11 @@ export class AuthController {
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
-| `apps/api/src/auth/auth.controller.ts` | Add @CustomThrottle decorators |
-| `apps/api/test/integration/auth-rate-limit.integration.spec.ts` | Rate limit integration tests |
-| `apps/api/test/staging/auth-rate-limiting.staging.spec.ts` | Staging rate limit tests |
+| File                                                            | Change                         |
+| --------------------------------------------------------------- | ------------------------------ |
+| `apps/api/src/auth/auth.controller.ts`                          | Add @CustomThrottle decorators |
+| `apps/api/test/integration/auth-rate-limit.integration.spec.ts` | Rate limit integration tests   |
+| `apps/api/test/staging/auth-rate-limiting.staging.spec.ts`      | Staging rate limit tests       |
 
 ---
 
@@ -995,16 +999,16 @@ export class AuthController {
 
 ### Threat Model
 
-| Threat | Mitigation |
-|--------|-----------|
-| Password brute force | Rate limiting (5/min), Argon2 slow hashing |
-| Token theft (XSS) | Access token in memory, refresh in httpOnly cookie |
-| Token theft (CSRF) | SameSite=Strict, CORS |
-| User enumeration | Generic login error messages |
-| Token replay | Token rotation, reuse detection |
-| SQL injection | Prisma parameterized queries |
-| XSS | Helmet CSP headers, React auto-escaping |
-| Session fixation | New tokens on login/register |
+| Threat               | Mitigation                                         |
+| -------------------- | -------------------------------------------------- |
+| Password brute force | Rate limiting (5/min), Argon2 slow hashing         |
+| Token theft (XSS)    | Access token in memory, refresh in httpOnly cookie |
+| Token theft (CSRF)   | SameSite=Strict, CORS                              |
+| User enumeration     | Generic login error messages                       |
+| Token replay         | Token rotation, reuse detection                    |
+| SQL injection        | Prisma parameterized queries                       |
+| XSS                  | Helmet CSP headers, React auto-escaping            |
+| Session fixation     | New tokens on login/register                       |
 
 ---
 
@@ -1030,21 +1034,21 @@ Since this is the first major schema change, and there is no real user data yet 
 
 ### Test Counts per Iteration
 
-| Iteration | Unit Tests | Integration Tests | E2E Tests |
-|-----------|-----------|-------------------|-----------|
-| 1.0 | 2 (Helmet) | 0 | 0 |
-| 1.1 | 3 (schema validation) | 2 (migration) | 0 |
-| 1.2 | 8 (controller + service) | 4 (registration flow) | 0 |
-| 1.3 | 5 (password hash/verify) | 0 | 0 |
-| 1.4 | 6 (login flow) | 4 (login integration) | 0 |
-| 1.5 | 8 (token generation) | 2 (token flow) | 0 |
-| 1.6 | 10 (refresh/rotation/reuse) | 4 (refresh integration) | 0 |
-| 1.7 | 4 (login form render) | 0 | 2 (page loads, form works) |
-| 1.8 | 6 (register form render) | 0 | 2 (page loads, validation) |
-| 1.9 | 6 (auth context) | 0 | 4 (full auth flow) |
-| 1.10 | 4 (route guards) | 2 (protected endpoint) | 4 (protected routes) |
-| 1.11 | 6 (error boundary, toast) | 0 | 2 (error scenarios) |
-| 1.12 | 4 (rate limiting) | 2 (rate limit integration) | 0 |
+| Iteration | Unit Tests                  | Integration Tests          | E2E Tests                  |
+| --------- | --------------------------- | -------------------------- | -------------------------- |
+| 1.0       | 2 (Helmet)                  | 0                          | 0                          |
+| 1.1       | 3 (schema validation)       | 2 (migration)              | 0                          |
+| 1.2       | 8 (controller + service)    | 4 (registration flow)      | 0                          |
+| 1.3       | 5 (password hash/verify)    | 0                          | 0                          |
+| 1.4       | 6 (login flow)              | 4 (login integration)      | 0                          |
+| 1.5       | 8 (token generation)        | 2 (token flow)             | 0                          |
+| 1.6       | 10 (refresh/rotation/reuse) | 4 (refresh integration)    | 0                          |
+| 1.7       | 4 (login form render)       | 0                          | 2 (page loads, form works) |
+| 1.8       | 6 (register form render)    | 0                          | 2 (page loads, validation) |
+| 1.9       | 6 (auth context)            | 0                          | 4 (full auth flow)         |
+| 1.10      | 4 (route guards)            | 2 (protected endpoint)     | 4 (protected routes)       |
+| 1.11      | 6 (error boundary, toast)   | 0                          | 2 (error scenarios)        |
+| 1.12      | 4 (rate limiting)           | 2 (rate limit integration) | 0                          |
 
 **Total estimated: ~92 new tests**
 
@@ -1069,105 +1073,105 @@ Since this is the first major schema change, and there is no real user data yet 
 
 **Auth Module (API):**
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/auth.module.ts` | Auth module |
-| `apps/api/src/auth/auth.controller.ts` | Auth endpoints |
-| `apps/api/src/auth/auth.service.ts` | Auth business logic |
-| `apps/api/src/auth/auth.controller.spec.ts` | Controller tests |
-| `apps/api/src/auth/auth.service.spec.ts` | Service tests |
-| `apps/api/src/auth/dto/register.dto.ts` | Register DTO |
-| `apps/api/src/auth/dto/login.dto.ts` | Login DTO |
-| `apps/api/src/auth/dto/auth-response.dto.ts` | Response DTO |
-| `apps/api/src/auth/services/password.service.ts` | Argon2 hashing |
-| `apps/api/src/auth/services/password.service.spec.ts` | Tests |
-| `apps/api/src/auth/services/token.service.ts` | JWT + refresh token |
-| `apps/api/src/auth/services/token.service.spec.ts` | Tests |
-| `apps/api/src/auth/services/refresh-token.service.ts` | Refresh token CRUD |
-| `apps/api/src/auth/services/refresh-token.service.spec.ts` | Tests |
-| `apps/api/src/auth/services/audit.service.ts` | Audit logging |
-| `apps/api/src/auth/services/audit.service.spec.ts` | Tests |
-| `apps/api/src/auth/strategies/local.strategy.ts` | Passport local |
-| `apps/api/src/auth/strategies/jwt.strategy.ts` | Passport JWT |
-| `apps/api/src/auth/guards/local-auth.guard.ts` | Local auth guard |
-| `apps/api/src/auth/guards/jwt-auth.guard.ts` | JWT auth guard |
-| `apps/api/src/auth/decorators/current-user.decorator.ts` | Current user decorator |
-| `apps/api/src/auth/interfaces/jwt-payload.interface.ts` | JWT payload type |
-| `apps/api/src/auth/constants/error-codes.ts` | Error code constants |
+| File                                                       | Purpose                |
+| ---------------------------------------------------------- | ---------------------- |
+| `apps/api/src/auth/auth.module.ts`                         | Auth module            |
+| `apps/api/src/auth/auth.controller.ts`                     | Auth endpoints         |
+| `apps/api/src/auth/auth.service.ts`                        | Auth business logic    |
+| `apps/api/src/auth/auth.controller.spec.ts`                | Controller tests       |
+| `apps/api/src/auth/auth.service.spec.ts`                   | Service tests          |
+| `apps/api/src/auth/dto/register.dto.ts`                    | Register DTO           |
+| `apps/api/src/auth/dto/login.dto.ts`                       | Login DTO              |
+| `apps/api/src/auth/dto/auth-response.dto.ts`               | Response DTO           |
+| `apps/api/src/auth/services/password.service.ts`           | Argon2 hashing         |
+| `apps/api/src/auth/services/password.service.spec.ts`      | Tests                  |
+| `apps/api/src/auth/services/token.service.ts`              | JWT + refresh token    |
+| `apps/api/src/auth/services/token.service.spec.ts`         | Tests                  |
+| `apps/api/src/auth/services/refresh-token.service.ts`      | Refresh token CRUD     |
+| `apps/api/src/auth/services/refresh-token.service.spec.ts` | Tests                  |
+| `apps/api/src/auth/services/audit.service.ts`              | Audit logging          |
+| `apps/api/src/auth/services/audit.service.spec.ts`         | Tests                  |
+| `apps/api/src/auth/strategies/local.strategy.ts`           | Passport local         |
+| `apps/api/src/auth/strategies/jwt.strategy.ts`             | Passport JWT           |
+| `apps/api/src/auth/guards/local-auth.guard.ts`             | Local auth guard       |
+| `apps/api/src/auth/guards/jwt-auth.guard.ts`               | JWT auth guard         |
+| `apps/api/src/auth/decorators/current-user.decorator.ts`   | Current user decorator |
+| `apps/api/src/auth/interfaces/jwt-payload.interface.ts`    | JWT payload type       |
+| `apps/api/src/auth/constants/error-codes.ts`               | Error code constants   |
 
 **Auth UI (Web):**
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/app/[locale]/auth/login/page.tsx` | Login page |
-| `apps/web/src/app/[locale]/auth/register/page.tsx` | Register page |
-| `apps/web/src/app/[locale]/dashboard/page.tsx` | Dashboard (protected) |
-| `apps/web/src/components/auth/LoginForm.tsx` | Login form |
-| `apps/web/src/components/auth/LoginForm.spec.tsx` | Tests |
-| `apps/web/src/components/auth/RegisterForm.tsx` | Register form |
-| `apps/web/src/components/auth/RegisterForm.spec.tsx` | Tests |
-| `apps/web/src/components/auth/PasswordStrength.tsx` | Password meter |
-| `apps/web/src/components/auth/PasswordStrength.spec.tsx` | Tests |
-| `apps/web/src/components/auth/ProtectedRoute.tsx` | Route protection |
-| `apps/web/src/components/auth/ProtectedRoute.spec.tsx` | Tests |
-| `apps/web/src/components/error/ErrorBoundary.tsx` | Error boundary |
-| `apps/web/src/components/error/ErrorBoundary.spec.tsx` | Tests |
-| `apps/web/src/components/ui/Input.tsx` | Input component |
-| `apps/web/src/components/ui/Input.spec.tsx` | Tests |
-| `apps/web/src/components/ui/Toast.tsx` | Toast component |
-| `apps/web/src/components/ui/Toast.spec.tsx` | Tests |
-| `apps/web/src/lib/auth/auth-context.tsx` | Auth provider |
-| `apps/web/src/lib/auth/auth-context.spec.tsx` | Tests |
-| `apps/web/src/lib/auth/types.ts` | Auth types |
-| `apps/web/src/lib/toast/toast-context.tsx` | Toast provider |
+| File                                                     | Purpose               |
+| -------------------------------------------------------- | --------------------- |
+| `apps/web/src/app/[locale]/auth/login/page.tsx`          | Login page            |
+| `apps/web/src/app/[locale]/auth/register/page.tsx`       | Register page         |
+| `apps/web/src/app/[locale]/dashboard/page.tsx`           | Dashboard (protected) |
+| `apps/web/src/components/auth/LoginForm.tsx`             | Login form            |
+| `apps/web/src/components/auth/LoginForm.spec.tsx`        | Tests                 |
+| `apps/web/src/components/auth/RegisterForm.tsx`          | Register form         |
+| `apps/web/src/components/auth/RegisterForm.spec.tsx`     | Tests                 |
+| `apps/web/src/components/auth/PasswordStrength.tsx`      | Password meter        |
+| `apps/web/src/components/auth/PasswordStrength.spec.tsx` | Tests                 |
+| `apps/web/src/components/auth/ProtectedRoute.tsx`        | Route protection      |
+| `apps/web/src/components/auth/ProtectedRoute.spec.tsx`   | Tests                 |
+| `apps/web/src/components/error/ErrorBoundary.tsx`        | Error boundary        |
+| `apps/web/src/components/error/ErrorBoundary.spec.tsx`   | Tests                 |
+| `apps/web/src/components/ui/Input.tsx`                   | Input component       |
+| `apps/web/src/components/ui/Input.spec.tsx`              | Tests                 |
+| `apps/web/src/components/ui/Toast.tsx`                   | Toast component       |
+| `apps/web/src/components/ui/Toast.spec.tsx`              | Tests                 |
+| `apps/web/src/lib/auth/auth-context.tsx`                 | Auth provider         |
+| `apps/web/src/lib/auth/auth-context.spec.tsx`            | Tests                 |
+| `apps/web/src/lib/auth/types.ts`                         | Auth types            |
+| `apps/web/src/lib/toast/toast-context.tsx`               | Toast provider        |
 
 **Tests:**
 
-| File | Purpose |
-|------|---------|
-| `apps/api/test/integration/auth.integration.spec.ts` | Auth integration tests |
-| `apps/api/test/integration/auth-rate-limit.integration.spec.ts` | Rate limit tests |
-| `apps/api/test/staging/auth.staging.spec.ts` | Staging auth tests |
-| `apps/api/test/staging/auth-rate-limiting.staging.spec.ts` | Staging rate limit tests |
-| `apps/web/e2e/auth.spec.ts` | Full E2E auth flow |
-| `apps/web/e2e/staging/auth.staging.spec.ts` | Staging auth E2E |
+| File                                                            | Purpose                  |
+| --------------------------------------------------------------- | ------------------------ |
+| `apps/api/test/integration/auth.integration.spec.ts`            | Auth integration tests   |
+| `apps/api/test/integration/auth-rate-limit.integration.spec.ts` | Rate limit tests         |
+| `apps/api/test/staging/auth.staging.spec.ts`                    | Staging auth tests       |
+| `apps/api/test/staging/auth-rate-limiting.staging.spec.ts`      | Staging rate limit tests |
+| `apps/web/e2e/auth.spec.ts`                                     | Full E2E auth flow       |
+| `apps/web/e2e/staging/auth.staging.spec.ts`                     | Staging auth E2E         |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) | New User, RefreshToken, AuditLog models |
-| [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts) | Dev user seed data |
-| [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) | Import AuthModule |
-| [`apps/api/src/main.ts`](../apps/api/src/main.ts) | Add Helmet, cookie-parser |
-| [`apps/api/package.json`](../apps/api/package.json) | New dependencies |
-| [`apps/web/package.json`](../apps/web/package.json) | New dependencies if needed |
-| [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx) | Add AuthProvider, ToastProvider |
-| [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts) | Auth header + refresh interceptor |
-| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) | Add auth nav items |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Auth i18n keys |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Auth i18n keys |
-| [`infrastructure/backup/crontab`](../infrastructure/backup/crontab) | Hourly backup schedule |
-| [`scripts/deploy.sh`](../scripts/deploy.sh) | Change to prisma migrate deploy |
-| [`docs/progress.md`](progress.md) | Document each iteration progress |
+| File                                                                                        | Change                                  |
+| ------------------------------------------------------------------------------------------- | --------------------------------------- |
+| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma)                         | New User, RefreshToken, AuditLog models |
+| [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts)                                     | Dev user seed data                      |
+| [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts)                               | Import AuthModule                       |
+| [`apps/api/src/main.ts`](../apps/api/src/main.ts)                                           | Add Helmet, cookie-parser               |
+| [`apps/api/package.json`](../apps/api/package.json)                                         | New dependencies                        |
+| [`apps/web/package.json`](../apps/web/package.json)                                         | New dependencies if needed              |
+| [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx)           | Add AuthProvider, ToastProvider         |
+| [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts)                       | Auth header + refresh interceptor       |
+| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) | Add auth nav items                      |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                 | Auth i18n keys                          |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                 | Auth i18n keys                          |
+| [`infrastructure/backup/crontab`](../infrastructure/backup/crontab)                         | Hourly backup schedule                  |
+| [`scripts/deploy.sh`](../scripts/deploy.sh)                                                 | Change to prisma migrate deploy         |
+| [`docs/progress.md`](progress.md)                                                           | Document each iteration progress        |
 
 ### New Dependencies
 
 **API (`apps/api/package.json`):**
 
-| Package | Purpose |
-|---------|---------|
-| `argon2` | Password hashing |
-| `@nestjs/passport` | Passport integration |
-| `passport` | Authentication framework |
-| `passport-local` | Local (email/password) strategy |
-| `passport-jwt` | JWT strategy |
-| `@nestjs/jwt` | JWT token generation |
-| `cookie-parser` | Parse httpOnly cookies |
-| `helmet` | Security headers |
-| `@types/passport-local` | TypeScript types |
-| `@types/passport-jwt` | TypeScript types |
-| `@types/cookie-parser` | TypeScript types |
+| Package                 | Purpose                         |
+| ----------------------- | ------------------------------- |
+| `argon2`                | Password hashing                |
+| `@nestjs/passport`      | Passport integration            |
+| `passport`              | Authentication framework        |
+| `passport-local`        | Local (email/password) strategy |
+| `passport-jwt`          | JWT strategy                    |
+| `@nestjs/jwt`           | JWT token generation            |
+| `cookie-parser`         | Parse httpOnly cookies          |
+| `helmet`                | Security headers                |
+| `@types/passport-local` | TypeScript types                |
+| `@types/passport-jwt`   | TypeScript types                |
+| `@types/cookie-parser`  | TypeScript types                |
 
 ---
 

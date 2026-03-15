@@ -28,7 +28,10 @@ export function Header() {
 
         {/* Navigation */}
         <nav className="flex items-center gap-4 md:gap-6">
-          <Link href="/" className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors">
+          <Link
+            href="/"
+            className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
+          >
             {t('nav.home')}
           </Link>
 
@@ -40,7 +43,10 @@ export function Header() {
               >
                 {t('nav.dashboard')}
               </Link>
-              <span className="hidden md:inline text-sm text-gray-700 font-medium" data-testid="user-name">
+              <span
+                className="hidden md:inline text-sm text-gray-700 font-medium"
+                data-testid="user-name"
+              >
                 {user?.name}
               </span>
               <button

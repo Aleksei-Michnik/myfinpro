@@ -5,3 +5,4 @@ coverage
 pnpm-lock.yaml
 *.min.js
 *.min.css
+next-env.d.ts

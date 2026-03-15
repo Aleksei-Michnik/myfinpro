@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, LoginData, RegisterData, AuthResponse } from './types';
 
 interface AuthContextType {
@@ -67,9 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (!res.ok) {
       const error = await res.json().catch(() => ({ message: 'Login failed' }));
-      throw new Error(
-        (error as { message?: string }).message || 'Login failed',
-      );
+      throw new Error((error as { message?: string }).message || 'Login failed');
     }
     const result: AuthResponse = await res.json();
     setUser(result.user);
@@ -87,12 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Too many attempts. Please try again later.');
     }
     if (!res.ok) {
-      const error = await res
-        .json()
-        .catch(() => ({ message: 'Registration failed' }));
-      throw new Error(
-        (error as { message?: string }).message || 'Registration failed',
-      );
+      const error = await res.json().catch(() => ({ message: 'Registration failed' }));
+      throw new Error((error as { message?: string }).message || 'Registration failed');
     }
     const result: AuthResponse = await res.json();
     setUser(result.user);

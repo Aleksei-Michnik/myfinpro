@@ -7,26 +7,12 @@ function ToastTrigger() {
   const { addToast, removeToast, toasts } = useToast();
   return (
     <div>
-      <button onClick={() => addToast('success', 'Success message')}>
-        Add Success
-      </button>
-      <button onClick={() => addToast('error', 'Error message')}>
-        Add Error
-      </button>
-      <button onClick={() => addToast('warning', 'Warning message')}>
-        Add Warning
-      </button>
-      <button onClick={() => addToast('info', 'Info message')}>
-        Add Info
-      </button>
-      <button onClick={() => addToast('success', 'Quick toast', 100)}>
-        Add Quick
-      </button>
-      {toasts.length > 0 && (
-        <button onClick={() => removeToast(toasts[0].id)}>
-          Remove First
-        </button>
-      )}
+      <button onClick={() => addToast('success', 'Success message')}>Add Success</button>
+      <button onClick={() => addToast('error', 'Error message')}>Add Error</button>
+      <button onClick={() => addToast('warning', 'Warning message')}>Add Warning</button>
+      <button onClick={() => addToast('info', 'Info message')}>Add Info</button>
+      <button onClick={() => addToast('success', 'Quick toast', 100)}>Add Quick</button>
+      {toasts.length > 0 && <button onClick={() => removeToast(toasts[0].id)}>Remove First</button>}
       <span data-testid="toast-count">{toasts.length}</span>
     </div>
   );

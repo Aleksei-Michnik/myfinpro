@@ -19,17 +19,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const requestId = getRequestId() || (request as Request & { requestId?: string }).requestId;
 
     const messageObj =
-      typeof message === 'object' && message !== null
-        ? (message as Record<string, unknown>)
-        : null;
+      typeof message === 'object' && message !== null ? (message as Record<string, unknown>) : null;
     const errorCode = messageObj?.errorCode as string | undefined;
 
     const errorResponse: Record<string, unknown> = {
       statusCode: status,
-      message:
-        typeof message === 'string'
-          ? message
-          : messageObj?.message || message,
+      message: typeof message === 'string' ? message : messageObj?.message || message,
       error: exception.name,
       timestamp: new Date().toISOString(),
       path: request.url,

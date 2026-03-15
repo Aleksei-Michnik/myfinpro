@@ -139,10 +139,7 @@ describe('AuthController', () => {
 
       const result = await controller.login(loginDto, mockResponse, mockRequest);
 
-      expect(mockAuthService.validateUser).toHaveBeenCalledWith(
-        loginDto.email,
-        loginDto.password,
-      );
+      expect(mockAuthService.validateUser).toHaveBeenCalledWith(loginDto.email, loginDto.password);
       expect(mockAuthService.login).toHaveBeenCalledWith(
         mockUser,
         mockResponse,
@@ -308,13 +305,9 @@ describe('AuthController', () => {
 
     it('should propagate UnauthorizedException from AuthService', async () => {
       const { UnauthorizedException } = jest.requireActual('@nestjs/common');
-      mockAuthService.getUser.mockRejectedValue(
-        new UnauthorizedException('User not found'),
-      );
+      mockAuthService.getUser.mockRejectedValue(new UnauthorizedException('User not found'));
 
-      await expect(controller.getMe(mockJwtPayload)).rejects.toThrow(
-        'User not found',
-      );
+      await expect(controller.getMe(mockJwtPayload)).rejects.toThrow('User not found');
     });
   });
 

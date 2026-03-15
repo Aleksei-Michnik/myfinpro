@@ -12,10 +12,7 @@ describe('LocalStrategy', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LocalStrategy,
-        { provide: AuthService, useValue: mockAuthService },
-      ],
+      providers: [LocalStrategy, { provide: AuthService, useValue: mockAuthService }],
     }).compile();
 
     strategy = module.get<LocalStrategy>(LocalStrategy);
@@ -51,13 +48,13 @@ describe('LocalStrategy', () => {
     it('should throw UnauthorizedException for invalid credentials', async () => {
       mockAuthService.validateUser.mockResolvedValue(null);
 
-      await expect(
-        strategy.validate('test@example.com', 'WrongPass'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(strategy.validate('test@example.com', 'WrongPass')).rejects.toThrow(
+        UnauthorizedException,
+      );
 
-      await expect(
-        strategy.validate('test@example.com', 'WrongPass'),
-      ).rejects.toThrow('Invalid email or password');
+      await expect(strategy.validate('test@example.com', 'WrongPass')).rejects.toThrow(
+        'Invalid email or password',
+      );
     });
   });
 });

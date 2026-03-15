@@ -44,12 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
           data-testid="error-boundary-fallback"
         >
           <div className="text-4xl">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            Something went wrong
-          </h2>
-          <p className="text-sm text-gray-600">
-            An unexpected error occurred. Please try again.
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900">Something went wrong</h2>
+          <p className="text-sm text-gray-600">An unexpected error occurred. Please try again.</p>
           {process.env.NODE_ENV !== 'production' && this.state.error && (
             <pre className="mt-2 max-w-full overflow-auto rounded bg-red-50 p-3 text-left text-xs text-red-800">
               {this.state.error.message}

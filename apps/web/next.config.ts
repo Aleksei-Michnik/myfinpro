@@ -15,9 +15,7 @@ const nextConfig: NextConfig = {
   // Allow Server Actions from reverse proxy origins (CloudFlare)
   experimental: {
     serverActions: {
-      allowedOrigins: process.env.ALLOWED_ORIGINS
-        ? process.env.ALLOWED_ORIGINS.split(',')
-        : [],
+      allowedOrigins: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [],
     },
   },
 

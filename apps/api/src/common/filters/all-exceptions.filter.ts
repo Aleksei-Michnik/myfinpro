@@ -32,9 +32,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
     const messageObj =
-      typeof message === 'object' && message !== null
-        ? (message as Record<string, unknown>)
-        : null;
+      typeof message === 'object' && message !== null ? (message as Record<string, unknown>) : null;
     const errorCode = messageObj?.errorCode as string | undefined;
 
     const errorResponse: Record<string, unknown> = {
