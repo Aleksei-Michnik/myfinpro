@@ -113,6 +113,8 @@ source "$METADATA_FILE"
 CURRENT_SLOT="${ACTIVE_SLOT:-}"
 ROLLBACK_SLOT="${PREVIOUS_SLOT:-}"
 ROLLBACK_TAG="${PREVIOUS_IMAGE_TAG:-}"
+# Save the failed deploy's tag before IMAGE_TAG is overwritten on export
+FAILED_IMAGE_TAG="${IMAGE_TAG:-}"
 
 if [ -z "$ROLLBACK_SLOT" ] || [ "$ROLLBACK_SLOT" = "none" ]; then
   error "No previous slot found in metadata. Cannot rollback."
@@ -217,7 +219,7 @@ DEPLOY_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ACTIVE_SLOT=${ROLLBACK_SLOT}
 PREVIOUS_SLOT=${CURRENT_SLOT}
 IMAGE_TAG=${ROLLBACK_TAG}
-PREVIOUS_IMAGE_TAG=${IMAGE_TAG}
+PREVIOUS_IMAGE_TAG=${FAILED_IMAGE_TAG}
 GIT_SHA=${PREVIOUS_GIT_SHA:-unknown}
 PREVIOUS_GIT_SHA=${GIT_SHA:-unknown}
 DEPLOY_STATUS=rollback

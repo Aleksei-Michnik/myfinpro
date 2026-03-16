@@ -92,7 +92,10 @@ fi
 log "Current active slot: ${CURRENT_SLOT}"
 log "Deploying to slot:   ${NEXT_SLOT}"
 
-# Load previous deployment metadata (for tracking previous image tag)
+# Save intended deployment tag before sourcing metadata (which may overwrite IMAGE_TAG)
+_DEPLOY_IMAGE_TAG="$IMAGE_TAG"
+_DEPLOY_GIT_SHA="$GIT_SHA"
+
 PREV_IMAGE_TAG=""
 PREV_GIT_SHA=""
 if [ -f "$METADATA_FILE" ]; then
@@ -101,6 +104,10 @@ if [ -f "$METADATA_FILE" ]; then
   PREV_IMAGE_TAG="${IMAGE_TAG:-}"
   PREV_GIT_SHA="${GIT_SHA:-}"
 fi
+
+# Restore the intended deployment values (overwritten by source)
+IMAGE_TAG="$_DEPLOY_IMAGE_TAG"
+GIT_SHA="$_DEPLOY_GIT_SHA"
 
 # Export variables needed by compose files
 export DEPLOY_SLOT="$NEXT_SLOT"
