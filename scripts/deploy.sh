@@ -94,7 +94,7 @@ log "Deploying to slot:   ${NEXT_SLOT}"
 
 # Save intended deployment tag before sourcing metadata (which may overwrite IMAGE_TAG)
 _DEPLOY_IMAGE_TAG="$IMAGE_TAG"
-_DEPLOY_GIT_SHA="$GIT_SHA"
+_DEPLOY_GIT_SHA="${GIT_SHA:-}"
 
 PREV_IMAGE_TAG=""
 PREV_GIT_SHA=""
