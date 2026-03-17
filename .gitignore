@@ -6,6 +6,7 @@ node_modules/
 dist/
 .next/
 out/
+*.tsbuildinfo
 
 # ── Environment files ──
 .env
@@ -20,6 +21,8 @@ out/
 # ── IDE ──
 .idea/
 .vscode/
+.kilocode/
+.kilocodemodes
 *.swp
 *.swo
 
