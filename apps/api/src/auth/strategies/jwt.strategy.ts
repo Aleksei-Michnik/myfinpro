@@ -10,9 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const secret = configService.get<string>('JWT_SECRET');
     const nodeEnv = configService.get<string>('NODE_ENV', 'development');
     if (!secret && nodeEnv !== 'development' && nodeEnv !== 'test') {
-      throw new Error(
-        'JWT_SECRET environment variable is required in staging/production',
-      );
+      throw new Error('JWT_SECRET environment variable is required in staging/production');
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

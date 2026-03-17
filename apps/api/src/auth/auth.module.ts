@@ -22,9 +22,7 @@ import { LocalStrategy } from './strategies/local.strategy';
         const secret = configService.get<string>('JWT_SECRET');
         const nodeEnv = configService.get<string>('NODE_ENV', 'development');
         if (!secret && nodeEnv !== 'development' && nodeEnv !== 'test') {
-          throw new Error(
-            'JWT_SECRET environment variable is required in staging/production',
-          );
+          throw new Error('JWT_SECRET environment variable is required in staging/production');
         }
         if (!secret) {
           // Only reachable in development/test — never in deployed environments
