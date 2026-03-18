@@ -194,16 +194,33 @@ else
 
   # Check if this is a baseline issue — database has pre-existing tables
   # but no migration history. Prisma outputs "schema is not empty" and
-  # links to the baseline docs when this happens
+  # links to the baseline docs when this happens.
   if echo "$MIGRATE_OUTPUT" | grep -qi "not empty\|baseline"; then
     log "Baseline issue detected — database has pre-existing tables without migration history."
-    log "Resetting database for clean Prisma migration..."
+    log "Dropping pre-existing tables for clean Prisma migration..."
     log "  (Safe: no user data exists in pre-Prisma bootstrap phase)"
 
-    if docker exec "$API_CONTAINER" npx prisma migrate reset --force --skip-seed --skip-generate 2>&1 | tee -a "$LOG_FILE"; then
-      info "Database reset and all migrations applied from scratch (baseline complete)."
+    # Drop all existing tables (including _prisma_migrations if partially created)
+    # so prisma migrate deploy can run from scratch.
+    # We use prisma db execute to run raw SQL — avoids needing mysql client.
+    docker exec "$API_CONTAINER" sh -c '
+      echo "SET FOREIGN_KEY_CHECKS=0;" > /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS health_checks;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS refresh_tokens;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS audit_logs;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS users;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS _prisma_migrations;" >> /tmp/drop_tables.sql
+      echo "SET FOREIGN_KEY_CHECKS=1;" >> /tmp/drop_tables.sql
+      npx prisma db execute --stdin < /tmp/drop_tables.sql
+    ' 2>&1 | tee -a "$LOG_FILE" || {
+      error "Failed to drop pre-existing tables."
+    }
+
+    # Now run prisma migrate deploy on the clean database
+    if docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE"; then
+      info "Database baseline complete — all migrations applied from scratch."
     else
-      error "Prisma migrate reset also failed! Database may need manual intervention."
+      error "Prisma migrate deploy failed even after dropping tables! Manual intervention needed."
     fi
   else
     warn "Migration failure is NOT a baseline issue — investigate manually."
