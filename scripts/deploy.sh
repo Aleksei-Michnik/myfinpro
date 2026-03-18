@@ -179,20 +179,25 @@ sleep 5
 
 API_CONTAINER="${CONTAINER_PREFIX}-api-${NEXT_SLOT}"
 
-# Try standard incremental migration first
-if docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE"; then
+# Capture migration output for error analysis (temporarily disable errexit)
+set +e
+MIGRATE_OUTPUT=$(docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1)
+MIGRATE_EXIT=$?
+set -e
+
+echo "$MIGRATE_OUTPUT" | tee -a "$LOG_FILE"
+
+if [ $MIGRATE_EXIT -eq 0 ]; then
   info "Database migrations applied successfully."
 else
-  warn "prisma migrate deploy failed — checking migration state..."
+  warn "prisma migrate deploy failed (exit code: $MIGRATE_EXIT)"
 
-  # Check if this is a baseline issue (no _prisma_migrations table)
-  # This happens when the database was created before Prisma was introduced
-  # (e.g., Phase 0 had manual table creation, now Phase 1 uses Prisma)
-  MIGRATE_STATUS=$(docker exec "$API_CONTAINER" npx prisma migrate status 2>&1) || true
-
-  if echo "$MIGRATE_STATUS" | grep -qi "not been created yet\|does not exist"; then
-    log "No Prisma migration tracking table found — database predates Prisma."
-    log "Resetting database for clean Prisma migration baseline..."
+  # Check if this is a baseline issue — database has pre-existing tables
+  # but no migration history. Prisma outputs "schema is not empty" and
+  # links to the baseline docs when this happens
+  if echo "$MIGRATE_OUTPUT" | grep -qi "not empty\|baseline"; then
+    log "Baseline issue detected — database has pre-existing tables without migration history."
+    log "Resetting database for clean Prisma migration..."
     log "  (Safe: no user data exists in pre-Prisma bootstrap phase)"
 
     if docker exec "$API_CONTAINER" npx prisma migrate reset --force --skip-seed --skip-generate 2>&1 | tee -a "$LOG_FILE"; then
@@ -202,7 +207,6 @@ else
     fi
   else
     warn "Migration failure is NOT a baseline issue — investigate manually."
-    echo "$MIGRATE_STATUS" | tee -a "$LOG_FILE"
   fi
 fi
 
