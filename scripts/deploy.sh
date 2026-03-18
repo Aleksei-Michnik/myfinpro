@@ -173,13 +173,40 @@ docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
 
 # ─── Step 4.5: Run database migrations ──────────────────────────────────────
 
-log "Running database migrations (prisma migrate deploy)..."
+log "Running database migrations..."
 # Wait a few seconds for the API container to start
 sleep 5
-docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE" || {
-  warn "Prisma migrate deploy failed — check migration status."
-}
-info "Database migrations complete."
+
+API_CONTAINER="${CONTAINER_PREFIX}-api-${NEXT_SLOT}"
+
+# Try standard incremental migration first
+if docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE"; then
+  info "Database migrations applied successfully."
+else
+  warn "prisma migrate deploy failed — checking migration state..."
+
+  # Check if this is a baseline issue (no _prisma_migrations table)
+  # This happens when the database was created before Prisma was introduced
+  # (e.g., Phase 0 had manual table creation, now Phase 1 uses Prisma)
+  MIGRATE_STATUS=$(docker exec "$API_CONTAINER" npx prisma migrate status 2>&1) || true
+
+  if echo "$MIGRATE_STATUS" | grep -qi "not been created yet\|does not exist"; then
+    log "No Prisma migration tracking table found — database predates Prisma."
+    log "Resetting database for clean Prisma migration baseline..."
+    log "  (Safe: no user data exists in pre-Prisma bootstrap phase)"
+
+    if docker exec "$API_CONTAINER" npx prisma migrate reset --force --skip-seed --skip-generate 2>&1 | tee -a "$LOG_FILE"; then
+      info "Database reset and all migrations applied from scratch (baseline complete)."
+    else
+      error "Prisma migrate reset also failed! Database may need manual intervention."
+    fi
+  else
+    warn "Migration failure is NOT a baseline issue — investigate manually."
+    echo "$MIGRATE_STATUS" | tee -a "$LOG_FILE"
+  fi
+fi
+
+info "Database migration step complete."
 
 # ─── Step 5: Wait for health checks ─────────────────────────────────────────
 
