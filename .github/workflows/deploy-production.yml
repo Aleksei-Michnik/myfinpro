@@ -306,8 +306,10 @@ jobs:
             # Stop any old per-environment nginx that might hold port 80
             docker stop myfinpro-prod-nginx myfinpro-staging-nginx 2>/dev/null || true
             docker rm myfinpro-prod-nginx myfinpro-staging-nginx 2>/dev/null || true
-            # Recreate shared nginx (handles config changes + port conflicts)
-            docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml up -d --force-recreate
+            # Start shared nginx if not running (don't force-recreate — that
+            # breaks DNS resolution for existing app containers). Config
+            # changes are picked up via nginx -s reload in deploy.sh.
+            docker compose -p myfinpro-shared -f docker-compose.shared-nginx.yml up -d
             cd /opt/myfinpro/production
 
             echo "── Ensuring infrastructure is running ──"

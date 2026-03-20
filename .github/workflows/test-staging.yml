@@ -39,6 +39,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Wait for API to be healthy
+        env:
+          STAGING_API_URL: https://${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}/api/v1
+        run: |
+          echo "⏳ Waiting for staging API to become healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_API_URL/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ API is healthy (attempt $i)"
+              exit 0
+            fi
+            echo "  Attempt $i/30: HTTP $STATUS — waiting 10s..."
+            sleep 10
+          done
+          echo "⚠️ API did not become healthy after 5 minutes, proceeding with tests anyway"
+
       - name: Run API staging tests
         env:
           STAGING_API_URL: https://${{ secrets.CLOUDFLARE_STAGING_SUBDOMAIN }}/api/v1

@@ -287,7 +287,7 @@ log "Allowing in-flight requests to drain (5s)..."
 sleep 5
 
 log "Verifying deployment through Nginx..."
-VERIFY_RETRIES=10
+VERIFY_RETRIES=3
 VERIFY_OK=false
 for i in $(seq 1 "$VERIFY_RETRIES"); do
   if curl -sf -H "Host: ${SERVER_NAME}" "http://localhost/api/v1/health" > /dev/null 2>&1; then
@@ -295,7 +295,7 @@ for i in $(seq 1 "$VERIFY_RETRIES"); do
     break
   fi
   log "  Health check attempt $i/${VERIFY_RETRIES}..."
-  sleep 3
+  sleep 5
 done
 
 if [ "$VERIFY_OK" = false ]; then
