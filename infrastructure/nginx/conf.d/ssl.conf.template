@@ -12,13 +12,15 @@
 #   Enable SSL block after installing origin certificates.
 
 # ─── Upstreams — point to the active blue/green slot ───
+# Use environment-prefixed aliases to avoid DNS collisions when
+# Nginx is on both staging and production networks.
 
 upstream ${ENVIRONMENT}_api {
-    server api-${ACTIVE_SLOT}:3001;
+    server ${ENVIRONMENT}-api-${ACTIVE_SLOT}:3001;
 }
 
 upstream ${ENVIRONMENT}_web {
-    server web-${ACTIVE_SLOT}:3000;
+    server ${ENVIRONMENT}-web-${ACTIVE_SLOT}:3000;
 }
 
 # ─── HTTP Server ───
