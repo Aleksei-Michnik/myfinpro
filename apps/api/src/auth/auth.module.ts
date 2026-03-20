@@ -18,12 +18,25 @@ import { LocalStrategy } from './strategies/local.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService): JwtModuleOptions => ({
-        secret: configService.get<string>('JWT_ACCESS_SECRET', 'dev-access-secret-change-me'),
-        signOptions: {
-          expiresIn: configService.get('JWT_ACCESS_EXPIRATION', '15m'),
-        },
-      }),
+      useFactory: (configService: ConfigService): JwtModuleOptions => {
+        const secret = configService.get<string>('JWT_SECRET');
+        const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+        if (!secret && nodeEnv !== 'development' && nodeEnv !== 'test') {
+          throw new Error('JWT_SECRET environment variable is required in staging/production');
+        }
+        if (!secret) {
+          // Only reachable in development/test — never in deployed environments
+          const fallback = 'dev-only-jwt-secret-DO-NOT-USE-IN-PRODUCTION';
+          return {
+            secret: fallback,
+            signOptions: { expiresIn: configService.get('JWT_EXPIRATION', '15m') },
+          };
+        }
+        return {
+          secret,
+          signOptions: { expiresIn: configService.get('JWT_EXPIRATION', '15m') },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

@@ -94,7 +94,7 @@ log "Deploying to slot:   ${NEXT_SLOT}"
 
 # Save intended deployment tag before sourcing metadata (which may overwrite IMAGE_TAG)
 _DEPLOY_IMAGE_TAG="$IMAGE_TAG"
-_DEPLOY_GIT_SHA="$GIT_SHA"
+_DEPLOY_GIT_SHA="${GIT_SHA:-}"
 
 PREV_IMAGE_TAG=""
 PREV_GIT_SHA=""
@@ -168,18 +168,68 @@ info "Infrastructure services are healthy."
 # ─── Step 4: Start new slot ─────────────────────────────────────────────────
 
 log "Starting new slot: ${NEXT_SLOT}..."
+# --force-recreate ensures containers use the freshly pulled image,
+# even if Docker thinks the config hasn't changed.
 docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
-  -f "$APP_COMPOSE" up -d
+  -f "$APP_COMPOSE" up -d --force-recreate
 
 # ─── Step 4.5: Run database migrations ──────────────────────────────────────
 
-log "Running database migrations (prisma migrate deploy)..."
+log "Running database migrations..."
 # Wait a few seconds for the API container to start
 sleep 5
-docker exec "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE" || {
-  warn "Prisma migrate deploy failed — check migration status."
-}
-info "Database migrations complete."
+
+API_CONTAINER="${CONTAINER_PREFIX}-api-${NEXT_SLOT}"
+
+# Capture migration output for error analysis (temporarily disable errexit)
+set +e
+MIGRATE_OUTPUT=$(docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1)
+MIGRATE_EXIT=$?
+set -e
+
+echo "$MIGRATE_OUTPUT" | tee -a "$LOG_FILE"
+
+if [ $MIGRATE_EXIT -eq 0 ]; then
+  info "Database migrations applied successfully."
+else
+  warn "prisma migrate deploy failed (exit code: $MIGRATE_EXIT)"
+
+  # Check if this is a baseline issue — database has pre-existing tables
+  # but no migration history. Prisma outputs "schema is not empty" and
+  # links to the baseline docs when this happens.
+  if echo "$MIGRATE_OUTPUT" | grep -qi "not empty\|baseline"; then
+    log "Baseline issue detected — database has pre-existing tables without migration history."
+    log "Dropping pre-existing tables for clean Prisma migration..."
+    log "  (Safe: no user data exists in pre-Prisma bootstrap phase)"
+
+    # Drop all existing tables (including _prisma_migrations if partially created)
+    # so prisma migrate deploy can run from scratch.
+    # We use prisma db execute to run raw SQL — avoids needing mysql client.
+    docker exec "$API_CONTAINER" sh -c '
+      echo "SET FOREIGN_KEY_CHECKS=0;" > /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS health_checks;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS refresh_tokens;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS audit_logs;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS users;" >> /tmp/drop_tables.sql
+      echo "DROP TABLE IF EXISTS _prisma_migrations;" >> /tmp/drop_tables.sql
+      echo "SET FOREIGN_KEY_CHECKS=1;" >> /tmp/drop_tables.sql
+      npx prisma db execute --stdin < /tmp/drop_tables.sql
+    ' 2>&1 | tee -a "$LOG_FILE" || {
+      error "Failed to drop pre-existing tables."
+    }
+
+    # Now run prisma migrate deploy on the clean database
+    if docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE"; then
+      info "Database baseline complete — all migrations applied from scratch."
+    else
+      error "Prisma migrate deploy failed even after dropping tables! Manual intervention needed."
+    fi
+  else
+    warn "Migration failure is NOT a baseline issue — investigate manually."
+  fi
+fi
+
+info "Database migration step complete."
 
 # ─── Step 5: Wait for health checks ─────────────────────────────────────────
 
@@ -187,6 +237,10 @@ log "Waiting for new slot health checks..."
 wait_for_container_health "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 90
 wait_for_container_health "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 90
 info "New slot ${NEXT_SLOT} is healthy!"
+
+# Dump API container startup logs for diagnostics
+log "API container startup logs (last 30 lines):"
+docker logs --tail 30 "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 2>&1 | tee -a "$LOG_FILE" || true
 
 # ─── Step 6: Switch shared Nginx to new slot ─────────────────────────────────
 
