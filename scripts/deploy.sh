@@ -168,8 +168,10 @@ info "Infrastructure services are healthy."
 # ─── Step 4: Start new slot ─────────────────────────────────────────────────
 
 log "Starting new slot: ${NEXT_SLOT}..."
+# --force-recreate ensures containers use the freshly pulled image,
+# even if Docker thinks the config hasn't changed.
 docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
-  -f "$APP_COMPOSE" up -d
+  -f "$APP_COMPOSE" up -d --force-recreate
 
 # ─── Step 4.5: Run database migrations ──────────────────────────────────────
 
@@ -235,6 +237,10 @@ log "Waiting for new slot health checks..."
 wait_for_container_health "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 90
 wait_for_container_health "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 90
 info "New slot ${NEXT_SLOT} is healthy!"
+
+# Dump API container startup logs for diagnostics
+log "API container startup logs (last 30 lines):"
+docker logs --tail 30 "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" 2>&1 | tee -a "$LOG_FILE" || true
 
 # ─── Step 6: Switch shared Nginx to new slot ─────────────────────────────────
 
