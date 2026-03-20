@@ -171,7 +171,7 @@ describe('TokenService', () => {
         httpOnly: true,
         secure: false, // NODE_ENV is 'test', not 'production'
         sameSite: 'strict',
-        path: '/api/v1/auth',
+        path: '/api',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
     });
@@ -212,7 +212,7 @@ describe('TokenService', () => {
         httpOnly: true,
         secure: false,
         sameSite: 'strict',
-        path: '/api/v1/auth',
+        path: '/api',
       });
     });
   });

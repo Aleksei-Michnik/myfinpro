@@ -35,7 +35,7 @@ export class TokenService {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
       sameSite: 'strict',
-      path: '/api/v1/auth',
+      path: '/api',
       maxAge,
     });
   }
@@ -45,7 +45,7 @@ export class TokenService {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
       sameSite: 'strict',
-      path: '/api/v1/auth',
+      path: '/api',
     });
   }
 
