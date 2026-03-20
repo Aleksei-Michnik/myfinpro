@@ -30,7 +30,7 @@
     "@myfinpro/eslint-config": "workspace:*",
     "@myfinpro/tsconfig": "workspace:*",
     "@playwright/test": "^1.58.2",
-    "@tailwindcss/postcss": "^4.2.1",
+    "@tailwindcss/postcss": "^4.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.5.0",
