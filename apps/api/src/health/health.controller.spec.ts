@@ -17,7 +17,7 @@ describe('HealthController', () => {
 
   const mockMemoryHealthIndicator = {
     isHealthy: jest.fn().mockResolvedValue({
-      memory: { status: 'up', heapUsedMB: 50, heapTotalMB: 200, rssMB: 100, usagePercent: '25%' },
+      memory: { status: 'up', heapUsedMB: 50, heapTotalMB: 200, rssMB: 100, thresholdMB: 512 },
     }),
   };
 

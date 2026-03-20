@@ -29,7 +29,9 @@ export class HealthController {
   check(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.isHealthy('database'),
-      () => this.memory.isHealthy('memory', 95),
+      // Use RSS-based threshold (512MB) instead of heap % which fluctuates
+      // with V8 GC cycles and causes false positives at 95% heap usage
+      () => this.memory.isHealthy('memory', 512),
     ]);
   }
 
@@ -39,7 +41,7 @@ export class HealthController {
   checkDetails(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.isHealthy('database'),
-      () => this.memory.isHealthy('memory', 95),
+      () => this.memory.isHealthy('memory', 256),
       () => this.redis.isHealthy('redis'),
       () =>
         this.disk.checkStorage('disk', {
