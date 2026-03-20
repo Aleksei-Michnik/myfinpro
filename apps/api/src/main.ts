@@ -13,8 +13,11 @@ import { setupSwagger } from './config/swagger.config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  // ── Trust proxy for CloudFlare ──
+  // ── Disable X-Powered-By header (security best practice) ──
   const httpAdapter = app.getHttpAdapter();
+  httpAdapter.getInstance().disable('x-powered-by');
+
+  // ── Trust proxy for CloudFlare ──
   // Cloudflare IPv4 ranges: https://www.cloudflare.com/ips-v4/
   // Cloudflare IPv6 ranges: https://www.cloudflare.com/ips-v6/
   httpAdapter
