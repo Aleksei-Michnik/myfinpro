@@ -232,6 +232,22 @@ jobs:
             echo "── Ensuring infrastructure is running ──"
             docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d
 
+            echo "── Waiting for MySQL to be healthy ──"
+            for i in $(seq 1 30); do
+              if docker exec myfinpro-staging-mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
+                echo "✅ MySQL is healthy (attempt $i)"
+                break
+              fi
+              echo "  MySQL not ready yet (attempt $i/30), waiting 5s..."
+              sleep 5
+            done
+            # Final check
+            if ! docker exec myfinpro-staging-mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
+              echo "⚠️ MySQL still not healthy after 150s — restarting..."
+              docker restart myfinpro-staging-mysql
+              sleep 15
+            fi
+
             echo "── Deploying application with blue-green strategy ──"
             chmod +x scripts/deploy.sh scripts/rollback.sh scripts/cleanup-images.sh
             bash scripts/deploy.sh staging "$IMAGE_TAG"
