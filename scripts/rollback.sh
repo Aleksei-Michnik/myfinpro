@@ -49,12 +49,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
+# ─── Logging (best-effort: never fail on disk-full) ──────────────────────────
 
-log()   { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE"; }
-info()  { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE"; }
-warn()  { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE"; }
-error() { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE"; }
+log()   { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*"; }
+info()  { echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "${GREEN}[$(date +%H:%M:%S)] ✅${NC} $*"; }
+warn()  { echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "${YELLOW}[$(date +%H:%M:%S)] ⚠️${NC}  $*"; }
+error() { echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "${RED}[$(date +%H:%M:%S)] ❌${NC} $*"; }
 
 # ─── Health check helper ────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ wait_for_container_health() {
         ;;
       unhealthy)
         error "${container} is unhealthy!"
-        docker logs --tail 20 "$container" 2>&1 | tee -a "$LOG_FILE" || true
+        docker logs --tail 20 "$container" 2>&1 | tee -a "$LOG_FILE" 2>/dev/null || true
         return 1
         ;;
     esac
@@ -92,6 +92,13 @@ wait_for_container_health() {
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 cd "$DEPLOY_DIR" || { echo "❌ Deploy directory $DEPLOY_DIR not found."; exit 1; }
+
+# Emergency disk cleanup — rollback often runs when deploy failed due to full disk
+echo "Emergency cleanup: freeing disk space for rollback..."
+ls -t "${DEPLOY_DIR}"/deploy-*.log 2>/dev/null | tail -n +3 | xargs rm -f 2>/dev/null || true
+ls -t "${DEPLOY_DIR}"/rollback-*.log 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
+docker image prune -f 2>/dev/null || true
+docker container prune -f 2>/dev/null || true
 
 log "═══════════════════════════════════════════════════════════════"
 log "  MyFinPro Rollback — ${ENVIRONMENT^^}"
@@ -167,7 +174,7 @@ envsubst '$SERVER_NAME $ACTIVE_SLOT $ENVIRONMENT' \
   < infrastructure/nginx/conf.d/ssl.conf.template \
   > "${SHARED_DIR}/nginx/conf.d/${ENVIRONMENT}.conf"
 
-docker exec "${NGINX_CONTAINER}" nginx -t 2>&1 | tee -a "$LOG_FILE" || {
+docker exec "${NGINX_CONTAINER}" nginx -t 2>&1 | tee -a "$LOG_FILE" 2>/dev/null || {
   error "Nginx config test failed during rollback!"
   exit 1
 }

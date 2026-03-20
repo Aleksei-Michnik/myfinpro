@@ -114,6 +114,17 @@ export DEPLOY_SLOT="$NEXT_SLOT"
 export IMAGE_TAG
 export ACTIVE_SLOT="$NEXT_SLOT"
 
+# ─── Step 1.5: Pre-deploy cleanup (free disk space) ─────────────────────────
+
+log "Pre-deploy cleanup: freeing disk space..."
+# Remove old deploy logs (keep last 5)
+ls -t "${DEPLOY_DIR}"/deploy-*.log 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+ls -t "${DEPLOY_DIR}"/rollback-*.log 2>/dev/null | tail -n +3 | xargs rm -f 2>/dev/null || true
+# Prune dangling images and stopped containers
+docker image prune -f 2>/dev/null || true
+docker container prune -f 2>/dev/null || true
+info "Pre-deploy cleanup complete."
+
 # ─── Step 2: Pull new images ────────────────────────────────────────────────
 
 log "Pulling new images (tag: ${IMAGE_TAG})..."
