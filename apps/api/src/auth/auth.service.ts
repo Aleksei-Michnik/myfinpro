@@ -203,7 +203,16 @@ export class AuthService {
 
     this.logger.log(`Tokens refreshed for user: ${user.email} (${user.id})`);
 
-    return { accessToken };
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        defaultCurrency: user.defaultCurrency,
+        locale: user.locale,
+      },
+      accessToken,
+    };
   }
 
   async logout(refreshToken: string, response: Response, userId?: string) {

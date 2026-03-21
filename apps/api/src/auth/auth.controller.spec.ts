@@ -181,7 +181,16 @@ describe('AuthController', () => {
         cookies: { refresh_token: 'valid-refresh-token' },
       } as unknown as Request;
 
-      const refreshResult = { accessToken: 'new-access-token' };
+      const refreshResult = {
+        user: {
+          id: 'test-uuid',
+          email: 'test@example.com',
+          name: 'Test User',
+          defaultCurrency: 'USD',
+          locale: 'en',
+        },
+        accessToken: 'new-access-token',
+      };
       mockAuthService.refreshTokens.mockResolvedValue(refreshResult);
 
       const result = await controller.refresh(mockResponse, requestWithCookie);

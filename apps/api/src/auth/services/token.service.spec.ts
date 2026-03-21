@@ -156,28 +156,37 @@ describe('TokenService', () => {
   });
 
   describe('setRefreshTokenCookie()', () => {
-    it('should call response.cookie with correct params', () => {
-      const mockResponseObj = { cookie: jest.fn() };
+    it('should call response.cookie with correct params and clear legacy cookie', () => {
+      const mockResponseObj = { cookie: jest.fn(), clearCookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
-        if (key === 'NODE_ENV') return 'test';
+        if (key === 'NODE_ENV') return 'staging';
         if (key === 'JWT_REFRESH_EXPIRATION') return '7d';
         return defaultValue;
       });
 
       service.setRefreshTokenCookie(mockResponseObj as unknown as Response, 'test-refresh-token');
 
-      expect(mockResponseObj.cookie).toHaveBeenCalledWith('refresh_token', 'test-refresh-token', {
+      // Should clear legacy cookie path first
+      expect(mockResponseObj.clearCookie).toHaveBeenCalledWith('refresh_token', {
         httpOnly: true,
-        secure: false, // NODE_ENV is 'test', not 'production'
+        secure: true, // NODE_ENV is not 'development'
         sameSite: 'strict',
         path: '/api/v1/auth',
+      });
+
+      // Should set the new cookie
+      expect(mockResponseObj.cookie).toHaveBeenCalledWith('refresh_token', 'test-refresh-token', {
+        httpOnly: true,
+        secure: true, // NODE_ENV is not 'development'
+        sameSite: 'strict',
+        path: '/api',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
     });
 
     it('should set secure=true in production', () => {
-      const mockResponseObj = { cookie: jest.fn() };
+      const mockResponseObj = { cookie: jest.fn(), clearCookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
         if (key === 'NODE_ENV') return 'production';
@@ -195,25 +204,56 @@ describe('TokenService', () => {
         }),
       );
     });
+
+    it('should set secure=false in development', () => {
+      const mockResponseObj = { cookie: jest.fn(), clearCookie: jest.fn() };
+
+      mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
+        if (key === 'NODE_ENV') return 'development';
+        if (key === 'JWT_REFRESH_EXPIRATION') return '7d';
+        return defaultValue;
+      });
+
+      service.setRefreshTokenCookie(mockResponseObj as unknown as Response, 'test-refresh-token');
+
+      expect(mockResponseObj.cookie).toHaveBeenCalledWith(
+        'refresh_token',
+        'test-refresh-token',
+        expect.objectContaining({
+          secure: false,
+        }),
+      );
+    });
   });
 
   describe('clearRefreshTokenCookie()', () => {
-    it('should call response.clearCookie with correct params', () => {
+    it('should clear both legacy and current cookie paths', () => {
       const mockResponseObj = { clearCookie: jest.fn() };
 
       mockConfigService.get.mockImplementation((key: string, defaultValue = '') => {
-        if (key === 'NODE_ENV') return 'test';
+        if (key === 'NODE_ENV') return 'staging';
         return defaultValue;
       });
 
       service.clearRefreshTokenCookie(mockResponseObj as unknown as Response);
 
+      // Should clear legacy path
       expect(mockResponseObj.clearCookie).toHaveBeenCalledWith('refresh_token', {
         httpOnly: true,
-        secure: false,
+        secure: true,
         sameSite: 'strict',
         path: '/api/v1/auth',
       });
+
+      // Should clear current path
+      expect(mockResponseObj.clearCookie).toHaveBeenCalledWith('refresh_token', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'strict',
+        path: '/api',
+      });
+
+      expect(mockResponseObj.clearCookie).toHaveBeenCalledTimes(2);
     });
   });
 });

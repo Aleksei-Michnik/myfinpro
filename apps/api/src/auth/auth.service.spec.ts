@@ -492,7 +492,7 @@ describe('AuthService', () => {
       isActive: true,
     };
 
-    it('should rotate token and return new access token', async () => {
+    it('should rotate token and return new access token with user data', async () => {
       mockRefreshTokenService.rotateRefreshToken.mockResolvedValue({
         userId: mockUser.id,
         newRefreshToken: 'new-refresh-token',
@@ -517,6 +517,13 @@ describe('AuthService', () => {
         'new-refresh-token',
       );
       expect(result.accessToken).toBe('mock-jwt-access-token');
+      expect(result.user).toEqual({
+        id: mockUser.id,
+        email: mockUser.email,
+        name: mockUser.name,
+        defaultCurrency: mockUser.defaultCurrency,
+        locale: mockUser.locale,
+      });
     });
 
     it('should throw UnauthorizedException with REFRESH_FAILED errorCode if user not found', async () => {

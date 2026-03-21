@@ -31,19 +31,47 @@ export class TokenService {
 
   setRefreshTokenCookie(response: Response, token: string): void {
     const maxAge = this.getRefreshExpirationMs();
+    const secure = this.configService.get<string>('NODE_ENV') !== 'development';
+
+    // Clear legacy cookie path first — before the cookie-path fix,
+    // cookies were set with path '/api/v1/auth'. Browsers with both
+    // the old (more-specific) and new cookie send the old one first,
+    // triggering token-reuse detection. Clearing it ensures only the
+    // correct cookie is sent on subsequent requests.
+    this.clearLegacyCookie(response, secure);
+
     response.cookie('refresh_token', token, {
       httpOnly: true,
-      secure: this.configService.get<string>('NODE_ENV') === 'production',
+      secure,
       sameSite: 'strict',
-      path: '/api/v1/auth',
+      path: '/api',
       maxAge,
     });
   }
 
   clearRefreshTokenCookie(response: Response): void {
+    const secure = this.configService.get<string>('NODE_ENV') !== 'development';
+
+    // Clear both legacy and current cookie paths
+    this.clearLegacyCookie(response, secure);
+
     response.clearCookie('refresh_token', {
       httpOnly: true,
-      secure: this.configService.get<string>('NODE_ENV') === 'production',
+      secure,
+      sameSite: 'strict',
+      path: '/api',
+    });
+  }
+
+  /**
+   * Remove the refresh_token cookie that was set with the old
+   * path '/api/v1/auth' (before the cookie-path fix).
+   * Safe to call even when the legacy cookie doesn't exist.
+   */
+  private clearLegacyCookie(response: Response, secure: boolean): void {
+    response.clearCookie('refresh_token', {
+      httpOnly: true,
+      secure,
       sameSite: 'strict',
       path: '/api/v1/auth',
     });
