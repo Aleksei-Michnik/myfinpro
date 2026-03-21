@@ -179,6 +179,11 @@ info "Infrastructure services are healthy."
 # ─── Step 4: Start new slot ─────────────────────────────────────────────────
 
 log "Starting new slot: ${NEXT_SLOT}..."
+# Remove any stale containers from the target slot (e.g. leftover from
+# a previous failed deploy that left the slot in a half-created state).
+# 'down --remove-orphans' ensures no name conflicts when we 'up -d'.
+docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+  -f "$APP_COMPOSE" down --remove-orphans 2>/dev/null || true
 # --force-recreate ensures containers use the freshly pulled image,
 # even if Docker thinks the config hasn't changed.
 docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \

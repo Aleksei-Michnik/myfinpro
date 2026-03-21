@@ -144,6 +144,11 @@ log "Starting rollback slot: ${ROLLBACK_SLOT} (tag: ${ROLLBACK_TAG})..."
 export DEPLOY_SLOT="$ROLLBACK_SLOT"
 export IMAGE_TAG="$ROLLBACK_TAG"
 
+# Remove any stale containers from the rollback slot (e.g. leftover from
+# a previous failed deploy that left the slot in a half-created state).
+docker compose -p "myfinpro-${ENVIRONMENT}-${ROLLBACK_SLOT}" \
+  -f "$APP_COMPOSE" down --remove-orphans 2>/dev/null || true
+
 # Try to start — images should still be cached locally
 docker compose -p "myfinpro-${ENVIRONMENT}-${ROLLBACK_SLOT}" \
   -f "$APP_COMPOSE" up -d || {
