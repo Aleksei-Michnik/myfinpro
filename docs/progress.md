@@ -774,45 +774,54 @@ Phase 1 implements a complete authentication system with email/password registra
 After the 13 feature iterations were complete, several critical deployment issues were discovered and fixed during the staging/production deployment process:
 
 #### Fix: deploy.sh Variable Collision (commit 0721753)
+
 - **Problem**: `source .deploy-metadata` in [`scripts/deploy.sh`](scripts/deploy.sh:95) overwrote the `IMAGE_TAG` variable (set from CLI argument) with the previous deployment's tag, causing every deploy to pull stale Docker images
 - **Impact**: All Phase 1 deploys were silently deploying Phase 0 images — production showed no auth UI
 - **Fix**: Save `IMAGE_TAG` before sourcing metadata file, restore after
 - **Also fixed**: Similar collision in [`scripts/rollback.sh`](scripts/rollback.sh:116)
 
 #### Fix: Unbound GIT_SHA + JWT_SECRET Standardization (commit e2c6a16)
+
 - **Problem 1**: `_DEPLOY_GIT_SHA="$GIT_SHA"` crashed with `set -u` because `GIT_SHA` was never set before the metadata source
 - **Fix**: Changed to `"${GIT_SHA:-}"` safe parameter expansion
 - **Problem 2**: API code read `JWT_ACCESS_SECRET` but Docker compose and GitHub Actions passed `JWT_SECRET` — JWT signing silently fell back to hardcoded dev secret in production
 - **Fix**: Standardized on `JWT_SECRET` everywhere with strict validation (throws in staging/production if unset)
 
 #### Fix: ESLint Plugin Compatibility (commit 4222c8d)
+
 - **Problem**: `eslint-plugin-import` incompatible with ESLint 10 (`sourceCode.getTokenOrCommentBefore` removed)
 - **Fix**: Replaced with `eslint-plugin-import-x` (maintained ESLint 10 fork), eliminated 41 lint warnings
 
 #### Fix: Prisma Migration Baseline (commit 4473768)
+
 - **Problem**: Staging/production databases had Phase 0 tables created manually (no `_prisma_migrations` tracking table), so `prisma migrate deploy` failed with "schema is not empty"
 - **Fix**: Added auto-detection in [`scripts/deploy.sh`](scripts/deploy.sh:195) that drops pre-existing tables via raw SQL when baseline case is detected, then re-runs `prisma migrate deploy`
 - **Safety**: Only triggers when `_prisma_migrations` table doesn't exist (one-time setup)
 
 #### Fix: DNS Collision Between Staging and Production (commit 4473768)
+
 - **Problem**: Both staging and production containers registered the same Docker DNS aliases (`api-green`, `web-green`) on their respective networks. Since shared Nginx was on both networks, Docker DNS returned production container IPs for staging requests
 - **Fix**: Prefixed aliases with environment name: `staging-api-green`, `production-api-green`, etc. in [`docker-compose.staging.app.yml`](docker-compose.staging.app.yml), [`docker-compose.production.app.yml`](docker-compose.production.app.yml), and [`infrastructure/nginx/conf.d/ssl.conf.template`](infrastructure/nginx/conf.d/ssl.conf.template)
 
 #### Fix: Memory Health Check False Positives (commit 4473768)
+
 - **Problem**: V8's GC keeps heap at 90-95% between cycles, causing the 95% heap threshold to alternate between pass/fail
 - **Fix**: Switched from heap%-based to RSS-based memory check (512MB threshold) in [`apps/api/src/health/indicators/memory.indicator.ts`](apps/api/src/health/indicators/memory.indicator.ts)
 
 #### Fix: Silent Refresh — Missing User + Cookie Path (commits cb959dd, 1bb12c5)
+
 - **Problem 1**: `refreshTokens()` returned `{ accessToken }` without `user` object. Frontend expected `{ user, accessToken }` — after refresh, `isAuthenticated` evaluated to false (page refresh signed user out)
 - **Problem 2**: Refresh token cookie set with `path: '/api/v1/auth'` but nginx proxies to `/api/`, so browser didn't send cookie on proxied path
 - **Problem 3**: Legacy cookie with old path coexisted with new cookie — per RFC 6265, more-specific old path sent first, server saw revoked token, triggered reuse detection revoking all sessions
 - **Fix**: Added `user` to refresh response, changed cookie path to `/api`, added legacy cookie cleanup on every set/clear
 
 #### Fix: Nginx Force-Recreate Breaking DNS (commit 4473768)
+
 - **Problem**: `docker compose up -d --force-recreate` on shared Nginx destroyed its DNS cache
 - **Fix**: Removed `--force-recreate` from Nginx startup in both staging and production deploy workflows
 
 #### Other Improvements
+
 - Removed duplicate security headers from [`infrastructure/nginx/nginx.conf`](infrastructure/nginx/nginx.conf) (rely on NestJS Helmet)
 - Added explicit `app.disable('x-powered-by')` in [`apps/api/src/main.ts`](apps/api/src/main.ts)
 - Added health check wait-for-healthy step with retries in staging test workflow
@@ -822,14 +831,14 @@ After the 13 feature iterations were complete, several critical deployment issue
 
 ### Test Summary
 
-| Category           | Count    | Framework                 |
-| ------------------ | -------- | ------------------------- |
-| API Unit Tests     | 177      | Jest                      |
-| API Integration    | ~15      | Jest + Testcontainers     |
-| Web Unit Tests     | 138      | Vitest + Testing Library  |
-| Playwright E2E     | 50       | Playwright (5 browsers)   |
-| Shared Package     | 15       | Vitest                    |
-| **Total**          | **~395** |                           |
+| Category        | Count    | Framework                |
+| --------------- | -------- | ------------------------ |
+| API Unit Tests  | 177      | Jest                     |
+| API Integration | ~15      | Jest + Testcontainers    |
+| Web Unit Tests  | 138      | Vitest + Testing Library |
+| Playwright E2E  | 50       | Playwright (5 browsers)  |
+| Shared Package  | 15       | Vitest                   |
+| **Total**       | **~395** |                          |
 
 ### Security Measures
 
