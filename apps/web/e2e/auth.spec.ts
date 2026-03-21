@@ -81,4 +81,83 @@ test.describe('Authentication Flows', () => {
     await expect(nav.getByRole('link', { name: /sign in/i })).toBeVisible();
     await expect(nav.getByRole('link', { name: /sign up/i })).toBeVisible();
   });
+
+  test('should stay signed in after page refresh (silent refresh)', async ({ page }) => {
+    // Track whether user has "logged in" via mock
+    let isLoggedIn = false;
+
+    const mockUser = {
+      id: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+    };
+
+    // Mock refresh endpoint — returns 401 until login succeeds
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      if (isLoggedIn) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ user: mockUser, accessToken: 'refreshed-token' }),
+        });
+      } else {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'No refresh token provided' }),
+        });
+      }
+    });
+
+    // Mock login endpoint
+    await page.route('**/api/v1/auth/login', async (route) => {
+      isLoggedIn = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: mockUser, accessToken: 'mock-access-token' }),
+      });
+    });
+
+    // Mock logout (in case it fires during cleanup)
+    await page.route('**/api/v1/auth/logout', async (route) => {
+      isLoggedIn = false;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Logged out successfully' }),
+      });
+    });
+
+    // 1. Go to login page
+    await page.goto('/en/auth/login');
+    await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
+
+    // 2. Fill in credentials and submit
+    await page.getByLabel(/email/i).click();
+    await page.getByLabel(/email/i).pressSequentially('test@example.com');
+    await page.getByLabel(/password/i).click();
+    await page.getByLabel(/password/i).pressSequentially('Password123');
+    await page.getByRole('button', { name: /sign in/i }).click();
+
+    // 3. Should redirect to dashboard
+    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+
+    // 4. Should show authenticated user in header (desktop only — hidden on mobile)
+    const userNameEl = page.getByTestId('user-name');
+    // On mobile projects the element is hidden via CSS; check logout button instead
+    const logoutButton = page.getByRole('button', { name: /logout/i });
+    await expect(logoutButton).toBeVisible({ timeout: 5000 });
+
+    // 5. Reload the page — silent refresh should restore the session
+    await page.reload();
+
+    // 6. Should still be on dashboard (not redirected to login)
+    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+
+    // 7. Authenticated UI should still be visible
+    await expect(logoutButton).toBeVisible({ timeout: 5000 });
+  });
 });
