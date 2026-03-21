@@ -181,9 +181,11 @@ info "Infrastructure services are healthy."
 log "Starting new slot: ${NEXT_SLOT}..."
 # Remove any stale containers from the target slot (e.g. leftover from
 # a previous failed deploy that left the slot in a half-created state).
-# 'down --remove-orphans' ensures no name conflicts when we 'up -d'.
-docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
-  -f "$APP_COMPOSE" down --remove-orphans 2>/dev/null || true
+# We use docker rm -f by explicit container name because compose-based
+# cleanup fails when containers have mismatched project labels (e.g.
+# from an older deploy that used a different -p project name).
+log "Cleaning up stale ${NEXT_SLOT} containers (if any)..."
+docker rm -f "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 2>/dev/null || true
 # --force-recreate ensures containers use the freshly pulled image,
 # even if Docker thinks the config hasn't changed.
 docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
