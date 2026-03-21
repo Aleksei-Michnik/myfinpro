@@ -380,7 +380,7 @@ services:
 
 ```dockerfile
 # ───── Base Stage ─────
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 
@@ -406,7 +406,7 @@ COPY . .
 RUN pnpm --filter api run build
 
 # ───── Production Stage ─────
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
@@ -426,7 +426,7 @@ CMD ["node", "dist/main.js"]
 
 ```dockerfile
 # ───── Base Stage ─────
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 
@@ -452,7 +452,7 @@ COPY . .
 RUN pnpm --filter web run build
 
 # ───── Production Stage ─────
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
@@ -472,7 +472,7 @@ CMD ["pnpm", "run", "start"]
 
 ```dockerfile
 # ───── Base Stage ─────
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 

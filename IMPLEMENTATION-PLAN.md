@@ -739,14 +739,14 @@ Production Dockerfiles must follow these practices for minimal image size:
 - **Multi-stage builds**: Separate build stage from runtime stage
 - **Production deps only**: `pnpm install --frozen-lockfile --prod` in runtime stage
 - **No devDependencies**: Never copy full `node_modules` with devDependencies to production
-- **Minimal base image**: Use `node:20-alpine` for runtime
+- **Minimal base image**: Use `node:24-alpine` for runtime
 - **Layer caching**: Order Dockerfile commands for optimal cache reuse
 
 Example production Dockerfile pattern:
 
 ```dockerfile
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY pnpm-lock.yaml package.json ./
 RUN pnpm install --frozen-lockfile
@@ -754,7 +754,7 @@ COPY . .
 RUN pnpm run build
 
 # Runtime stage
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 COPY pnpm-lock.yaml package.json ./
 RUN pnpm install --frozen-lockfile --prod
