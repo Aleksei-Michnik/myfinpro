@@ -39,6 +39,7 @@ model User {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   refreshTokens   RefreshToken[]
+  oauthProviders  OAuthProvider[]
 
   @@index([email])
   @@index([createdAt])
@@ -77,4 +78,25 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ── Phase 2: OAuth models ──
+
+model OAuthProvider {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  provider   String   @db.VarChar(50)
+  providerId String   @map("provider_id") @db.VarChar(255)
+  userId     String   @map("user_id") @db.VarChar(36)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email      String?  @db.VarChar(255)
+  name       String?  @db.VarChar(255)
+  avatarUrl  String?  @map("avatar_url") @db.VarChar(500)
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@index([provider, email])
+  @@map("oauth_providers")
 }

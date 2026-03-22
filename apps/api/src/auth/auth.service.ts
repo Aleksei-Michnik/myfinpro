@@ -4,9 +4,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { TokenService } from './services/token.service';
+
+export interface GoogleProfile {
+  googleId: string;
+  email?: string;
+  name: string;
+  picture?: string;
+  emailVerified: boolean;
+}
 
 @Injectable()
 export class AuthService {
@@ -17,6 +26,7 @@ export class AuthService {
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly oauthService: OAuthService,
   ) {}
 
   async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
@@ -236,6 +246,110 @@ export class AuthService {
     this.logger.log(`User logged out${userId ? `: ${userId}` : ''}`);
 
     return { message: 'Logged out successfully' };
+  }
+
+  async findOrCreateGoogleUser(googleProfile: GoogleProfile): Promise<ValidatedUser> {
+    const { googleId, email, name, picture, emailVerified } = googleProfile;
+
+    // 1. Check if this Google account is already linked
+    const existingOAuth = await this.oauthService.findByProvider('google', googleId);
+    if (existingOAuth) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: existingOAuth.userId },
+      });
+      if (!user) {
+        throw new UnauthorizedException({
+          message: 'User not found',
+          errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+        });
+      }
+      if (!user.isActive) {
+        throw new UnauthorizedException({
+          message: 'Account is inactive',
+          errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
+        });
+      }
+      const { passwordHash, ...result } = user;
+      return result;
+    }
+
+    // 2. If email is verified, check if a user with this email already exists
+    if (email && emailVerified) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingUser) {
+        if (!existingUser.isActive) {
+          throw new UnauthorizedException({
+            message: 'Account is inactive',
+            errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
+          });
+        }
+
+        // Link Google to the existing user
+        await this.oauthService.linkToUser('google', googleId, existingUser.id, {
+          email,
+          name,
+          avatarUrl: picture,
+        });
+
+        this.logger.log(
+          `Google account linked to existing user: ${existingUser.email} (${existingUser.id})`,
+        );
+
+        const { passwordHash, ...result } = existingUser;
+        return result;
+      }
+    }
+
+    // 3. No user found — create new User + OAuthProvider in a transaction
+    if (!email || !emailVerified) {
+      throw new UnauthorizedException({
+        message: 'Google account email is not verified',
+        errorCode: AUTH_ERRORS.OAUTH_EMAIL_NOT_VERIFIED,
+      });
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash: null,
+          name: name || email.split('@')[0],
+          emailVerified: true,
+        },
+      });
+
+      await tx.oAuthProvider.create({
+        data: {
+          provider: 'google',
+          providerId: googleId,
+          userId: newUser.id,
+          email,
+          name,
+          avatarUrl: picture,
+        },
+      });
+
+      return newUser;
+    });
+
+    this.logger.log(`New user created via Google OAuth: ${result.email} (${result.id})`);
+
+    // Log audit event
+    await this.prisma.auditLog.create({
+      data: {
+        userId: result.id,
+        action: 'USER_REGISTERED_OAUTH',
+        entity: 'User',
+        entityId: result.id,
+        details: { email: result.email, provider: 'google' },
+      },
+    });
+
+    const { passwordHash, ...userWithoutPassword } = result;
+    return userWithoutPassword;
   }
 
   async getUser(userId: string) {
