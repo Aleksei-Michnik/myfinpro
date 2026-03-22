@@ -7,7 +7,6 @@ import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { TokenService } from './services/token.service';
 
 // Internal metadata keys used by @nestjs/throttler's @Throttle() decorator
 // The decorator concatenates the base key with the throttler name (e.g., 'default')
@@ -36,12 +35,6 @@ describe('AuthController', () => {
     }),
   };
 
-  const mockTokenService = {
-    generateAccessToken: jest.fn().mockReturnValue('mock-access-token'),
-    generateRefreshToken: jest.fn().mockReturnValue('mock-refresh-token'),
-    setRefreshTokenCookie: jest.fn(),
-  };
-
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
@@ -62,7 +55,6 @@ describe('AuthController', () => {
       providers: [
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: TokenService, useValue: mockTokenService },
       ],
     }).compile();
 

@@ -33,7 +33,6 @@ import { RegisterDto } from './dto/register.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { TokenService } from './services/token.service';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -43,7 +42,6 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-    private readonly tokenService: TokenService,
   ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
