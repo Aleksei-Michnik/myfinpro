@@ -165,10 +165,10 @@ GOOGLE_CALLBACK_URL=https://${SERVER_NAME}/api/v1/auth/google/callback
 
 Add to [`apps/api/package.json`](../apps/api/package.json):
 
-| Package                            | Purpose                    |
-| ---------------------------------- | -------------------------- |
-| `passport-google-oauth20`          | Passport Google strategy   |
-| `@types/passport-google-oauth20`   | TypeScript types (devDep)  |
+| Package                          | Purpose                   |
+| -------------------------------- | ------------------------- |
+| `passport-google-oauth20`        | Passport Google strategy  |
+| `@types/passport-google-oauth20` | TypeScript types (devDep) |
 
 ### 2.1e. Google Strategy
 
@@ -208,8 +208,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const googleProfile: GoogleProfile = {
       googleId: profile.id,
       email: profile.emails?.[0]?.value ?? '',
-      emailVerified: profile.emails?.[0]?.verified === 'true'
-        || (profile.emails?.[0] as Record<string, unknown>)?.verified === true,
+      emailVerified:
+        profile.emails?.[0]?.verified === 'true' ||
+        (profile.emails?.[0] as Record<string, unknown>)?.verified === true,
       name: profile.displayName ?? '',
       avatarUrl: profile.photos?.[0]?.value,
     };
@@ -220,15 +221,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
 
 ### Files Created/Modified
 
-| File | Change |
-| --- | --- |
-| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) | Add `OAuthProvider` model, add relation to `User` |
-| `apps/api/prisma/migrations/YYYYMMDD_phase2_oauth_provider/migration.sql` | New migration |
-| `apps/api/src/auth/strategies/google.strategy.ts` | New: Passport Google strategy |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add Google OAuth env vars |
-| [`.env.staging.template`](../.env.staging.template) | Add Google OAuth env vars |
-| [`.env.production.template`](../.env.production.template) | Add Google OAuth env vars |
-| [`apps/api/package.json`](../apps/api/package.json) | Add `passport-google-oauth20` + types |
+| File                                                                      | Change                                            |
+| ------------------------------------------------------------------------- | ------------------------------------------------- |
+| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma)       | Add `OAuthProvider` model, add relation to `User` |
+| `apps/api/prisma/migrations/YYYYMMDD_phase2_oauth_provider/migration.sql` | New migration                                     |
+| `apps/api/src/auth/strategies/google.strategy.ts`                         | New: Passport Google strategy                     |
+| [`apps/api/.env.example`](../apps/api/.env.example)                       | Add Google OAuth env vars                         |
+| [`.env.staging.template`](../.env.staging.template)                       | Add Google OAuth env vars                         |
+| [`.env.production.template`](../.env.production.template)                 | Add Google OAuth env vars                         |
+| [`apps/api/package.json`](../apps/api/package.json)                       | Add `passport-google-oauth20` + types             |
 
 ### Acceptance Criteria
 
@@ -368,7 +369,14 @@ export class OAuthService {
   }
 
   private async loginOAuthUser(
-    user: { id: string; email: string; name: string; defaultCurrency: string; locale: string; isActive: boolean },
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      defaultCurrency: string;
+      locale: string;
+      isActive: boolean;
+    },
     response: Response,
     ip?: string,
     userAgent?: string,
@@ -511,18 +519,20 @@ import { OAuthService } from './services/oauth.service';
     PrismaModule,
     ConfigModule, // ← Add if not already imported
     PassportModule,
-    JwtModule.registerAsync({ /* existing config */ }),
+    JwtModule.registerAsync({
+      /* existing config */
+    }),
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
-    OAuthService,         // ← New
+    OAuthService, // ← New
     PasswordService,
     TokenService,
     RefreshTokenService,
     LocalStrategy,
     JwtStrategy,
-    GoogleStrategy,       // ← New
+    GoogleStrategy, // ← New
   ],
   exports: [AuthService, OAuthService, PasswordService, TokenService, RefreshTokenService],
 })
@@ -533,11 +543,11 @@ export class AuthModule {}
 
 Since the Google callback redirects to the frontend, the backend needs to know the frontend URL:
 
-| Environment | `FRONTEND_URL` value |
-| --- | --- |
-| Development | `` (empty — relative redirect) |
-| Staging | `` (empty — same domain via nginx proxy) |
-| Production | `` (empty — same domain via nginx proxy) |
+| Environment | `FRONTEND_URL` value                     |
+| ----------- | ---------------------------------------- |
+| Development | `` (empty — relative redirect)           |
+| Staging     | `` (empty — same domain via nginx proxy) |
+| Production  | `` (empty — same domain via nginx proxy) |
 
 Because nginx proxies both the API and frontend on the same domain, `FRONTEND_URL` can be empty (relative redirect). The redirect path `/${locale}/auth/callback?token=...` will resolve to the same origin.
 
@@ -588,17 +598,17 @@ describe('GoogleStrategy', () => {
 
 ### Files Created/Modified
 
-| File | Change |
-| --- | --- |
-| `apps/api/src/auth/services/oauth.service.ts` | New: OAuth business logic |
-| `apps/api/src/auth/services/oauth.service.spec.ts` | New: Unit tests |
-| `apps/api/src/auth/guards/google-auth.guard.ts` | New: Passport Google guard |
-| `apps/api/src/auth/strategies/google.strategy.spec.ts` | New: Strategy unit tests |
-| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) | Add `google` and `google/callback` endpoints |
-| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add tests for Google endpoints |
-| [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts) | Register `GoogleStrategy`, `OAuthService` |
-| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add OAuth error codes |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add `FRONTEND_URL` |
+| File                                                                                          | Change                                       |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `apps/api/src/auth/services/oauth.service.ts`                                                 | New: OAuth business logic                    |
+| `apps/api/src/auth/services/oauth.service.spec.ts`                                            | New: Unit tests                              |
+| `apps/api/src/auth/guards/google-auth.guard.ts`                                               | New: Passport Google guard                   |
+| `apps/api/src/auth/strategies/google.strategy.spec.ts`                                        | New: Strategy unit tests                     |
+| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts)             | Add `google` and `google/callback` endpoints |
+| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts)   | Add tests for Google endpoints               |
+| [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts)                     | Register `GoogleStrategy`, `OAuthService`    |
+| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add OAuth error codes                        |
+| [`apps/api/.env.example`](../apps/api/.env.example)                                           | Add `FRONTEND_URL`                           |
 
 ### Acceptance Criteria
 
@@ -675,7 +685,7 @@ Add to [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-
 ```typescript
 interface AuthContextType {
   // ... existing fields ...
-  loginWithToken: (token: string) => Promise<void>;  // ← New
+  loginWithToken: (token: string) => Promise<void>; // ← New
 }
 
 // Inside AuthProvider:
@@ -683,7 +693,7 @@ const loginWithToken = useCallback(async (token: string) => {
   // Fetch user profile using the provided access token
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     credentials: 'include',
@@ -788,18 +798,18 @@ describe('LoginForm - Google button', () => {
 
 ### Files Created/Modified
 
-| File | Change |
-| --- | --- |
-| `apps/web/src/app/[locale]/auth/callback/page.tsx` | New: OAuth callback page |
-| `apps/web/src/app/[locale]/auth/callback/callback.spec.tsx` | New: Callback page tests |
-| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) | Add `loginWithToken` method |
-| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) | Add `loginWithToken` tests |
-| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx) | Enable Google button |
-| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx) | Add Google button tests |
-| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) | Enable Google button |
-| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Add Google button tests |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Add OAuth i18n keys |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Add OAuth i18n keys |
+| File                                                                                                          | Change                      |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `apps/web/src/app/[locale]/auth/callback/page.tsx`                                                            | New: OAuth callback page    |
+| `apps/web/src/app/[locale]/auth/callback/callback.spec.tsx`                                                   | New: Callback page tests    |
+| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx)                         | Add `loginWithToken` method |
+| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx)               | Add `loginWithToken` tests  |
+| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx)                 | Enable Google button        |
+| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx)       | Add Google button tests     |
+| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx)           | Enable Google button        |
+| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Add Google button tests     |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                                   | Add OAuth i18n keys         |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                                   | Add OAuth i18n keys         |
 
 ### Acceptance Criteria
 
@@ -820,15 +830,15 @@ Ensure robust account linking: when a Google user has an existing email/password
 
 ### 5.4a. Account Linking Scenarios
 
-| # | Scenario | Input | Expected Behavior |
-| --- | --- | --- | --- |
-| 1 | New Google user, no existing account | Google sub=123, email=new@test.com | Create User + OAuthProvider |
-| 2 | Existing user, same email, no Google link | Google sub=123, email=existing@test.com | Create OAuthProvider, link to existing User |
-| 3 | Existing user, already linked to Google | Google sub=123, email=existing@test.com | Login directly via OAuthProvider lookup |
-| 4 | Google email not verified | Google sub=123, email=unverified@test.com, verified=false | Reject with error |
-| 5 | User account inactive | Google sub=123, linked to inactive user | Reject with error |
-| 6 | Different Google account, same email | Google sub=456, email=existing@test.com (already linked to sub=123) | Create second OAuthProvider for same User |
-| 7 | OAuth-only user logs in again | Google sub=123, previously created without password | Login via OAuthProvider lookup |
+| #   | Scenario                                  | Input                                                               | Expected Behavior                           |
+| --- | ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| 1   | New Google user, no existing account      | Google sub=123, email=new@test.com                                  | Create User + OAuthProvider                 |
+| 2   | Existing user, same email, no Google link | Google sub=123, email=existing@test.com                             | Create OAuthProvider, link to existing User |
+| 3   | Existing user, already linked to Google   | Google sub=123, email=existing@test.com                             | Login directly via OAuthProvider lookup     |
+| 4   | Google email not verified                 | Google sub=123, email=unverified@test.com, verified=false           | Reject with error                           |
+| 5   | User account inactive                     | Google sub=123, linked to inactive user                             | Reject with error                           |
+| 6   | Different Google account, same email      | Google sub=456, email=existing@test.com (already linked to sub=123) | Create second OAuthProvider for same User   |
+| 7   | OAuth-only user logs in again             | Google sub=123, previously created without password                 | Login via OAuthProvider lookup              |
 
 ### 5.4b. OAuthService Enhancements for Edge Cases
 
@@ -884,11 +894,11 @@ describe('OAuth Integration', () => {
 
 ### Files Created/Modified
 
-| File | Change |
-| --- | --- |
-| [`apps/api/src/auth/services/oauth.service.ts`](../apps/api/src/auth/services/oauth.service.ts) | Add transaction wrapping, edge case handling |
-| [`apps/api/src/auth/services/oauth.service.spec.ts`](../apps/api/src/auth/services/oauth.service.spec.ts) | Add edge case unit tests |
-| `apps/api/test/integration/oauth.integration.spec.ts` | New: Integration tests for all linking scenarios |
+| File                                                                                                      | Change                                           |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [`apps/api/src/auth/services/oauth.service.ts`](../apps/api/src/auth/services/oauth.service.ts)           | Add transaction wrapping, edge case handling     |
+| [`apps/api/src/auth/services/oauth.service.spec.ts`](../apps/api/src/auth/services/oauth.service.spec.ts) | Add edge case unit tests                         |
+| `apps/api/test/integration/oauth.integration.spec.ts`                                                     | New: Integration tests for all linking scenarios |
 
 ### Acceptance Criteria
 
@@ -919,14 +929,14 @@ describe('OAuth Integration', () => {
 
 ### Threat Model — Phase 2 Additions
 
-| Threat | Mitigation |
-| --- | --- |
-| CSRF on OAuth flow | Passport `state: true` generates random state parameter |
-| OAuth token theft in URL | Access token is short-lived (15min); callback page consumes it immediately |
-| Account hijacking via email match | Only link if Google reports `emailVerified: true` |
-| Race condition duplicate users | Database transaction + unique constraints |
-| Malicious OAuth redirect | Callback URL is hardcoded in Google Console; Passport validates it |
-| Google Client Secret leak | Stored in GitHub Secrets; env var in container, not in code |
+| Threat                            | Mitigation                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| CSRF on OAuth flow                | Passport `state: true` generates random state parameter                    |
+| OAuth token theft in URL          | Access token is short-lived (15min); callback page consumes it immediately |
+| Account hijacking via email match | Only link if Google reports `emailVerified: true`                          |
+| Race condition duplicate users    | Database transaction + unique constraints                                  |
+| Malicious OAuth redirect          | Callback URL is hardcoded in Google Console; Passport validates it         |
+| Google Client Secret leak         | Stored in GitHub Secrets; env var in container, not in code                |
 
 ### CSP Header Update
 
@@ -944,7 +954,7 @@ app.use(
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
-        formAction: ["'self'", 'https://accounts.google.com'],  // ← Allow OAuth redirect
+        formAction: ["'self'", 'https://accounts.google.com'], // ← Allow OAuth redirect
         upgradeInsecureRequests: [],
       },
     },
@@ -974,6 +984,7 @@ Steps:
 ### Rollback Safety
 
 Since this is purely additive:
+
 - Rollback to Phase 1 code is safe — old code simply ignores the `oauth_providers` table
 - No data loss risk — existing `users` and `refresh_tokens` tables are untouched
 - Blue-green deploy safety: both old and new slots can run simultaneously
@@ -984,18 +995,19 @@ Since this is purely additive:
 
 ### Test Counts per Iteration
 
-| Iteration | Unit Tests | Integration Tests | UI Tests |
-| --- | --- | --- | --- |
-| 2.1 | 3 (Google strategy) | 2 (migration, schema) | 0 |
-| 2.2 | 9 (OAuthService, controller) | 0 | 0 |
-| 2.3 | 6 (callback page, button) | 0 | 6 (UI tests) |
-| 2.4 | 4 (edge cases) | 11 (linking scenarios) | 0 |
+| Iteration | Unit Tests                   | Integration Tests      | UI Tests     |
+| --------- | ---------------------------- | ---------------------- | ------------ |
+| 2.1       | 3 (Google strategy)          | 2 (migration, schema)  | 0            |
+| 2.2       | 9 (OAuthService, controller) | 0                      | 0            |
+| 2.3       | 6 (callback page, button)    | 0                      | 6 (UI tests) |
+| 2.4       | 4 (edge cases)               | 11 (linking scenarios) | 0            |
 
 **Total estimated: ~41 new tests**
 
 ### Key Test Scenarios
 
 **Backend Unit Tests:**
+
 - Google strategy extracts correct profile data
 - OAuthService creates new user on first Google login
 - OAuthService links Google to existing email user
@@ -1005,6 +1017,7 @@ Since this is purely additive:
 - Auth controller handles OAuth errors gracefully
 
 **Backend Integration Tests (with Testcontainers):**
+
 - Full Google OAuth flow with mock profile
 - Account linking with pre-existing email user
 - Duplicate prevention with unique constraints
@@ -1012,6 +1025,7 @@ Since this is purely additive:
 - Audit log verification
 
 **Frontend UI Tests:**
+
 - Callback page processes token correctly
 - Callback page handles missing token
 - Callback page handles error param
@@ -1027,58 +1041,59 @@ Since this is purely additive:
 
 **Auth Module (API):**
 
-| File | Purpose |
-| --- | --- |
-| `apps/api/src/auth/strategies/google.strategy.ts` | Passport Google OAuth strategy |
-| `apps/api/src/auth/strategies/google.strategy.spec.ts` | Strategy tests |
-| `apps/api/src/auth/services/oauth.service.ts` | OAuth business logic |
-| `apps/api/src/auth/services/oauth.service.spec.ts` | OAuth service tests |
-| `apps/api/src/auth/guards/google-auth.guard.ts` | Google auth guard |
-| `apps/api/prisma/migrations/YYYYMMDD_phase2_oauth_provider/migration.sql` | Database migration |
+| File                                                                      | Purpose                        |
+| ------------------------------------------------------------------------- | ------------------------------ |
+| `apps/api/src/auth/strategies/google.strategy.ts`                         | Passport Google OAuth strategy |
+| `apps/api/src/auth/strategies/google.strategy.spec.ts`                    | Strategy tests                 |
+| `apps/api/src/auth/services/oauth.service.ts`                             | OAuth business logic           |
+| `apps/api/src/auth/services/oauth.service.spec.ts`                        | OAuth service tests            |
+| `apps/api/src/auth/guards/google-auth.guard.ts`                           | Google auth guard              |
+| `apps/api/prisma/migrations/YYYYMMDD_phase2_oauth_provider/migration.sql` | Database migration             |
 
 **Auth UI (Web):**
 
-| File | Purpose |
-| --- | --- |
-| `apps/web/src/app/[locale]/auth/callback/page.tsx` | OAuth callback page |
+| File                                                        | Purpose             |
+| ----------------------------------------------------------- | ------------------- |
+| `apps/web/src/app/[locale]/auth/callback/page.tsx`          | OAuth callback page |
 | `apps/web/src/app/[locale]/auth/callback/callback.spec.tsx` | Callback page tests |
 
 **Tests:**
 
-| File | Purpose |
-| --- | --- |
+| File                                                  | Purpose                 |
+| ----------------------------------------------------- | ----------------------- |
 | `apps/api/test/integration/oauth.integration.spec.ts` | OAuth integration tests |
 
 ### Modified Files
 
-| File | Change |
-| --- | --- |
-| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) | Add `OAuthProvider` model, `oauthProviders` relation on User |
-| [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts) | Register `GoogleStrategy`, `OAuthService` |
-| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) | Add `google` and `google/callback` endpoints |
-| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add Google endpoint tests |
-| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add OAuth error codes |
-| [`apps/api/src/main.ts`](../apps/api/src/main.ts) | Update CSP `formAction` for Google OAuth |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `FRONTEND_URL` |
-| [`apps/api/package.json`](../apps/api/package.json) | Add `passport-google-oauth20`, `@types/passport-google-oauth20` |
-| [`.env.staging.template`](../.env.staging.template) | Add Google OAuth env vars |
-| [`.env.production.template`](../.env.production.template) | Add Google OAuth env vars |
-| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) | Add `loginWithToken` method |
-| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) | Add `loginWithToken` tests |
-| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx) | Enable Google button |
-| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx) | Add Google button tests |
-| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) | Enable Google button |
-| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Add Google button tests |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Add OAuth i18n keys |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Add OAuth i18n keys |
-| [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` env vars |
-| [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` env vars |
+| File                                                                                                          | Change                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma)                                           | Add `OAuthProvider` model, `oauthProviders` relation on User                          |
+| [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts)                                     | Register `GoogleStrategy`, `OAuthService`                                             |
+| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts)                             | Add `google` and `google/callback` endpoints                                          |
+| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts)                   | Add Google endpoint tests                                                             |
+| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts)                 | Add OAuth error codes                                                                 |
+| [`apps/api/src/main.ts`](../apps/api/src/main.ts)                                                             | Update CSP `formAction` for Google OAuth                                              |
+| [`apps/api/.env.example`](../apps/api/.env.example)                                                           | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `FRONTEND_URL` |
+| [`apps/api/package.json`](../apps/api/package.json)                                                           | Add `passport-google-oauth20`, `@types/passport-google-oauth20`                       |
+| [`.env.staging.template`](../.env.staging.template)                                                           | Add Google OAuth env vars                                                             |
+| [`.env.production.template`](../.env.production.template)                                                     | Add Google OAuth env vars                                                             |
+| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx)                         | Add `loginWithToken` method                                                           |
+| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx)               | Add `loginWithToken` tests                                                            |
+| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx)                 | Enable Google button                                                                  |
+| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx)       | Add Google button tests                                                               |
+| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx)           | Enable Google button                                                                  |
+| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Add Google button tests                                                               |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                                   | Add OAuth i18n keys                                                                   |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                                   | Add OAuth i18n keys                                                                   |
+| [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml)                             | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` env vars        |
+| [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml)                       | Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` env vars        |
 
 ### CI/CD Workflow Changes
 
 Both [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) and [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) need:
 
 **New GitHub Secrets:**
+
 - `GOOGLE_CLIENT_ID` — shared across staging and production (same Google OAuth app)
 - `GOOGLE_CLIENT_SECRET` — shared across staging and production
 
@@ -1107,10 +1122,10 @@ export GOOGLE_CALLBACK_URL
 
 **API (`apps/api/package.json`):**
 
-| Package | Purpose | Type |
-| --- | --- | --- |
-| `passport-google-oauth20` | Passport Google OAuth 2.0 strategy | dependency |
-| `@types/passport-google-oauth20` | TypeScript types | devDependency |
+| Package                          | Purpose                            | Type          |
+| -------------------------------- | ---------------------------------- | ------------- |
+| `passport-google-oauth20`        | Passport Google OAuth 2.0 strategy | dependency    |
+| `@types/passport-google-oauth20` | TypeScript types                   | devDependency |
 
 ---
 

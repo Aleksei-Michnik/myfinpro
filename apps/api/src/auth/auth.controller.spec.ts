@@ -442,10 +442,7 @@ describe('AuthController', () => {
     });
 
     it('should have @Throttle metadata on googleAuth endpoint with limit 10 and ttl 60000', () => {
-      const limit = Reflect.getMetadata(
-        THROTTLER_LIMIT_KEY,
-        AuthController.prototype.googleAuth,
-      );
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.googleAuth);
       const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.googleAuth);
 
       expect(limit).toBe(10);
@@ -457,10 +454,7 @@ describe('AuthController', () => {
         THROTTLER_LIMIT_KEY,
         AuthController.prototype.googleCallback,
       );
-      const ttl = Reflect.getMetadata(
-        THROTTLER_TTL_KEY,
-        AuthController.prototype.googleCallback,
-      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.googleCallback);
 
       expect(limit).toBe(10);
       expect(ttl).toBe(60000);
