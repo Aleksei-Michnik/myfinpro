@@ -13,13 +13,21 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       'http://localhost/api/v1/auth/google/callback',
     );
 
+    const logger = new Logger(GoogleStrategy.name);
+
     if (!clientID || !clientSecret) {
-      const logger = new Logger(GoogleStrategy.name);
       logger.warn(
         'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set — Google OAuth will not work. ' +
           'Using dummy values to prevent app crash.',
       );
     }
+
+    // Diagnostic: log credential status and callbackURL at bootstrap
+    logger.log(
+      `GoogleStrategy init: clientID=${clientID ? 'SET' : 'MISSING'}, ` +
+        `clientSecret=${clientSecret ? 'SET' : 'MISSING'}, ` +
+        `callbackURL=${callbackURL}, state=true`,
+    );
 
     super({
       clientID: clientID || 'dummy-client-id',
@@ -28,6 +36,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       scope: ['email', 'profile'],
       state: true,
     });
+
+    // Diagnostic: warn about state: true requiring session middleware
+    logger.warn(
+      'state: true is configured — this requires express-session middleware on req.session. ' +
+        'If sessions are not configured, Passport will throw: ' +
+        '"OAuth2Strategy requires session support when using state."',
+    );
   }
 
   async validate(

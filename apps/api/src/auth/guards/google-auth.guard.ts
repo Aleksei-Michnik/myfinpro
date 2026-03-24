@@ -8,7 +8,15 @@ export class GoogleAuthGuard extends AuthGuard('google') {
 
   handleRequest<TUser>(err: Error | null, user: TUser, info: Error | undefined): TUser {
     if (err) {
-      this.logger.error(`Google OAuth error: ${err.message}`, err.stack);
+      // Diagnostic: log the full error to identify the root cause (e.g. missing session for state: true)
+      this.logger.error(
+        `Google OAuth error [diagnostic]: message="${err.message}", ` +
+          `name="${err.name}", stack="${err.stack}"`,
+      );
+      this.logger.error(
+        `Google OAuth error [diagnostic]: Is this a session error? ` +
+          `Contains "session": ${String(err.message).includes('session')}`,
+      );
       throw new UnauthorizedException({
         message: 'Google authentication failed',
         errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
@@ -17,7 +25,7 @@ export class GoogleAuthGuard extends AuthGuard('google') {
 
     if (!user) {
       const reason = info?.message || 'No user returned from Google';
-      this.logger.warn(`Google OAuth failed: ${reason}`);
+      this.logger.warn(`Google OAuth failed [diagnostic]: reason="${reason}", info=${JSON.stringify(info)}`);
       throw new UnauthorizedException({
         message: 'Google authentication failed',
         errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
