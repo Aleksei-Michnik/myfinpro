@@ -25,7 +25,9 @@ export class GoogleAuthGuard extends AuthGuard('google') {
 
     if (!user) {
       const reason = info?.message || 'No user returned from Google';
-      this.logger.warn(`Google OAuth failed [diagnostic]: reason="${reason}", info=${JSON.stringify(info)}`);
+      this.logger.warn(
+        `Google OAuth failed [diagnostic]: reason="${reason}", info=${JSON.stringify(info)}`,
+      );
       throw new UnauthorizedException({
         message: 'Google authentication failed',
         errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
