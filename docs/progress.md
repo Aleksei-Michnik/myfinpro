@@ -990,13 +990,13 @@ Phase 2 adds Google OAuth authentication as a second auth provider. Users can si
 
 ### Phase 2 Test Summary
 
-| Category        | Count    | Notes                                        |
-| --------------- | -------- | -------------------------------------------- |
-| API Unit Tests  | 198      | +21 from Phase 1 (Google strategy, OAuth, controller, service) |
-| Web Unit Tests  | ~155     | +17 from Phase 1 (callback, auth-context, LoginForm, RegisterForm) |
-| Playwright E2E  | ~65      | +15 from Phase 1 (Google button, callback) across 5 browsers |
-| Shared Package  | 46       | Unchanged                                    |
-| **Total**       | **~464** | +69 tests from Phase 1                       |
+| Category       | Count    | Notes                                                              |
+| -------------- | -------- | ------------------------------------------------------------------ |
+| API Unit Tests | 198      | +21 from Phase 1 (Google strategy, OAuth, controller, service)     |
+| Web Unit Tests | ~155     | +17 from Phase 1 (callback, auth-context, LoginForm, RegisterForm) |
+| Playwright E2E | ~65      | +15 from Phase 1 (Google button, callback) across 5 browsers       |
+| Shared Package | 46       | Unchanged                                                          |
+| **Total**      | **~464** | +69 tests from Phase 1                                             |
 
 ### OAuth Flow Diagram
 
@@ -1084,20 +1084,20 @@ myfinpro/
 
 ## 7. Quality Metrics
 
-| Metric                  | Result                                                               |
-| ----------------------- | -------------------------------------------------------------------- |
-| **Lint**                | 0 errors, 0 warnings                                                 |
-| **Typecheck**           | 0 errors                                                             |
-| **API Unit Tests**      | 198 passing (Jest)                                                   |
-| **API Integration**     | ~15 passing (Jest + Testcontainers)                                  |
-| **Web Unit Tests**      | ~155 passing (Vitest + Testing Library)                              |
-| **Shared Unit Tests**   | 46 passing (Vitest)                                                  |
-| **Playwright E2E**      | ~65 passing (chromium, firefox, webkit, mobile-chrome, mobile-safari)|
-| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting)      |
-| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)         |
-| **Total Tests**         | ~464 across all test types                                           |
-| **Build**               | All packages successful                                              |
-| **Production Gate**     | Staging tests must pass within 24h before production deploy          |
+| Metric                  | Result                                                                |
+| ----------------------- | --------------------------------------------------------------------- |
+| **Lint**                | 0 errors, 0 warnings                                                  |
+| **Typecheck**           | 0 errors                                                              |
+| **API Unit Tests**      | 198 passing (Jest)                                                    |
+| **API Integration**     | ~15 passing (Jest + Testcontainers)                                   |
+| **Web Unit Tests**      | ~155 passing (Vitest + Testing Library)                               |
+| **Shared Unit Tests**   | 46 passing (Vitest)                                                   |
+| **Playwright E2E**      | ~65 passing (chromium, firefox, webkit, mobile-chrome, mobile-safari) |
+| **Staging Integration** | 16 passing (4 suites: health, api-root, swagger, rate-limiting)       |
+| **Staging E2E**         | 14 passing (4 suites: homepage, api-proxy, i18n, responsive)          |
+| **Total Tests**         | ~464 across all test types                                            |
+| **Build**               | All packages successful                                               |
+| **Production Gate**     | Staging tests must pass within 24h before production deploy           |
 
 ---
 
@@ -1189,12 +1189,12 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 ### Phase 3: Telegram Authentication (4 iterations)
 
-| Iteration | Objective                                                              |
-| --------- | ---------------------------------------------------------------------- |
-| 3.1       | Telegram auth setup — Bot token, widget configuration                  |
-| 3.2       | Telegram login flow — Widget callback, account linking                 |
-| 3.3       | Frontend Telegram login — Login button, widget integration             |
-| 3.4       | Account linking — Link Telegram to existing accounts                   |
+| Iteration | Objective                                                  |
+| --------- | ---------------------------------------------------------- |
+| 3.1       | Telegram auth setup — Bot token, widget configuration      |
+| 3.2       | Telegram login flow — Widget callback, account linking     |
+| 3.3       | Frontend Telegram login — Login button, widget integration |
+| 3.4       | Account linking — Link Telegram to existing accounts       |
 
 ### Other Upcoming Work
 
