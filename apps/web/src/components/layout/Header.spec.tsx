@@ -12,6 +12,7 @@ let mockAuthState = {
   logout: mockLogout,
   accessToken: null as string | null,
   login: vi.fn(),
+  loginWithToken: vi.fn(),
   register: vi.fn(),
   getAccessToken: () => null as string | null,
 };
@@ -57,6 +58,7 @@ describe('Header', () => {
       logout: mockLogout,
       accessToken: null,
       login: vi.fn(),
+      loginWithToken: vi.fn(),
       register: vi.fn(),
       getAccessToken: () => null,
     };
@@ -141,6 +143,7 @@ describe('Header', () => {
         logout: mockLogout,
         accessToken: 'token',
         login: vi.fn(),
+        loginWithToken: vi.fn(),
         register: vi.fn(),
         getAccessToken: () => 'token',
       };

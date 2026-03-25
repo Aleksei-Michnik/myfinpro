@@ -1,9 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RegisterForm } from './RegisterForm';
 
 const mockRegister = vi.fn();
 const mockPush = vi.fn();
+
+// Save original location
+const originalLocation = window.location;
 
 // Mock next-intl
 vi.mock('next-intl', () => ({
@@ -25,6 +28,7 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({
     register: mockRegister,
+    loginWithToken: vi.fn(),
     user: null,
     isAuthenticated: false,
     isLoading: false,
@@ -49,6 +53,17 @@ vi.mock('@/components/ui/Toast', () => ({
 describe('RegisterForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { ...originalLocation, href: '' },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   it('renders name input with label', () => {
@@ -191,5 +206,19 @@ describe('RegisterForm', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Email already exists');
     });
+  });
+
+  it('renders Google sign-up button and navigates to OAuth endpoint', () => {
+    render(<RegisterForm />);
+    const googleBtn = screen.getByRole('button', { name: 'google' });
+    expect(googleBtn).toBeInTheDocument();
+    expect(googleBtn).toBeEnabled();
+    fireEvent.click(googleBtn);
+    expect(window.location.href).toBe('/api/v1/auth/google');
+  });
+
+  it('renders "or sign up with" divider text', () => {
+    render(<RegisterForm />);
+    expect(screen.getByText('orSignUpWith')).toBeInTheDocument();
   });
 });

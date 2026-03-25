@@ -173,6 +173,26 @@ export function RegisterForm() {
         {isLoading ? t('signingUp') : t('signUp')}
       </Button>
 
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-300" />
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="bg-white px-2 text-gray-500">{t('orSignUpWith')}</span>
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          window.location.href = '/api/v1/auth/google';
+        }}
+      >
+        {t('google')}
+      </Button>
+
       <p className="text-center text-sm text-gray-600">
         {t('hasAccount')}{' '}
         <Link href="/auth/login" className="text-primary-600 hover:text-primary-500 font-medium">

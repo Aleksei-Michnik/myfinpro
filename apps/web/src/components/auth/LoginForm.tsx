@@ -78,7 +78,6 @@ export function LoginForm() {
         {isLoading ? t('signingIn') : t('signIn')}
       </Button>
 
-      {/* Placeholder for future OAuth buttons */}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-300" />
@@ -89,7 +88,13 @@ export function LoginForm() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Button type="button" variant="outline" disabled className="opacity-50">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            window.location.href = '/api/v1/auth/google';
+          }}
+        >
           {t('google')}
         </Button>
         <Button type="button" variant="outline" disabled className="opacity-50">

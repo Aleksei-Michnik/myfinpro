@@ -1,9 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoginForm } from './LoginForm';
 
 const mockLogin = vi.fn();
 const mockPush = vi.fn();
+
+// Save original location
+const originalLocation = window.location;
 
 // Mock next-intl
 vi.mock('next-intl', () => ({
@@ -30,6 +33,7 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({
     login: mockLogin,
+    loginWithToken: vi.fn(),
     user: null,
     isAuthenticated: false,
     isLoading: false,
@@ -54,6 +58,18 @@ vi.mock('@/components/ui/Toast', () => ({
 describe('LoginForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Mock window.location for Google button tests
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { ...originalLocation, href: '' },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   it('renders email input with label', () => {
@@ -83,14 +99,21 @@ describe('LoginForm', () => {
     expect(button).toBeDisabled();
   });
 
-  it('renders OAuth buttons (disabled)', () => {
+  it('renders Google button as enabled and Telegram button as disabled', () => {
     render(<LoginForm />);
     const googleBtn = screen.getByRole('button', { name: 'google' });
     const telegramBtn = screen.getByRole('button', { name: 'telegram' });
     expect(googleBtn).toBeInTheDocument();
-    expect(googleBtn).toBeDisabled();
+    expect(googleBtn).toBeEnabled();
     expect(telegramBtn).toBeInTheDocument();
     expect(telegramBtn).toBeDisabled();
+  });
+
+  it('Google button navigates to OAuth endpoint on click', () => {
+    render(<LoginForm />);
+    const googleBtn = screen.getByRole('button', { name: 'google' });
+    fireEvent.click(googleBtn);
+    expect(window.location.href).toBe('/api/v1/auth/google');
   });
 
   it('renders "or sign in with" divider text', () => {

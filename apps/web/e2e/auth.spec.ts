@@ -160,4 +160,85 @@ test.describe('Authentication Flows', () => {
     // 7. Authenticated UI should still be visible
     await expect(logoutButton).toBeVisible({ timeout: 5000 });
   });
+
+  test('Google sign-in button is enabled and navigates to OAuth endpoint', async ({ page }) => {
+    await page.goto('/en/auth/login');
+
+    // Wait for form to load
+    await expect(page.locator('form')).toBeVisible();
+
+    const googleBtn = page.getByRole('button', { name: /google/i });
+    await expect(googleBtn).toBeVisible();
+    await expect(googleBtn).toBeEnabled();
+
+    // Intercept navigation to verify Google OAuth URL
+    const [request] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/api/v1/auth/google')),
+      googleBtn.click(),
+    ]);
+    expect(request.url()).toContain('/api/v1/auth/google');
+  });
+
+  test('OAuth callback page with valid token shows loading then redirects to dashboard', async ({
+    page,
+  }) => {
+    const mockUser = {
+      id: 'google-user-uuid',
+      email: 'google@example.com',
+      name: 'Google User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+    };
+
+    // Mock /auth/me endpoint to return user profile for the token
+    await page.route('**/api/v1/auth/me', async (route) => {
+      const headers = route.request().headers();
+      if (headers['authorization'] === 'Bearer valid-google-token') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(mockUser),
+        });
+      } else {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Unauthorized' }),
+        });
+      }
+    });
+
+    // Mock refresh to also return authenticated user (for post-redirect)
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: mockUser, accessToken: 'valid-google-token' }),
+      });
+    });
+
+    await page.goto('/en/auth/callback?token=valid-google-token');
+
+    // Should show loading spinner initially
+    await expect(page.getByText(/signing in with google/i)).toBeVisible({ timeout: 5000 });
+
+    // Should eventually redirect to dashboard
+    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+  });
+
+  test('OAuth callback page without token redirects to login', async ({ page }) => {
+    // Mock refresh as unauthenticated
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Unauthorized' }),
+      });
+    });
+
+    await page.goto('/en/auth/callback');
+
+    // Should redirect to login page
+    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 15000 });
+  });
 });

@@ -40,6 +40,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
     },
     accessToken: 'mock-token',
     login: vi.fn(),
+    loginWithToken: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => 'mock-token',
