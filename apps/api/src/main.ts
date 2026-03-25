@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import session from 'express-session';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
@@ -69,10 +70,34 @@ async function bootstrap() {
   // ── Cookie parser ──
   app.use(cookieParser());
 
+  // ── Session middleware (required by Passport OAuth2 state parameter) ──
+  // Only used for the brief OAuth redirect → callback flow.
+  // In-memory store is acceptable: sessions are ephemeral (5 min TTL),
+  // and blue-green deployment ensures the same instance handles both legs.
+  const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  const isProduction = nodeEnv === 'production' || nodeEnv === 'staging';
+  app.use(
+    session({
+      secret: configService.get<string>(
+        'SESSION_SECRET',
+        configService.get<string>('JWT_SECRET', 'dev-session-secret'),
+      ),
+      resave: false,
+      saveUninitialized: false,
+      name: '__oauth_session',
+      cookie: {
+        maxAge: 5 * 60 * 1000, // 5 minutes — just enough for OAuth redirect flow
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'lax',
+      },
+    }),
+  );
+
   // Use pino logger as the NestJS logger
   app.useLogger(app.get(Logger));
 
-  const configService = app.get(ConfigService);
   const logger = app.get(Logger);
 
   // ── Global prefix ──

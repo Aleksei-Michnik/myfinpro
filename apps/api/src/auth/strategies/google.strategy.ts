@@ -22,11 +22,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       );
     }
 
-    // Diagnostic: log credential status and callbackURL at bootstrap
     logger.log(
       `GoogleStrategy init: clientID=${clientID ? 'SET' : 'MISSING'}, ` +
         `clientSecret=${clientSecret ? 'SET' : 'MISSING'}, ` +
-        `callbackURL=${callbackURL}, state=true`,
+        `callbackURL=${callbackURL}`,
     );
 
     super({
@@ -34,15 +33,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: clientSecret || 'dummy-client-secret',
       callbackURL,
       scope: ['email', 'profile'],
-      state: true,
+      state: true, // Requires express-session middleware (configured in main.ts)
     });
-
-    // Diagnostic: warn about state: true requiring session middleware
-    logger.warn(
-      'state: true is configured — this requires express-session middleware on req.session. ' +
-        'If sessions are not configured, Passport will throw: ' +
-        '"OAuth2Strategy requires session support when using state."',
-    );
   }
 
   async validate(
