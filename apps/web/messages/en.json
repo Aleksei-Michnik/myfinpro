@@ -65,7 +65,12 @@
     "logoutSuccess": "Successfully signed out.",
     "sessionExpired": "Your session has expired. Please sign in again.",
     "networkError": "Network error. Please check your connection.",
-    "tooManyAttempts": "Too many attempts. Please try again later."
+    "tooManyAttempts": "Too many attempts. Please try again later.",
+    "googleSignInProgress": "Signing in with Google...",
+    "oauthError": "Authentication failed. Please try again.",
+    "oauthSuccess": "Signed in with Google!",
+    "orSignUpWith": "Or sign up with",
+    "signInWithGoogle": "Sign in with Google"
   },
   "toast": {
     "dismiss": "Dismiss"

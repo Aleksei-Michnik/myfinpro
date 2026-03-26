@@ -4,36 +4,45 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiExcludeEndpoint,
   ApiUnauthorizedResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
-import { AuthService } from './auth.service';
+import { AuthService, GoogleProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('register')
@@ -138,5 +147,35 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   async getMe(@CurrentUser() user: JwtPayload) {
     return this.authService.getUser(user.sub);
+  }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(GoogleAuthGuard)
+  @Get('google')
+  @ApiExcludeEndpoint()
+  async googleAuth() {
+    // Guard redirects to Google — this method body is never executed
+  }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(GoogleAuthGuard)
+  @Get('google/callback')
+  @ApiExcludeEndpoint()
+  async googleCallback(@Req() request: Request, @Res() response: Response) {
+    const googleProfile = request.user as GoogleProfile;
+    const user = await this.authService.findOrCreateGoogleUser(googleProfile);
+
+    // Use the existing login flow to generate tokens, set cookie, update lastLoginAt
+    const ip = request.ip;
+    const userAgent = request.headers['user-agent'];
+    const { accessToken } = await this.authService.login(user, response, ip, userAgent);
+
+    // Redirect to frontend with access token
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const locale = user.locale || 'en';
+    const redirectUrl = `${frontendUrl}/${locale}/auth/callback?token=${accessToken}`;
+
+    this.logger.log(`Google OAuth callback: redirecting user ${user.id} to frontend`);
+    response.redirect(redirectUrl);
   }
 }

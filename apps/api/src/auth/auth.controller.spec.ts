@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Request, Response } from 'express';
 import { AuthController } from './auth.controller';
@@ -22,6 +23,16 @@ describe('AuthController', () => {
     refreshTokens: jest.fn(),
     logout: jest.fn(),
     getUser: jest.fn(),
+    findOrCreateGoogleUser: jest.fn(),
+  };
+
+  const mockConfigService = {
+    get: jest.fn((key: string, defaultValue?: string) => {
+      const config: Record<string, string> = {
+        FRONTEND_URL: 'http://localhost:3000',
+      };
+      return config[key] ?? defaultValue;
+    }),
   };
 
   const mockResponse = {
@@ -41,7 +52,10 @@ describe('AuthController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: mockAuthService }],
+      providers: [
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: ConfigService, useValue: mockConfigService },
+      ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
@@ -320,6 +334,73 @@ describe('AuthController', () => {
     });
   });
 
+  describe('googleAuth()', () => {
+    it('should be defined', () => {
+      expect(controller.googleAuth).toBeDefined();
+    });
+  });
+
+  describe('googleCallback()', () => {
+    it('should call findOrCreateGoogleUser and redirect to frontend', async () => {
+      const mockUser = {
+        id: 'google-user-uuid',
+        email: 'google@example.com',
+        name: 'Google User',
+        defaultCurrency: 'USD',
+        locale: 'en',
+        timezone: 'UTC',
+        isActive: true,
+        emailVerified: true,
+        lastLoginAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const googleProfile = {
+        googleId: 'google-123',
+        email: 'google@example.com',
+        name: 'Google User',
+        picture: 'https://lh3.googleusercontent.com/photo.jpg',
+        emailVerified: true,
+      };
+
+      const requestWithUser = {
+        ...mockRequestData,
+        user: googleProfile,
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      mockAuthService.findOrCreateGoogleUser.mockResolvedValue(mockUser);
+      mockAuthService.login.mockResolvedValue({
+        user: {
+          id: mockUser.id,
+          email: mockUser.email,
+          name: mockUser.name,
+          defaultCurrency: mockUser.defaultCurrency,
+          locale: mockUser.locale,
+        },
+        accessToken: 'mock-jwt-token',
+      });
+
+      await controller.googleCallback(requestWithUser, redirectResponse);
+
+      expect(mockAuthService.findOrCreateGoogleUser).toHaveBeenCalledWith(googleProfile);
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        mockUser,
+        redirectResponse,
+        '127.0.0.1',
+        'TestAgent/1.0',
+      );
+      expect(redirectResponse.redirect).toHaveBeenCalledWith(
+        'http://localhost:3000/en/auth/callback?token=mock-jwt-token',
+      );
+    });
+  });
+
   describe('Rate limiting metadata', () => {
     it('should have @Throttle metadata on register endpoint with limit 5 and ttl 60000', () => {
       const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.register);
@@ -358,6 +439,25 @@ describe('AuthController', () => {
 
       // getMe should not have per-endpoint throttle override
       expect(limit).toBeUndefined();
+    });
+
+    it('should have @Throttle metadata on googleAuth endpoint with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.googleAuth);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.googleAuth);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should have @Throttle metadata on googleCallback endpoint with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.googleCallback,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.googleCallback);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
     });
   });
 });

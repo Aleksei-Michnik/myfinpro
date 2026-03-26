@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { TokenService } from './services/token.service';
@@ -25,6 +26,14 @@ describe('AuthService', () => {
     refreshToken: {
       create: jest.fn(),
     },
+    $transaction: jest.fn(),
+  };
+
+  const mockOAuthService = {
+    findByProvider: jest.fn(),
+    findByProviderEmail: jest.fn(),
+    createOAuthProvider: jest.fn(),
+    linkToUser: jest.fn(),
   };
 
   const mockPasswordService = {
@@ -62,6 +71,7 @@ describe('AuthService', () => {
         { provide: PasswordService, useValue: mockPasswordService },
         { provide: TokenService, useValue: mockTokenService },
         { provide: RefreshTokenService, useValue: mockRefreshTokenService },
+        { provide: OAuthService, useValue: mockOAuthService },
       ],
     }).compile();
 
@@ -675,6 +685,109 @@ describe('AuthService', () => {
         },
       });
       expect(result).toEqual({ message: 'Logged out successfully' });
+    });
+  });
+
+  describe('findOrCreateGoogleUser()', () => {
+    const mockGoogleProfile = {
+      googleId: 'google-123',
+      email: 'google@example.com',
+      name: 'Google User',
+      picture: 'https://lh3.googleusercontent.com/pic.jpg',
+      emailVerified: true,
+    };
+
+    const mockUser = {
+      id: 'user-uuid',
+      email: 'google@example.com',
+      name: 'Google User',
+      passwordHash: null,
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+      isActive: true,
+      emailVerified: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should return existing user when OAuth provider is found', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'google',
+        providerId: 'google-123',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findOrCreateGoogleUser(mockGoogleProfile);
+
+      expect(result.id).toBe('user-uuid');
+      expect(result.email).toBe('google@example.com');
+      expect(result).not.toHaveProperty('passwordHash');
+    });
+
+    it('should throw if OAuth provider found but user is inactive', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'google',
+        providerId: 'google-123',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue({ ...mockUser, isActive: false });
+
+      await expect(service.findOrCreateGoogleUser(mockGoogleProfile)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should link Google to existing user by email', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+      mockOAuthService.linkToUser.mockResolvedValue({});
+
+      const result = await service.findOrCreateGoogleUser(mockGoogleProfile);
+
+      expect(mockOAuthService.linkToUser).toHaveBeenCalledWith(
+        'google',
+        'google-123',
+        'user-uuid',
+        {
+          email: 'google@example.com',
+          name: 'Google User',
+          avatarUrl: 'https://lh3.googleusercontent.com/pic.jpg',
+        },
+      );
+      expect(result.id).toBe('user-uuid');
+    });
+
+    it('should create a new user when no existing user found', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+      mockPrismaService.$transaction.mockImplementation(async (fn: Function) => {
+        const tx = {
+          user: { create: jest.fn().mockResolvedValue(mockUser) },
+          oAuthProvider: { create: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(tx);
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.findOrCreateGoogleUser(mockGoogleProfile);
+
+      expect(result.id).toBe('user-uuid');
+      expect(result.email).toBe('google@example.com');
+    });
+
+    it('should throw if email is not verified and no existing user', async () => {
+      const unverifiedProfile = { ...mockGoogleProfile, emailVerified: false };
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOrCreateGoogleUser(unverifiedProfile)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import session from 'express-session';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
@@ -17,12 +18,16 @@ async function bootstrap() {
   const httpAdapter = app.getHttpAdapter();
   httpAdapter.getInstance().disable('x-powered-by');
 
-  // ── Trust proxy for CloudFlare ──
+  // ── Trust proxy for CloudFlare + Docker reverse proxy (Nginx) ──
   // Cloudflare IPv4 ranges: https://www.cloudflare.com/ips-v4/
   // Cloudflare IPv6 ranges: https://www.cloudflare.com/ips-v6/
+  // Docker default bridge networks: 172.16.0.0/12
+  // Loopback: 127.0.0.0/8
   httpAdapter
     .getInstance()
     .set('trust proxy', [
+      'loopback',
+      '172.16.0.0/12',
       '173.245.48.0/20',
       '103.21.244.0/22',
       '103.22.200.0/22',
@@ -55,8 +60,8 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:', 'https://*.googleusercontent.com'],
+          connectSrc: ["'self'", 'https://accounts.google.com'],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
           upgradeInsecureRequests: [],
@@ -69,10 +74,35 @@ async function bootstrap() {
   // ── Cookie parser ──
   app.use(cookieParser());
 
+  // ── Session middleware (required by Passport OAuth2 state parameter) ──
+  // Only used for the brief OAuth redirect → callback flow.
+  // In-memory store is acceptable: sessions are ephemeral (5 min TTL),
+  // and blue-green deployment ensures the same instance handles both legs.
+  const configService = app.get(ConfigService);
+  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  const isProduction = nodeEnv === 'production' || nodeEnv === 'staging';
+  app.use(
+    session({
+      secret: configService.get<string>(
+        'SESSION_SECRET',
+        configService.get<string>('JWT_SECRET', 'dev-session-secret'),
+      ),
+      resave: false,
+      saveUninitialized: false,
+      proxy: isProduction, // Trust the reverse proxy (Cloudflare → Nginx → API)
+      name: '__oauth_session',
+      cookie: {
+        maxAge: 5 * 60 * 1000, // 5 minutes — just enough for OAuth redirect flow
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'lax',
+      },
+    }),
+  );
+
   // Use pino logger as the NestJS logger
   app.useLogger(app.get(Logger));
 
-  const configService = app.get(ConfigService);
   const logger = app.get(Logger);
 
   // ── Global prefix ──

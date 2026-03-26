@@ -9,6 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (data: LoginData) => Promise<void>;
+  loginWithToken: (token: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => string | null;
@@ -86,6 +87,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(result.accessToken);
   }, []);
 
+  const loginWithToken = useCallback(async (token: string) => {
+    setAccessToken(token);
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!res.ok) {
+        setAccessToken(null);
+        throw new Error('Failed to authenticate with token');
+      }
+      const userData: User = await res.json();
+      setUser(userData);
+    } catch (error) {
+      setAccessToken(null);
+      setUser(null);
+      throw error;
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
@@ -110,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         login,
+        loginWithToken,
         register,
         logout,
         getAccessToken,

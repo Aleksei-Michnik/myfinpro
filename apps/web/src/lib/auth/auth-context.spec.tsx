@@ -21,7 +21,16 @@ const mockAuthResponse = {
 };
 
 function TestConsumer() {
-  const { user, isAuthenticated, isLoading, login, register, logout, getAccessToken } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    login,
+    loginWithToken,
+    register,
+    logout,
+    getAccessToken,
+  } = useAuth();
   const [error, setError] = useState<string | null>(null);
   return (
     <div>
@@ -38,6 +47,13 @@ function TestConsumer() {
         }
       >
         Login
+      </button>
+      <button
+        onClick={() =>
+          loginWithToken('oauth-test-token').catch((err: Error) => setError(err.message))
+        }
+      >
+        LoginWithToken
       </button>
       <button
         onClick={() =>
@@ -301,5 +317,100 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('loading')).toHaveTextContent('false');
     });
     expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+  });
+
+  describe('loginWithToken', () => {
+    it('sets token and fetches user profile via /auth/me', async () => {
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      // Mock the /auth/me response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockUser),
+      });
+
+      await act(async () => {
+        screen.getByText('LoginWithToken').click();
+      });
+
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      expect(screen.getByTestId('user')).toHaveTextContent('Test User');
+      expect(screen.getByTestId('token')).toHaveTextContent('oauth-test-token');
+
+      // Verify /auth/me was called with Bearer token
+      const meCall = mockFetch.mock.calls[1];
+      expect(meCall[0]).toContain('/auth/me');
+      expect(meCall[1]).toMatchObject({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer oauth-test-token',
+        }),
+      });
+    });
+
+    it('clears token and throws on /auth/me failure', async () => {
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      // Mock /auth/me failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ message: 'Unauthorized' }),
+      });
+
+      await act(async () => {
+        screen.getByText('LoginWithToken').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent(
+          'Failed to authenticate with token',
+        );
+      });
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      expect(screen.getByTestId('user')).toHaveTextContent('null');
+      expect(screen.getByTestId('token')).toHaveTextContent('null');
+    });
+
+    it('clears token and throws on network error', async () => {
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      // Mock network error
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      await act(async () => {
+        screen.getByText('LoginWithToken').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent('Network error');
+      });
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      expect(screen.getByTestId('token')).toHaveTextContent('null');
+    });
   });
 });

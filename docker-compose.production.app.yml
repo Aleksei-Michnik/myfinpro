@@ -23,6 +23,10 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       API_INTERNAL_URL: ${API_INTERNAL_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
     # No exposed ports — accessed through Nginx only
     networks:
       myfinpro-production-net:
