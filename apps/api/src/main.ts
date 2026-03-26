@@ -18,12 +18,16 @@ async function bootstrap() {
   const httpAdapter = app.getHttpAdapter();
   httpAdapter.getInstance().disable('x-powered-by');
 
-  // ── Trust proxy for CloudFlare ──
+  // ── Trust proxy for CloudFlare + Docker reverse proxy (Nginx) ──
   // Cloudflare IPv4 ranges: https://www.cloudflare.com/ips-v4/
   // Cloudflare IPv6 ranges: https://www.cloudflare.com/ips-v6/
+  // Docker default bridge networks: 172.16.0.0/12
+  // Loopback: 127.0.0.0/8
   httpAdapter
     .getInstance()
     .set('trust proxy', [
+      'loopback',
+      '172.16.0.0/12',
       '173.245.48.0/20',
       '103.21.244.0/22',
       '103.22.200.0/22',
@@ -85,6 +89,7 @@ async function bootstrap() {
       ),
       resave: false,
       saveUninitialized: false,
+      proxy: isProduction, // Trust the reverse proxy (Cloudflare → Nginx → API)
       name: '__oauth_session',
       cookie: {
         maxAge: 5 * 60 * 1000, // 5 minutes — just enough for OAuth redirect flow
