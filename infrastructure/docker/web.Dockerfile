@@ -29,6 +29,9 @@ RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \
 
 # ───── Production Stage ─────
 FROM node:24-alpine AS production
+LABEL org.opencontainers.image.source="https://github.com/Aleksei-Michnik/myfinpro"
+LABEL org.opencontainers.image.description="MyFinPro Web Application"
+LABEL org.opencontainers.image.licenses="UNLICENSED"
 # Install wget for Docker health checks (BusyBox wget lacks --no-verbose/--tries flags)
 RUN apk add --no-cache wget
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate

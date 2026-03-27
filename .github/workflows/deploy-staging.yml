@@ -100,6 +100,9 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/api:staging-${{ steps.meta.outputs.sha_short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           no-cache: true
 
       - name: Build and push Web image
@@ -112,6 +115,9 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/web:staging
             ghcr.io/${{ steps.meta.outputs.repo_lower }}/web:staging-${{ steps.meta.outputs.sha_short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=web-staging
           cache-to: type=gha,mode=max,scope=web-staging
 
