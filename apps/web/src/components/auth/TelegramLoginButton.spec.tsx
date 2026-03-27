@@ -9,8 +9,6 @@ describe('useTelegramLogin', () => {
 
   // Track scripts added to document.head
   let appendedScripts: HTMLScriptElement[] = [];
-  const originalAppendChild = document.head.appendChild.bind(document.head);
-  const originalRemoveChild = document.head.removeChild.bind(document.head);
   const originalContains = document.head.contains.bind(document.head);
 
   beforeEach(() => {
