@@ -100,16 +100,16 @@ flowchart TD
 
 ### Key Difference from Google OAuth
 
-| Aspect | Google OAuth - Phase 2 | Telegram Login SDK - Phase 3 |
-|--------|----------------------|-------------------------------|
-| Flow type | Server-side redirect | Client-side SDK popup + POST |
-| Verification | OAuth2 code exchange | OIDC JWT via JWKS |
-| Email available | Yes - Google email | No - Telegram has no email |
-| Account linking | By email match | By Telegram ID only |
-| Button style | App Button → redirect | App Button → SDK popup |
-| Session needed | Yes - for OAuth state | No - stateless JWT |
-| New users | Auto-get email from Google | No email - username only |
-| Script | None - server redirect | oauth.telegram.org/js/telegram-login.js |
+| Aspect          | Google OAuth - Phase 2     | Telegram Login SDK - Phase 3            |
+| --------------- | -------------------------- | --------------------------------------- |
+| Flow type       | Server-side redirect       | Client-side SDK popup + POST            |
+| Verification    | OAuth2 code exchange       | OIDC JWT via JWKS                       |
+| Email available | Yes - Google email         | No - Telegram has no email              |
+| Account linking | By email match             | By Telegram ID only                     |
+| Button style    | App Button → redirect      | App Button → SDK popup                  |
+| Session needed  | Yes - for OAuth state      | No - stateless JWT                      |
+| New users       | Auto-get email from Google | No email - username only                |
+| Script          | None - server redirect     | oauth.telegram.org/js/telegram-login.js |
 
 ---
 
@@ -134,12 +134,12 @@ Before implementing, the Telegram bot must be created and configured:
 
 Add the following GitHub Secrets:
 
-| Secret | Environment | Value | Used by |
-|--------|-------------|-------|---------|
-| `TELEGRAM_BOT_TOKEN` | Production | Bot token from BotFather (production bot) | API (JWT audience validation) |
-| `TELEGRAM_BOT_USERNAME` | Production | Bot username without @ | Bot app, display purposes |
-| `TELEGRAM_BOT_TOKEN_STAGE` | Staging | Bot token from BotFather (staging bot) | API (JWT audience validation) |
-| `TELEGRAM_BOT_USERNAME_STAGE` | Staging | Bot username without @ | Bot app, display purposes |
+| Secret                        | Environment | Value                                     | Used by                       |
+| ----------------------------- | ----------- | ----------------------------------------- | ----------------------------- |
+| `TELEGRAM_BOT_TOKEN`          | Production  | Bot token from BotFather (production bot) | API (JWT audience validation) |
+| `TELEGRAM_BOT_USERNAME`       | Production  | Bot username without @                    | Bot app, display purposes     |
+| `TELEGRAM_BOT_TOKEN_STAGE`    | Staging     | Bot token from BotFather (staging bot)    | API (JWT audience validation) |
+| `TELEGRAM_BOT_USERNAME_STAGE` | Staging     | Bot username without @                    | Bot app, display purposes     |
 
 > **Note:** Two separate Telegram bots are needed — one for staging, one for production — because BotFather only allows one domain per bot. The numeric bot Client ID (`NEXT_PUBLIC_TELEGRAM_BOT_ID`) is derived from the bot token in CI/CD: `${TELEGRAM_BOT_TOKEN%%:*}`. No additional secret is needed.
 
@@ -173,6 +173,7 @@ NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=MyFinProBot
 The Telegram Login Widget sends signed data. The backend must verify it using HMAC-SHA256 per the [official documentation](https://core.telegram.org/widgets/login#checking-authorization).
 
 Verification algorithm:
+
 1. Sort all received fields (except `hash`) alphabetically
 2. Create a data-check-string: `key=value\n` pairs
 3. Compute SHA-256 of the bot token → this is the secret key
@@ -273,13 +274,13 @@ export class TelegramAuthDto {
 
 ### Files Created/Modified
 
-| File | Change |
-|------|--------|
-| `apps/api/src/auth/utils/telegram-auth.util.ts` | New: HMAC verification utility |
-| `apps/api/src/auth/utils/telegram-auth.util.spec.ts` | New: Unit tests |
-| `apps/api/src/auth/dto/telegram-auth.dto.ts` | New: Telegram auth DTO |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add Telegram env vars |
-| [`apps/web/.env.example`](../apps/web/.env.example) | Add Telegram bot username |
+| File                                                 | Change                         |
+| ---------------------------------------------------- | ------------------------------ |
+| `apps/api/src/auth/utils/telegram-auth.util.ts`      | New: HMAC verification utility |
+| `apps/api/src/auth/utils/telegram-auth.util.spec.ts` | New: Unit tests                |
+| `apps/api/src/auth/dto/telegram-auth.dto.ts`         | New: Telegram auth DTO         |
+| [`apps/api/.env.example`](../apps/api/.env.example)  | Add Telegram env vars          |
+| [`apps/web/.env.example`](../apps/web/.env.example)  | Add Telegram bot username      |
 
 ### Acceptance Criteria
 
@@ -298,17 +299,17 @@ export class TelegramAuthDto {
 
 ### Files Created/Modified (Iteration 3.1)
 
-| File | Change |
-|------|--------|
-| `apps/api/src/auth/utils/telegram-auth.util.ts` | New: HMAC verification utility |
-| `apps/api/src/auth/utils/telegram-auth.util.spec.ts` | New: Unit tests |
-| `apps/api/src/auth/dto/telegram-auth.dto.ts` | New: Telegram auth DTO |
-| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts) | Add `TelegramProfile` + `findOrCreateTelegramUser()` |
-| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) | Add unit tests |
-| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) | Add `POST /auth/telegram/callback` endpoint |
-| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add controller tests |
-| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add Telegram error codes |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add Telegram env vars |
+| File                                                                                          | Change                                               |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `apps/api/src/auth/utils/telegram-auth.util.ts`                                               | New: HMAC verification utility                       |
+| `apps/api/src/auth/utils/telegram-auth.util.spec.ts`                                          | New: Unit tests                                      |
+| `apps/api/src/auth/dto/telegram-auth.dto.ts`                                                  | New: Telegram auth DTO                               |
+| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts)                   | Add `TelegramProfile` + `findOrCreateTelegramUser()` |
+| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts)         | Add unit tests                                       |
+| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts)             | Add `POST /auth/telegram/callback` endpoint          |
+| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts)   | Add controller tests                                 |
+| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add Telegram error codes                             |
+| [`apps/api/.env.example`](../apps/api/.env.example)                                           | Add Telegram env vars                                |
 
 ---
 
@@ -319,6 +320,7 @@ export class TelegramAuthDto {
 Enable Telegram authentication on login and register pages using the official **Telegram Login SDK** with the app's own custom-styled `Button` component for visual consistency with Google OAuth. Also update backend verification from HMAC-SHA256 to OIDC JWT.
 
 > **Design change:** The original design used the legacy Telegram Login Widget which renders its own branded iframe button. The revised design uses the official [Telegram Login SDK](https://core.telegram.org/bots/telegram-login) (`oauth.telegram.org/js/telegram-login.js`) which supports:
+>
 > - **Programmatic API**: `Telegram.Login.auth(InitOptions, callback)` — triggers login popup from any click handler
 > - **Custom buttons**: No widget-rendered button needed; use the app's own Button component
 > - **OIDC JWT**: Callback returns `{id_token, user, error}` instead of hash-based data
@@ -348,13 +350,13 @@ function getJwks(): jose.JWTVerifyGetKey {
 }
 
 export interface TelegramJwtPayload {
-  sub: string;       // Telegram user ID (string)
+  sub: string; // Telegram user ID (string)
   first_name: string;
   last_name?: string;
   username?: string;
   photo_url?: string;
-  iss: string;        // https://oauth.telegram.org
-  aud: number;        // Bot Client ID
+  iss: string; // https://oauth.telegram.org
+  aud: number; // Bot Client ID
   iat: number;
   exp: number;
   nonce?: string;
@@ -643,25 +645,25 @@ NEXT_PUBLIC_TELEGRAM_BOT_ID=123456789
 
 ### Files Created/Modified
 
-| File | Change |
-|------|--------|
-| `apps/api/src/auth/utils/telegram-auth.util.ts` | Rewrite: JWT verification via JWKS |
-| `apps/api/src/auth/utils/telegram-auth.util.spec.ts` | Rewrite: JWT verification tests |
-| `apps/api/src/auth/dto/telegram-auth.dto.ts` | Update: accept `{id_token}` |
-| `apps/api/src/auth/auth.controller.ts` | Update: JWT decode + verification |
-| `apps/api/src/auth/auth.controller.spec.ts` | Update: new verification tests |
-| `apps/web/src/components/auth/TelegramLoginButton.tsx` | New: `useTelegramLogin` hook |
-| `apps/web/src/components/auth/TelegramLoginButton.spec.tsx` | New: Hook + SDK tests |
-| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx) | Enable Telegram with custom Button |
-| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx) | Update tests for Telegram button |
-| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) | Enable Telegram with custom Button |
-| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Update tests for Telegram button |
-| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) | Add `loginWithTelegram` method |
-| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) | Add `loginWithTelegram` tests |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Add Telegram i18n keys |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Add Telegram Hebrew translations |
-| [`apps/api/src/main.ts`](../apps/api/src/main.ts) | Update CSP for Telegram SDK |
-| `apps/api/package.json` | Add `jose` dependency |
+| File                                                                                                          | Change                             |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `apps/api/src/auth/utils/telegram-auth.util.ts`                                                               | Rewrite: JWT verification via JWKS |
+| `apps/api/src/auth/utils/telegram-auth.util.spec.ts`                                                          | Rewrite: JWT verification tests    |
+| `apps/api/src/auth/dto/telegram-auth.dto.ts`                                                                  | Update: accept `{id_token}`        |
+| `apps/api/src/auth/auth.controller.ts`                                                                        | Update: JWT decode + verification  |
+| `apps/api/src/auth/auth.controller.spec.ts`                                                                   | Update: new verification tests     |
+| `apps/web/src/components/auth/TelegramLoginButton.tsx`                                                        | New: `useTelegramLogin` hook       |
+| `apps/web/src/components/auth/TelegramLoginButton.spec.tsx`                                                   | New: Hook + SDK tests              |
+| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx)                 | Enable Telegram with custom Button |
+| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx)       | Update tests for Telegram button   |
+| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx)           | Enable Telegram with custom Button |
+| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Update tests for Telegram button   |
+| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx)                         | Add `loginWithTelegram` method     |
+| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx)               | Add `loginWithTelegram` tests      |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                                   | Add Telegram i18n keys             |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                                   | Add Telegram Hebrew translations   |
+| [`apps/api/src/main.ts`](../apps/api/src/main.ts)                                                             | Update CSP for Telegram SDK        |
+| `apps/api/package.json`                                                                                       | Add `jose` dependency              |
 
 ### Acceptance Criteria
 
@@ -791,18 +793,19 @@ async unlinkProvider(userId: string, provider: string) {
 ### 5.3c. Unlink Safety Rule
 
 A user must always have at least one authentication method. Before unlinking:
+
 - If user has a password → safe to unlink any provider
 - If user has no password → must keep at least one provider
 - If unlinking would leave user with no auth method → reject with error
 
 ### Files Created/Modified (Iteration 3.3)
 
-| File | Change |
-|------|--------|
-| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts) | Add `getConnectedAccounts`, `linkTelegramToUser`, `unlinkProvider` |
-| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) | Add unit tests |
-| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) | Add connected accounts endpoints |
-| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add controller tests |
+| File                                                                                        | Change                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts)                 | Add `getConnectedAccounts`, `linkTelegramToUser`, `unlinkProvider` |
+| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts)       | Add unit tests                                                     |
+| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts)           | Add connected accounts endpoints                                   |
+| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add controller tests                                               |
 
 ### Acceptance Criteria
 
@@ -873,18 +876,18 @@ Add "Connected Accounts" link to the dashboard/settings navigation in the Header
 
 ### 6.4e. Account Linking Scenarios (Integration Tests)
 
-| # | Scenario | Expected Behavior |
-|---|----------|-------------------|
-| 1 | Unauthenticated: New Telegram user | Create User with placeholder email |
-| 2 | Unauthenticated: Returning Telegram user | Login via OAuthProvider lookup |
-| 3 | Authenticated: Link Telegram to email/password user | Create OAuthProvider, return updated list |
-| 4 | Authenticated: Telegram already linked to this user | Return "already linked" |
-| 5 | Authenticated: Telegram linked to different user | Reject with conflict error |
-| 6 | Unlink Telegram when password exists | Success, provider removed |
-| 7 | Unlink Google when Telegram exists and no password | Success, provider removed |
-| 8 | Unlink last provider when no password | Reject - would leave no auth method |
-| 9 | Invalid HMAC on link attempt | Reject with 401 |
-| 10 | Expired auth_date on link attempt | Reject with 401 |
+| #   | Scenario                                            | Expected Behavior                         |
+| --- | --------------------------------------------------- | ----------------------------------------- |
+| 1   | Unauthenticated: New Telegram user                  | Create User with placeholder email        |
+| 2   | Unauthenticated: Returning Telegram user            | Login via OAuthProvider lookup            |
+| 3   | Authenticated: Link Telegram to email/password user | Create OAuthProvider, return updated list |
+| 4   | Authenticated: Telegram already linked to this user | Return "already linked"                   |
+| 5   | Authenticated: Telegram linked to different user    | Reject with conflict error                |
+| 6   | Unlink Telegram when password exists                | Success, provider removed                 |
+| 7   | Unlink Google when Telegram exists and no password  | Success, provider removed                 |
+| 8   | Unlink last provider when no password               | Reject - would leave no auth method       |
+| 9   | Invalid HMAC on link attempt                        | Reject with 401                           |
+| 10  | Expired auth_date on link attempt                   | Reject with 401                           |
 
 ### 6.4f. Integration Tests
 
@@ -926,16 +929,16 @@ describe('Telegram Auth Integration', () => {
 
 ### Files Created/Modified (Iteration 3.4)
 
-| File | Change |
-|------|--------|
-| `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx` | New: Connected accounts page |
-| `apps/web/src/components/auth/ConnectedAccounts.tsx` | New: Connected accounts component |
-| `apps/web/src/components/auth/ConnectedAccounts.spec.tsx` | New: Component tests |
-| `apps/api/test/integration/telegram-auth.integration.spec.ts` | New: Integration tests |
-| [`apps/web/e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts) | Add connected accounts + Telegram E2E tests |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Add connected accounts i18n |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Add connected accounts Hebrew |
-| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) | Add settings navigation |
+| File                                                                                        | Change                                      |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx`                            | New: Connected accounts page                |
+| `apps/web/src/components/auth/ConnectedAccounts.tsx`                                        | New: Connected accounts component           |
+| `apps/web/src/components/auth/ConnectedAccounts.spec.tsx`                                   | New: Component tests                        |
+| `apps/api/test/integration/telegram-auth.integration.spec.ts`                               | New: Integration tests                      |
+| [`apps/web/e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts)                                 | Add connected accounts + Telegram E2E tests |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                 | Add connected accounts i18n                 |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                 | Add connected accounts Hebrew               |
+| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) | Add settings navigation                     |
 
 ### Acceptance Criteria
 
@@ -968,16 +971,16 @@ describe('Telegram Auth Integration', () => {
 
 ### Threat Model — Phase 3 Additions
 
-| Threat | Mitigation |
-|--------|-----------|
-| Forged Telegram auth data | JWT signature verification via Telegram JWKS |
-| Replay attack | JWT exp claim + optional nonce |
-| Bot token leak | Stored in GitHub Secrets only, env var injection at deploy time |
-| XSS via Telegram SDK | CSP restricts script sources to `oauth.telegram.org` |
-| Brute force on callback | Rate limit 5 req/min |
-| Account enumeration | Generic error messages, no user existence leak |
-| Account takeover via linking | Telegram ID uniqueness — cannot link to two accounts |
-| Orphaned account | Unlink safety prevents removing last auth method |
+| Threat                       | Mitigation                                                      |
+| ---------------------------- | --------------------------------------------------------------- |
+| Forged Telegram auth data    | JWT signature verification via Telegram JWKS                    |
+| Replay attack                | JWT exp claim + optional nonce                                  |
+| Bot token leak               | Stored in GitHub Secrets only, env var injection at deploy time |
+| XSS via Telegram SDK         | CSP restricts script sources to `oauth.telegram.org`            |
+| Brute force on callback      | Rate limit 5 req/min                                            |
+| Account enumeration          | Generic error messages, no user existence leak                  |
+| Account takeover via linking | Telegram ID uniqueness — cannot link to two accounts            |
+| Orphaned account             | Unlink safety prevents removing last auth method                |
 
 ---
 
@@ -985,18 +988,19 @@ describe('Telegram Auth Integration', () => {
 
 ### Test Counts per Iteration
 
-| Iteration | Unit Tests | Integration Tests | UI Tests |
-|-----------|-----------|------------------|----------|
-| 3.1 | 18 - HMAC util, DTO, service, controller | 0 | 0 |
-| 3.2 | 8 - Widget component, auth context | 0 | 4 - E2E |
-| 3.3 | 10 - Connected accounts service + controller | 0 | 0 |
-| 3.4 | 6 - Component tests | 14 - Linking/unlinking scenarios | 4 - E2E |
+| Iteration | Unit Tests                                   | Integration Tests                | UI Tests |
+| --------- | -------------------------------------------- | -------------------------------- | -------- |
+| 3.1       | 18 - HMAC util, DTO, service, controller     | 0                                | 0        |
+| 3.2       | 8 - Widget component, auth context           | 0                                | 4 - E2E  |
+| 3.3       | 10 - Connected accounts service + controller | 0                                | 0        |
+| 3.4       | 6 - Component tests                          | 14 - Linking/unlinking scenarios | 4 - E2E  |
 
 **Total estimated: ~64 new tests**
 
 ### Key Test Scenarios
 
 **Backend Unit Tests:**
+
 - `verifyTelegramAuth()` with valid data returns true
 - `verifyTelegramAuth()` with tampered data returns false
 - `verifyTelegramAuth()` with different bot token returns false
@@ -1014,6 +1018,7 @@ describe('Telegram Auth Integration', () => {
 - `unlinkProvider()` rejects if last auth method
 
 **Integration Tests (with Testcontainers):**
+
 - Full Telegram auth flow with mock signed data
 - User creation with OAuthProvider record
 - Duplicate prevention
@@ -1024,6 +1029,7 @@ describe('Telegram Auth Integration', () => {
 - Connected accounts listing
 
 **Frontend Tests:**
+
 - TelegramLoginButton renders widget container
 - loginWithTelegram sends POST to correct endpoint
 - Error handling for failed Telegram auth
@@ -1038,12 +1044,12 @@ describe('Telegram Auth Integration', () => {
 
 ### New GitHub Secrets
 
-| Secret | Environment | Used by |
-|--------|-------------|---------|
-| `TELEGRAM_BOT_TOKEN` | Production | API JWT audience validation |
-| `TELEGRAM_BOT_USERNAME` | Production | Bot app, display purposes |
-| `TELEGRAM_BOT_TOKEN_STAGE` | Staging | API JWT audience validation |
-| `TELEGRAM_BOT_USERNAME_STAGE` | Staging | Bot app, display purposes |
+| Secret                        | Environment | Used by                     |
+| ----------------------------- | ----------- | --------------------------- |
+| `TELEGRAM_BOT_TOKEN`          | Production  | API JWT audience validation |
+| `TELEGRAM_BOT_USERNAME`       | Production  | Bot app, display purposes   |
+| `TELEGRAM_BOT_TOKEN_STAGE`    | Staging     | API JWT audience validation |
+| `TELEGRAM_BOT_USERNAME_STAGE` | Staging     | Bot app, display purposes   |
 
 ### Deploy Workflow Updates
 
@@ -1086,12 +1092,14 @@ export NEXT_PUBLIC_TELEGRAM_BOT_ID="${TELEGRAM_BOT_TOKEN%%:*}"
 Add to [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) and [`docker-compose.production.app.yml`](../docker-compose.production.app.yml):
 
 **API service:**
+
 ```yaml
 environment:
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
 ```
 
 **Web service** (note: `NEXT_PUBLIC_*` vars are baked at build time, but passed for reference):
+
 ```yaml
 environment:
   NEXT_PUBLIC_TELEGRAM_BOT_ID: ${NEXT_PUBLIC_TELEGRAM_BOT_ID}
@@ -1126,43 +1134,43 @@ And in CI/CD workflows, pass as build-arg:
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/auth/utils/telegram-auth.util.ts` | HMAC-SHA256 verification |
-| `apps/api/src/auth/utils/telegram-auth.util.spec.ts` | Verification unit tests |
-| `apps/api/src/auth/dto/telegram-auth.dto.ts` | Telegram auth DTO |
-| `apps/web/src/components/auth/TelegramLoginButton.tsx` | Telegram widget wrapper |
-| `apps/web/src/components/auth/TelegramLoginButton.spec.tsx` | Widget component tests |
-| `apps/web/src/components/auth/ConnectedAccounts.tsx` | Connected accounts component |
-| `apps/web/src/components/auth/ConnectedAccounts.spec.tsx` | Component tests |
-| `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx` | Connected accounts page |
-| `apps/api/test/integration/telegram-auth.integration.spec.ts` | Integration tests |
+| File                                                             | Purpose                      |
+| ---------------------------------------------------------------- | ---------------------------- |
+| `apps/api/src/auth/utils/telegram-auth.util.ts`                  | HMAC-SHA256 verification     |
+| `apps/api/src/auth/utils/telegram-auth.util.spec.ts`             | Verification unit tests      |
+| `apps/api/src/auth/dto/telegram-auth.dto.ts`                     | Telegram auth DTO            |
+| `apps/web/src/components/auth/TelegramLoginButton.tsx`           | Telegram widget wrapper      |
+| `apps/web/src/components/auth/TelegramLoginButton.spec.tsx`      | Widget component tests       |
+| `apps/web/src/components/auth/ConnectedAccounts.tsx`             | Connected accounts component |
+| `apps/web/src/components/auth/ConnectedAccounts.spec.tsx`        | Component tests              |
+| `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx` | Connected accounts page      |
+| `apps/api/test/integration/telegram-auth.integration.spec.ts`    | Integration tests            |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts) | Add Telegram + connected accounts methods |
-| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) | Add all unit tests |
-| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) | Add Telegram + connected accounts endpoints |
-| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) | Add controller tests |
-| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) | Add Telegram error codes |
-| [`apps/api/src/main.ts`](../apps/api/src/main.ts) | Update CSP for Telegram widget |
-| [`apps/api/.env.example`](../apps/api/.env.example) | Add Telegram env vars |
-| [`apps/web/.env.example`](../apps/web/.env.example) | Add `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` |
-| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx) | Replace disabled Telegram button with widget |
-| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx) | Update Telegram button tests |
-| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) | Add Telegram widget |
-| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Update Telegram button tests |
-| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) | Add `loginWithTelegram` method |
-| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) | Add `loginWithTelegram` tests |
-| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) | Add settings navigation |
-| [`apps/web/messages/en.json`](../apps/web/messages/en.json) | Add Telegram + connected accounts i18n |
-| [`apps/web/messages/he.json`](../apps/web/messages/he.json) | Add Hebrew translations |
-| [`apps/web/e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts) | Add Telegram + connected accounts E2E tests |
-| [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) | Add Telegram env vars |
-| [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) | Add Telegram env vars |
-| Docker Compose app files | Add Telegram env passthrough |
+| File                                                                                                          | Change                                       |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts)                                   | Add Telegram + connected accounts methods    |
+| [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts)                         | Add all unit tests                           |
+| [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts)                             | Add Telegram + connected accounts endpoints  |
+| [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts)                   | Add controller tests                         |
+| [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts)                 | Add Telegram error codes                     |
+| [`apps/api/src/main.ts`](../apps/api/src/main.ts)                                                             | Update CSP for Telegram widget               |
+| [`apps/api/.env.example`](../apps/api/.env.example)                                                           | Add Telegram env vars                        |
+| [`apps/web/.env.example`](../apps/web/.env.example)                                                           | Add `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`      |
+| [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx)                 | Replace disabled Telegram button with widget |
+| [`apps/web/src/components/auth/LoginForm.spec.tsx`](../apps/web/src/components/auth/LoginForm.spec.tsx)       | Update Telegram button tests                 |
+| [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx)           | Add Telegram widget                          |
+| [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) | Update Telegram button tests                 |
+| [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx)                         | Add `loginWithTelegram` method               |
+| [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx)               | Add `loginWithTelegram` tests                |
+| [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx)                   | Add settings navigation                      |
+| [`apps/web/messages/en.json`](../apps/web/messages/en.json)                                                   | Add Telegram + connected accounts i18n       |
+| [`apps/web/messages/he.json`](../apps/web/messages/he.json)                                                   | Add Hebrew translations                      |
+| [`apps/web/e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts)                                                   | Add Telegram + connected accounts E2E tests  |
+| [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml)                             | Add Telegram env vars                        |
+| [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml)                       | Add Telegram env vars                        |
+| Docker Compose app files                                                                                      | Add Telegram env passthrough                 |
 
 ### No Database Migration Needed
 
@@ -1198,6 +1206,7 @@ Each iteration deploys to staging and production via the existing CI/CD pipeline
 ## Appendix B: Deployment Iteration Summary
 
 ### Iteration 3.1: Backend — Telegram Auth Verification + Endpoint
+
 - Telegram HMAC verification utility with tests
 - `TelegramAuthDto` with class-validator
 - `findOrCreateTelegramUser()` in AuthService
@@ -1208,6 +1217,7 @@ Each iteration deploys to staging and production via the existing CI/CD pipeline
 - **Deploy → test → commit → push → verify**
 
 ### Iteration 3.2: Frontend — Telegram Login SDK + Auth Context + Backend JWT Update
+
 - Backend: Migrate from HMAC-SHA256 to OIDC JWT verification (add `jose` dependency)
 - Backend: Update `TelegramAuthDto` to accept `{id_token}`
 - Backend: Update controller to verify JWT via Telegram JWKS
@@ -1222,6 +1232,7 @@ Each iteration deploys to staging and production via the existing CI/CD pipeline
 - **Deploy → test → commit → push → verify**
 
 ### Iteration 3.3: Connected Accounts API + Link While Authenticated
+
 - `GET /auth/connected-accounts` endpoint
 - `POST /auth/link/telegram` endpoint
 - `DELETE /auth/connected-accounts/:provider` endpoint
@@ -1230,6 +1241,7 @@ Each iteration deploys to staging and production via the existing CI/CD pipeline
 - **Deploy → test → commit → push → verify**
 
 ### Iteration 3.4: Connected Accounts UI + Integration Tests
+
 - Connected Accounts settings page
 - ConnectedAccounts React component
 - Navigation update (Header)
