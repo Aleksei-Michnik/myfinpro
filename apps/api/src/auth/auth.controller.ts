@@ -24,15 +24,17 @@ import {
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
-import { AuthService, GoogleProfile } from './auth.service';
+import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { verifyTelegramAuth, isTelegramAuthRecent } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -177,5 +179,61 @@ export class AuthController {
 
     this.logger.log(`Google OAuth callback: redirecting user ${user.id} to frontend`);
     response.redirect(redirectUrl);
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 60000 })
+  @Post('telegram/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Authenticate via Telegram Login Widget' })
+  @ApiResponse({
+    status: 200,
+    description: 'Telegram authentication successful',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram auth data' })
+  @ApiTooManyRequestsResponse({ description: 'Too many authentication attempts' })
+  async telegramCallback(
+    @Body() dto: TelegramAuthDto,
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+  ) {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      throw new UnauthorizedException({
+        message: 'Telegram authentication is not configured',
+        errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+      });
+    }
+
+    // Verify HMAC signature
+    if (!verifyTelegramAuth(dto, botToken)) {
+      throw new UnauthorizedException({
+        message: 'Invalid Telegram authentication data',
+        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+      });
+    }
+
+    // Verify auth_date is recent
+    if (!isTelegramAuthRecent(dto.auth_date)) {
+      throw new UnauthorizedException({
+        message: 'Telegram authentication has expired',
+        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_EXPIRED,
+      });
+    }
+
+    // Build profile and find or create user
+    const telegramProfile: TelegramProfile = {
+      telegramId: String(dto.id),
+      firstName: dto.first_name,
+      lastName: dto.last_name,
+      username: dto.username,
+      photoUrl: dto.photo_url,
+    };
+
+    const user = await this.authService.findOrCreateTelegramUser(telegramProfile);
+
+    const ip = request.ip;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.login(user, response, ip, userAgent);
   }
 }

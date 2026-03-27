@@ -17,6 +17,14 @@ export interface GoogleProfile {
   emailVerified: boolean;
 }
 
+export interface TelegramProfile {
+  telegramId: string;
+  firstName: string;
+  lastName?: string;
+  username?: string;
+  photoUrl?: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -345,6 +353,80 @@ export class AuthService {
         entity: 'User',
         entityId: result.id,
         details: { email: result.email, provider: 'google' },
+      },
+    });
+
+    const { passwordHash, ...userWithoutPassword } = result;
+    return userWithoutPassword;
+  }
+
+  async findOrCreateTelegramUser(profile: TelegramProfile): Promise<ValidatedUser> {
+    const { telegramId, firstName, lastName, username, photoUrl } = profile;
+
+    // 1. Check if this Telegram account is already linked
+    const existingOAuth = await this.oauthService.findByProvider('telegram', telegramId);
+    if (existingOAuth) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: existingOAuth.userId },
+      });
+      if (!user) {
+        throw new UnauthorizedException({
+          message: 'User not found',
+          errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+        });
+      }
+      if (!user.isActive) {
+        throw new UnauthorizedException({
+          message: 'Account is inactive',
+          errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
+        });
+      }
+      const { passwordHash, ...result } = user;
+      return result;
+    }
+
+    // 2. No email matching for Telegram — always create new User + OAuthProvider
+    const displayName = lastName ? `${firstName} ${lastName}` : firstName;
+    const email = `telegram_${telegramId}@telegram.user`;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash: null,
+          name: displayName,
+          emailVerified: false,
+        },
+      });
+
+      await tx.oAuthProvider.create({
+        data: {
+          provider: 'telegram',
+          providerId: telegramId,
+          userId: newUser.id,
+          name: displayName,
+          avatarUrl: photoUrl,
+          metadata: {
+            username: username || null,
+            firstName,
+            lastName: lastName || null,
+          },
+        },
+      });
+
+      return newUser;
+    });
+
+    this.logger.log(`New user created via Telegram OAuth: ${result.email} (${result.id})`);
+
+    // Log audit event
+    await this.prisma.auditLog.create({
+      data: {
+        userId: result.id,
+        action: 'USER_REGISTERED_OAUTH',
+        entity: 'User',
+        entityId: result.id,
+        details: { email: result.email, provider: 'telegram' },
       },
     });
 

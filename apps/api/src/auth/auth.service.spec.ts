@@ -790,4 +790,187 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('findOrCreateTelegramUser()', () => {
+    const mockTelegramProfile = {
+      telegramId: '123456789',
+      firstName: 'John',
+      lastName: 'Doe',
+      username: 'johndoe',
+      photoUrl: 'https://t.me/i/userpic/320/photo.jpg',
+    };
+
+    const mockUser = {
+      id: 'user-uuid',
+      email: 'telegram_123456789@telegram.user',
+      name: 'John Doe',
+      passwordHash: null,
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+      isActive: true,
+      emailVerified: false,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should create new user when no existing OAuth provider found', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.$transaction.mockImplementation(async (fn: Function) => {
+        const tx = {
+          user: { create: jest.fn().mockResolvedValue(mockUser) },
+          oAuthProvider: { create: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(tx);
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.findOrCreateTelegramUser(mockTelegramProfile);
+
+      expect(mockOAuthService.findByProvider).toHaveBeenCalledWith('telegram', '123456789');
+      expect(mockPrismaService.$transaction).toHaveBeenCalled();
+      expect(result.id).toBe('user-uuid');
+      expect(result.email).toBe('telegram_123456789@telegram.user');
+      expect(result.name).toBe('John Doe');
+      expect(result).not.toHaveProperty('passwordHash');
+    });
+
+    it('should return existing linked user when OAuth provider found', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findOrCreateTelegramUser(mockTelegramProfile);
+
+      expect(result.id).toBe('user-uuid');
+      expect(result.email).toBe('telegram_123456789@telegram.user');
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should reject inactive user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue({ ...mockUser, isActive: false });
+
+      await expect(service.findOrCreateTelegramUser(mockTelegramProfile)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await service.findOrCreateTelegramUser(mockTelegramProfile);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Account is inactive',
+            errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
+          }),
+        );
+      }
+    });
+
+    it('should handle missing optional fields (no lastName, no username, no photoUrl)', async () => {
+      const minimalProfile = {
+        telegramId: '999888777',
+        firstName: 'Solo',
+      };
+
+      const minimalUser = {
+        ...mockUser,
+        id: 'minimal-uuid',
+        email: 'telegram_999888777@telegram.user',
+        name: 'Solo',
+      };
+
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.$transaction.mockImplementation(async (fn: Function) => {
+        const tx = {
+          user: {
+            create: jest.fn().mockImplementation(({ data }) => {
+              expect(data.name).toBe('Solo');
+              expect(data.email).toBe('telegram_999888777@telegram.user');
+              return Promise.resolve(minimalUser);
+            }),
+          },
+          oAuthProvider: {
+            create: jest.fn().mockImplementation(({ data }) => {
+              expect(data.metadata).toEqual({
+                username: null,
+                firstName: 'Solo',
+                lastName: null,
+              });
+              return Promise.resolve({});
+            }),
+          },
+        };
+        return fn(tx);
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.findOrCreateTelegramUser(minimalProfile);
+
+      expect(result.id).toBe('minimal-uuid');
+      expect(result.name).toBe('Solo');
+    });
+
+    it('should throw USER_NOT_FOUND when OAuth provider exists but user does not', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'deleted-user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOrCreateTelegramUser(mockTelegramProfile)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await service.findOrCreateTelegramUser(mockTelegramProfile);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'User not found',
+            errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+          }),
+        );
+      }
+    });
+
+    it('should create audit log with provider telegram', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.$transaction.mockImplementation(async (fn: Function) => {
+        const tx = {
+          user: { create: jest.fn().mockResolvedValue(mockUser) },
+          oAuthProvider: { create: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(tx);
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.findOrCreateTelegramUser(mockTelegramProfile);
+
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: mockUser.id,
+          action: 'USER_REGISTERED_OAUTH',
+          entity: 'User',
+          entityId: mockUser.id,
+          details: { email: mockUser.email, provider: 'telegram' },
+        },
+      });
+    });
+  });
 });

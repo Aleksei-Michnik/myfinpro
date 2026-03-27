@@ -1,3 +1,4 @@
+import { createHash, createHmac } from 'crypto';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -7,6 +8,7 @@ import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { TelegramAuthDto } from './dto/telegram-auth.dto';
 
 // Internal metadata keys used by @nestjs/throttler's @Throttle() decorator
 // The decorator concatenates the base key with the throttler name (e.g., 'default')
@@ -24,12 +26,16 @@ describe('AuthController', () => {
     logout: jest.fn(),
     getUser: jest.fn(),
     findOrCreateGoogleUser: jest.fn(),
+    findOrCreateTelegramUser: jest.fn(),
   };
+
+  const TEST_BOT_TOKEN = 'test-bot-token:ABC123xyz';
 
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: string) => {
       const config: Record<string, string> = {
         FRONTEND_URL: 'http://localhost:3000',
+        TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN,
       };
       return config[key] ?? defaultValue;
     }),
@@ -458,6 +464,170 @@ describe('AuthController', () => {
 
       expect(limit).toBe(10);
       expect(ttl).toBe(60000);
+    });
+
+    it('should have @Throttle metadata on telegramCallback endpoint with limit 5 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.telegramCallback,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.telegramCallback);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(60000);
+    });
+  });
+
+  describe('telegramCallback()', () => {
+    function computeTelegramHash(data: Record<string, unknown>, botToken: string): string {
+      const dataCheckString = Object.keys(data)
+        .sort()
+        .filter((key) => data[key] !== undefined)
+        .map((key) => `${key}=${data[key]}`)
+        .join('\n');
+
+      const secretKey = createHash('sha256').update(botToken).digest();
+      return createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    function buildValidDto(): TelegramAuthDto {
+      const baseData = {
+        id: 123456789,
+        first_name: 'John',
+        auth_date: now,
+      };
+      const hash = computeTelegramHash(baseData, TEST_BOT_TOKEN);
+      return { ...baseData, hash } as TelegramAuthDto;
+    }
+
+    const mockUser = {
+      id: 'telegram-user-uuid',
+      email: 'telegram_123456789@telegram.user',
+      name: 'John',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+      isActive: true,
+      emailVerified: false,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should return tokens for valid Telegram auth data', async () => {
+      const dto = buildValidDto();
+      const loginResponse = {
+        user: {
+          id: mockUser.id,
+          email: mockUser.email,
+          name: mockUser.name,
+          defaultCurrency: mockUser.defaultCurrency,
+          locale: mockUser.locale,
+        },
+        accessToken: 'mock-jwt-token',
+      };
+
+      mockAuthService.findOrCreateTelegramUser.mockResolvedValue(mockUser);
+      mockAuthService.login.mockResolvedValue(loginResponse);
+
+      const result = await controller.telegramCallback(dto, mockResponse, mockRequest);
+
+      expect(mockAuthService.findOrCreateTelegramUser).toHaveBeenCalledWith({
+        telegramId: '123456789',
+        firstName: 'John',
+        lastName: undefined,
+        username: undefined,
+        photoUrl: undefined,
+      });
+      expect(mockAuthService.login).toHaveBeenCalledWith(
+        mockUser,
+        mockResponse,
+        '127.0.0.1',
+        'TestAgent/1.0',
+      );
+      expect(result).toEqual(loginResponse);
+    });
+
+    it('should throw 401 with TELEGRAM_AUTH_INVALID for invalid HMAC', async () => {
+      const dto: TelegramAuthDto = {
+        id: 123456789,
+        first_name: 'John',
+        auth_date: now,
+        hash: 'invalid-hash-value',
+      };
+
+      await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await controller.telegramCallback(dto, mockResponse, mockRequest);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Invalid Telegram authentication data',
+            errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+          }),
+        );
+      }
+    });
+
+    it('should throw 401 with TELEGRAM_AUTH_EXPIRED for expired auth_date', async () => {
+      const oldTimestamp = now - 600; // 10 minutes ago
+      const baseData = {
+        id: 123456789,
+        first_name: 'John',
+        auth_date: oldTimestamp,
+      };
+      const hash = computeTelegramHash(baseData, TEST_BOT_TOKEN);
+      const dto: TelegramAuthDto = { ...baseData, hash } as TelegramAuthDto;
+
+      await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await controller.telegramCallback(dto, mockResponse, mockRequest);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Telegram authentication has expired',
+            errorCode: AUTH_ERRORS.TELEGRAM_AUTH_EXPIRED,
+          }),
+        );
+      }
+    });
+
+    it('should throw 401 with OAUTH_PROVIDER_ERROR when bot token is not configured', async () => {
+      mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'TELEGRAM_BOT_TOKEN') return defaultValue as string;
+        const config: Record<string, string> = {
+          FRONTEND_URL: 'http://localhost:3000',
+        };
+        return config[key] ?? (defaultValue as string);
+      });
+
+      const dto = buildValidDto();
+
+      await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await controller.telegramCallback(dto, mockResponse, mockRequest);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Telegram authentication is not configured',
+            errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+          }),
+        );
+      }
     });
   });
 });
