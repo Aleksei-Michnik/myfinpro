@@ -3,12 +3,12 @@
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
+import { useTelegramLogin } from '@/components/auth/TelegramLoginButton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { useTelegramLogin } from '@/components/auth/TelegramLoginButton';
 
 const TELEGRAM_BOT_ID = process.env.NEXT_PUBLIC_TELEGRAM_BOT_ID;
 
