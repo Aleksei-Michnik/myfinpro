@@ -1,63 +1,53 @@
-import { createHash, createHmac } from 'crypto';
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 /**
- * Data received from Telegram Login Widget.
- * Field names use snake_case to match Telegram's API format.
+ * Telegram OIDC JWT claims returned by the Telegram Login SDK.
+ *
+ * @see https://core.telegram.org/widgets/login (OIDC JWT section)
  */
-export interface TelegramAuthData {
-  id: number;
+export interface TelegramJwtClaims extends JWTPayload {
+  /** Telegram user ID (numeric, as string in `sub`) */
+  sub: string;
+  /** First name */
   first_name: string;
+  /** Last name (optional) */
   last_name?: string;
+  /** Telegram username (optional) */
   username?: string;
+  /** Profile photo URL (optional) */
   photo_url?: string;
-  auth_date: number;
-  hash: string;
 }
 
-/**
- * Verifies the HMAC-SHA256 hash per Telegram's Login Widget protocol.
- *
- * @see https://core.telegram.org/widgets/login#checking-authorization
- *
- * Steps:
- * 1. Sort all fields (except `hash`) alphabetically
- * 2. Create data-check-string: `key=value\n` pairs
- * 3. SHA-256 of bot token = secret key
- * 4. HMAC-SHA256 of data-check-string using secret key
- * 5. Compare with received hash
- */
-export function verifyTelegramAuth(data: TelegramAuthData, botToken: string): boolean {
-  const { hash, ...rest } = data;
+/** Telegram's JWKS endpoint for verifying id_token signatures. */
+const TELEGRAM_JWKS_URL = new URL('https://oauth.telegram.org/.well-known/jwks.json');
 
-  if (!hash || !botToken) {
-    return false;
+/** Cached JWKS fetcher — `jose` handles key rotation and caching internally. */
+const telegramJWKS = createRemoteJWKSet(TELEGRAM_JWKS_URL);
+
+/**
+ * Verifies a Telegram Login SDK `id_token` (OIDC JWT) using Telegram's JWKS.
+ *
+ * @param idToken - The raw JWT string from the Telegram Login SDK
+ * @param botId - The numeric bot ID (first part of bot token, e.g. "123456789")
+ * @returns Verified JWT claims including Telegram user profile data
+ * @throws If the token is invalid, expired, or has wrong audience
+ */
+export async function verifyTelegramIdToken(
+  idToken: string,
+  botId: string,
+): Promise<TelegramJwtClaims> {
+  const { payload } = await jwtVerify(idToken, telegramJWKS, {
+    issuer: 'https://oauth.telegram.org',
+    audience: botId,
+  });
+
+  // Validate required claims
+  if (!payload.sub) {
+    throw new Error('Missing sub claim in Telegram id_token');
+  }
+  if (!(payload as TelegramJwtClaims).first_name) {
+    throw new Error('Missing first_name claim in Telegram id_token');
   }
 
-  // 1. Sort fields alphabetically and create data-check-string
-  const dataCheckString = Object.keys(rest)
-    .sort()
-    .filter((key) => rest[key as keyof typeof rest] !== undefined)
-    .map((key) => `${key}=${rest[key as keyof typeof rest]}`)
-    .join('\n');
-
-  // 2. SHA-256 of bot token = secret key
-  const secretKey = createHash('sha256').update(botToken).digest();
-
-  // 3. HMAC-SHA256 of data-check-string using secret key
-  const hmac = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-
-  // 4. Compare with received hash (constant-time comparison)
-  return hmac === hash;
-}
-
-/**
- * Checks that auth_date is within the allowed time window.
- *
- * @param authDate - Unix timestamp from Telegram's auth_date field
- * @param maxAgeSeconds - Maximum age in seconds (default: 300 = 5 minutes)
- * @returns true if auth_date is recent enough
- */
-export function isTelegramAuthRecent(authDate: number, maxAgeSeconds: number = 300): boolean {
-  const now = Math.floor(Date.now() / 1000);
-  return now - authDate <= maxAgeSeconds;
+  return payload as TelegramJwtClaims;
 }

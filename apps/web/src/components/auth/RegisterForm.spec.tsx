@@ -29,6 +29,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({
     register: mockRegister,
     loginWithToken: vi.fn(),
+    loginWithTelegram: vi.fn(),
     user: null,
     isAuthenticated: false,
     isLoading: false,
@@ -36,6 +37,15 @@ vi.mock('@/lib/auth/auth-context', () => ({
     login: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => null,
+  }),
+}));
+
+// Mock useTelegramLogin hook
+vi.mock('@/components/auth/TelegramLoginButton', () => ({
+  useTelegramLogin: () => ({
+    triggerLogin: vi.fn(),
+    isReady: false,
+    isLoading: false,
   }),
 }));
 
@@ -215,6 +225,13 @@ describe('RegisterForm', () => {
     expect(googleBtn).toBeEnabled();
     fireEvent.click(googleBtn);
     expect(window.location.href).toBe('/api/v1/auth/google');
+  });
+
+  it('renders Telegram button as disabled when NEXT_PUBLIC_TELEGRAM_BOT_ID is not set', () => {
+    render(<RegisterForm />);
+    const telegramBtn = screen.getByRole('button', { name: 'telegram' });
+    expect(telegramBtn).toBeInTheDocument();
+    expect(telegramBtn).toBeDisabled();
   });
 
   it('renders "or sign up with" divider text', () => {

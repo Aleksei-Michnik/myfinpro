@@ -70,7 +70,10 @@
     "oauthError": "Authentication failed. Please try again.",
     "oauthSuccess": "Signed in with Google!",
     "orSignUpWith": "Or sign up with",
-    "signInWithGoogle": "Sign in with Google"
+    "signInWithGoogle": "Sign in with Google",
+    "telegramAuthFailed": "Sign-in with Telegram failed. Please try again.",
+    "telegramAuthSuccess": "Signed in with Telegram!",
+    "telegramSignIn": "Sign in with Telegram"
   },
   "toast": {
     "dismiss": "Dismiss"

@@ -13,6 +13,7 @@ let mockAuthState = {
   accessToken: null as string | null,
   login: vi.fn(),
   loginWithToken: vi.fn(),
+  loginWithTelegram: vi.fn(),
   register: vi.fn(),
   getAccessToken: () => null as string | null,
 };
@@ -59,6 +60,7 @@ describe('Header', () => {
       accessToken: null,
       login: vi.fn(),
       loginWithToken: vi.fn(),
+      loginWithTelegram: vi.fn(),
       register: vi.fn(),
       getAccessToken: () => null,
     };
@@ -144,6 +146,7 @@ describe('Header', () => {
         accessToken: 'token',
         login: vi.fn(),
         loginWithToken: vi.fn(),
+        loginWithTelegram: vi.fn(),
         register: vi.fn(),
         getAccessToken: () => 'token',
       };

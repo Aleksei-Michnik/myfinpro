@@ -21,6 +21,8 @@ CMD ["pnpm", "run", "dev"]
 
 # ───── Build Stage ─────
 FROM dependencies AS build
+ARG NEXT_PUBLIC_TELEGRAM_BOT_ID
+ENV NEXT_PUBLIC_TELEGRAM_BOT_ID=${NEXT_PUBLIC_TELEGRAM_BOT_ID}
 COPY . .
 # Remove stale tsbuildinfo (incremental builds skip emit if present without dist)
 RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \

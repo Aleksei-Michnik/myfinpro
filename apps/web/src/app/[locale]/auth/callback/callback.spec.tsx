@@ -37,6 +37,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
     isLoading: false,
     accessToken: null,
     login: vi.fn(),
+    loginWithTelegram: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => null,

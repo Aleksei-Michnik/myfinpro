@@ -17,5 +17,8 @@ declare namespace NodeJS {
 
     /** Comma-separated supported locales */
     NEXT_PUBLIC_SUPPORTED_LOCALES?: string;
+
+    /** Telegram bot ID (numeric) for Telegram Login SDK */
+    NEXT_PUBLIC_TELEGRAM_BOT_ID?: string;
   }
 }

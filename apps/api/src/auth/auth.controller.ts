@@ -34,7 +34,7 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { verifyTelegramAuth, isTelegramAuthRecent } from './utils/telegram-auth.util';
+import { verifyTelegramIdToken } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -184,13 +184,13 @@ export class AuthController {
   @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('telegram/callback')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Authenticate via Telegram Login Widget' })
+  @ApiOperation({ summary: 'Authenticate via Telegram Login SDK (OIDC JWT)' })
   @ApiResponse({
     status: 200,
     description: 'Telegram authentication successful',
     type: AuthResponseDto,
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram auth data' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram id_token' })
   @ApiTooManyRequestsResponse({ description: 'Too many authentication attempts' })
   async telegramCallback(
     @Body() dto: TelegramAuthDto,
@@ -205,29 +205,30 @@ export class AuthController {
       });
     }
 
-    // Verify HMAC signature
-    if (!verifyTelegramAuth(dto, botToken)) {
+    // Extract bot ID (numeric part before the colon)
+    const botId = botToken.split(':')[0];
+
+    // Verify OIDC JWT via Telegram's JWKS
+    let claims;
+    try {
+      claims = await verifyTelegramIdToken(dto.id_token, botId);
+    } catch (error) {
+      this.logger.warn(
+        `Telegram id_token verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
       throw new UnauthorizedException({
         message: 'Invalid Telegram authentication data',
         errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
       });
     }
 
-    // Verify auth_date is recent
-    if (!isTelegramAuthRecent(dto.auth_date)) {
-      throw new UnauthorizedException({
-        message: 'Telegram authentication has expired',
-        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_EXPIRED,
-      });
-    }
-
-    // Build profile and find or create user
+    // Build profile from JWT claims and find or create user
     const telegramProfile: TelegramProfile = {
-      telegramId: String(dto.id),
-      firstName: dto.first_name,
-      lastName: dto.last_name,
-      username: dto.username,
-      photoUrl: dto.photo_url,
+      telegramId: claims.sub,
+      firstName: claims.first_name,
+      lastName: claims.last_name,
+      username: claims.username,
+      photoUrl: claims.photo_url,
     };
 
     const user = await this.authService.findOrCreateTelegramUser(telegramProfile);

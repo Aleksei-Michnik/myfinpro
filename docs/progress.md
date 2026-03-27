@@ -1,8 +1,8 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-03-25
-> **Current Phase:** Phase 2 — Google Authentication ✅ Complete
-> **Next Phase:** Phase 3 — Telegram Authentication
+> **Last updated:** 2026-03-27
+> **Current Phase:** Phase 3 — Telegram Authentication 🔄 In Progress
+> **Next Phase:** Phase 3.3 — Connected Accounts
 
 ---
 
@@ -41,7 +41,7 @@
 | 0     | Foundation                 | 8/8        | ✅ Complete    | 2026-02-13      |
 | 1     | Basic Authentication       | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication      | 4/4        | ✅ Complete    | 2026-03-25      |
-| 3     | Telegram Authentication    | 0/4        | ⬜ Not Started | —               |
+| 3     | Telegram Authentication    | 2/4        | 🔄 In Progress | —               |
 | 4     | Family/Group Management    | 0/14       | ⬜ Not Started | —               |
 | 5     | Income Management          | 0/10       | ⬜ Not Started | —               |
 | 6     | Expense Management         | 0/13       | ⬜ Not Started | —               |
@@ -54,7 +54,7 @@
 | 13    | Bot Analytics              | 0/4        | ⬜ Not Started | —               |
 | 14    | LLM Assistant              | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 128 | **Completed:** 25 | **Remaining:** 103
+**Total iterations:** 128 | **Completed:** 27 | **Remaining:** 101
 
 ---
 
@@ -1022,7 +1022,79 @@ User clicks "Google" → window.location.href = /api/v1/auth/google
 
 ---
 
-## 6. Current Project Structure
+## 6. Phase 3 — Telegram Authentication
+
+### Overview
+
+Phase 3 adds Telegram as a third authentication provider. Users can sign in or register with their Telegram account via the official Telegram Login SDK. The implementation uses OIDC JWT verification (via Telegram's JWKS endpoint) rather than the legacy HMAC-SHA256 widget approach, enabling custom-styled buttons that match the app's design system.
+
+**Key architecture decisions:**
+
+- **Telegram Login SDK** (`oauth.telegram.org/js/telegram-login.js`) — programmatic API with `Telegram.Login.auth()` for custom button support
+- **OIDC JWT verification** — backend verifies `id_token` via Telegram's JWKS (`jose` library), not HMAC-SHA256
+- **POST-based flow** — frontend sends `{id_token}` to `POST /api/v1/auth/telegram/callback`
+- **No email from Telegram** — placeholder email `telegram_{id}@telegram.user` used
+- **Two separate bots** — staging and production each have their own Telegram bot (BotFather domain restriction)
+- **`NEXT_PUBLIC_TELEGRAM_BOT_ID`** — numeric bot ID derived from bot token at build time in CI/CD
+
+### Iteration 3.1: Backend — Telegram Auth Endpoint (Initial)
+
+**What was implemented (then updated in 3.2):**
+
+- `POST /api/v1/auth/telegram/callback` endpoint
+- `TelegramAuthDto` — initially accepted HMAC fields, updated to `{id_token}` in 3.2
+- `verifyTelegramAuth()` utility — initially HMAC-SHA256, replaced with `verifyTelegramIdToken()` in 3.2
+- `findOrCreateTelegramUser()` in AuthService — creates user with placeholder email
+- Prisma schema already had `telegramId` field from Phase 2 migration
+- Rate limiting: 5 requests/minute on telegram callback
+
+### Iteration 3.2: Frontend + Backend JWT Migration + CI/CD
+
+**What was implemented:**
+
+**Backend (JWT migration):**
+
+- Added `jose` dependency for OIDC JWT verification
+- Rewrote `telegram-auth.util.ts` — `verifyTelegramIdToken()` using `createRemoteJWKSet` + `jwtVerify` against Telegram's JWKS
+- Updated `TelegramAuthDto` to accept `{id_token: string}` instead of HMAC fields
+- Updated `auth.controller.ts` — extracts bot ID from token, verifies JWT, builds `TelegramProfile` from claims
+- CSP headers updated for `oauth.telegram.org` (scriptSrc, frameSrc, connectSrc)
+
+**Frontend:**
+
+- `useTelegramLogin` hook — loads Telegram Login SDK, provides `triggerLogin()` function
+- Custom-styled Telegram button in LoginForm and RegisterForm (app's own `Button` component)
+- `loginWithTelegram` method in AuthContext — sends `{id_token}` to backend
+- Graceful fallback: disabled button when `NEXT_PUBLIC_TELEGRAM_BOT_ID` is not set
+- i18n translations added (en + he): `telegramAuthFailed`, `telegramAuthSuccess`, `telegramSignIn`
+
+**Infrastructure:**
+
+- CI/CD workflows updated with Telegram secrets and bot ID derivation
+- `web.Dockerfile` — `ARG NEXT_PUBLIC_TELEGRAM_BOT_ID` in build stage
+- Docker Compose files — `TELEGRAM_BOT_TOKEN` for API service
+- `.env` templates updated
+
+**Key files created/modified:**
+
+- [`apps/api/src/auth/utils/telegram-auth.util.ts`](../apps/api/src/auth/utils/telegram-auth.util.ts) — JWT verification via JWKS
+- [`apps/api/src/auth/dto/telegram-auth.dto.ts`](../apps/api/src/auth/dto/telegram-auth.dto.ts) — `{id_token}` DTO
+- [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) — Telegram callback endpoint
+- [`apps/web/src/components/auth/TelegramLoginButton.tsx`](../apps/web/src/components/auth/TelegramLoginButton.tsx) — `useTelegramLogin` hook
+- [`apps/web/src/components/auth/LoginForm.tsx`](../apps/web/src/components/auth/LoginForm.tsx) — Telegram button integration
+- [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) — Telegram button integration
+- [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) — `loginWithTelegram` method
+
+**Tests added/updated:**
+
+- `telegram-auth.util.spec.ts` — 7 tests for JWT verification (mocked `jose`)
+- `auth.controller.spec.ts` — 6 tests for telegram callback (valid token, invalid, expired, not configured, bot ID extraction)
+- `TelegramLoginButton.spec.tsx` — 10 tests for `useTelegramLogin` hook
+- Updated all AuthContext mock consumers to include `loginWithTelegram`
+
+---
+
+## 7. Current Project Structure
 
 ```
 myfinpro/
@@ -1088,7 +1160,7 @@ myfinpro/
 | ----------------------- | --------------------------------------------------------------------- |
 | **Lint**                | 0 errors, 0 warnings                                                  |
 | **Typecheck**           | 0 errors                                                              |
-| **API Unit Tests**      | 198 passing (Jest)                                                    |
+| **API Unit Tests**      | 219 passing (Jest)                                                    |
 | **API Integration**     | ~15 passing (Jest + Testcontainers)                                   |
 | **Web Unit Tests**      | ~155 passing (Vitest + Testing Library)                               |
 | **Shared Unit Tests**   | 46 passing (Vitest)                                                   |
@@ -1149,6 +1221,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | [`docs/phase-0-design.md`](phase-0-design.md)                             | Phase 0 architecture design decisions                   |
 | [`docs/phase-1-design.md`](phase-1-design.md)                             | Phase 1 authentication architecture and design          |
 | [`docs/phase-2-design.md`](phase-2-design.md)                             | Phase 2 Google OAuth architecture and design            |
+| [`docs/phase-3-design.md`](phase-3-design.md)                             | Phase 3 Telegram authentication architecture and design |
 | [`docs/deployment.md`](deployment.md)                                     | Deployment guide — full pipeline, test gating, rollback |
 | [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
@@ -1187,14 +1260,14 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 ## 11. Next Steps
 
-### Phase 3: Telegram Authentication (4 iterations)
+### Phase 3: Telegram Authentication (2/4 iterations remaining)
 
-| Iteration | Objective                                                  |
-| --------- | ---------------------------------------------------------- |
-| 3.1       | Telegram auth setup — Bot token, widget configuration      |
-| 3.2       | Telegram login flow — Widget callback, account linking     |
-| 3.3       | Frontend Telegram login — Login button, widget integration |
-| 3.4       | Account linking — Link Telegram to existing accounts       |
+| Iteration | Objective                                                              | Status         |
+| --------- | ---------------------------------------------------------------------- | -------------- |
+| 3.1       | Backend — Telegram auth endpoint (initial HMAC, updated to JWT in 3.2) | ✅ Complete    |
+| 3.2       | Frontend — Telegram Login SDK + Auth Context + Backend JWT + CI/CD     | ✅ Complete    |
+| 3.3       | Connected accounts — Link Telegram to existing email/password accounts | ⬜ Not Started |
+| 3.4       | Account settings — Manage connected providers, unlink accounts         | ⬜ Not Started |
 
 ### Other Upcoming Work
 

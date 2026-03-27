@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, LoginData, RegisterData, AuthResponse } from './types';
+import type { TelegramLoginResult } from '@/components/auth/TelegramLoginButton';
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +11,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (data: LoginData) => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
+  loginWithTelegram: (data: TelegramLoginResult) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => string | null;
@@ -87,6 +89,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(result.accessToken);
   }, []);
 
+  const loginWithTelegram = useCallback(async (data: TelegramLoginResult) => {
+    const res = await fetch(`${API_BASE}/auth/telegram/callback`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: 'Telegram authentication failed' }));
+      throw new Error((error as { message?: string }).message || 'Telegram authentication failed');
+    }
+    const result: AuthResponse = await res.json();
+    setUser(result.user);
+    setAccessToken(result.accessToken);
+  }, []);
+
   const loginWithToken = useCallback(async (token: string) => {
     setAccessToken(token);
     try {
@@ -135,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         loginWithToken,
+        loginWithTelegram,
         register,
         logout,
         getAccessToken,

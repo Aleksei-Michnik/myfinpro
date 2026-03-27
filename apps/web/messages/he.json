@@ -70,7 +70,10 @@
     "oauthError": "ההתחברות נכשלה. אנא נסה שוב.",
     "oauthSuccess": "התחברת עם Google!",
     "orSignUpWith": "או הירשם עם",
-    "signInWithGoogle": "התחבר עם Google"
+    "signInWithGoogle": "התחבר עם Google",
+    "telegramAuthFailed": "ההתחברות עם טלגרם נכשלה. נסה שוב.",
+    "telegramAuthSuccess": "התחברת עם טלגרם!",
+    "telegramSignIn": "התחבר עם טלגרם"
   },
   "toast": {
     "dismiss": "סגור"

@@ -44,6 +44,7 @@
     "cookie-parser": "^1.4.7",
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
+    "jose": "^6.2.2",
     "mariadb": "^3.5.2",
     "nestjs-pino": "^4.6.1",
     "passport": "^0.7.0",

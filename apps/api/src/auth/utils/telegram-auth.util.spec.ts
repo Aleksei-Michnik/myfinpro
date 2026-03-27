@@ -1,160 +1,152 @@
-import { createHash, createHmac } from 'crypto';
-import { TelegramAuthData, verifyTelegramAuth, isTelegramAuthRecent } from './telegram-auth.util';
+import { verifyTelegramIdToken, TelegramJwtClaims } from './telegram-auth.util';
 
-/**
- * Helper: compute a valid HMAC hash for Telegram auth data.
- */
-function computeTelegramHash(data: Omit<TelegramAuthData, 'hash'>, botToken: string): string {
-  const dataCheckString = Object.keys(data)
-    .sort()
-    .filter((key) => data[key as keyof typeof data] !== undefined)
-    .map((key) => `${key}=${data[key as keyof typeof data]}`)
-    .join('\n');
+// Mock jose module
+jest.mock('jose', () => {
+  const mockJwtVerify = jest.fn();
+  return {
+    createRemoteJWKSet: jest.fn(() => 'mock-jwks'),
+    jwtVerify: mockJwtVerify,
+  };
+});
 
-  const secretKey = createHash('sha256').update(botToken).digest();
-  return createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-}
+// Get reference to the mocked jwtVerify
+import { jwtVerify } from 'jose';
+const mockJwtVerify = jwtVerify as jest.MockedFunction<typeof jwtVerify>;
 
 describe('telegram-auth.util', () => {
-  const botToken = 'test-bot-token:ABC123xyz';
+  const botId = '123456789';
+  const validIdToken = 'eyJhbGciOiJSUzI1NiJ9.valid.token';
 
-  describe('verifyTelegramAuth()', () => {
-    it('should return true for valid data with a correct HMAC', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 123456789,
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('verifyTelegramIdToken()', () => {
+    it('should return claims for a valid id_token', async () => {
+      const mockClaims: TelegramJwtClaims = {
+        sub: '987654321',
         first_name: 'John',
         last_name: 'Doe',
         username: 'johndoe',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const data: TelegramAuthData = { ...baseData, hash };
-
-      expect(verifyTelegramAuth(data, botToken)).toBe(true);
-    });
-
-    it('should return true for valid data without optional fields', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 987654321,
-        first_name: 'Jane',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const data: TelegramAuthData = { ...baseData, hash };
-
-      expect(verifyTelegramAuth(data, botToken)).toBe(true);
-    });
-
-    it('should return true for data with photo_url', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 111222333,
-        first_name: 'Alice',
         photo_url: 'https://t.me/i/userpic/320/photo.jpg',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const data: TelegramAuthData = { ...baseData, hash };
-
-      expect(verifyTelegramAuth(data, botToken)).toBe(true);
-    });
-
-    it('should return false for tampered data (modified first_name)', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 123456789,
-        first_name: 'John',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const tampered: TelegramAuthData = {
-        ...baseData,
-        first_name: 'Hacker',
-        hash,
+        iss: 'https://oauth.telegram.org',
+        aud: botId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 300,
       };
 
-      expect(verifyTelegramAuth(tampered, botToken)).toBe(false);
+      mockJwtVerify.mockResolvedValue({
+        payload: mockClaims,
+        protectedHeader: { alg: 'RS256' },
+      } as never);
+
+      const result = await verifyTelegramIdToken(validIdToken, botId);
+
+      expect(result).toEqual(mockClaims);
+      expect(mockJwtVerify).toHaveBeenCalledWith(validIdToken, 'mock-jwks', {
+        issuer: 'https://oauth.telegram.org',
+        audience: botId,
+      });
     });
 
-    it('should return false for tampered data (modified id)', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 123456789,
-        first_name: 'John',
-        auth_date: 1700000000,
+    it('should return claims without optional fields', async () => {
+      const mockClaims: TelegramJwtClaims = {
+        sub: '987654321',
+        first_name: 'Jane',
+        iss: 'https://oauth.telegram.org',
+        aud: botId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 300,
       };
-      const hash = computeTelegramHash(baseData, botToken);
-      const tampered: TelegramAuthData = {
-        ...baseData,
-        id: 999999999,
-        hash,
+
+      mockJwtVerify.mockResolvedValue({
+        payload: mockClaims,
+        protectedHeader: { alg: 'RS256' },
+      } as never);
+
+      const result = await verifyTelegramIdToken(validIdToken, botId);
+
+      expect(result.sub).toBe('987654321');
+      expect(result.first_name).toBe('Jane');
+      expect(result.last_name).toBeUndefined();
+      expect(result.username).toBeUndefined();
+      expect(result.photo_url).toBeUndefined();
+    });
+
+    it('should throw when jwtVerify rejects (invalid signature)', async () => {
+      mockJwtVerify.mockRejectedValue(new Error('signature verification failed'));
+
+      await expect(verifyTelegramIdToken('invalid-token', botId)).rejects.toThrow(
+        'signature verification failed',
+      );
+    });
+
+    it('should throw when jwtVerify rejects (expired token)', async () => {
+      mockJwtVerify.mockRejectedValue(new Error('"exp" claim timestamp check failed'));
+
+      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow(
+        '"exp" claim timestamp check failed',
+      );
+    });
+
+    it('should throw when jwtVerify rejects (wrong audience)', async () => {
+      mockJwtVerify.mockRejectedValue(
+        new Error('"aud" claim check failed — unexpected "999999999" value'),
+      );
+
+      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow('"aud" claim');
+    });
+
+    it('should throw when sub claim is missing', async () => {
+      mockJwtVerify.mockResolvedValue({
+        payload: {
+          first_name: 'John',
+          iss: 'https://oauth.telegram.org',
+          aud: botId,
+        },
+        protectedHeader: { alg: 'RS256' },
+      } as never);
+
+      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow('Missing sub claim');
+    });
+
+    it('should throw when first_name claim is missing', async () => {
+      mockJwtVerify.mockResolvedValue({
+        payload: {
+          sub: '987654321',
+          iss: 'https://oauth.telegram.org',
+          aud: botId,
+        },
+        protectedHeader: { alg: 'RS256' },
+      } as never);
+
+      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow(
+        'Missing first_name claim',
+      );
+    });
+
+    it('should pass correct issuer and audience to jwtVerify', async () => {
+      const customBotId = '555555555';
+      const mockClaims: TelegramJwtClaims = {
+        sub: '111222333',
+        first_name: 'Alice',
+        iss: 'https://oauth.telegram.org',
+        aud: customBotId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 300,
       };
 
-      expect(verifyTelegramAuth(tampered, botToken)).toBe(false);
-    });
+      mockJwtVerify.mockResolvedValue({
+        payload: mockClaims,
+        protectedHeader: { alg: 'RS256' },
+      } as never);
 
-    it('should return false for wrong bot token', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 123456789,
-        first_name: 'John',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const data: TelegramAuthData = { ...baseData, hash };
+      await verifyTelegramIdToken(validIdToken, customBotId);
 
-      expect(verifyTelegramAuth(data, 'wrong-bot-token')).toBe(false);
-    });
-
-    it('should return false for missing hash', () => {
-      const data = {
-        id: 123456789,
-        first_name: 'John',
-        auth_date: 1700000000,
-        hash: '',
-      } as TelegramAuthData;
-
-      expect(verifyTelegramAuth(data, botToken)).toBe(false);
-    });
-
-    it('should return false for missing bot token', () => {
-      const baseData: Omit<TelegramAuthData, 'hash'> = {
-        id: 123456789,
-        first_name: 'John',
-        auth_date: 1700000000,
-      };
-      const hash = computeTelegramHash(baseData, botToken);
-      const data: TelegramAuthData = { ...baseData, hash };
-
-      expect(verifyTelegramAuth(data, '')).toBe(false);
-    });
-  });
-
-  describe('isTelegramAuthRecent()', () => {
-    it('should return true for a recent timestamp', () => {
-      const now = Math.floor(Date.now() / 1000);
-      expect(isTelegramAuthRecent(now - 60)).toBe(true); // 1 minute ago
-    });
-
-    it('should return true for a timestamp exactly at the boundary', () => {
-      const now = Math.floor(Date.now() / 1000);
-      expect(isTelegramAuthRecent(now - 300)).toBe(true); // exactly 5 minutes (default)
-    });
-
-    it('should return false for an old timestamp', () => {
-      const now = Math.floor(Date.now() / 1000);
-      expect(isTelegramAuthRecent(now - 301)).toBe(false); // 5 min + 1 sec
-    });
-
-    it('should return false for a very old timestamp', () => {
-      expect(isTelegramAuthRecent(1000000000)).toBe(false); // Sept 2001
-    });
-
-    it('should respect custom maxAgeSeconds', () => {
-      const now = Math.floor(Date.now() / 1000);
-      expect(isTelegramAuthRecent(now - 10, 30)).toBe(true); // 10s ago, 30s max
-      expect(isTelegramAuthRecent(now - 31, 30)).toBe(false); // 31s ago, 30s max
-    });
-
-    it('should return true for the current timestamp', () => {
-      const now = Math.floor(Date.now() / 1000);
-      expect(isTelegramAuthRecent(now)).toBe(true);
+      expect(mockJwtVerify).toHaveBeenCalledWith(validIdToken, 'mock-jwks', {
+        issuer: 'https://oauth.telegram.org',
+        audience: customBotId,
+      });
     });
   });
 });
