@@ -10,17 +10,28 @@ export interface TelegramLoginResult {
   id_token: string;
 }
 
+/**
+ * Error response from the Telegram Login SDK callback.
+ * Returned when the user cancels or auth fails.
+ */
+interface TelegramLoginError {
+  error: string;
+}
+
+/** The SDK callback receives either a success result or an error object. */
+type TelegramAuthCallbackResult = TelegramLoginResult | TelegramLoginError;
+
 /** Global type augmentation for the Telegram Login SDK. */
 declare global {
   interface Window {
     Telegram?: {
       Login: {
         auth: (
-          options: { bot_id: string; request_access?: string; lang?: string },
-          callback: (result: TelegramLoginResult | false) => void,
+          options: { client_id: string; request_access?: string; lang?: string },
+          callback: (result: TelegramAuthCallbackResult) => void,
         ) => void;
-        init: (options: { bot_id: string }) => void;
-        open: (callback: (result: TelegramLoginResult | false) => void) => void;
+        init: (options: { client_id: string }) => void;
+        open: (callback: (result: TelegramAuthCallbackResult) => void) => void;
       };
     };
   }
@@ -92,37 +103,22 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
   }, [botId]);
 
   const triggerLogin = useCallback(() => {
-    console.log('[TelegramLogin] triggerLogin called', {
-      sdkLoaded: !!window.Telegram?.Login,
-      botId,
-      authMethodExists: typeof window.Telegram?.Login?.auth,
-    });
-    if (!window.Telegram?.Login || !botId) {
-      console.warn('[TelegramLogin] SDK not loaded or botId missing, aborting');
-      return;
-    }
+    if (!window.Telegram?.Login || !botId) return;
 
     setIsLoading(true);
     try {
-      console.log('[TelegramLogin] Calling Telegram.Login.auth with options:', {
-        bot_id: botId,
-        request_access: 'write',
-        lang: lang || 'not set',
-      });
       window.Telegram.Login.auth(
-        { bot_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
+        { client_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
         (result) => {
-          console.log('[TelegramLogin] auth callback fired, result:', result);
           setIsLoading(false);
-          if (result === false) {
+          if ('error' in result) {
             onErrorRef.current?.();
           } else {
             onAuthRef.current(result);
           }
         },
       );
-    } catch (error) {
-      console.error('[TelegramLogin] auth() threw an error:', error);
+    } catch {
       setIsLoading(false);
       onErrorRef.current?.();
     }

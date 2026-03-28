@@ -99,7 +99,7 @@ describe('useTelegramLogin', () => {
     expect(document.head.removeChild).toHaveBeenCalled();
   });
 
-  it('triggerLogin calls Telegram.Login.auth with correct options', () => {
+  it('triggerLogin calls Telegram.Login.auth with client_id (not bot_id)', () => {
     const mockAuth = vi.fn();
     (window as unknown as Record<string, unknown>).Telegram = {
       Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
@@ -114,12 +114,12 @@ describe('useTelegramLogin', () => {
     });
 
     expect(mockAuth).toHaveBeenCalledWith(
-      { bot_id: botId, request_access: 'write', lang: 'he' },
+      { client_id: botId, request_access: 'write', lang: 'he' },
       expect.any(Function),
     );
   });
 
-  it('triggerLogin calls onAuth when Telegram returns a result', () => {
+  it('triggerLogin calls onAuth when Telegram returns a result with id_token', () => {
     const mockAuth = vi.fn();
     (window as unknown as Record<string, unknown>).Telegram = {
       Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
@@ -132,7 +132,9 @@ describe('useTelegramLogin', () => {
     });
 
     // Get the callback passed to Telegram.Login.auth
-    const callback = mockAuth.mock.calls[0][1] as (result: TelegramLoginResult | false) => void;
+    const callback = mockAuth.mock.calls[0][1] as (
+      result: TelegramLoginResult | { error: string },
+    ) => void;
 
     act(() => {
       callback({ id_token: 'test-jwt-token' });
@@ -142,7 +144,7 @@ describe('useTelegramLogin', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('triggerLogin calls onError when user cancels (result is false)', () => {
+  it('triggerLogin calls onError when SDK returns an error object', () => {
     const mockAuth = vi.fn();
     (window as unknown as Record<string, unknown>).Telegram = {
       Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
@@ -156,10 +158,12 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
-    const callback = mockAuth.mock.calls[0][1] as (result: TelegramLoginResult | false) => void;
+    const callback = mockAuth.mock.calls[0][1] as (
+      result: TelegramLoginResult | { error: string },
+    ) => void;
 
     act(() => {
-      callback(false);
+      callback({ error: 'user_cancelled' });
     });
 
     expect(mockOnError).toHaveBeenCalled();
@@ -190,6 +194,28 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
+    expect(mockOnAuth).not.toHaveBeenCalled();
+  });
+
+  it('recovers from auth() throwing an error', () => {
+    const mockAuth = vi.fn().mockImplementation(() => {
+      throw new Error('client_id is required');
+    });
+    (window as unknown as Record<string, unknown>).Telegram = {
+      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
+    };
+
+    const { result } = renderHook(() =>
+      useTelegramLogin({ botId, onAuth: mockOnAuth, onError: mockOnError }),
+    );
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    // Should recover: isLoading back to false, onError called
+    expect(result.current.isLoading).toBe(false);
+    expect(mockOnError).toHaveBeenCalled();
     expect(mockOnAuth).not.toHaveBeenCalled();
   });
 });
