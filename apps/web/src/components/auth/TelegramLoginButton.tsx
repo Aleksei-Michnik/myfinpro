@@ -27,7 +27,12 @@ declare global {
     Telegram?: {
       Login: {
         auth: (
-          options: { client_id: string; request_access?: string; lang?: string },
+          options: {
+            client_id: string;
+            origin: string;
+            request_access?: string;
+            lang?: string;
+          },
           callback: (result: TelegramAuthCallbackResult) => void,
         ) => void;
         init: (options: { client_id: string }) => void;
@@ -108,7 +113,12 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     setIsLoading(true);
     try {
       window.Telegram.Login.auth(
-        { client_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
+        {
+          client_id: botId,
+          origin: window.location.origin,
+          request_access: 'write',
+          ...(lang ? { lang } : {}),
+        },
         (result) => {
           setIsLoading(false);
           if ('error' in result) {

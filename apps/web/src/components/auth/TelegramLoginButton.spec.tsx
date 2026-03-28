@@ -99,6 +99,22 @@ describe('useTelegramLogin', () => {
     expect(document.head.removeChild).toHaveBeenCalled();
   });
 
+  it('triggerLogin passes origin matching window.location.origin', () => {
+    const mockAuth = vi.fn();
+    (window as unknown as Record<string, unknown>).Telegram = {
+      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
+    };
+
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const passedOptions = mockAuth.mock.calls[0][0] as Record<string, unknown>;
+    expect(passedOptions.origin).toBe(window.location.origin);
+  });
+
   it('triggerLogin calls Telegram.Login.auth with client_id (not bot_id)', () => {
     const mockAuth = vi.fn();
     (window as unknown as Record<string, unknown>).Telegram = {
@@ -114,7 +130,7 @@ describe('useTelegramLogin', () => {
     });
 
     expect(mockAuth).toHaveBeenCalledWith(
-      { client_id: botId, request_access: 'write', lang: 'he' },
+      { client_id: botId, origin: 'http://localhost:3000', request_access: 'write', lang: 'he' },
       expect.any(Function),
     );
   });
