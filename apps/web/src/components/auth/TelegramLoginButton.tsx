@@ -92,20 +92,40 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
   }, [botId]);
 
   const triggerLogin = useCallback(() => {
-    if (!window.Telegram?.Login || !botId) return;
+    console.log('[TelegramLogin] triggerLogin called', {
+      sdkLoaded: !!window.Telegram?.Login,
+      botId,
+      authMethodExists: typeof window.Telegram?.Login?.auth,
+    });
+    if (!window.Telegram?.Login || !botId) {
+      console.warn('[TelegramLogin] SDK not loaded or botId missing, aborting');
+      return;
+    }
 
     setIsLoading(true);
-    window.Telegram.Login.auth(
-      { bot_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
-      (result) => {
-        setIsLoading(false);
-        if (result === false) {
-          onErrorRef.current?.();
-        } else {
-          onAuthRef.current(result);
-        }
-      },
-    );
+    try {
+      console.log('[TelegramLogin] Calling Telegram.Login.auth with options:', {
+        bot_id: botId,
+        request_access: 'write',
+        lang: lang || 'not set',
+      });
+      window.Telegram.Login.auth(
+        { bot_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
+        (result) => {
+          console.log('[TelegramLogin] auth callback fired, result:', result);
+          setIsLoading(false);
+          if (result === false) {
+            onErrorRef.current?.();
+          } else {
+            onAuthRef.current(result);
+          }
+        },
+      );
+    } catch (error) {
+      console.error('[TelegramLogin] auth() threw an error:', error);
+      setIsLoading(false);
+      onErrorRef.current?.();
+    }
   }, [botId, lang]);
 
   return { triggerLogin, isReady, isLoading };
