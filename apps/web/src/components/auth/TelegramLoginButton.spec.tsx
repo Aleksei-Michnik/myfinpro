@@ -99,10 +99,28 @@ describe('useTelegramLogin', () => {
     expect(document.head.removeChild).toHaveBeenCalled();
   });
 
-  it('triggerLogin passes origin matching window.location.origin', () => {
-    const mockAuth = vi.fn();
+  it('patches window.open to inject origin into Telegram auth popup URL', () => {
+    const mockAuth = vi.fn().mockImplementation(() => {
+      // Simulate what the SDK does: call window.open with the auth URL
+      const popup = window.open(
+        'https://oauth.telegram.org/auth?response_type=post_message&client_id=123456789',
+        'telegram_oidc_login',
+        'width=550,height=650',
+      );
+      // Capture the URL that was actually passed through our patch
+      void popup; // not used in test
+    });
+
+    // Spy on window.open to capture the final URL
+    const openSpy = vi.fn().mockReturnValue(null);
+    window.open = openSpy;
+
     (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
+      Login: {
+        auth: mockAuth,
+        init: vi.fn(),
+        open: vi.fn(),
+      },
     };
 
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
@@ -111,8 +129,18 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
-    const passedOptions = mockAuth.mock.calls[0][0] as Record<string, unknown>;
-    expect(passedOptions.origin).toBe(window.location.origin);
+    // The auth mock was called, which in turn called our patched window.open.
+    // The patched window.open should have injected &origin= into the URL.
+    // But we need to check what the *final* open received.
+    // Since mockAuth simulates the SDK calling window.open, and our hook
+    // patches window.open before calling auth(), the mock should see the patched version.
+    expect(mockAuth).toHaveBeenCalled();
+
+    // After triggerLogin, window.open should be restored (finally block)
+    // The openSpy was set before mockAuth ran, so it captured the patched call
+    const capturedUrl = openSpy.mock.calls[0]?.[0] as string;
+    expect(capturedUrl).toContain('origin=');
+    expect(capturedUrl).toContain(encodeURIComponent('http://localhost:3000'));
   });
 
   it('triggerLogin calls Telegram.Login.auth with client_id (not bot_id)', () => {
@@ -130,7 +158,7 @@ describe('useTelegramLogin', () => {
     });
 
     expect(mockAuth).toHaveBeenCalledWith(
-      { client_id: botId, origin: 'http://localhost:3000', request_access: 'write', lang: 'he' },
+      { client_id: botId, request_access: 'write', lang: 'he' },
       expect.any(Function),
     );
   });
@@ -233,5 +261,22 @@ describe('useTelegramLogin', () => {
     expect(result.current.isLoading).toBe(false);
     expect(mockOnError).toHaveBeenCalled();
     expect(mockOnAuth).not.toHaveBeenCalled();
+  });
+
+  it('restores window.open after triggerLogin (no longer patched)', () => {
+    const mockAuth = vi.fn();
+    (window as unknown as Record<string, unknown>).Telegram = {
+      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
+    };
+
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    // After triggerLogin, window.open should no longer be the patched version.
+    // Verify by calling it with a non-Telegram URL and checking it's not modified.
+    expect(window.open.name).not.toBe('patchedOpen');
   });
 });

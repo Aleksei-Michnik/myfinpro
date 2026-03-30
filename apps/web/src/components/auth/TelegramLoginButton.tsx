@@ -27,12 +27,7 @@ declare global {
     Telegram?: {
       Login: {
         auth: (
-          options: {
-            client_id: string;
-            origin: string;
-            request_access?: string;
-            lang?: string;
-          },
+          options: { client_id: string; request_access?: string; lang?: string },
           callback: (result: TelegramAuthCallbackResult) => void,
         ) => void;
         init: (options: { client_id: string }) => void;
@@ -111,14 +106,27 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     if (!window.Telegram?.Login || !botId) return;
 
     setIsLoading(true);
+
+    // WORKAROUND: The Telegram Login SDK v3 omits the `origin` query parameter
+    // from the popup URL it constructs for the post_message flow. The Telegram
+    // auth server requires `origin` and returns "origin required" without it.
+    // We temporarily patch window.open to inject `&origin=` into the URL.
+    const originalOpen = window.open.bind(window);
+    window.open = function patchedOpen(
+      url?: string | URL,
+      target?: string,
+      features?: string,
+    ): WindowProxy | null {
+      if (typeof url === 'string' && url.includes('oauth.telegram.org/auth')) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = url + separator + 'origin=' + encodeURIComponent(window.location.origin);
+      }
+      return originalOpen(url, target, features);
+    };
+
     try {
       window.Telegram.Login.auth(
-        {
-          client_id: botId,
-          origin: window.location.origin,
-          request_access: 'write',
-          ...(lang ? { lang } : {}),
-        },
+        { client_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
         (result) => {
           setIsLoading(false);
           if ('error' in result) {
@@ -131,6 +139,10 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     } catch {
       setIsLoading(false);
       onErrorRef.current?.();
+    } finally {
+      // Restore original window.open — the SDK calls it synchronously
+      // before any await, so this runs after the popup has already opened.
+      window.open = originalOpen;
     }
   }, [botId, lang]);
 
