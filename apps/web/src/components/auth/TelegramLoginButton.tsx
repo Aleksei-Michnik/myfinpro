@@ -145,6 +145,18 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
       top +
       ',status=0,location=0,menubar=0,toolbar=0';
 
+    // ── DEBUG: catch-all message listener — logs EVERY postMessage ─────
+    const debugAllMessages = (event: MessageEvent) => {
+      console.log('[TG-DEBUG] postMessage received', {
+        origin: event.origin,
+        data: typeof event.data === 'string' ? event.data.slice(0, 300) : event.data,
+        hasSource: !!event.source,
+      });
+    };
+    window.addEventListener('message', debugAllMessages);
+    console.log('[TG-DEBUG] triggerLogin called, authUrl:', authUrl);
+    // ── END DEBUG ───────────────────────────────────────────────────────
+
     // ── Guard: prevent duplicate listeners from prior abandoned popups ──
     cleanupRef.current?.();
 
@@ -154,12 +166,16 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     const finish = (result: TelegramAuthCallbackResult) => {
       if (finished) return;
       finished = true;
+      console.log('[TG-DEBUG] finish() called with:', JSON.stringify(result));
       cleanup();
+      window.removeEventListener('message', debugAllMessages);
       setIsLoading(false);
 
       if ('error' in result) {
+        console.log('[TG-DEBUG] calling onError');
         onErrorRef.current?.();
       } else {
+        console.log('[TG-DEBUG] calling onAuth with id_token');
         onAuthRef.current(result);
       }
     };
@@ -206,14 +222,13 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     // ── Open popup ──────────────────────────────────────────────────────
     window.addEventListener('message', onMessage);
     popupRef.current = window.open(authUrl, 'telegram_oidc_login', features);
+    console.log('[TG-DEBUG] window.open returned:', popupRef.current ? 'WindowProxy' : 'null');
 
     if (popupRef.current) {
       popupRef.current.focus();
       checkClose();
     } else {
-      // Popup blocked — fall back: the message listener is still active,
-      // so if the browser opened it as a tab we'll still receive the result.
-      // Start close-checking anyway (it'll no-op since ref is null).
+      console.log('[TG-DEBUG] popup was blocked, message listener still active');
     }
   }, [botId, lang]);
 
