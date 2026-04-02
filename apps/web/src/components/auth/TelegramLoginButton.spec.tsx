@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useTelegramLogin, type TelegramLoginResult } from './TelegramLoginButton';
+import { useTelegramLogin } from './TelegramLoginButton';
 
 describe('useTelegramLogin', () => {
   const mockOnAuth = vi.fn();
