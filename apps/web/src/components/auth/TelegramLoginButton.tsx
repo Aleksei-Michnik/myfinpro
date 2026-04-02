@@ -107,6 +107,17 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
 
     setIsLoading(true);
 
+    // --- DEBUG: Listen for ALL postMessage events to see if Telegram's arrives ---
+    const debugMessageHandler = (event: MessageEvent) => {
+      console.log('[TelegramLogin][DEBUG] postMessage received:', {
+        origin: event.origin,
+        data: typeof event.data === 'string' ? event.data.slice(0, 200) : event.data,
+        source: event.source ? 'WindowProxy' : 'null',
+      });
+    };
+    window.addEventListener('message', debugMessageHandler);
+    // --- END DEBUG ---
+
     // WORKAROUND: The Telegram Login SDK v3 omits the `origin` query parameter
     // from the popup URL it constructs for the post_message flow. The Telegram
     // auth server requires `origin` and returns "origin required" without it.
@@ -120,23 +131,34 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
       if (typeof url === 'string' && url.includes('oauth.telegram.org/auth')) {
         const separator = url.includes('?') ? '&' : '?';
         url = url + separator + 'origin=' + encodeURIComponent(window.location.origin);
+        console.log('[TelegramLogin][DEBUG] Patched popup URL:', url);
       }
-      return originalOpen(url, target, features);
+      const popup = originalOpen(url, target, features);
+      console.log('[TelegramLogin][DEBUG] window.open returned:', popup ? 'WindowProxy' : 'null');
+      return popup;
     };
 
     try {
+      console.log('[TelegramLogin][DEBUG] Calling Telegram.Login.auth()...');
       window.Telegram.Login.auth(
         { client_id: botId, request_access: 'write', ...(lang ? { lang } : {}) },
         (result) => {
+          console.log('[TelegramLogin][DEBUG] SDK callback fired with:', JSON.stringify(result));
+          window.removeEventListener('message', debugMessageHandler);
           setIsLoading(false);
           if ('error' in result) {
+            console.log('[TelegramLogin][DEBUG] Result has error, calling onError');
             onErrorRef.current?.();
           } else {
+            console.log('[TelegramLogin][DEBUG] Result has id_token, calling onAuth');
             onAuthRef.current(result);
           }
         },
       );
+      console.log('[TelegramLogin][DEBUG] auth() returned (popup should be open)');
     } catch {
+      console.log('[TelegramLogin][DEBUG] auth() threw an error');
+      window.removeEventListener('message', debugMessageHandler);
       setIsLoading(false);
       onErrorRef.current?.();
     } finally {
