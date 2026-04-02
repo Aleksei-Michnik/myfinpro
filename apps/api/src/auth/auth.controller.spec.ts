@@ -8,12 +8,9 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
-
-// Mock the telegram-auth util module
 jest.mock('./utils/telegram-auth.util', () => ({
   verifyTelegramAuth: jest.fn(),
 }));
-
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 const mockVerifyTelegramAuth = verifyTelegramAuth as jest.MockedFunction<typeof verifyTelegramAuth>;
 
