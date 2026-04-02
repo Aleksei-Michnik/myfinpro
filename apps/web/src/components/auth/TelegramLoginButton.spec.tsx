@@ -7,148 +7,78 @@ describe('useTelegramLogin', () => {
   const mockOnError = vi.fn();
   const botId = '123456789';
 
-  // Track scripts added to document.head
-  let appendedScripts: HTMLScriptElement[] = [];
-  const originalContains = document.head.contains.bind(document.head);
+  let openSpy: ReturnType<typeof vi.fn>;
+  let addEventSpy: ReturnType<typeof vi.spyOn>;
+  let removeEventSpy: ReturnType<typeof vi.spyOn>;
+
+  /** Extract the `message` event handler registered via addEventListener spy. */
+  function getMessageHandler(): (event: MessageEvent) => void {
+    const calls = addEventSpy.mock.calls as unknown as [string, EventListener][];
+    const msgCall = calls.find(([type]) => type === 'message');
+    if (!msgCall) throw new Error('No message listener was registered');
+    return msgCall[1] as (event: MessageEvent) => void;
+  }
+
+  /** Check whether removeEventListener was called for the `message` event. */
+  function wasMessageListenerRemoved(): boolean {
+    const calls = removeEventSpy.mock.calls as unknown as [string, EventListener][];
+    return calls.some(([type]) => type === 'message');
+  }
+
+  /** A valid JWT with 3 dot-separated base64 parts for buildResult to parse. */
+  const STUB_JWT = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.stub-signature';
+
+  /** Helper to create a Telegram auth_result MessageEvent */
+  function makeTelegramAuthEvent(
+    data: Record<string, unknown>,
+    origin = 'https://oauth.telegram.org',
+  ): MessageEvent {
+    return new MessageEvent('message', {
+      origin,
+      data: JSON.stringify(data),
+    });
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
-    appendedScripts = [];
+    vi.useFakeTimers();
 
-    // Mock document.head.appendChild to track script injection
-    vi.spyOn(document.head, 'appendChild').mockImplementation((node: Node) => {
-      if (node instanceof HTMLScriptElement) {
-        appendedScripts.push(node);
-      }
-      return node;
+    // Mock window.open to return a mock popup
+    openSpy = vi.fn().mockReturnValue({
+      closed: false,
+      focus: vi.fn(),
+      close: vi.fn(),
     });
+    vi.stubGlobal('open', openSpy);
 
-    vi.spyOn(document.head, 'removeChild').mockImplementation((node: Node) => {
-      appendedScripts = appendedScripts.filter((s) => s !== node);
-      return node;
-    });
-
-    vi.spyOn(document.head, 'contains').mockImplementation((node: Node | null) => {
-      if (node instanceof HTMLScriptElement) {
-        return appendedScripts.includes(node);
-      }
-      return originalContains(node);
-    });
-
-    // Clean up any previous Telegram SDK mock
-    delete (window as unknown as Record<string, unknown>).Telegram;
+    addEventSpy = vi.spyOn(window, 'addEventListener');
+    removeEventSpy = vi.spyOn(window, 'removeEventListener');
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
-    delete (window as unknown as Record<string, unknown>).Telegram;
+    vi.unstubAllGlobals();
   });
 
-  it('injects the Telegram Login SDK script into document.head', () => {
-    renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
-
-    expect(appendedScripts.length).toBe(1);
-    expect(appendedScripts[0].src).toContain('oauth.telegram.org/js/telegram-login.js');
-    expect(appendedScripts[0].async).toBe(true);
-  });
-
-  it('does not inject script when botId is empty', () => {
-    renderHook(() => useTelegramLogin({ botId: '', onAuth: mockOnAuth }));
-
-    expect(appendedScripts.length).toBe(0);
-  });
-
-  it('sets isReady=true when script loads', () => {
-    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
-
-    expect(result.current.isReady).toBe(false);
-
-    // Simulate script load
-    act(() => {
-      appendedScripts[0].onload?.(new Event('load'));
-    });
-
-    expect(result.current.isReady).toBe(true);
-  });
-
-  it('sets isReady=true immediately if SDK is already loaded', () => {
-    // Pre-load the SDK
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: {
-        auth: vi.fn(),
-        init: vi.fn(),
-        open: vi.fn(),
-      },
-    };
-
-    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
-
-    expect(result.current.isReady).toBe(true);
-    // Should not inject another script
-    expect(appendedScripts.length).toBe(0);
-  });
-
-  it('removes script on unmount', () => {
-    const { unmount } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
-
-    expect(appendedScripts.length).toBe(1);
-
-    unmount();
-
-    // removeChild should have been called
-    expect(document.head.removeChild).toHaveBeenCalled();
-  });
-
-  it('patches window.open to inject origin into Telegram auth popup URL', () => {
-    const mockAuth = vi.fn().mockImplementation(() => {
-      // Simulate what the SDK does: call window.open with the auth URL
-      const popup = window.open(
-        'https://oauth.telegram.org/auth?response_type=post_message&client_id=123456789',
-        'telegram_oidc_login',
-        'width=550,height=650',
-      );
-      // Capture the URL that was actually passed through our patch
-      void popup; // not used in test
-    });
-
-    // Spy on window.open to capture the final URL
-    const openSpy = vi.fn().mockReturnValue(null);
-    window.open = openSpy;
-
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: {
-        auth: mockAuth,
-        init: vi.fn(),
-        open: vi.fn(),
-      },
-    };
-
+  it('opens popup with correct Telegram OIDC URL including origin', () => {
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
 
     act(() => {
       result.current.triggerLogin();
     });
 
-    // The auth mock was called, which in turn called our patched window.open.
-    // The patched window.open should have injected &origin= into the URL.
-    // But we need to check what the *final* open received.
-    // Since mockAuth simulates the SDK calling window.open, and our hook
-    // patches window.open before calling auth(), the mock should see the patched version.
-    expect(mockAuth).toHaveBeenCalled();
-
-    // After triggerLogin, window.open should be restored (finally block)
-    // The openSpy was set before mockAuth ran, so it captured the patched call
-    const capturedUrl = openSpy.mock.calls[0]?.[0] as string;
-    expect(capturedUrl).toContain('origin=');
-    expect(capturedUrl).toContain(encodeURIComponent('http://localhost:3000'));
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const url = openSpy.mock.calls[0][0] as string;
+    expect(url).toContain('https://oauth.telegram.org/auth?');
+    expect(url).toContain('response_type=post_message');
+    expect(url).toContain('client_id=' + encodeURIComponent(botId));
+    expect(url).toContain('redirect_uri=');
+    expect(url).toContain('scope=');
+    expect(url).toContain('origin=' + encodeURIComponent('http://localhost:3000'));
   });
 
-  it('triggerLogin calls Telegram.Login.auth with client_id (not bot_id)', () => {
-    const mockAuth = vi.fn();
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
-
+  it('includes lang parameter when provided', () => {
     const { result } = renderHook(() =>
       useTelegramLogin({ botId, onAuth: mockOnAuth, lang: 'he' }),
     );
@@ -157,71 +87,27 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
-    expect(mockAuth).toHaveBeenCalledWith(
-      { client_id: botId, request_access: 'write', lang: 'he' },
-      expect.any(Function),
-    );
+    const url = openSpy.mock.calls[0][0] as string;
+    expect(url).toContain('lang=he');
   });
 
-  it('triggerLogin calls onAuth when Telegram returns a result with id_token', () => {
-    const mockAuth = vi.fn();
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
-
+  it('opens popup with correct window name and features', () => {
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
 
     act(() => {
       result.current.triggerLogin();
     });
 
-    // Get the callback passed to Telegram.Login.auth
-    const callback = mockAuth.mock.calls[0][1] as (
-      result: TelegramLoginResult | { error: string },
-    ) => void;
-
-    act(() => {
-      callback({ id_token: 'test-jwt-token' });
-    });
-
-    expect(mockOnAuth).toHaveBeenCalledWith({ id_token: 'test-jwt-token' });
-    expect(result.current.isLoading).toBe(false);
+    expect(openSpy.mock.calls[0][1]).toBe('telegram_oidc_login');
+    const features = openSpy.mock.calls[0][2] as string;
+    expect(features).toContain('width=550');
+    expect(features).toContain('height=650');
   });
 
-  it('triggerLogin calls onError when SDK returns an error object', () => {
-    const mockAuth = vi.fn();
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
-
-    const { result } = renderHook(() =>
-      useTelegramLogin({ botId, onAuth: mockOnAuth, onError: mockOnError }),
-    );
-
-    act(() => {
-      result.current.triggerLogin();
-    });
-
-    const callback = mockAuth.mock.calls[0][1] as (
-      result: TelegramLoginResult | { error: string },
-    ) => void;
-
-    act(() => {
-      callback({ error: 'user_cancelled' });
-    });
-
-    expect(mockOnError).toHaveBeenCalled();
-    expect(mockOnAuth).not.toHaveBeenCalled();
-    expect(result.current.isLoading).toBe(false);
-  });
-
-  it('sets isLoading=true while auth popup is open', () => {
-    const mockAuth = vi.fn();
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
-
+  it('sets isLoading=true while popup is open', () => {
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    expect(result.current.isLoading).toBe(false);
 
     act(() => {
       result.current.triggerLogin();
@@ -230,24 +116,80 @@ describe('useTelegramLogin', () => {
     expect(result.current.isLoading).toBe(true);
   });
 
-  it('does nothing when triggerLogin is called without SDK loaded', () => {
+  it('registers a message event listener before opening popup', () => {
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
 
-    // SDK not loaded yet, triggerLogin should be a no-op
     act(() => {
       result.current.triggerLogin();
     });
 
-    expect(mockOnAuth).not.toHaveBeenCalled();
+    // Should not throw — a message listener was registered
+    expect(() => getMessageHandler()).not.toThrow();
   });
 
-  it('recovers from auth() throwing an error', () => {
-    const mockAuth = vi.fn().mockImplementation(() => {
-      throw new Error('client_id is required');
+  it('calls onAuth when receiving auth_result postMessage from oauth.telegram.org', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
     });
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
+
+    const handler = getMessageHandler();
+
+    act(() => {
+      handler(makeTelegramAuthEvent({ event: 'auth_result', result: STUB_JWT }));
+    });
+
+    expect(mockOnAuth).toHaveBeenCalledTimes(1);
+    expect(mockOnAuth.mock.calls[0][0]).toHaveProperty('id_token');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('calls onError when receiving auth_result with error from oauth.telegram.org', () => {
+    const { result } = renderHook(() =>
+      useTelegramLogin({ botId, onAuth: mockOnAuth, onError: mockOnError }),
+    );
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    act(() => {
+      handler(makeTelegramAuthEvent({ event: 'auth_result', error: 'user_cancelled' }));
+    });
+
+    expect(mockOnError).toHaveBeenCalledTimes(1);
+    expect(mockOnAuth).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('ignores postMessage from non-Telegram origins', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    act(() => {
+      handler(
+        makeTelegramAuthEvent(
+          { event: 'auth_result', result: STUB_JWT },
+          'https://evil.example.com',
+        ),
+      );
+    });
+
+    expect(mockOnAuth).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(true); // still loading
+  });
+
+  it('calls onError when popup is closed without auth result', () => {
+    const mockPopup = { closed: false, focus: vi.fn(), close: vi.fn() };
+    openSpy.mockReturnValue(mockPopup);
 
     const { result } = renderHook(() =>
       useTelegramLogin({ botId, onAuth: mockOnAuth, onError: mockOnError }),
@@ -257,17 +199,55 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
-    // Should recover: isLoading back to false, onError called
-    expect(result.current.isLoading).toBe(false);
-    expect(mockOnError).toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(true);
+
+    // Simulate popup closing
+    mockPopup.closed = true;
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(mockOnError).toHaveBeenCalledTimes(1);
     expect(mockOnAuth).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
   });
 
-  it('restores window.open after triggerLogin (no longer patched)', () => {
-    const mockAuth = vi.fn();
-    (window as unknown as Record<string, unknown>).Telegram = {
-      Login: { auth: mockAuth, init: vi.fn(), open: vi.fn() },
-    };
+  it('removes message listener after receiving result', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    act(() => {
+      handler(makeTelegramAuthEvent({ event: 'auth_result', result: STUB_JWT }));
+    });
+
+    expect(wasMessageListenerRemoved()).toBe(true);
+  });
+
+  it('does nothing when botId is empty', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId: '', onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(result.current.isReady).toBe(false);
+  });
+
+  it('isReady is true when botId is provided', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    expect(result.current.isReady).toBe(true);
+  });
+
+  it('focuses existing popup if triggerLogin called while popup is open', () => {
+    const mockPopup = { closed: false, focus: vi.fn(), close: vi.fn() };
+    openSpy.mockReturnValue(mockPopup);
 
     const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
 
@@ -275,8 +255,87 @@ describe('useTelegramLogin', () => {
       result.current.triggerLogin();
     });
 
-    // After triggerLogin, window.open should no longer be the patched version.
-    // Verify by calling it with a non-Telegram URL and checking it's not modified.
-    expect(window.open.name).not.toBe('patchedOpen');
+    // Second call — popup is still open
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    // window.open called only once, popup focused twice (initial + re-click)
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(mockPopup.focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not call callbacks twice (finish guard)', () => {
+    const mockPopup = { closed: false, focus: vi.fn(), close: vi.fn() };
+    openSpy.mockReturnValue(mockPopup);
+
+    const { result } = renderHook(() =>
+      useTelegramLogin({ botId, onAuth: mockOnAuth, onError: mockOnError }),
+    );
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    // First: success result via postMessage
+    act(() => {
+      handler(makeTelegramAuthEvent({ event: 'auth_result', result: STUB_JWT }));
+    });
+
+    // Then: popup closes (would fire error, but finish guard prevents it)
+    mockPopup.closed = true;
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(mockOnAuth).toHaveBeenCalledTimes(1);
+    expect(mockOnError).not.toHaveBeenCalled();
+  });
+
+  it('handles non-JSON postMessage data gracefully', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    // Send non-JSON string — should not throw
+    act(() => {
+      handler(
+        new MessageEvent('message', {
+          origin: 'https://oauth.telegram.org',
+          data: 'not-json-data',
+        }),
+      );
+    });
+
+    expect(mockOnAuth).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(true); // still loading
+  });
+
+  it('handles object postMessage data (not just string)', () => {
+    const { result } = renderHook(() => useTelegramLogin({ botId, onAuth: mockOnAuth }));
+
+    act(() => {
+      result.current.triggerLogin();
+    });
+
+    const handler = getMessageHandler();
+
+    // Send data as object (some browsers pass objects directly)
+    act(() => {
+      handler(
+        new MessageEvent('message', {
+          origin: 'https://oauth.telegram.org',
+          data: { event: 'auth_result', result: STUB_JWT },
+        }),
+      );
+    });
+
+    expect(mockOnAuth).toHaveBeenCalledTimes(1);
   });
 });
