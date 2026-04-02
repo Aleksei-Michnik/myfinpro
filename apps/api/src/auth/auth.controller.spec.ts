@@ -11,13 +11,11 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 
 // Mock the telegram-auth util module
 jest.mock('./utils/telegram-auth.util', () => ({
-  verifyTelegramIdToken: jest.fn(),
+  verifyTelegramAuth: jest.fn(),
 }));
 
-import { verifyTelegramIdToken } from './utils/telegram-auth.util';
-const mockVerifyTelegramIdToken = verifyTelegramIdToken as jest.MockedFunction<
-  typeof verifyTelegramIdToken
->;
+import { verifyTelegramAuth } from './utils/telegram-auth.util';
+const mockVerifyTelegramAuth = verifyTelegramAuth as jest.MockedFunction<typeof verifyTelegramAuth>;
 
 // Internal metadata keys used by @nestjs/throttler's @Throttle() decorator
 // The decorator concatenates the base key with the throttler name (e.g., 'default')
@@ -511,8 +509,15 @@ describe('AuthController', () => {
       updatedAt: new Date(),
     };
 
-    it('should return tokens for valid Telegram id_token', async () => {
-      const dto: TelegramAuthDto = { id_token: 'valid.jwt.token' };
+    const validDto: TelegramAuthDto = {
+      id: 123456789,
+      first_name: 'John',
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: 'valid_hash_value',
+    };
+
+    it('should return tokens for valid Telegram hash-based auth data', async () => {
+      const dto = { ...validDto };
       const loginResponse = {
         user: {
           id: mockUser.id,
@@ -524,13 +529,12 @@ describe('AuthController', () => {
         accessToken: 'mock-jwt-token',
       };
 
-      mockVerifyTelegramIdToken.mockResolvedValue({
-        sub: '123456789',
-        first_name: 'John',
-        iss: 'https://oauth.telegram.org',
-        aud: '123456789',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+      mockVerifyTelegramAuth.mockReturnValue({
+        telegramId: '123456789',
+        firstName: 'John',
+        lastName: undefined,
+        username: undefined,
+        photoUrl: undefined,
       });
 
       mockAuthService.findOrCreateTelegramUser.mockResolvedValue(mockUser);
@@ -538,7 +542,7 @@ describe('AuthController', () => {
 
       const result = await controller.telegramCallback(dto, mockResponse, mockRequest);
 
-      expect(mockVerifyTelegramIdToken).toHaveBeenCalledWith('valid.jwt.token', '123456789');
+      expect(mockVerifyTelegramAuth).toHaveBeenCalledWith(dto, TEST_BOT_TOKEN);
       expect(mockAuthService.findOrCreateTelegramUser).toHaveBeenCalledWith({
         telegramId: '123456789',
         firstName: 'John',
@@ -555,19 +559,20 @@ describe('AuthController', () => {
       expect(result).toEqual(loginResponse);
     });
 
-    it('should pass optional profile fields from JWT claims', async () => {
-      const dto: TelegramAuthDto = { id_token: 'valid.jwt.token' };
-
-      mockVerifyTelegramIdToken.mockResolvedValue({
-        sub: '123456789',
-        first_name: 'John',
+    it('should pass optional profile fields from verified auth data', async () => {
+      const dto: TelegramAuthDto = {
+        ...validDto,
         last_name: 'Doe',
         username: 'johndoe',
         photo_url: 'https://t.me/i/userpic/320/photo.jpg',
-        iss: 'https://oauth.telegram.org',
-        aud: '123456789',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+      };
+
+      mockVerifyTelegramAuth.mockReturnValue({
+        telegramId: '123456789',
+        firstName: 'John',
+        lastName: 'Doe',
+        username: 'johndoe',
+        photoUrl: 'https://t.me/i/userpic/320/photo.jpg',
       });
 
       mockAuthService.findOrCreateTelegramUser.mockResolvedValue(mockUser);
@@ -587,17 +592,21 @@ describe('AuthController', () => {
       });
     });
 
-    it('should throw 401 with TELEGRAM_AUTH_INVALID when id_token verification fails', async () => {
-      const dto: TelegramAuthDto = { id_token: 'invalid.jwt.token' };
+    it('should throw 401 with TELEGRAM_AUTH_INVALID when hash verification fails', async () => {
+      const dto = { ...validDto, hash: 'invalid_hash' };
 
-      mockVerifyTelegramIdToken.mockRejectedValue(new Error('signature verification failed'));
+      mockVerifyTelegramAuth.mockImplementation(() => {
+        throw new Error('Invalid Telegram auth hash');
+      });
 
       await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
         UnauthorizedException,
       );
 
       try {
-        mockVerifyTelegramIdToken.mockRejectedValue(new Error('signature verification failed'));
+        mockVerifyTelegramAuth.mockImplementation(() => {
+          throw new Error('Invalid Telegram auth hash');
+        });
         await controller.telegramCallback(dto, mockResponse, mockRequest);
       } catch (error) {
         const response = (error as UnauthorizedException).getResponse();
@@ -610,19 +619,21 @@ describe('AuthController', () => {
       }
     });
 
-    it('should throw 401 with TELEGRAM_AUTH_INVALID when id_token is expired', async () => {
-      const dto: TelegramAuthDto = { id_token: 'expired.jwt.token' };
+    it('should throw 401 with TELEGRAM_AUTH_INVALID when auth data is stale', async () => {
+      const dto = { ...validDto, auth_date: Math.floor(Date.now() / 1000) - 86401 };
 
-      mockVerifyTelegramIdToken.mockRejectedValue(new Error('"exp" claim timestamp check failed'));
+      mockVerifyTelegramAuth.mockImplementation(() => {
+        throw new Error('Telegram auth data is too old');
+      });
 
       await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
         UnauthorizedException,
       );
 
       try {
-        mockVerifyTelegramIdToken.mockRejectedValue(
-          new Error('"exp" claim timestamp check failed'),
-        );
+        mockVerifyTelegramAuth.mockImplementation(() => {
+          throw new Error('Telegram auth data is too old');
+        });
         await controller.telegramCallback(dto, mockResponse, mockRequest);
       } catch (error) {
         const response = (error as UnauthorizedException).getResponse();
@@ -644,7 +655,7 @@ describe('AuthController', () => {
         return config[key] ?? (defaultValue as string);
       });
 
-      const dto: TelegramAuthDto = { id_token: 'valid.jwt.token' };
+      const dto = { ...validDto };
 
       await expect(controller.telegramCallback(dto, mockResponse, mockRequest)).rejects.toThrow(
         UnauthorizedException,
@@ -663,16 +674,12 @@ describe('AuthController', () => {
       }
     });
 
-    it('should extract bot ID from bot token (part before colon)', async () => {
-      const dto: TelegramAuthDto = { id_token: 'valid.jwt.token' };
+    it('should pass full bot token (not just bot ID) to verifyTelegramAuth', async () => {
+      const dto = { ...validDto };
 
-      mockVerifyTelegramIdToken.mockResolvedValue({
-        sub: '999',
-        first_name: 'Test',
-        iss: 'https://oauth.telegram.org',
-        aud: '123456789',
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+      mockVerifyTelegramAuth.mockReturnValue({
+        telegramId: '999',
+        firstName: 'Test',
       });
 
       mockAuthService.findOrCreateTelegramUser.mockResolvedValue(mockUser);
@@ -683,8 +690,8 @@ describe('AuthController', () => {
 
       await controller.telegramCallback(dto, mockResponse, mockRequest);
 
-      // Bot token is '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ', so bot ID should be '123456789'
-      expect(mockVerifyTelegramIdToken).toHaveBeenCalledWith('valid.jwt.token', '123456789');
+      // Should pass the full bot token, not just the bot ID
+      expect(mockVerifyTelegramAuth).toHaveBeenCalledWith(dto, TEST_BOT_TOKEN);
     });
   });
 });

@@ -1,152 +1,136 @@
-import { verifyTelegramIdToken, TelegramJwtClaims } from './telegram-auth.util';
+import { createHash, createHmac } from 'crypto';
+import type { TelegramAuthDto } from '../dto/telegram-auth.dto';
+import { verifyTelegramAuth, TelegramAuthData } from './telegram-auth.util';
 
-// Mock jose module
-jest.mock('jose', () => {
-  const mockJwtVerify = jest.fn();
-  return {
-    createRemoteJWKSet: jest.fn(() => 'mock-jwks'),
-    jwtVerify: mockJwtVerify,
+/**
+ * Helper: compute a valid HMAC-SHA256 hash for test data.
+ */
+function computeHash(data: Omit<TelegramAuthDto, 'hash'>, botToken: string): string {
+  const checkData: Record<string, string | number> = {
+    id: data.id,
+    first_name: data.first_name,
+    auth_date: data.auth_date,
   };
-});
+  if (data.last_name) checkData.last_name = data.last_name;
+  if (data.username) checkData.username = data.username;
+  if (data.photo_url) checkData.photo_url = data.photo_url;
 
-// Get reference to the mocked jwtVerify
-import { jwtVerify } from 'jose';
-const mockJwtVerify = jwtVerify as jest.MockedFunction<typeof jwtVerify>;
+  const dataCheckString = Object.keys(checkData)
+    .sort()
+    .map((key) => `${key}=${checkData[key]}`)
+    .join('\n');
+
+  const secretKey = createHash('sha256').update(botToken).digest();
+  return createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+}
 
 describe('telegram-auth.util', () => {
-  const botId = '123456789';
-  const validIdToken = 'eyJhbGciOiJSUzI1NiJ9.valid.token';
+  const botToken = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz';
+  const now = Math.floor(Date.now() / 1000);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('verifyTelegramIdToken()', () => {
-    it('should return claims for a valid id_token', async () => {
-      const mockClaims: TelegramJwtClaims = {
-        sub: '987654321',
+  describe('verifyTelegramAuth()', () => {
+    it('should return auth data for valid hash-based Telegram data', () => {
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
         first_name: 'John',
         last_name: 'Doe',
         username: 'johndoe',
         photo_url: 'https://t.me/i/userpic/320/photo.jpg',
-        iss: 'https://oauth.telegram.org',
-        aud: botId,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+        auth_date: now,
       };
+      const hash = computeHash(data, botToken);
+      const dto: TelegramAuthDto = { ...data, hash };
 
-      mockJwtVerify.mockResolvedValue({
-        payload: mockClaims,
-        protectedHeader: { alg: 'RS256' },
-      } as never);
+      const result = verifyTelegramAuth(dto, botToken);
 
-      const result = await verifyTelegramIdToken(validIdToken, botId);
-
-      expect(result).toEqual(mockClaims);
-      expect(mockJwtVerify).toHaveBeenCalledWith(validIdToken, 'mock-jwks', {
-        issuer: 'https://oauth.telegram.org',
-        audience: botId,
+      expect(result).toEqual<TelegramAuthData>({
+        telegramId: '987654321',
+        firstName: 'John',
+        lastName: 'Doe',
+        username: 'johndoe',
+        photoUrl: 'https://t.me/i/userpic/320/photo.jpg',
       });
     });
 
-    it('should return claims without optional fields', async () => {
-      const mockClaims: TelegramJwtClaims = {
-        sub: '987654321',
+    it('should return auth data without optional fields', () => {
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
         first_name: 'Jane',
-        iss: 'https://oauth.telegram.org',
-        aud: botId,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+        auth_date: now,
       };
+      const hash = computeHash(data, botToken);
+      const dto: TelegramAuthDto = { ...data, hash };
 
-      mockJwtVerify.mockResolvedValue({
-        payload: mockClaims,
-        protectedHeader: { alg: 'RS256' },
-      } as never);
+      const result = verifyTelegramAuth(dto, botToken);
 
-      const result = await verifyTelegramIdToken(validIdToken, botId);
-
-      expect(result.sub).toBe('987654321');
-      expect(result.first_name).toBe('Jane');
-      expect(result.last_name).toBeUndefined();
+      expect(result.telegramId).toBe('987654321');
+      expect(result.firstName).toBe('Jane');
+      expect(result.lastName).toBeUndefined();
       expect(result.username).toBeUndefined();
-      expect(result.photo_url).toBeUndefined();
+      expect(result.photoUrl).toBeUndefined();
     });
 
-    it('should throw when jwtVerify rejects (invalid signature)', async () => {
-      mockJwtVerify.mockRejectedValue(new Error('signature verification failed'));
-
-      await expect(verifyTelegramIdToken('invalid-token', botId)).rejects.toThrow(
-        'signature verification failed',
-      );
-    });
-
-    it('should throw when jwtVerify rejects (expired token)', async () => {
-      mockJwtVerify.mockRejectedValue(new Error('"exp" claim timestamp check failed'));
-
-      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow(
-        '"exp" claim timestamp check failed',
-      );
-    });
-
-    it('should throw when jwtVerify rejects (wrong audience)', async () => {
-      mockJwtVerify.mockRejectedValue(
-        new Error('"aud" claim check failed — unexpected "999999999" value'),
-      );
-
-      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow('"aud" claim');
-    });
-
-    it('should throw when sub claim is missing', async () => {
-      mockJwtVerify.mockResolvedValue({
-        payload: {
-          first_name: 'John',
-          iss: 'https://oauth.telegram.org',
-          aud: botId,
-        },
-        protectedHeader: { alg: 'RS256' },
-      } as never);
-
-      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow('Missing sub claim');
-    });
-
-    it('should throw when first_name claim is missing', async () => {
-      mockJwtVerify.mockResolvedValue({
-        payload: {
-          sub: '987654321',
-          iss: 'https://oauth.telegram.org',
-          aud: botId,
-        },
-        protectedHeader: { alg: 'RS256' },
-      } as never);
-
-      await expect(verifyTelegramIdToken(validIdToken, botId)).rejects.toThrow(
-        'Missing first_name claim',
-      );
-    });
-
-    it('should pass correct issuer and audience to jwtVerify', async () => {
-      const customBotId = '555555555';
-      const mockClaims: TelegramJwtClaims = {
-        sub: '111222333',
-        first_name: 'Alice',
-        iss: 'https://oauth.telegram.org',
-        aud: customBotId,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 300,
+    it('should throw when hash is invalid (tampered data)', () => {
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
+        first_name: 'John',
+        auth_date: now,
       };
+      const dto: TelegramAuthDto = { ...data, hash: 'invalid_hash_value' };
 
-      mockJwtVerify.mockResolvedValue({
-        payload: mockClaims,
-        protectedHeader: { alg: 'RS256' },
-      } as never);
+      expect(() => verifyTelegramAuth(dto, botToken)).toThrow('Invalid Telegram auth hash');
+    });
 
-      await verifyTelegramIdToken(validIdToken, customBotId);
+    it('should throw when auth_date is too old (stale data)', () => {
+      const staleDate = now - 86401; // 24 hours + 1 second ago
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
+        first_name: 'John',
+        auth_date: staleDate,
+      };
+      const hash = computeHash(data, botToken);
+      const dto: TelegramAuthDto = { ...data, hash };
 
-      expect(mockJwtVerify).toHaveBeenCalledWith(validIdToken, 'mock-jwks', {
-        issuer: 'https://oauth.telegram.org',
-        audience: customBotId,
-      });
+      expect(() => verifyTelegramAuth(dto, botToken)).toThrow('Telegram auth data is too old');
+    });
+
+    it('should throw when hash was computed with wrong bot token', () => {
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
+        first_name: 'John',
+        auth_date: now,
+      };
+      const hash = computeHash(data, 'wrong_bot_token:ABC');
+      const dto: TelegramAuthDto = { ...data, hash };
+
+      expect(() => verifyTelegramAuth(dto, botToken)).toThrow('Invalid Telegram auth hash');
+    });
+
+    it('should throw when data fields are modified after hashing', () => {
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
+        first_name: 'John',
+        auth_date: now,
+      };
+      const hash = computeHash(data, botToken);
+      // Tamper with the first_name after computing hash
+      const dto: TelegramAuthDto = { ...data, first_name: 'Hacker', hash };
+
+      expect(() => verifyTelegramAuth(dto, botToken)).toThrow('Invalid Telegram auth hash');
+    });
+
+    it('should accept data within the 24-hour window', () => {
+      const recentDate = now - 3600; // 1 hour ago
+      const data: Omit<TelegramAuthDto, 'hash'> = {
+        id: 987654321,
+        first_name: 'John',
+        auth_date: recentDate,
+      };
+      const hash = computeHash(data, botToken);
+      const dto: TelegramAuthDto = { ...data, hash };
+
+      const result = verifyTelegramAuth(dto, botToken);
+      expect(result.telegramId).toBe('987654321');
     });
   });
 });

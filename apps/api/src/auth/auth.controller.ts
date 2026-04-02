@@ -34,7 +34,7 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-import { verifyTelegramIdToken } from './utils/telegram-auth.util';
+import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -184,13 +184,13 @@ export class AuthController {
   @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('telegram/callback')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Authenticate via Telegram Login SDK (OIDC JWT)' })
+  @ApiOperation({ summary: 'Authenticate via Telegram Login Widget (HMAC-SHA256)' })
   @ApiResponse({
     status: 200,
     description: 'Telegram authentication successful',
     type: AuthResponseDto,
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram id_token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram auth data' })
   @ApiTooManyRequestsResponse({ description: 'Too many authentication attempts' })
   async telegramCallback(
     @Body() dto: TelegramAuthDto,
@@ -205,16 +205,13 @@ export class AuthController {
       });
     }
 
-    // Extract bot ID (numeric part before the colon)
-    const botId = botToken.split(':')[0];
-
-    // Verify OIDC JWT via Telegram's JWKS
-    let claims;
+    // Verify HMAC-SHA256 hash using the bot token
+    let authData;
     try {
-      claims = await verifyTelegramIdToken(dto.id_token, botId);
+      authData = verifyTelegramAuth(dto, botToken);
     } catch (error) {
       this.logger.warn(
-        `Telegram id_token verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Telegram auth verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       throw new UnauthorizedException({
         message: 'Invalid Telegram authentication data',
@@ -222,13 +219,13 @@ export class AuthController {
       });
     }
 
-    // Build profile from JWT claims and find or create user
+    // Build profile from verified data and find or create user
     const telegramProfile: TelegramProfile = {
-      telegramId: claims.sub,
-      firstName: claims.first_name,
-      lastName: claims.last_name,
-      username: claims.username,
-      photoUrl: claims.photo_url,
+      telegramId: authData.telegramId,
+      firstName: authData.firstName,
+      lastName: authData.lastName,
+      username: authData.username,
+      photoUrl: authData.photoUrl,
     };
 
     const user = await this.authService.findOrCreateTelegramUser(telegramProfile);

@@ -3,11 +3,22 @@
 import { useCallback, useRef, useState } from 'react';
 
 /**
- * Response from the Telegram OIDC popup flow.
- * Contains an OIDC JWT `id_token`.
+ * Telegram Login Widget hash-based auth result.
+ *
+ * Telegram does NOT support native OIDC — the Login SDK v3 returns
+ * the classic hash-based user data: `{ id, first_name, auth_date, hash, ... }`.
+ * The hash is HMAC-SHA256 of the data fields using the bot token as key.
+ *
+ * @see https://core.telegram.org/widgets/login#checking-authorization
  */
 export interface TelegramLoginResult {
-  id_token: string;
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
 }
 
 /**
@@ -26,34 +37,41 @@ const OIDC_ORIGIN = 'https://oauth.telegram.org';
 const OIDC_AUTH_URL = OIDC_ORIGIN + '/auth';
 const POPUP_CHECK_INTERVAL_MS = 300;
 
-// ── Helpers (replicated from SDK's buildResult) ─────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const pad = payload.length % 4;
-    if (pad) payload += '='.repeat(4 - pad);
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
+function isErrorResult(data: unknown): data is TelegramLoginError {
+  return typeof data === 'object' && data !== null && 'error' in data;
 }
 
 function buildResult(data: Record<string, unknown>): TelegramAuthCallbackResult {
   if (data.error) {
     return { error: String(data.error) };
   }
-  const idToken = data.result;
-  if (!idToken || typeof idToken !== 'string') {
-    return { error: 'missing id_token' };
+
+  const result = data.result;
+
+  // Telegram returns result as an object with { id, first_name, auth_date, hash, ... }
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const r = result as Record<string, unknown>;
+    if (
+      typeof r.id === 'number' &&
+      typeof r.first_name === 'string' &&
+      typeof r.hash === 'string' &&
+      typeof r.auth_date === 'number'
+    ) {
+      return {
+        id: r.id,
+        first_name: r.first_name,
+        last_name: r.last_name as string | undefined,
+        username: r.username as string | undefined,
+        photo_url: r.photo_url as string | undefined,
+        auth_date: r.auth_date,
+        hash: r.hash,
+      };
+    }
   }
-  const user = decodeJwtPayload(idToken);
-  if (!user) {
-    return { error: 'malformed id_token' };
-  }
-  return { id_token: idToken };
+
+  return { error: 'invalid auth result' };
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -61,7 +79,7 @@ function buildResult(data: Record<string, unknown>): TelegramAuthCallbackResult 
 interface UseTelegramLoginOptions {
   /** Numeric bot ID (first part of bot token). */
   botId: string;
-  /** Called with the id_token on successful authentication. */
+  /** Called with the auth result on successful authentication. */
   onAuth: (result: TelegramLoginResult) => void;
   /** Called when user cancels or auth fails. */
   onError?: () => void;
@@ -70,9 +88,8 @@ interface UseTelegramLoginOptions {
 }
 
 /**
- * Hook that opens the Telegram Login OIDC popup directly (without relying on the
- * Telegram Login SDK's internal message handler, which has a race condition between
- * its close-checker and postMessage delivery).
+ * Hook that opens the Telegram Login popup directly (without relying on the
+ * Telegram Login SDK's internal message handler).
  *
  * We construct the popup URL ourselves, open it with `window.open`, and listen for
  * the `postMessage` result directly. This gives us full control over the popup
@@ -108,7 +125,7 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
 
     setIsLoading(true);
 
-    // ── Build the auth URL (same as SDK v3, but with `origin`) ──────────
+    // ── Build the auth URL ───────────────────────────────────────────────
     const scopes = ['openid', 'profile', 'telegram:bot_access'];
     const redirectUri = window.location.origin + window.location.pathname;
 
@@ -145,8 +162,6 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
       top +
       ',status=0,location=0,menubar=0,toolbar=0';
 
-    console.log('[TG-DEBUG] triggerLogin called, authUrl:', authUrl);
-
     // ── Guard: prevent duplicate listeners from prior abandoned popups ──
     cleanupRef.current?.();
 
@@ -156,15 +171,12 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
     const finish = (result: TelegramAuthCallbackResult) => {
       if (finished) return;
       finished = true;
-      console.log('[TG-DEBUG] finish() called with:', JSON.stringify(result));
       cleanup();
       setIsLoading(false);
 
-      if ('error' in result) {
-        console.log('[TG-DEBUG] calling onError');
+      if (isErrorResult(result)) {
         onErrorRef.current?.();
       } else {
-        console.log('[TG-DEBUG] calling onAuth with id_token');
         onAuthRef.current(result);
       }
     };
@@ -210,26 +222,11 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
 
     // ── Open popup ──────────────────────────────────────────────────────
     window.addEventListener('message', onMessage);
-
-    // ── DEBUG: catch-all message listener — logs EVERY postMessage ─────
-    const debugAllMessages = (event: MessageEvent) => {
-      console.log('[TG-DEBUG] postMessage received', {
-        origin: event.origin,
-        data: typeof event.data === 'string' ? event.data.slice(0, 300) : event.data,
-        hasSource: !!event.source,
-      });
-    };
-    window.addEventListener('message', debugAllMessages);
-    // ── END DEBUG ─────────────────────────────────────────────────────
-
     popupRef.current = window.open(authUrl, 'telegram_oidc_login', features);
-    console.log('[TG-DEBUG] window.open returned:', popupRef.current ? 'WindowProxy' : 'null');
 
     if (popupRef.current) {
       popupRef.current.focus();
       checkClose();
-    } else {
-      console.log('[TG-DEBUG] popup was blocked, message listener still active');
     }
   }, [botId, lang]);
 

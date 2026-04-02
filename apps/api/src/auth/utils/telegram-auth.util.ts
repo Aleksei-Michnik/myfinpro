@@ -1,53 +1,80 @@
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createHash, createHmac } from 'crypto';
+import type { TelegramAuthDto } from '../dto/telegram-auth.dto';
 
 /**
- * Telegram OIDC JWT claims returned by the Telegram Login SDK.
- *
- * @see https://core.telegram.org/widgets/login (OIDC JWT section)
+ * Verified Telegram user profile extracted from the hash-based auth data.
  */
-export interface TelegramJwtClaims extends JWTPayload {
-  /** Telegram user ID (numeric, as string in `sub`) */
-  sub: string;
+export interface TelegramAuthData {
+  /** Telegram user ID (as string for consistency with OAuth provider IDs) */
+  telegramId: string;
   /** First name */
-  first_name: string;
+  firstName: string;
   /** Last name (optional) */
-  last_name?: string;
+  lastName?: string;
   /** Telegram username (optional) */
   username?: string;
   /** Profile photo URL (optional) */
-  photo_url?: string;
+  photoUrl?: string;
 }
 
-/** Telegram's JWKS endpoint for verifying id_token signatures. */
-const TELEGRAM_JWKS_URL = new URL('https://oauth.telegram.org/.well-known/jwks.json');
-
-/** Cached JWKS fetcher — `jose` handles key rotation and caching internally. */
-const telegramJWKS = createRemoteJWKSet(TELEGRAM_JWKS_URL);
+/** Maximum age of auth_date before we consider it stale (24 hours). */
+const MAX_AUTH_AGE_SECONDS = 86400;
 
 /**
- * Verifies a Telegram Login SDK `id_token` (OIDC JWT) using Telegram's JWKS.
+ * Verifies Telegram Login Widget data using HMAC-SHA256.
  *
- * @param idToken - The raw JWT string from the Telegram Login SDK
- * @param botId - The numeric bot ID (first part of bot token, e.g. "123456789")
- * @returns Verified JWT claims including Telegram user profile data
- * @throws If the token is invalid, expired, or has wrong audience
+ * The verification algorithm:
+ * 1. Sort all fields (except `hash`) alphabetically as `key=value` pairs
+ * 2. Join them with `\n`
+ * 3. Create a SHA-256 hash of the bot token (this is the secret key)
+ * 4. Compute HMAC-SHA256 of the data string using the secret key
+ * 5. Compare with the provided `hash`
+ *
+ * @param dto - The Telegram auth data from the frontend
+ * @param botToken - The full bot token (e.g. "123456789:ABCdefGHI...")
+ * @returns Verified user profile data
+ * @throws If the hash is invalid, data is stale, or required fields are missing
+ *
+ * @see https://core.telegram.org/widgets/login#checking-authorization
  */
-export async function verifyTelegramIdToken(
-  idToken: string,
-  botId: string,
-): Promise<TelegramJwtClaims> {
-  const { payload } = await jwtVerify(idToken, telegramJWKS, {
-    issuer: 'https://oauth.telegram.org',
-    audience: botId,
-  });
-
-  // Validate required claims
-  if (!payload.sub) {
-    throw new Error('Missing sub claim in Telegram id_token');
-  }
-  if (!(payload as TelegramJwtClaims).first_name) {
-    throw new Error('Missing first_name claim in Telegram id_token');
+export function verifyTelegramAuth(dto: TelegramAuthDto, botToken: string): TelegramAuthData {
+  // 1. Check auth_date freshness
+  const now = Math.floor(Date.now() / 1000);
+  if (now - dto.auth_date > MAX_AUTH_AGE_SECONDS) {
+    throw new Error('Telegram auth data is too old');
   }
 
-  return payload as TelegramJwtClaims;
+  // 2. Build the data-check-string: sort fields alphabetically, join with \n
+  const checkData: Record<string, string | number> = {
+    id: dto.id,
+    first_name: dto.first_name,
+    auth_date: dto.auth_date,
+  };
+  if (dto.last_name) checkData.last_name = dto.last_name;
+  if (dto.username) checkData.username = dto.username;
+  if (dto.photo_url) checkData.photo_url = dto.photo_url;
+
+  const dataCheckString = Object.keys(checkData)
+    .sort()
+    .map((key) => `${key}=${checkData[key]}`)
+    .join('\n');
+
+  // 3. Create secret key: SHA-256 of the bot token
+  const secretKey = createHash('sha256').update(botToken).digest();
+
+  // 4. Compute HMAC-SHA256
+  const hmac = createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+  // 5. Compare hashes (constant-time comparison via string equality on hex)
+  if (hmac !== dto.hash) {
+    throw new Error('Invalid Telegram auth hash');
+  }
+
+  return {
+    telegramId: String(dto.id),
+    firstName: dto.first_name,
+    lastName: dto.last_name,
+    username: dto.username,
+    photoUrl: dto.photo_url,
+  };
 }
