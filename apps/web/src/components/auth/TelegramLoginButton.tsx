@@ -145,17 +145,7 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
       top +
       ',status=0,location=0,menubar=0,toolbar=0';
 
-    // ── DEBUG: catch-all message listener — logs EVERY postMessage ─────
-    const debugAllMessages = (event: MessageEvent) => {
-      console.log('[TG-DEBUG] postMessage received', {
-        origin: event.origin,
-        data: typeof event.data === 'string' ? event.data.slice(0, 300) : event.data,
-        hasSource: !!event.source,
-      });
-    };
-    window.addEventListener('message', debugAllMessages);
     console.log('[TG-DEBUG] triggerLogin called, authUrl:', authUrl);
-    // ── END DEBUG ───────────────────────────────────────────────────────
 
     // ── Guard: prevent duplicate listeners from prior abandoned popups ──
     cleanupRef.current?.();
@@ -168,7 +158,6 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
       finished = true;
       console.log('[TG-DEBUG] finish() called with:', JSON.stringify(result));
       cleanup();
-      window.removeEventListener('message', debugAllMessages);
       setIsLoading(false);
 
       if ('error' in result) {
@@ -221,6 +210,18 @@ export function useTelegramLogin({ botId, onAuth, onError, lang }: UseTelegramLo
 
     // ── Open popup ──────────────────────────────────────────────────────
     window.addEventListener('message', onMessage);
+
+    // ── DEBUG: catch-all message listener — logs EVERY postMessage ─────
+    const debugAllMessages = (event: MessageEvent) => {
+      console.log('[TG-DEBUG] postMessage received', {
+        origin: event.origin,
+        data: typeof event.data === 'string' ? event.data.slice(0, 300) : event.data,
+        hasSource: !!event.source,
+      });
+    };
+    window.addEventListener('message', debugAllMessages);
+    // ── END DEBUG ─────────────────────────────────────────────────────
+
     popupRef.current = window.open(authUrl, 'telegram_oidc_login', features);
     console.log('[TG-DEBUG] window.open returned:', popupRef.current ? 'WindowProxy' : 'null');
 
