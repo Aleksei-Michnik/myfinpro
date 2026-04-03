@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 0/13       | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 1/13       | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 141 | **Completed:** 29 | **Remaining:** 112
+**Total iterations:** 141 | **Completed:** 30 | **Remaining:** 111
 
 ---
 
@@ -1364,7 +1364,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 | Iteration | Objective                     | Status         |
 | --------- | ----------------------------- | -------------- |
-| 4.1       | Email service infrastructure  | ⬜ Not Started |
+| 4.1       | Email service infrastructure  | ✅ Complete    |
 | 4.2       | Email confirmation — backend  | ⬜ Not Started |
 | 4.3       | Email confirmation — frontend | ⬜ Not Started |
 | 4.4       | Password reset — backend      | ⬜ Not Started |
