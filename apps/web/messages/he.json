@@ -74,7 +74,18 @@
     "signInWithGoogle": "התחבר עם Google",
     "telegramAuthFailed": "ההתחברות עם טלגרם נכשלה. נסה שוב.",
     "telegramAuthSuccess": "התחברת עם טלגרם!",
-    "telegramSignIn": "התחבר עם טלגרם"
+    "telegramSignIn": "התחבר עם טלגרם",
+    "verifyEmail": "אמת את האימייל שלך",
+    "verifyEmailSent": "אימייל אימות נשלח! בדוק את תיבת הדואר.",
+    "verifyEmailSuccess": "האימייל אומת בהצלחה!",
+    "verifyEmailExpired": "קישור האימות פג תוקף.",
+    "verifyEmailAlreadyVerified": "האימייל שלך כבר מאומת.",
+    "verifyEmailInvalid": "קישור אימות לא תקין.",
+    "verifyEmailBanner": "אנא אמת את כתובת האימייל שלך. בדוק את תיבת הדואר או",
+    "resendVerification": "שלח שוב אימייל אימות",
+    "resendingVerification": "שולח שוב...",
+    "goToDashboard": "עבור ללוח הבקרה",
+    "checkInbox": "בדוק את תיבת הדואר שלך לקישור אימות."
   },
   "toast": {
     "dismiss": "סגור"

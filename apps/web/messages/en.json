@@ -74,7 +74,18 @@
     "signInWithGoogle": "Sign in with Google",
     "telegramAuthFailed": "Sign-in with Telegram failed. Please try again.",
     "telegramAuthSuccess": "Signed in with Telegram!",
-    "telegramSignIn": "Sign in with Telegram"
+    "telegramSignIn": "Sign in with Telegram",
+    "verifyEmail": "Verify your email",
+    "verifyEmailSent": "Verification email sent! Check your inbox.",
+    "verifyEmailSuccess": "Email verified successfully!",
+    "verifyEmailExpired": "This verification link has expired.",
+    "verifyEmailAlreadyVerified": "Your email is already verified.",
+    "verifyEmailInvalid": "Invalid verification link.",
+    "verifyEmailBanner": "Please verify your email address. Check your inbox or",
+    "resendVerification": "Resend verification email",
+    "resendingVerification": "Resending...",
+    "goToDashboard": "Go to Dashboard",
+    "checkInbox": "Check your inbox for a verification link."
   },
   "toast": {
     "dismiss": "Dismiss"

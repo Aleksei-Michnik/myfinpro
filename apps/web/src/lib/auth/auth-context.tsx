@@ -15,6 +15,8 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => string | null;
+  resendVerificationEmail: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -128,6 +130,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resendVerificationEmail = useCallback(async () => {
+    const token = accessToken;
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE}/auth/send-verification-email`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const error = await res
+        .json()
+        .catch(() => ({ message: 'Failed to send verification email' }));
+      throw new Error(
+        (error as { message?: string }).message || 'Failed to send verification email',
+      );
+    }
+  }, [accessToken]);
+
+  const refreshUser = useCallback(async () => {
+    const token = accessToken;
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        const userData: User = await res.json();
+        setUser(userData);
+      }
+    } catch {
+      // Silent fail
+    }
+  }, [accessToken]);
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
@@ -157,6 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         getAccessToken,
+        resendVerificationEmail,
+        refreshUser,
       }}
     >
       {children}

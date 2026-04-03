@@ -16,6 +16,8 @@ let mockAuthState = {
   loginWithTelegram: vi.fn(),
   register: vi.fn(),
   getAccessToken: () => null as string | null,
+  resendVerificationEmail: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 // Mock next-intl hooks
@@ -63,6 +65,8 @@ describe('Header', () => {
       loginWithTelegram: vi.fn(),
       register: vi.fn(),
       getAccessToken: () => null,
+      resendVerificationEmail: vi.fn(),
+      refreshUser: vi.fn(),
     };
   });
 
@@ -149,6 +153,8 @@ describe('Header', () => {
         loginWithTelegram: vi.fn(),
         register: vi.fn(),
         getAccessToken: () => 'token',
+        resendVerificationEmail: vi.fn(),
+        refreshUser: vi.fn(),
       };
     });
 

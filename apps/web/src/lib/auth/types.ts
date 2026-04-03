@@ -4,6 +4,7 @@ export interface User {
   name: string;
   defaultCurrency: string;
   locale: string;
+  emailVerified: boolean;
 }
 
 export interface AuthState {

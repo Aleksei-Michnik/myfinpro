@@ -13,6 +13,7 @@ const mockUser = {
   name: 'Test User',
   defaultCurrency: 'USD',
   locale: 'en',
+  emailVerified: true,
 };
 
 const mockAuthResponse = {

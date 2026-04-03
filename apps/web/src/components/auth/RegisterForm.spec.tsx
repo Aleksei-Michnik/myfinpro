@@ -37,6 +37,8 @@ vi.mock('@/lib/auth/auth-context', () => ({
     login: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => null,
+    resendVerificationEmail: vi.fn(),
+    refreshUser: vi.fn(),
   }),
 }));
 
