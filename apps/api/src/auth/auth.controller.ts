@@ -36,13 +36,16 @@ import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordResetService } from './services/password-reset.service';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -54,6 +57,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly passwordResetService: PasswordResetService,
   ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -212,6 +216,40 @@ export class AuthController {
 
     await this.emailVerificationService.verifyEmail(token);
     return { message: 'Email verified successfully' };
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiResponse({
+    status: 200,
+    description: 'If an account with this email exists, a reset link has been sent.',
+  })
+  @ApiTooManyRequestsResponse({ description: 'Too many password reset requests' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.passwordResetService.forgotPassword(dto.email);
+    return {
+      message: 'If an account with this email exists, a reset link has been sent.',
+    };
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired reset token' })
+  @ApiBadRequestResponse({ description: 'Token already used or invalid password' })
+  @ApiTooManyRequestsResponse({ description: 'Too many reset attempts' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.passwordResetService.resetPassword(dto.token, dto.password);
+    return {
+      message: 'Password reset successfully. Please sign in with your new password.',
+    };
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })

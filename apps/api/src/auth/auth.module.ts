@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
+import { PasswordResetService } from './services/password-reset.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { TokenService } from './services/token.service';
@@ -47,6 +48,7 @@ import { LocalStrategy } from './strategies/local.strategy';
     AuthService,
     EmailVerificationService,
     OAuthService,
+    PasswordResetService,
     PasswordService,
     TokenService,
     RefreshTokenService,
@@ -58,6 +60,7 @@ import { LocalStrategy } from './strategies/local.strategy';
     AuthService,
     EmailVerificationService,
     OAuthService,
+    PasswordResetService,
     PasswordService,
     TokenService,
     RefreshTokenService,

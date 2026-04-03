@@ -9,6 +9,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordResetService } from './services/password-reset.service';
 jest.mock('./utils/telegram-auth.util', () => ({
   verifyTelegramAuth: jest.fn(),
 }));
@@ -41,6 +42,11 @@ describe('AuthController', () => {
     createAndSendVerification: jest.fn(),
     verifyEmail: jest.fn(),
     resendVerification: jest.fn(),
+  };
+
+  const mockPasswordResetService = {
+    forgotPassword: jest.fn(),
+    resetPassword: jest.fn(),
   };
 
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
@@ -76,6 +82,7 @@ describe('AuthController', () => {
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: EmailVerificationService, useValue: mockEmailVerificationService },
+        { provide: PasswordResetService, useValue: mockPasswordResetService },
       ],
     }).compile();
 
@@ -1046,6 +1053,98 @@ describe('AuthController', () => {
       await expect(controller.verifyEmail('bad-token')).rejects.toThrow(
         'Invalid verification token',
       );
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    it('should call passwordResetService.forgotPassword and return generic message', async () => {
+      mockPasswordResetService.forgotPassword.mockResolvedValue(undefined);
+
+      const result = await controller.forgotPassword({ email: 'test@example.com' });
+
+      expect(mockPasswordResetService.forgotPassword).toHaveBeenCalledWith('test@example.com');
+      expect(result).toEqual({
+        message: 'If an account with this email exists, a reset link has been sent.',
+      });
+    });
+
+    it('should return same generic message even for non-existent email (prevent enumeration)', async () => {
+      mockPasswordResetService.forgotPassword.mockResolvedValue(undefined);
+
+      const result = await controller.forgotPassword({ email: 'nonexistent@example.com' });
+
+      expect(result).toEqual({
+        message: 'If an account with this email exists, a reset link has been sent.',
+      });
+    });
+
+    it('should have @Throttle metadata with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.forgotPassword,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.forgotPassword);
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('resetPassword()', () => {
+    it('should call passwordResetService.resetPassword and return success message', async () => {
+      mockPasswordResetService.resetPassword.mockResolvedValue({ userId: 'user-1' });
+
+      const result = await controller.resetPassword({
+        token: 'valid-token',
+        password: 'NewSecurePass123',
+      });
+
+      expect(mockPasswordResetService.resetPassword).toHaveBeenCalledWith(
+        'valid-token',
+        'NewSecurePass123',
+      );
+      expect(result).toEqual({
+        message: 'Password reset successfully. Please sign in with your new password.',
+      });
+    });
+
+    it('should propagate UnauthorizedException from service (invalid token)', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockPasswordResetService.resetPassword.mockRejectedValue(
+        new ActualUnauth({
+          message: 'Invalid password reset token',
+          errorCode: AUTH_ERRORS.RESET_TOKEN_INVALID,
+        }),
+      );
+
+      await expect(
+        controller.resetPassword({ token: 'bad-token', password: 'NewSecurePass123' }),
+      ).rejects.toThrow('Invalid password reset token');
+    });
+
+    it('should propagate BadRequestException from service (used token)', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockPasswordResetService.resetPassword.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Password reset token has already been used',
+          errorCode: AUTH_ERRORS.RESET_TOKEN_USED,
+        }),
+      );
+
+      await expect(
+        controller.resetPassword({ token: 'used-token', password: 'NewSecurePass123' }),
+      ).rejects.toThrow('Password reset token has already been used');
+    });
+
+    it('should have @Throttle metadata with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.resetPassword,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.resetPassword);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
     });
   });
 });
