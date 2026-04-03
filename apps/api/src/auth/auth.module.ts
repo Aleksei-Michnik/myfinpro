@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
@@ -44,6 +45,7 @@ import { LocalStrategy } from './strategies/local.strategy';
   controllers: [AuthController],
   providers: [
     AuthService,
+    EmailVerificationService,
     OAuthService,
     PasswordService,
     TokenService,
@@ -52,6 +54,13 @@ import { LocalStrategy } from './strategies/local.strategy';
     JwtStrategy,
     GoogleStrategy,
   ],
-  exports: [AuthService, OAuthService, PasswordService, TokenService, RefreshTokenService],
+  exports: [
+    AuthService,
+    EmailVerificationService,
+    OAuthService,
+    PasswordService,
+    TokenService,
+    RefreshTokenService,
+  ],
 })
 export class AuthModule {}

@@ -12,6 +12,7 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
@@ -43,6 +44,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly oauthService: OAuthService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
@@ -103,6 +105,21 @@ export class AuthService {
     // Set refresh token as httpOnly cookie
     this.tokenService.setRefreshTokenCookie(response, refreshToken);
 
+    // Fire-and-forget: send verification email (don't let failure break registration)
+    try {
+      this.emailVerificationService
+        .createAndSendVerification(user.id, user.email, user.name, user.locale || 'en')
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to send verification email for user ${user.id}: ${(err as Error).message}`,
+          );
+        });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to initiate verification email for user ${user.id}: ${(err as Error).message}`,
+      );
+    }
+
     return {
       user: {
         id: user.id,
@@ -110,6 +127,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -196,6 +214,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -236,6 +255,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -452,6 +472,7 @@ export class AuthService {
         defaultCurrency: true,
         locale: true,
         timezone: true,
+        emailVerified: true,
       },
     });
     if (!user) {

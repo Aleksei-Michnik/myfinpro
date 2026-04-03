@@ -9,6 +9,7 @@ import {
   Logger,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UnauthorizedException,
@@ -19,6 +20,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -40,6 +42,7 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { EmailVerificationService } from './services/email-verification.service';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -50,6 +53,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -155,6 +159,59 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   async getMe(@CurrentUser() user: JwtPayload) {
     return this.authService.getUser(user.sub);
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('send-verification-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Send or resend email verification link' })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email sent or already verified',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification email requests' })
+  async sendVerificationEmail(@CurrentUser() user: JwtPayload) {
+    try {
+      await this.emailVerificationService.resendVerification(user.sub);
+      return { message: 'Verification email sent' };
+    } catch (error) {
+      // If already verified, return 200 with message
+      if (
+        error instanceof BadRequestException &&
+        (error.getResponse() as Record<string, unknown>).errorCode ===
+          AUTH_ERRORS.EMAIL_ALREADY_VERIFIED
+      ) {
+        return { message: 'Email already verified' };
+      }
+      throw error;
+    }
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @Get('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email address using token from email link' })
+  @ApiQuery({ name: 'token', required: true, description: 'Verification token from email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verified successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid verification token' })
+  @ApiBadRequestResponse({ description: 'Token expired or already used' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification attempts' })
+  async verifyEmail(@Query('token') token: string) {
+    if (!token) {
+      throw new BadRequestException({
+        message: 'Verification token is required',
+        errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+      });
+    }
+
+    await this.emailVerificationService.verifyEmail(token);
+    return { message: 'Email verified successfully' };
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })

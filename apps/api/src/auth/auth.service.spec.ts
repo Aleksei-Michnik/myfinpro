@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
@@ -66,6 +67,12 @@ describe('AuthService', () => {
     cleanupExpiredTokens: jest.fn(),
   };
 
+  const mockEmailVerificationService = {
+    createAndSendVerification: jest.fn().mockResolvedValue(undefined),
+    verifyEmail: jest.fn(),
+    resendVerification: jest.fn(),
+  };
+
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
@@ -80,6 +87,7 @@ describe('AuthService', () => {
         { provide: TokenService, useValue: mockTokenService },
         { provide: RefreshTokenService, useValue: mockRefreshTokenService },
         { provide: OAuthService, useValue: mockOAuthService },
+        { provide: EmailVerificationService, useValue: mockEmailVerificationService },
       ],
     }).compile();
 
@@ -441,6 +449,7 @@ describe('AuthService', () => {
         name: mockUser.name,
         defaultCurrency: mockUser.defaultCurrency,
         locale: mockUser.locale,
+        emailVerified: mockUser.emailVerified,
       });
       expect(result.accessToken).toBe('mock-jwt-access-token');
     });
@@ -541,6 +550,7 @@ describe('AuthService', () => {
         name: mockUser.name,
         defaultCurrency: mockUser.defaultCurrency,
         locale: mockUser.locale,
+        emailVerified: undefined,
       });
     });
 
@@ -625,6 +635,7 @@ describe('AuthService', () => {
           defaultCurrency: true,
           locale: true,
           timezone: true,
+          emailVerified: true,
         },
       });
     });

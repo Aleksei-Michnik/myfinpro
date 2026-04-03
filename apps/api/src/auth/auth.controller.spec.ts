@@ -8,6 +8,7 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { EmailVerificationService } from './services/email-verification.service';
 jest.mock('./utils/telegram-auth.util', () => ({
   verifyTelegramAuth: jest.fn(),
 }));
@@ -34,6 +35,12 @@ describe('AuthController', () => {
     getConnectedAccounts: jest.fn(),
     linkTelegramToUser: jest.fn(),
     unlinkProvider: jest.fn(),
+  };
+
+  const mockEmailVerificationService = {
+    createAndSendVerification: jest.fn(),
+    verifyEmail: jest.fn(),
+    resendVerification: jest.fn(),
   };
 
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
@@ -68,6 +75,7 @@ describe('AuthController', () => {
       providers: [
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: EmailVerificationService, useValue: mockEmailVerificationService },
       ],
     }).compile();
 
@@ -931,6 +939,113 @@ describe('AuthController', () => {
       );
 
       expect(limit).toBeUndefined();
+    });
+
+    it('should have @Throttle metadata on sendVerificationEmail with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.sendVerificationEmail,
+      );
+      const ttl = Reflect.getMetadata(
+        THROTTLER_TTL_KEY,
+        AuthController.prototype.sendVerificationEmail,
+      );
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+
+    it('should have @Throttle metadata on verifyEmail with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.verifyEmail);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.verifyEmail);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('sendVerificationEmail()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call resendVerification and return success message', async () => {
+      mockEmailVerificationService.resendVerification.mockResolvedValue(undefined);
+
+      const result = await controller.sendVerificationEmail(mockJwtPayload);
+
+      expect(mockEmailVerificationService.resendVerification).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual({ message: 'Verification email sent' });
+    });
+
+    it('should return "Email already verified" when EMAIL_ALREADY_VERIFIED', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.resendVerification.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Email is already verified',
+          errorCode: AUTH_ERRORS.EMAIL_ALREADY_VERIFIED,
+        }),
+      );
+
+      const result = await controller.sendVerificationEmail(mockJwtPayload);
+
+      expect(result).toEqual({ message: 'Email already verified' });
+    });
+
+    it('should propagate other errors', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.resendVerification.mockRejectedValue(
+        new ActualUnauth({
+          message: 'User not found',
+          errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+        }),
+      );
+
+      await expect(controller.sendVerificationEmail(mockJwtPayload)).rejects.toThrow(
+        'User not found',
+      );
+    });
+  });
+
+  describe('verifyEmail()', () => {
+    it('should call verifyEmail and return success message', async () => {
+      mockEmailVerificationService.verifyEmail.mockResolvedValue({ userId: 'user-1' });
+
+      const result = await controller.verifyEmail('valid-token');
+
+      expect(mockEmailVerificationService.verifyEmail).toHaveBeenCalledWith('valid-token');
+      expect(result).toEqual({ message: 'Email verified successfully' });
+    });
+
+    it('should throw BadRequestException when token is empty', async () => {
+      await expect(controller.verifyEmail('')).rejects.toThrow(BadRequestException);
+
+      try {
+        await controller.verifyEmail('');
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+          }),
+        );
+      }
+    });
+
+    it('should propagate errors from EmailVerificationService', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.verifyEmail.mockRejectedValue(
+        new ActualUnauth({
+          message: 'Invalid verification token',
+          errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+        }),
+      );
+
+      await expect(controller.verifyEmail('bad-token')).rejects.toThrow(
+        'Invalid verification token',
+      );
     });
   });
 });
