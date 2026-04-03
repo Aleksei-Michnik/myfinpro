@@ -344,28 +344,28 @@ Full localization can be deferred, but the foundation should be set early to avo
 
 Each iteration is deployable, includes tests, and expands CI/CD coverage. Order follows the required sequence.
 
-**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (12), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 139 iterations.**
+**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (13), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 140 iterations.**
 
 ### Phase Size Guidelines
 
-| Phase                     | Iterations | Size Category | Notes                                              |
-| ------------------------- | ---------- | ------------- | -------------------------------------------------- |
-| Phase 0: Foundation       | 8          | Medium        | Infrastructure setup, one-time                     |
-| Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                |
-| Phase 2: Google Auth      | 4          | Small         | OAuth integration                                  |
-| Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                 |
-| Phase 4: Auth Completion  | 12         | Medium        | Email confirm, password reset, delete, legal pages |
-| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)  |
-| Phase 6: Income           | 10         | Medium        | Core transaction type                              |
-| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments               |
-| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                          |
-| Phase 9: Receipts         | 8          | Medium        | File handling complexity                           |
-| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                               |
-| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9) |
-| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                             |
-| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                           |
-| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                   |
-| Phase 15: LLM             | 8          | Medium        | AI integration                                     |
+| Phase                     | Iterations | Size Category | Notes                                                           |
+| ------------------------- | ---------- | ------------- | --------------------------------------------------------------- |
+| Phase 0: Foundation       | 8          | Medium        | Infrastructure setup, one-time                                  |
+| Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                             |
+| Phase 2: Google Auth      | 4          | Small         | OAuth integration                                               |
+| Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                              |
+| Phase 4: Auth Completion  | 13         | Medium        | Email confirm, password reset, delete, legal pages, Haraka SMTP |
+| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)               |
+| Phase 6: Income           | 10         | Medium        | Core transaction type                                           |
+| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments                            |
+| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                                       |
+| Phase 9: Receipts         | 8          | Medium        | File handling complexity                                        |
+| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                                            |
+| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9)              |
+| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                                          |
+| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                                        |
+| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                                |
+| Phase 15: LLM             | 8          | Medium        | AI integration                                                  |
 
 **Target phase size**: 6-10 iterations recommended. Larger phases are split into logical sub-sections.
 
@@ -433,6 +433,7 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 | 4.10      | How-to Guide                  | Help page at /help with step-by-step instructions for all auth features                         | UI tests          | lint + typecheck + unit        | Deploy     | Help page renders with all sections                        |
 | 4.11      | Consent + footer              | Registration consent checkbox, global footer with legal links                                   | UI tests          | lint + typecheck + unit        | Deploy     | Registration requires consent, footer visible on all pages |
 | 4.12      | Integration + E2E tests       | Comprehensive integration tests for all Phase 4 features + E2E Playwright tests                 | Integration + E2E | full suite                     | Deploy     | All Phase 4 features tested end-to-end                     |
+| 4.13      | Haraka SMTP infrastructure    | Self-hosted Haraka SMTP server in Docker, DKIM signing, SPF/DMARC DNS records                   | Manual + delivery | lint + typecheck               | Deploy     | Emails delivered to real inboxes with DKIM/SPF pass        |
 
 > **Detailed design**: See [`docs/phase-4-design.md`](docs/phase-4-design.md) for the full Phase 4 design document.
 

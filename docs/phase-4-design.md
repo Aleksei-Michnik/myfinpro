@@ -1295,8 +1295,130 @@ gantt
 
     section Testing
     4.12 Integration + E2E Tests :i12, after i8, 1
+
+    section SMTP Infrastructure
+    4.13 Haraka SMTP Server :i13, after i12, 1
 ```
 
-**Note:** Iterations 4.2-4.3, 4.4-4.5, and 4.6-4.8 all depend on 4.1 (Email Infrastructure). Iterations 4.9-4.11 (Legal Pages) have no backend dependencies and can be developed in parallel with the other tracks.
+**Note:** Iterations 4.2-4.3, 4.4-4.5, and 4.6-4.8 all depend on 4.1 (Email Infrastructure). Iterations 4.9-4.11 (Legal Pages) have no backend dependencies and can be developed in parallel with the other tracks. Iteration 4.13 (Haraka) is the final iteration that enables real email delivery.
 
 Each iteration deploys to both staging and production via the existing CI/CD pipeline.
+
+---
+
+## 19. Iteration 4.13: Haraka SMTP Infrastructure
+
+### Overview
+
+Deploy a self-hosted Haraka SMTP server as a Docker container alongside the existing infrastructure. Haraka is a Node.js-based, high-performance SMTP server that handles outbound email delivery for all transactional emails (verification, password reset, deletion notices).
+
+### Why Self-Hosted SMTP
+
+- **No third-party dependency** — full control over email delivery
+- **Cost-effective** — no per-email fees
+- **Aligned with tech stack** — Haraka is Node.js-based
+- **Privacy-first** — email content never leaves our infrastructure
+
+### Architecture
+
+```mermaid
+flowchart LR
+    API["NestJS API<br/>MailService + Nodemailer"] -->|SMTP :25| HARAKA["Haraka SMTP<br/>Docker Container"]
+    HARAKA -->|"DKIM signed"| MX["Recipient MX Server"]
+    HARAKA -->|SPF + DMARC| DNS["Cloudflare DNS"]
+```
+
+### Docker Infrastructure
+
+Add Haraka as a service in both staging and production infrastructure compose files:
+
+```yaml
+# docker-compose.{env}.infra.yml
+haraka:
+  image: haraka/haraka-docker:latest # or custom Dockerfile
+  container_name: myfinpro-${ENV}-haraka
+  restart: unless-stopped
+  ports: [] # No external ports — internal only
+  volumes:
+    - ./infrastructure/haraka/config:/opt/haraka/config:ro
+  networks:
+    - myfinpro-${ENV}-net
+  healthcheck:
+    test: ['CMD', 'nc', '-z', 'localhost', '25']
+    interval: 30s
+    timeout: 5s
+    retries: 3
+```
+
+### Haraka Configuration
+
+| Config File                                   | Purpose                                      |
+| --------------------------------------------- | -------------------------------------------- |
+| `infrastructure/haraka/config/smtp.ini`       | SMTP bind address (0.0.0.0:25), TLS settings |
+| `infrastructure/haraka/config/host_list`      | Allowed sender domains                       |
+| `infrastructure/haraka/config/dkim_sign.ini`  | DKIM signing config                          |
+| `infrastructure/haraka/config/dkim/{domain}/` | DKIM private key + selector                  |
+| `infrastructure/haraka/config/plugins`        | Plugin list (dkim_sign, spf, etc.)           |
+
+### DNS Records Required
+
+| Record            | Type | Value                                    | Purpose           |
+| ----------------- | ---- | ---------------------------------------- | ----------------- |
+| `@` or subdomain  | MX   | Server IP                                | Mail exchange     |
+| `@` or subdomain  | TXT  | `v=spf1 ip4:{SERVER_IP} -all`            | SPF authorization |
+| `mail._domainkey` | TXT  | DKIM public key                          | DKIM verification |
+| `_dmarc`          | TXT  | `v=DMARC1; p=quarantine; rua=mailto:...` | DMARC policy      |
+| Server IP         | PTR  | mail.domain.com                          | Reverse DNS       |
+
+### Environment Variables
+
+Update `.env` templates:
+
+```
+SMTP_HOST=haraka          # Docker service name
+SMTP_PORT=25
+SMTP_SECURE=false         # Internal network, no TLS needed
+SMTP_USER=                # No auth for internal SMTP
+SMTP_PASS=
+SMTP_FROM="MyFinPro <noreply@{domain}>"
+```
+
+### Files Created
+
+| File                                         | Purpose                         |
+| -------------------------------------------- | ------------------------------- |
+| `infrastructure/haraka/config/smtp.ini`      | SMTP server configuration       |
+| `infrastructure/haraka/config/host_list`     | Allowed sender domains          |
+| `infrastructure/haraka/config/plugins`       | Enabled plugins                 |
+| `infrastructure/haraka/config/dkim_sign.ini` | DKIM signing configuration      |
+| `infrastructure/haraka/Dockerfile`           | Custom Haraka image (if needed) |
+
+### Modified Files
+
+| File                                      | Change                  |
+| ----------------------------------------- | ----------------------- |
+| `docker-compose.staging.infra.yml`        | Add haraka service      |
+| `docker-compose.production.infra.yml`     | Add haraka service      |
+| `docker-compose.staging.app.yml`          | Add SMTP\_\* env vars   |
+| `docker-compose.production.app.yml`       | Add SMTP\_\* env vars   |
+| `.github/workflows/deploy-staging.yml`    | Add SMTP env vars       |
+| `.github/workflows/deploy-production.yml` | Add SMTP env vars       |
+| `.env.staging.template`                   | Add SMTP config section |
+| `.env.production.template`                | Add SMTP config section |
+| `apps/api/.env.example`                   | Add SMTP config section |
+
+### Acceptance Criteria
+
+- Haraka container running and healthy in both staging and production
+- API MailService connects to Haraka via internal Docker network
+- Verification emails delivered to real inboxes
+- DKIM signatures verified (check via mail-tester.com)
+- SPF and DMARC records configured in Cloudflare DNS
+- Console fallback still works when Haraka is not available
+
+### Testing
+
+- Send test email from staging and verify delivery
+- Check DKIM signature via email headers
+- Verify SPF pass via email headers
+- Run mail-tester.com score check

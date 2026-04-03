@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-04-03
-> **Current Phase:** Phase 4 — Auth Completion & Legal Pages ⬜ Not Started
+> **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
 > **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
 ---
@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 0/12       | ⬜ Not Started | —               |
+| 4     | Auth Completion & Legal Pages | 0/13       | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 140 | **Completed:** 29 | **Remaining:** 111
+**Total iterations:** 141 | **Completed:** 29 | **Remaining:** 112
 
 ---
 
@@ -1360,7 +1360,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 3.3       | Backend — Connected Accounts API + HMAC-SHA256 rewrite + bug fixes  | ✅ Complete |
 | 3.4       | Connected Accounts UI + integration tests + progress update         | ✅ Complete |
 
-### Phase 4: Auth Completion & Legal Pages (Next)
+### Phase 4: Auth Completion & Legal Pages (In Progress)
 
 | Iteration | Objective                     | Status         |
 | --------- | ----------------------------- | -------------- |
@@ -1376,6 +1376,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.10      | How-to Guide                  | ⬜ Not Started |
 | 4.11      | Consent + footer              | ⬜ Not Started |
 | 4.12      | Integration + E2E tests       | ⬜ Not Started |
+| 4.13      | Haraka SMTP infrastructure    | ⬜ Not Started |
 
 > **Detailed design**: See [`docs/phase-4-design.md`](phase-4-design.md) for the full Phase 4 design document.
 
