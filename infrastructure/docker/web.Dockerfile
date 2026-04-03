@@ -21,6 +21,8 @@ CMD ["pnpm", "run", "dev"]
 
 # ───── Build Stage ─────
 FROM dependencies AS build
+ARG NEXT_PUBLIC_TELEGRAM_BOT_ID
+ENV NEXT_PUBLIC_TELEGRAM_BOT_ID=${NEXT_PUBLIC_TELEGRAM_BOT_ID}
 COPY . .
 # Remove stale tsbuildinfo (incremental builds skip emit if present without dist)
 RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \
@@ -29,6 +31,9 @@ RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo && \
 
 # ───── Production Stage ─────
 FROM node:24-alpine AS production
+LABEL org.opencontainers.image.source="https://github.com/Aleksei-Michnik/myfinpro"
+LABEL org.opencontainers.image.description="MyFinPro Web Application"
+LABEL org.opencontainers.image.licenses="UNLICENSED"
 # Install wget for Docker health checks (BusyBox wget lacks --no-verbose/--tries flags)
 RUN apk add --no-cache wget
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate

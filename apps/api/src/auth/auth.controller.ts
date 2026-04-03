@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Logger,
+  Param,
   Post,
   Req,
   Res,
@@ -15,24 +18,29 @@ import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiBearerAuth,
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiExcludeEndpoint,
+  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
-import { AuthService, GoogleProfile } from './auth.service';
+import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -177,5 +185,137 @@ export class AuthController {
 
     this.logger.log(`Google OAuth callback: redirecting user ${user.id} to frontend`);
     response.redirect(redirectUrl);
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 60000 })
+  @Post('telegram/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Authenticate via Telegram Login Widget (HMAC-SHA256)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Telegram authentication successful',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired Telegram auth data' })
+  @ApiTooManyRequestsResponse({ description: 'Too many authentication attempts' })
+  async telegramCallback(
+    @Body() dto: TelegramAuthDto,
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+  ) {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      throw new UnauthorizedException({
+        message: 'Telegram authentication is not configured',
+        errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+      });
+    }
+
+    // Verify HMAC-SHA256 hash using the bot token
+    let authData;
+    try {
+      authData = verifyTelegramAuth(dto, botToken);
+    } catch (error) {
+      this.logger.warn(
+        `Telegram auth verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new UnauthorizedException({
+        message: 'Invalid Telegram authentication data',
+        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+      });
+    }
+
+    // Build profile from verified data and find or create user
+    const telegramProfile: TelegramProfile = {
+      telegramId: authData.telegramId,
+      firstName: authData.firstName,
+      lastName: authData.lastName,
+      username: authData.username,
+      photoUrl: authData.photoUrl,
+    };
+
+    const user = await this.authService.findOrCreateTelegramUser(telegramProfile);
+
+    const ip = request.ip;
+    const userAgent = request.headers['user-agent'];
+    return this.authService.login(user, response, ip, userAgent);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('connected-accounts')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List connected authentication providers' })
+  @ApiResponse({
+    status: 200,
+    description: 'Connected accounts list with hasPassword flag',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  async getConnectedAccounts(@CurrentUser() user: JwtPayload) {
+    return this.authService.getConnectedAccounts(user.sub);
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('link/telegram')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Link a Telegram account to the authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Telegram account linked successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiConflictResponse({ description: 'Telegram account already linked to another user' })
+  @ApiTooManyRequestsResponse({ description: 'Too many link attempts' })
+  async linkTelegram(@CurrentUser() user: JwtPayload, @Body() dto: TelegramAuthDto) {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      throw new UnauthorizedException({
+        message: 'Telegram authentication is not configured',
+        errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+      });
+    }
+
+    // Verify HMAC-SHA256 hash using the bot token
+    try {
+      verifyTelegramAuth(dto, botToken);
+    } catch (error) {
+      this.logger.warn(
+        `Telegram link verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new UnauthorizedException({
+        message: 'Invalid Telegram authentication data',
+        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+      });
+    }
+
+    return this.authService.linkTelegramToUser(user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('connected-accounts/:provider')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unlink an authentication provider from the authenticated user' })
+  @ApiParam({ name: 'provider', enum: ['google', 'telegram'] })
+  @ApiResponse({
+    status: 200,
+    description: 'Provider unlinked successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Provider not linked' })
+  @ApiBadRequestResponse({ description: 'Cannot unlink the last authentication method' })
+  async unlinkProvider(@CurrentUser() user: JwtPayload, @Param('provider') provider: string) {
+    // Validate provider parameter
+    const validProviders = ['google', 'telegram'];
+    if (!validProviders.includes(provider)) {
+      throw new BadRequestException({
+        message: `Invalid provider: ${provider}. Must be one of: ${validProviders.join(', ')}`,
+        errorCode: AUTH_ERRORS.PROVIDER_NOT_FOUND,
+      });
+    }
+
+    return this.authService.unlinkProvider(user.sub, provider);
   }
 }

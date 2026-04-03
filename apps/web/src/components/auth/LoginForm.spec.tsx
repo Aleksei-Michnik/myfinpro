@@ -34,6 +34,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({
     login: mockLogin,
     loginWithToken: vi.fn(),
+    loginWithTelegram: vi.fn(),
     user: null,
     isAuthenticated: false,
     isLoading: false,
@@ -41,6 +42,15 @@ vi.mock('@/lib/auth/auth-context', () => ({
     register: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => null,
+  }),
+}));
+
+// Mock useTelegramLogin hook
+vi.mock('@/components/auth/TelegramLoginButton', () => ({
+  useTelegramLogin: () => ({
+    triggerLogin: vi.fn(),
+    isReady: false,
+    isLoading: false,
   }),
 }));
 

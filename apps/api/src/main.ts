@@ -58,12 +58,13 @@ async function bootstrap() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
+          scriptSrc: ["'self'", 'https://oauth.telegram.org'],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'https:', 'https://*.googleusercontent.com'],
-          connectSrc: ["'self'", 'https://accounts.google.com'],
+          imgSrc: ["'self'", 'data:', 'https:', 'https://*.googleusercontent.com', 'https://t.me'],
+          connectSrc: ["'self'", 'https://accounts.google.com', 'https://oauth.telegram.org'],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
+          frameSrc: ["'self'", 'https://oauth.telegram.org'],
           upgradeInsecureRequests: [],
         },
       },

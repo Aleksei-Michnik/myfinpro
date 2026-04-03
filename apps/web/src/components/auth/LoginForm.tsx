@@ -3,15 +3,18 @@
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
+import { useTelegramLogin } from '@/components/auth/TelegramLoginButton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 
+const TELEGRAM_BOT_ID = process.env.NEXT_PUBLIC_TELEGRAM_BOT_ID;
+
 export function LoginForm() {
   const t = useTranslations('auth');
-  const { login } = useAuth();
+  const { login, loginWithTelegram } = useAuth();
   const { addToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,6 +22,27 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const { triggerLogin: triggerTelegramLogin, isLoading: isTelegramLoading } = useTelegramLogin({
+    botId: TELEGRAM_BOT_ID || '',
+    onAuth: async (result) => {
+      setError('');
+      setIsLoading(true);
+      try {
+        await loginWithTelegram(result);
+        addToast('success', t('telegramAuthSuccess'));
+        const redirect = searchParams.get('redirect');
+        router.push(redirect || '/dashboard');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('telegramAuthFailed'));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      // User cancelled — no action needed
+    },
+  });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -97,9 +121,20 @@ export function LoginForm() {
         >
           {t('google')}
         </Button>
-        <Button type="button" variant="outline" disabled className="opacity-50">
-          {t('telegram')}
-        </Button>
+        {TELEGRAM_BOT_ID ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={triggerTelegramLogin}
+            disabled={isLoading || isTelegramLoading}
+          >
+            {isTelegramLoading ? t('signingIn') : t('telegram')}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="opacity-50">
+            {t('telegram')}
+          </Button>
+        )}
       </div>
 
       <p className="text-center text-sm text-gray-600">

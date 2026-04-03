@@ -3,11 +3,14 @@
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
+import { useTelegramLogin } from '@/components/auth/TelegramLoginButton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
+
+const TELEGRAM_BOT_ID = process.env.NEXT_PUBLIC_TELEGRAM_BOT_ID;
 
 interface FieldErrors {
   name?: string;
@@ -20,7 +23,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function RegisterForm() {
   const t = useTranslations('auth');
-  const { register } = useAuth();
+  const { register, loginWithTelegram } = useAuth();
   const { addToast } = useToast();
   const router = useRouter();
   const [name, setName] = useState('');
@@ -31,6 +34,26 @@ export function RegisterForm() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [generalError, setGeneralError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const { triggerLogin: triggerTelegramLogin, isLoading: isTelegramLoading } = useTelegramLogin({
+    botId: TELEGRAM_BOT_ID || '',
+    onAuth: async (result) => {
+      setGeneralError('');
+      setIsLoading(true);
+      try {
+        await loginWithTelegram(result);
+        addToast('success', t('telegramAuthSuccess'));
+        router.push('/dashboard');
+      } catch (err) {
+        setGeneralError(err instanceof Error ? err.message : t('telegramAuthFailed'));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      // User cancelled — no action needed
+    },
+  });
 
   function validateField(field: string, value: string): string | undefined {
     switch (field) {
@@ -182,16 +205,31 @@ export function RegisterForm() {
         </div>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => {
-          window.location.href = '/api/v1/auth/google';
-        }}
-      >
-        {t('google')}
-      </Button>
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            window.location.href = '/api/v1/auth/google';
+          }}
+        >
+          {t('google')}
+        </Button>
+        {TELEGRAM_BOT_ID ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={triggerTelegramLogin}
+            disabled={isLoading || isTelegramLoading}
+          >
+            {isTelegramLoading ? t('signingUp') : t('telegram')}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled className="opacity-50">
+            {t('telegram')}
+          </Button>
+        )}
+      </div>
 
       <p className="text-center text-sm text-gray-600">
         {t('hasAccount')}{' '}

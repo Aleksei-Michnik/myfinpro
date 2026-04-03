@@ -30,6 +30,9 @@ RUN rm -f /app/packages/shared/tsconfig.tsbuildinfo /app/apps/api/tsconfig.build
 
 # ───── Production Stage ─────
 FROM base AS production
+LABEL org.opencontainers.image.source="https://github.com/Aleksei-Michnik/myfinpro"
+LABEL org.opencontainers.image.description="MyFinPro API Server"
+LABEL org.opencontainers.image.licenses="UNLICENSED"
 # Install wget for Docker health checks (BusyBox wget lacks --no-verbose/--tries flags)
 RUN apk add --no-cache wget
 WORKDIR /app

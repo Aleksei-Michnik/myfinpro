@@ -13,6 +13,7 @@ let mockAuthState = {
   accessToken: null as string | null,
   login: vi.fn(),
   loginWithToken: vi.fn(),
+  loginWithTelegram: vi.fn(),
   register: vi.fn(),
   getAccessToken: () => null as string | null,
 };
@@ -59,6 +60,7 @@ describe('Header', () => {
       accessToken: null,
       login: vi.fn(),
       loginWithToken: vi.fn(),
+      loginWithTelegram: vi.fn(),
       register: vi.fn(),
       getAccessToken: () => null,
     };
@@ -144,6 +146,7 @@ describe('Header', () => {
         accessToken: 'token',
         login: vi.fn(),
         loginWithToken: vi.fn(),
+        loginWithTelegram: vi.fn(),
         register: vi.fn(),
         getAccessToken: () => 'token',
       };
@@ -159,6 +162,13 @@ describe('Header', () => {
       const dashboardLink = screen.getByText('nav.dashboard');
       expect(dashboardLink).toBeInTheDocument();
       expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
+    });
+
+    it('renders connected accounts link', () => {
+      render(<Header />);
+      const settingsLink = screen.getByText('nav.connectedAccounts');
+      expect(settingsLink).toBeInTheDocument();
+      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
     });
 
     it('renders logout button', () => {

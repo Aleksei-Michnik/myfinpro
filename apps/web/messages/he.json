@@ -15,6 +15,7 @@
     "transactions": "תנועות",
     "budgets": "תקציבים",
     "settings": "הגדרות",
+    "connectedAccounts": "חשבונות מחוברים",
     "signIn": "התחברות",
     "signUp": "הרשמה",
     "logout": "התנתקות"
@@ -70,7 +71,10 @@
     "oauthError": "ההתחברות נכשלה. אנא נסה שוב.",
     "oauthSuccess": "התחברת עם Google!",
     "orSignUpWith": "או הירשם עם",
-    "signInWithGoogle": "התחבר עם Google"
+    "signInWithGoogle": "התחבר עם Google",
+    "telegramAuthFailed": "ההתחברות עם טלגרם נכשלה. נסה שוב.",
+    "telegramAuthSuccess": "התחברת עם טלגרם!",
+    "telegramSignIn": "התחבר עם טלגרם"
   },
   "toast": {
     "dismiss": "סגור"
@@ -78,5 +82,22 @@
   "dashboard": {
     "title": "לוח בקרה",
     "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן."
+  },
+  "settings": {
+    "connectedAccounts": "חשבונות מחוברים",
+    "connectedAccountsDescription": "נהל את שיטות ההתחברות שלך",
+    "emailPassword": "אימייל וסיסמה",
+    "connected": "מחובר",
+    "notConnected": "לא מחובר",
+    "connectGoogle": "חבר Google",
+    "connectTelegram": "חבר Telegram",
+    "disconnect": "נתק",
+    "disconnectConfirm": "האם אתה בטוח שברצונך לנתק את {provider}?",
+    "disconnectSuccess": "{provider} נותק בהצלחה",
+    "disconnectError": "ניתוק {provider} נכשל",
+    "cannotDisconnectLast": "לא ניתן לנתק את שיטת ההתחברות האחרונה",
+    "linkSuccess": "{provider} חובר בהצלחה",
+    "linkError": "חיבור {provider} נכשל",
+    "alreadyLinked": "חשבון {provider} זה כבר מקושר למשתמש אחר"
   }
 }
