@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Logger,
+  Param,
   Post,
   Req,
   Res,
@@ -15,10 +18,13 @@ import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiBearerAuth,
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiExcludeEndpoint,
+  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
@@ -233,5 +239,83 @@ export class AuthController {
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
     return this.authService.login(user, response, ip, userAgent);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('connected-accounts')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List connected authentication providers' })
+  @ApiResponse({
+    status: 200,
+    description: 'Connected accounts list with hasPassword flag',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  async getConnectedAccounts(@CurrentUser() user: JwtPayload) {
+    return this.authService.getConnectedAccounts(user.sub);
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('link/telegram')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Link a Telegram account to the authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Telegram account linked successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiConflictResponse({ description: 'Telegram account already linked to another user' })
+  @ApiTooManyRequestsResponse({ description: 'Too many link attempts' })
+  async linkTelegram(@CurrentUser() user: JwtPayload, @Body() dto: TelegramAuthDto) {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      throw new UnauthorizedException({
+        message: 'Telegram authentication is not configured',
+        errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+      });
+    }
+
+    // Verify HMAC-SHA256 hash using the bot token
+    try {
+      verifyTelegramAuth(dto, botToken);
+    } catch (error) {
+      this.logger.warn(
+        `Telegram link verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new UnauthorizedException({
+        message: 'Invalid Telegram authentication data',
+        errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+      });
+    }
+
+    return this.authService.linkTelegramToUser(user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('connected-accounts/:provider')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unlink an authentication provider from the authenticated user' })
+  @ApiParam({ name: 'provider', enum: ['google', 'telegram'] })
+  @ApiResponse({
+    status: 200,
+    description: 'Provider unlinked successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Provider not linked' })
+  @ApiBadRequestResponse({ description: 'Cannot unlink the last authentication method' })
+  async unlinkProvider(@CurrentUser() user: JwtPayload, @Param('provider') provider: string) {
+    // Validate provider parameter
+    const validProviders = ['google', 'telegram'];
+    if (!validProviders.includes(provider)) {
+      throw new BadRequestException({
+        message: `Invalid provider: ${provider}. Must be one of: ${validProviders.join(', ')}`,
+        errorCode: AUTH_ERRORS.PROVIDER_NOT_FOUND,
+      });
+    }
+
+    return this.authService.unlinkProvider(user.sub, provider);
   }
 }

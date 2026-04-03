@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Request, Response } from 'express';
@@ -31,6 +31,9 @@ describe('AuthController', () => {
     getUser: jest.fn(),
     findOrCreateGoogleUser: jest.fn(),
     findOrCreateTelegramUser: jest.fn(),
+    getConnectedAccounts: jest.fn(),
+    linkTelegramToUser: jest.fn(),
+    unlinkProvider: jest.fn(),
   };
 
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
@@ -689,6 +692,245 @@ describe('AuthController', () => {
 
       // Should pass the full bot token, not just the bot ID
       expect(mockVerifyTelegramAuth).toHaveBeenCalledWith(dto, TEST_BOT_TOKEN);
+    });
+  });
+
+  describe('getConnectedAccounts()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call AuthService.getConnectedAccounts() and return result', async () => {
+      const expectedResult = {
+        hasPassword: true,
+        providers: [
+          {
+            provider: 'google',
+            name: 'Google User',
+            email: 'google@example.com',
+            avatarUrl: 'https://photo.url',
+            connectedAt: new Date(),
+          },
+        ],
+      };
+
+      mockAuthService.getConnectedAccounts.mockResolvedValue(expectedResult);
+
+      const result = await controller.getConnectedAccounts(mockJwtPayload);
+
+      expect(mockAuthService.getConnectedAccounts).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should return empty providers when user has no OAuth', async () => {
+      const expectedResult = {
+        hasPassword: true,
+        providers: [],
+      };
+
+      mockAuthService.getConnectedAccounts.mockResolvedValue(expectedResult);
+
+      const result = await controller.getConnectedAccounts(mockJwtPayload);
+
+      expect(result.providers).toEqual([]);
+      expect(result.hasPassword).toBe(true);
+    });
+  });
+
+  describe('linkTelegram()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    const validDto: TelegramAuthDto = {
+      id: 123456789,
+      first_name: 'John',
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: 'valid_hash_value',
+    };
+
+    it('should verify HMAC and call linkTelegramToUser for valid data', async () => {
+      const dto = { ...validDto };
+      const expectedResult = {
+        hasPassword: true,
+        providers: [
+          {
+            provider: 'telegram',
+            name: 'John',
+            email: null,
+            avatarUrl: null,
+            connectedAt: new Date(),
+          },
+        ],
+      };
+
+      mockVerifyTelegramAuth.mockReturnValue({
+        telegramId: '123456789',
+        firstName: 'John',
+      });
+      mockAuthService.linkTelegramToUser.mockResolvedValue(expectedResult);
+
+      const result = await controller.linkTelegram(mockJwtPayload, dto);
+
+      expect(mockVerifyTelegramAuth).toHaveBeenCalledWith(dto, TEST_BOT_TOKEN);
+      expect(mockAuthService.linkTelegramToUser).toHaveBeenCalledWith('test-uuid', dto);
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should throw 401 with TELEGRAM_AUTH_INVALID when HMAC verification fails', async () => {
+      const dto = { ...validDto, hash: 'invalid_hash' };
+
+      mockVerifyTelegramAuth.mockImplementation(() => {
+        throw new Error('Invalid Telegram auth hash');
+      });
+
+      await expect(controller.linkTelegram(mockJwtPayload, dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        mockVerifyTelegramAuth.mockImplementation(() => {
+          throw new Error('Invalid Telegram auth hash');
+        });
+        await controller.linkTelegram(mockJwtPayload, dto);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Invalid Telegram authentication data',
+            errorCode: AUTH_ERRORS.TELEGRAM_AUTH_INVALID,
+          }),
+        );
+      }
+
+      expect(mockAuthService.linkTelegramToUser).not.toHaveBeenCalled();
+    });
+
+    it('should throw 401 with OAUTH_PROVIDER_ERROR when bot token is not configured', async () => {
+      mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'TELEGRAM_BOT_TOKEN') return defaultValue as string;
+        const config: Record<string, string> = {
+          FRONTEND_URL: 'http://localhost:3000',
+        };
+        return config[key] ?? (defaultValue as string);
+      });
+
+      const dto = { ...validDto };
+
+      await expect(controller.linkTelegram(mockJwtPayload, dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await controller.linkTelegram(mockJwtPayload, dto);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Telegram authentication is not configured',
+            errorCode: AUTH_ERRORS.OAUTH_PROVIDER_ERROR,
+          }),
+        );
+      }
+    });
+  });
+
+  describe('unlinkProvider()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call AuthService.unlinkProvider() and return result', async () => {
+      const expectedResult = {
+        hasPassword: true,
+        providers: [],
+      };
+
+      mockAuthService.unlinkProvider.mockResolvedValue(expectedResult);
+
+      const result = await controller.unlinkProvider(mockJwtPayload, 'telegram');
+
+      expect(mockAuthService.unlinkProvider).toHaveBeenCalledWith('test-uuid', 'telegram');
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should accept google as a valid provider', async () => {
+      const expectedResult = {
+        hasPassword: true,
+        providers: [],
+      };
+
+      mockAuthService.unlinkProvider.mockResolvedValue(expectedResult);
+
+      const result = await controller.unlinkProvider(mockJwtPayload, 'google');
+
+      expect(mockAuthService.unlinkProvider).toHaveBeenCalledWith('test-uuid', 'google');
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should throw BadRequestException for invalid provider', async () => {
+      await expect(controller.unlinkProvider(mockJwtPayload, 'facebook')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      try {
+        await controller.unlinkProvider(mockJwtPayload, 'facebook');
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.PROVIDER_NOT_FOUND,
+          }),
+        );
+      }
+    });
+
+    it('should propagate BadRequestException from service (safety check)', async () => {
+      const { BadRequestException } = jest.requireActual('@nestjs/common');
+      mockAuthService.unlinkProvider.mockRejectedValue(
+        new BadRequestException({
+          message: 'Cannot unlink the last authentication method',
+          errorCode: 'CANNOT_UNLINK_LAST_AUTH',
+        }),
+      );
+
+      await expect(controller.unlinkProvider(mockJwtPayload, 'telegram')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('Rate limiting metadata (new endpoints)', () => {
+    it('should have @Throttle metadata on linkTelegram endpoint with limit 5 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.linkTelegram);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.linkTelegram);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(60000);
+    });
+
+    it('should NOT have @Throttle metadata on getConnectedAccounts endpoint (uses global default)', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.getConnectedAccounts,
+      );
+
+      expect(limit).toBeUndefined();
+    });
+
+    it('should NOT have @Throttle metadata on unlinkProvider endpoint (uses global default)', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.unlinkProvider,
+      );
+
+      expect(limit).toBeUndefined();
     });
   });
 });

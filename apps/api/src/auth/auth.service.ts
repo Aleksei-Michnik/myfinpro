@@ -1,8 +1,16 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
+import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
@@ -453,5 +461,148 @@ export class AuthService {
       });
     }
     return user;
+  }
+
+  async getConnectedAccounts(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        oauthProviders: {
+          select: {
+            provider: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException({
+        message: 'User not found',
+        errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+      });
+    }
+
+    return {
+      hasPassword: !!user.passwordHash,
+      providers: user.oauthProviders.map((p) => ({
+        provider: p.provider,
+        name: p.name,
+        email: p.email,
+        avatarUrl: p.avatarUrl,
+        connectedAt: p.createdAt,
+      })),
+    };
+  }
+
+  async linkTelegramToUser(userId: string, telegramData: TelegramAuthDto) {
+    // 1. Check if this Telegram ID is already linked to ANY user
+    const existing = await this.oauthService.findByProvider('telegram', String(telegramData.id));
+
+    if (existing) {
+      if (existing.userId === userId) {
+        // Already linked to this user — return success
+        return this.getConnectedAccounts(userId);
+      }
+      // Linked to a different user — conflict
+      throw new ConflictException({
+        message: 'This Telegram account is already linked to another user',
+        errorCode: AUTH_ERRORS.TELEGRAM_ALREADY_LINKED,
+      });
+    }
+
+    // 2. Create OAuthProvider record
+    const displayName = [telegramData.first_name, telegramData.last_name].filter(Boolean).join(' ');
+
+    await this.oauthService.createOAuthProvider({
+      provider: 'telegram',
+      providerId: String(telegramData.id),
+      userId,
+      name: displayName,
+      avatarUrl: telegramData.photo_url,
+      metadata: {
+        username: telegramData.username,
+        firstName: telegramData.first_name,
+        lastName: telegramData.last_name,
+      },
+    });
+
+    // 3. Audit log
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'OAUTH_PROVIDER_LINKED',
+        entity: 'OAuthProvider',
+        entityId: userId,
+        details: { provider: 'telegram', telegramId: String(telegramData.id) },
+      },
+    });
+
+    this.logger.log(`Telegram account ${telegramData.id} linked to user ${userId}`);
+
+    // 4. Return updated connected accounts
+    return this.getConnectedAccounts(userId);
+  }
+
+  async unlinkProvider(userId: string, provider: string) {
+    // 1. Get user with all auth methods
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        passwordHash: true,
+        oauthProviders: { select: { provider: true, id: true } },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException({
+        message: 'User not found',
+        errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+      });
+    }
+
+    // 2. Find the provider to unlink
+    const providerToRemove = user.oauthProviders.find((p) => p.provider === provider);
+    if (!providerToRemove) {
+      throw new NotFoundException({
+        message: `Provider ${provider} is not linked`,
+        errorCode: AUTH_ERRORS.PROVIDER_NOT_FOUND,
+      });
+    }
+
+    // 3. Safety check: must have at least one auth method remaining
+    const hasPassword = !!user.passwordHash;
+    const otherProviders = user.oauthProviders.filter((p) => p.provider !== provider);
+    if (!hasPassword && otherProviders.length === 0) {
+      throw new BadRequestException({
+        message: 'Cannot unlink the last authentication method',
+        errorCode: AUTH_ERRORS.CANNOT_UNLINK_LAST_AUTH,
+      });
+    }
+
+    // 4. Delete the OAuthProvider record
+    await this.prisma.oAuthProvider.delete({ where: { id: providerToRemove.id } });
+
+    // 5. Audit log
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'OAUTH_PROVIDER_UNLINKED',
+        entity: 'OAuthProvider',
+        entityId: providerToRemove.id,
+        details: { provider },
+      },
+    });
+
+    this.logger.log(`Provider ${provider} unlinked from user ${userId}`);
+
+    // 6. Return updated connected accounts
+    return this.getConnectedAccounts(userId);
   }
 }

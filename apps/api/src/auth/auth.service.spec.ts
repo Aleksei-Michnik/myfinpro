@@ -1,4 +1,9 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +30,9 @@ describe('AuthService', () => {
     },
     refreshToken: {
       create: jest.fn(),
+    },
+    oAuthProvider: {
+      delete: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -971,6 +979,366 @@ describe('AuthService', () => {
           details: { email: mockUser.email, provider: 'telegram' },
         },
       });
+    });
+  });
+
+  describe('getConnectedAccounts()', () => {
+    it('should return providers list with hasPassword flag when user has password', async () => {
+      const createdAt = new Date('2026-03-01T00:00:00Z');
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-uuid',
+        email: 'test@example.com',
+        passwordHash: '$argon2id$hashed',
+        oauthProviders: [
+          {
+            provider: 'google',
+            name: 'Google User',
+            email: 'google@example.com',
+            avatarUrl: 'https://photo.url',
+            createdAt,
+          },
+          {
+            provider: 'telegram',
+            name: 'John Doe',
+            email: null,
+            avatarUrl: null,
+            createdAt,
+          },
+        ],
+      });
+
+      const result = await service.getConnectedAccounts('user-uuid');
+
+      expect(result.hasPassword).toBe(true);
+      expect(result.providers).toHaveLength(2);
+      expect(result.providers[0]).toEqual({
+        provider: 'google',
+        name: 'Google User',
+        email: 'google@example.com',
+        avatarUrl: 'https://photo.url',
+        connectedAt: createdAt,
+      });
+      expect(result.providers[1]).toEqual({
+        provider: 'telegram',
+        name: 'John Doe',
+        email: null,
+        avatarUrl: null,
+        connectedAt: createdAt,
+      });
+    });
+
+    it('should return empty providers for user with no OAuth', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-uuid',
+        email: 'test@example.com',
+        passwordHash: '$argon2id$hashed',
+        oauthProviders: [],
+      });
+
+      const result = await service.getConnectedAccounts('user-uuid');
+
+      expect(result.hasPassword).toBe(true);
+      expect(result.providers).toEqual([]);
+    });
+
+    it('should return hasPassword false for OAuth-only user', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'user-uuid',
+        email: 'telegram_123@telegram.user',
+        passwordHash: null,
+        oauthProviders: [
+          {
+            provider: 'telegram',
+            name: 'Tg User',
+            email: null,
+            avatarUrl: null,
+            createdAt: new Date(),
+          },
+        ],
+      });
+
+      const result = await service.getConnectedAccounts('user-uuid');
+
+      expect(result.hasPassword).toBe(false);
+      expect(result.providers).toHaveLength(1);
+    });
+
+    it('should throw UnauthorizedException when user not found', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getConnectedAccounts('non-existent')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      try {
+        await service.getConnectedAccounts('non-existent');
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'User not found',
+            errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+          }),
+        );
+      }
+    });
+  });
+
+  describe('linkTelegramToUser()', () => {
+    const telegramDto = {
+      id: 123456789,
+      first_name: 'John',
+      last_name: 'Doe',
+      username: 'johndoe',
+      photo_url: 'https://t.me/photo.jpg',
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: 'valid_hash',
+    };
+
+    const connectedAccountsUser = {
+      id: 'user-uuid',
+      email: 'test@example.com',
+      passwordHash: '$argon2id$hashed',
+      oauthProviders: [
+        {
+          provider: 'telegram',
+          name: 'John Doe',
+          email: null,
+          avatarUrl: 'https://t.me/photo.jpg',
+          createdAt: new Date(),
+        },
+      ],
+    };
+
+    it('should link Telegram to user when not already linked', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockOAuthService.createOAuthProvider.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
+
+      const result = await service.linkTelegramToUser('user-uuid', telegramDto);
+
+      expect(mockOAuthService.findByProvider).toHaveBeenCalledWith('telegram', '123456789');
+      expect(mockOAuthService.createOAuthProvider).toHaveBeenCalledWith({
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'user-uuid',
+        name: 'John Doe',
+        avatarUrl: 'https://t.me/photo.jpg',
+        metadata: {
+          username: 'johndoe',
+          firstName: 'John',
+          lastName: 'Doe',
+        },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-uuid',
+          action: 'OAUTH_PROVIDER_LINKED',
+          entity: 'OAuthProvider',
+          entityId: 'user-uuid',
+          details: { provider: 'telegram', telegramId: '123456789' },
+        },
+      });
+      expect(result.hasPassword).toBe(true);
+      expect(result.providers).toHaveLength(1);
+    });
+
+    it('should return existing connected accounts if already linked to same user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
+
+      const result = await service.linkTelegramToUser('user-uuid', telegramDto);
+
+      expect(mockOAuthService.createOAuthProvider).not.toHaveBeenCalled();
+      expect(result.hasPassword).toBe(true);
+    });
+
+    it('should throw ConflictException if linked to different user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'telegram',
+        providerId: '123456789',
+        userId: 'other-user-uuid',
+      });
+
+      await expect(service.linkTelegramToUser('user-uuid', telegramDto)).rejects.toThrow(
+        ConflictException,
+      );
+
+      try {
+        await service.linkTelegramToUser('user-uuid', telegramDto);
+      } catch (error) {
+        const response = (error as ConflictException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'This Telegram account is already linked to another user',
+            errorCode: AUTH_ERRORS.TELEGRAM_ALREADY_LINKED,
+          }),
+        );
+      }
+    });
+  });
+
+  describe('unlinkProvider()', () => {
+    it('should unlink a provider and return updated connected accounts', async () => {
+      mockPrismaService.user.findUnique
+        .mockResolvedValueOnce({
+          passwordHash: '$argon2id$hashed',
+          oauthProviders: [
+            { provider: 'google', id: 'oauth-google-id' },
+            { provider: 'telegram', id: 'oauth-telegram-id' },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: 'user-uuid',
+          email: 'test@example.com',
+          passwordHash: '$argon2id$hashed',
+          oauthProviders: [
+            {
+              provider: 'google',
+              name: 'Google User',
+              email: 'google@example.com',
+              avatarUrl: null,
+              createdAt: new Date(),
+            },
+          ],
+        });
+      mockPrismaService.oAuthProvider.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.unlinkProvider('user-uuid', 'telegram');
+
+      expect(mockPrismaService.oAuthProvider.delete).toHaveBeenCalledWith({
+        where: { id: 'oauth-telegram-id' },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-uuid',
+          action: 'OAUTH_PROVIDER_UNLINKED',
+          entity: 'OAuthProvider',
+          entityId: 'oauth-telegram-id',
+          details: { provider: 'telegram' },
+        },
+      });
+      expect(result.providers).toHaveLength(1);
+      expect(result.providers[0].provider).toBe('google');
+    });
+
+    it('should throw NotFoundException if provider not found', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        passwordHash: '$argon2id$hashed',
+        oauthProviders: [{ provider: 'google', id: 'oauth-google-id' }],
+      });
+
+      await expect(service.unlinkProvider('user-uuid', 'telegram')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      try {
+        await service.unlinkProvider('user-uuid', 'telegram');
+      } catch (error) {
+        const response = (error as NotFoundException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Provider telegram is not linked',
+            errorCode: AUTH_ERRORS.PROVIDER_NOT_FOUND,
+          }),
+        );
+      }
+    });
+
+    it('should throw BadRequestException if last auth method (no password, one provider)', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        oauthProviders: [{ provider: 'telegram', id: 'oauth-telegram-id' }],
+      });
+
+      await expect(service.unlinkProvider('user-uuid', 'telegram')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      try {
+        await service.unlinkProvider('user-uuid', 'telegram');
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            message: 'Cannot unlink the last authentication method',
+            errorCode: AUTH_ERRORS.CANNOT_UNLINK_LAST_AUTH,
+          }),
+        );
+      }
+    });
+
+    it('should allow unlink when password exists even if only one provider', async () => {
+      mockPrismaService.user.findUnique
+        .mockResolvedValueOnce({
+          passwordHash: '$argon2id$hashed',
+          oauthProviders: [{ provider: 'telegram', id: 'oauth-telegram-id' }],
+        })
+        .mockResolvedValueOnce({
+          id: 'user-uuid',
+          email: 'test@example.com',
+          passwordHash: '$argon2id$hashed',
+          oauthProviders: [],
+        });
+      mockPrismaService.oAuthProvider.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.unlinkProvider('user-uuid', 'telegram');
+
+      expect(mockPrismaService.oAuthProvider.delete).toHaveBeenCalledWith({
+        where: { id: 'oauth-telegram-id' },
+      });
+      expect(result.hasPassword).toBe(true);
+      expect(result.providers).toEqual([]);
+    });
+
+    it('should allow unlink when other providers exist (no password)', async () => {
+      mockPrismaService.user.findUnique
+        .mockResolvedValueOnce({
+          passwordHash: null,
+          oauthProviders: [
+            { provider: 'google', id: 'oauth-google-id' },
+            { provider: 'telegram', id: 'oauth-telegram-id' },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: 'user-uuid',
+          email: 'test@example.com',
+          passwordHash: null,
+          oauthProviders: [
+            {
+              provider: 'google',
+              name: 'Google User',
+              email: 'google@example.com',
+              avatarUrl: null,
+              createdAt: new Date(),
+            },
+          ],
+        });
+      mockPrismaService.oAuthProvider.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.unlinkProvider('user-uuid', 'telegram');
+
+      expect(mockPrismaService.oAuthProvider.delete).toHaveBeenCalled();
+      expect(result.hasPassword).toBe(false);
+      expect(result.providers).toHaveLength(1);
+    });
+
+    it('should throw UnauthorizedException when user not found', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.unlinkProvider('non-existent', 'telegram')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });
