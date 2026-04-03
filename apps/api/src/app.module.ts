@@ -8,6 +8,7 @@ import { LoggerModule } from './common/logger/logger.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { AppThrottlerModule } from './common/throttler/throttler.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
     }),
     LoggerModule,
     PrismaModule,
+    MailModule,
     MetricsModule,
     AppThrottlerModule,
     HealthModule,
