@@ -344,7 +344,7 @@ Full localization can be deferred, but the foundation should be set early to avo
 
 Each iteration is deployable, includes tests, and expands CI/CD coverage. Order follows the required sequence.
 
-**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (14), Phase 5 (10), Phase 6 (13), Phase 7 (10), Phase 8 (8), Phase 9 (8), Phase 10-Core (4), Phase 10-Transactions (12), Phase 11 (10), Phase 12 (8), Phase 13 (4), Phase 14 (8). **Total: 127 iterations.**
+**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (12), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 139 iterations.**
 
 ### Phase Size Guidelines
 
@@ -354,17 +354,18 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 | Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                |
 | Phase 2: Google Auth      | 4          | Small         | OAuth integration                                  |
 | Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                 |
-| Phase 4: Groups + Profile | 8 + 6      | Medium        | Groups (4.1-4.8) + Profile sub-section (4.9-4.14)  |
-| Phase 5: Income           | 10         | Medium        | Core transaction type                              |
-| Phase 6: Expense          | 13         | Medium-Large  | More complex with loans/installments               |
-| Phase 7: Budgets          | 10         | Medium        | Depends on income/expense                          |
-| Phase 8: Receipts         | 8          | Medium        | File handling complexity                           |
-| Phase 9: Analytics        | 8          | Medium        | Dashboard and charts                               |
-| Phase 10: Telegram Bot    | 4 + 12     | Large         | Split: Core (10.1-10.4) + Transactions (10.5-10.9) |
-| Phase 11: Mini App        | 10         | Medium        | Mobile-first interface                             |
-| Phase 12: Bot Receipts    | 8          | Medium        | Photo and URL processing                           |
-| Phase 13: Bot Analytics   | 4          | Small         | Summary commands                                   |
-| Phase 14: LLM             | 8          | Medium        | AI integration                                     |
+| Phase 4: Auth Completion  | 12         | Medium        | Email confirm, password reset, delete, legal pages |
+| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)  |
+| Phase 6: Income           | 10         | Medium        | Core transaction type                              |
+| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments               |
+| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                          |
+| Phase 9: Receipts         | 8          | Medium        | File handling complexity                           |
+| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                               |
+| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9) |
+| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                             |
+| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                           |
+| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                   |
+| Phase 15: LLM             | 8          | Medium        | AI integration                                     |
 
 **Target phase size**: 6-10 iterations recommended. Larger phases are split into logical sub-sections.
 
@@ -416,187 +417,206 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 | 3.3       | Login UI        | Telegram login button                              | UI test          | lint + typecheck + unit        | Deploy     | Login works                |
 | 3.4       | Account linking | Link Telegram user to existing account             | Integration test | lint + typecheck + integration | Deploy     | Accounts linked            |
 
-### Phase 4: Family/Group Management
+### Phase 4: Auth Completion & Legal Pages
 
-#### 4A: Group Management (Iterations 4.1–4.8)
+| Iteration | Objective                     | Scope                                                                                           | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                        |
+| --------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------- |
+| 4.1       | Email service infrastructure  | Nodemailer + SMTP transport, email templates, graceful fallback                                 | Unit tests        | lint + typecheck + unit        | Deploy     | Email service sends emails (or logs in dev)                |
+| 4.2       | Email confirmation — backend  | Verification token model, send/verify endpoints, auto-send on register                          | Unit + API tests  | lint + typecheck + integration | Deploy     | Verification email sent, token validates                   |
+| 4.3       | Email confirmation — frontend | Verification banner, verify-email page, resend button                                           | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Unverified users see banner, verification link works       |
+| 4.4       | Password reset — backend      | Reset token model, forgot-password + reset-password endpoints, session revocation               | Unit + API tests  | lint + typecheck + integration | Deploy     | Password reset flow works end-to-end                       |
+| 4.5       | Password reset — frontend     | Forgot password page, reset password page, login page link update                               | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Forgot password and reset password pages functional        |
+| 4.6       | Delete account — backend      | Soft delete with scheduledDeletionAt, cancel-deletion, login-based reactivation, deletion email | Unit + API tests  | lint + typecheck + integration | Deploy     | Soft delete sets 30-day grace period, cancellation works   |
+| 4.7       | Delete account — frontend     | Account settings page, deletion dialog, deletion banner, cancel deletion                        | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Users can request and cancel deletion via UI               |
+| 4.8       | Account deletion scheduler    | NestJS @Cron daily job: hard delete expired accounts, anonymize audit logs                      | Unit tests        | lint + typecheck + unit        | Deploy     | Expired soft-deleted accounts permanently removed          |
+| 4.9       | Terms of Use + Privacy Policy | Static pages at /legal/terms and /legal/privacy with bilingual content                          | UI tests          | lint + typecheck + unit        | Deploy     | Legal pages render correctly in en and he                  |
+| 4.10      | How-to Guide                  | Help page at /help with step-by-step instructions for all auth features                         | UI tests          | lint + typecheck + unit        | Deploy     | Help page renders with all sections                        |
+| 4.11      | Consent + footer              | Registration consent checkbox, global footer with legal links                                   | UI tests          | lint + typecheck + unit        | Deploy     | Registration requires consent, footer visible on all pages |
+| 4.12      | Integration + E2E tests       | Comprehensive integration tests for all Phase 4 features + E2E Playwright tests                 | Integration + E2E | full suite                     | Deploy     | All Phase 4 features tested end-to-end                     |
+
+> **Detailed design**: See [`docs/phase-4-design.md`](docs/phase-4-design.md) for the full Phase 4 design document.
+
+### Phase 5: Family/Group Management
+
+#### 5A: Group Management (Iterations 5.1–5.8)
 
 | Iteration | Objective         | Scope                                   | Testing          | CI/CD                          | Deployment | Acceptance Criteria                                                                |
 | --------- | ----------------- | --------------------------------------- | ---------------- | ------------------------------ | ---------- | ---------------------------------------------------------------------------------- |
-| 4.1       | Group schema      | Groups, memberships tables with indexes | Migration tests  | lint + typecheck + unit        | Deploy     | Schema applied                                                                     |
-| 4.2       | Create API        | Create group endpoint                   | Unit tests       | lint + typecheck + unit        | Deploy     | Group created                                                                      |
-| 4.3       | Create UI         | Group creation UI                       | UI tests         | lint + typecheck + unit        | Deploy     | UI creates group                                                                   |
-| 4.4       | Invite API        | Invite tokens                           | Unit tests       | lint + typecheck + unit        | Deploy     | Invite generated                                                                   |
-| 4.5       | Accept invite     | Join flow                               | Integration test | lint + typecheck + integration | Deploy     | Member joins                                                                       |
-| 4.6       | Group dashboard   | Basic view                              | UI tests         | lint + typecheck + unit        | Deploy     | Dashboard displays group name, member list, recent transactions, and total balance |
-| 4.7       | Member management | List/remove members                     | E2E tests        | full suite                     | Deploy     | Members managed                                                                    |
-| 4.8       | Roles/permissions | Admin/member roles with audit logging   | Permission tests | lint + typecheck + unit        | Deploy     | Access enforced                                                                    |
+| 5.1       | Group schema      | Groups, memberships tables with indexes | Migration tests  | lint + typecheck + unit        | Deploy     | Schema applied                                                                     |
+| 5.2       | Create API        | Create group endpoint                   | Unit tests       | lint + typecheck + unit        | Deploy     | Group created                                                                      |
+| 5.3       | Create UI         | Group creation UI                       | UI tests         | lint + typecheck + unit        | Deploy     | UI creates group                                                                   |
+| 5.4       | Invite API        | Invite tokens                           | Unit tests       | lint + typecheck + unit        | Deploy     | Invite generated                                                                   |
+| 5.5       | Accept invite     | Join flow                               | Integration test | lint + typecheck + integration | Deploy     | Member joins                                                                       |
+| 5.6       | Group dashboard   | Basic view                              | UI tests         | lint + typecheck + unit        | Deploy     | Dashboard displays group name, member list, recent transactions, and total balance |
+| 5.7       | Member management | List/remove members                     | E2E tests        | full suite                     | Deploy     | Members managed                                                                    |
+| 5.8       | Roles/permissions | Admin/member roles with audit logging   | Permission tests | lint + typecheck + unit        | Deploy     | Access enforced                                                                    |
 
-#### 4B: User Profile Management (Iterations 4.9–4.14)
+#### 5B: User Profile Management (Iterations 5.9–5.14)
 
 | Iteration | Objective        | Scope                                                                              | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                            |
 | --------- | ---------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------- |
-| 4.9       | Profile view     | User profile page with avatar, name, email, timezone, default currency, and locale | UI tests          | lint + typecheck + unit        | Deploy     | Profile page displays all user settings with edit buttons      |
-| 4.10      | Profile edit     | Name, timezone, default currency, locale preferences                               | Integration tests | lint + typecheck + integration | Deploy     | Profile updates saved and reflected immediately in UI          |
-| 4.11      | Password change  | Change password flow with current password validation                              | Integration tests | lint + typecheck + integration | Deploy     | Password updated with confirmation email sent                  |
-| 4.12      | Account deletion | GDPR-compliant deletion with cascade                                               | E2E tests         | full suite                     | Deploy     | Account and all associated data permanently removed            |
-| 4.13      | Data export      | JSON/CSV export of all user data                                                   | Integration tests | lint + typecheck + integration | Deploy     | Export contains transactions, groups, categories, and settings |
-| 4.14      | Export UI        | Profile page download button                                                       | UI tests          | lint + typecheck + unit        | Deploy     | Download initiates and completes with progress indicator       |
+| 5.9       | Profile view     | User profile page with avatar, name, email, timezone, default currency, and locale | UI tests          | lint + typecheck + unit        | Deploy     | Profile page displays all user settings with edit buttons      |
+| 5.10      | Profile edit     | Name, timezone, default currency, locale preferences                               | Integration tests | lint + typecheck + integration | Deploy     | Profile updates saved and reflected immediately in UI          |
+| 5.11      | Password change  | Change password flow with current password validation                              | Integration tests | lint + typecheck + integration | Deploy     | Password updated with confirmation email sent                  |
+| 5.12      | Account deletion | GDPR-compliant deletion with cascade                                               | E2E tests         | full suite                     | Deploy     | Account and all associated data permanently removed            |
+| 5.13      | Data export      | JSON/CSV export of all user data                                                   | Integration tests | lint + typecheck + integration | Deploy     | Export contains transactions, groups, categories, and settings |
+| 5.14      | Export UI        | Profile page download button                                                       | UI tests          | lint + typecheck + unit        | Deploy     | Download initiates and completes with progress indicator       |
 
-### Phase 5: Income Management
+### Phase 6: Income Management
 
 | Iteration | Objective        | Scope                                                                                                                                                                                                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                                               |
 | --------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 5.1       | Income schema    | Incomes table with currency field (ISO 4217), amount as cents, indexes on (user_id, created_at)                                                                                                                                                  | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                    |
-| 5.2       | Categories       | Predefined/custom income categories                                                                                                                                                                                                              | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                 |
-| 5.3       | Add API          | Create income endpoint with currency validation                                                                                                                                                                                                  | API tests         | lint + typecheck + integration | Deploy     | Income saved                                                                                                                      |
-| 5.4       | Add UI           | Income form with currency selector                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Income created                                                                                                                    |
-| 5.5       | Types            | Recurring/limited income types                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Types supported                                                                                                                   |
-| 5.6       | List API + UI    | List incomes with pagination                                                                                                                                                                                                                     | E2E tests         | full suite                     | Deploy     | Lists shown with cursor pagination                                                                                                |
-| 5.7       | Edit/delete      | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                        |
-| 5.8       | Attribution      | Personal vs group income                                                                                                                                                                                                                         | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                              |
-| 5.9       | Recurring engine | BullMQ cron-based scheduler for recurring income generation; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; handling of missed/late recurring transactions with catch-up logic | Integration tests | lint + typecheck + integration | Deploy     | Recurring incomes auto-created on schedule; missed transactions detected and generated; user notified of each auto-created income |
-| 5.10      | Audit logging    | Log all income modifications                                                                                                                                                                                                                     | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                              |
+| 6.1       | Income schema    | Incomes table with currency field (ISO 4217), amount as cents, indexes on (user_id, created_at)                                                                                                                                                  | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                    |
+| 6.2       | Categories       | Predefined/custom income categories                                                                                                                                                                                                              | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                 |
+| 6.3       | Add API          | Create income endpoint with currency validation                                                                                                                                                                                                  | API tests         | lint + typecheck + integration | Deploy     | Income saved                                                                                                                      |
+| 6.4       | Add UI           | Income form with currency selector                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Income created                                                                                                                    |
+| 6.5       | Types            | Recurring/limited income types                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Types supported                                                                                                                   |
+| 6.6       | List API + UI    | List incomes with pagination                                                                                                                                                                                                                     | E2E tests         | full suite                     | Deploy     | Lists shown with cursor pagination                                                                                                |
+| 6.7       | Edit/delete      | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                        |
+| 6.8       | Attribution      | Personal vs group income                                                                                                                                                                                                                         | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                              |
+| 6.9       | Recurring engine | BullMQ cron-based scheduler for recurring income generation; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; handling of missed/late recurring transactions with catch-up logic | Integration tests | lint + typecheck + integration | Deploy     | Recurring incomes auto-created on schedule; missed transactions detected and generated; user notified of each auto-created income |
+| 6.10      | Audit logging    | Log all income modifications                                                                                                                                                                                                                     | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                              |
 
-### Phase 6: Expense Management
+### Phase 7: Expense Management
 
 | Iteration | Objective          | Scope                                                                                                                                                                                                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                                                 |
 | --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 6.1       | Expense schema     | Expenses table with currency field, amount as cents, indexes                                                                                                                                                                                     | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                      |
-| 6.2       | Categories         | Predefined/custom expense categories                                                                                                                                                                                                             | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                   |
-| 6.3       | Add API            | Create expense endpoint with currency validation                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | Expense saved                                                                                                                       |
-| 6.4       | Add UI             | Expense form with currency support                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Expense created                                                                                                                     |
-| 6.5       | Auto-categorize    | Rules-based categorization                                                                                                                                                                                                                       | Unit tests        | lint + typecheck + unit        | Deploy     | Rules applied                                                                                                                       |
-| 6.6       | List API + UI      | List expenses with cursor pagination                                                                                                                                                                                                             | E2E tests         | full suite                     | Deploy     | Lists shown                                                                                                                         |
-| 6.7       | Edit/delete        | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                          |
-| 6.8       | Attribution        | Personal vs group expense                                                                                                                                                                                                                        | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                                |
-| 6.9       | Loans & mortgages  | Principal, interest, schedule                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Loan expenses supported                                                                                                             |
-| 6.10      | Installments       | Zero or custom interest, payments count                                                                                                                                                                                                          | Integration tests | lint + typecheck + integration | Deploy     | Installments tracked                                                                                                                |
-| 6.11      | Remember choice    | Last classification preference                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Defaults applied                                                                                                                    |
-| 6.12      | Recurring expenses | BullMQ cron-based scheduler for recurring expense generation; reuse recurring engine from 5.9; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; missed/late transaction catch-up | Integration tests | lint + typecheck + integration | Deploy     | Recurring expenses auto-created on schedule; missed transactions detected and generated; user notified of each auto-created expense |
-| 6.13      | Audit logging      | Log all expense modifications                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                                |
+| 7.1       | Expense schema     | Expenses table with currency field, amount as cents, indexes                                                                                                                                                                                     | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                      |
+| 7.2       | Categories         | Predefined/custom expense categories                                                                                                                                                                                                             | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                   |
+| 7.3       | Add API            | Create expense endpoint with currency validation                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | Expense saved                                                                                                                       |
+| 7.4       | Add UI             | Expense form with currency support                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Expense created                                                                                                                     |
+| 7.5       | Auto-categorize    | Rules-based categorization                                                                                                                                                                                                                       | Unit tests        | lint + typecheck + unit        | Deploy     | Rules applied                                                                                                                       |
+| 7.6       | List API + UI      | List expenses with cursor pagination                                                                                                                                                                                                             | E2E tests         | full suite                     | Deploy     | Lists shown                                                                                                                         |
+| 7.7       | Edit/delete        | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                          |
+| 7.8       | Attribution        | Personal vs group expense                                                                                                                                                                                                                        | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                                |
+| 7.9       | Loans & mortgages  | Principal, interest, schedule                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Loan expenses supported                                                                                                             |
+| 7.10      | Installments       | Zero or custom interest, payments count                                                                                                                                                                                                          | Integration tests | lint + typecheck + integration | Deploy     | Installments tracked                                                                                                                |
+| 7.11      | Remember choice    | Last classification preference                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Defaults applied                                                                                                                    |
+| 7.12      | Recurring expenses | BullMQ cron-based scheduler for recurring expense generation; reuse recurring engine from 6.9; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; missed/late transaction catch-up | Integration tests | lint + typecheck + integration | Deploy     | Recurring expenses auto-created on schedule; missed transactions detected and generated; user notified of each auto-created expense |
+| 7.13      | Audit logging      | Log all expense modifications                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                                |
 
-### Phase 7: Budgets & Spending Targets
+### Phase 8: Budgets & Spending Targets
 
 | Iteration | Objective             | Scope                                                                  | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                  |
 | --------- | --------------------- | ---------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
-| 7.1       | Budget schema         | Budgets/targets table with personal + group scope, timeframe, currency | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                       |
-| 7.2       | Create target API     | CRUD endpoints for spending targets                                    | API tests         | lint + typecheck + integration | Deploy     | Target created                                                                                       |
-| 7.3       | Create target UI      | Target creation form with amount, timeframe                            | UI tests          | lint + typecheck + unit        | Deploy     | UI creates target                                                                                    |
-| 7.4       | List/edit targets     | Target list and edit functionality                                     | E2E tests         | full suite                     | Deploy     | Targets manageable                                                                                   |
-| 7.5       | Progress tracking     | Calculate progress percentage against expenses                         | Integration tests | lint + typecheck + integration | Deploy     | Progress accurate                                                                                    |
-| 7.6       | Personal dashboard    | Dashboard with budget overview, progress bars                          | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard displays each budget with name, amount, spent, remaining, and progress bar with percentage |
-| 7.7       | Group targets         | Group-scoped budgets and targets                                       | Integration tests | lint + typecheck + integration | Deploy     | Group members can create, view, and track shared budget targets                                      |
-| 7.8       | Group dashboard       | Group budget overview                                                  | UI tests          | lint + typecheck + unit        | Deploy     | Group dashboard displays shared budgets with per-member contribution breakdown                       |
-| 7.9       | Alert configuration   | Threshold alerts, low balance warnings                                 | Integration tests | lint + typecheck + integration | Deploy     | Alerts configurable                                                                                  |
-| 7.10      | Due payment reminders | Reminder scheduling for upcoming payments                              | Integration tests | lint + typecheck + integration | Deploy     | Reminders scheduled                                                                                  |
+| 8.1       | Budget schema         | Budgets/targets table with personal + group scope, timeframe, currency | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                       |
+| 8.2       | Create target API     | CRUD endpoints for spending targets                                    | API tests         | lint + typecheck + integration | Deploy     | Target created                                                                                       |
+| 8.3       | Create target UI      | Target creation form with amount, timeframe                            | UI tests          | lint + typecheck + unit        | Deploy     | UI creates target                                                                                    |
+| 8.4       | List/edit targets     | Target list and edit functionality                                     | E2E tests         | full suite                     | Deploy     | Targets manageable                                                                                   |
+| 8.5       | Progress tracking     | Calculate progress percentage against expenses                         | Integration tests | lint + typecheck + integration | Deploy     | Progress accurate                                                                                    |
+| 8.6       | Personal dashboard    | Dashboard with budget overview, progress bars                          | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard displays each budget with name, amount, spent, remaining, and progress bar with percentage |
+| 8.7       | Group targets         | Group-scoped budgets and targets                                       | Integration tests | lint + typecheck + integration | Deploy     | Group members can create, view, and track shared budget targets                                      |
+| 8.8       | Group dashboard       | Group budget overview                                                  | UI tests          | lint + typecheck + unit        | Deploy     | Group dashboard displays shared budgets with per-member contribution breakdown                       |
+| 8.9       | Alert configuration   | Threshold alerts, low balance warnings                                 | Integration tests | lint + typecheck + integration | Deploy     | Alerts configurable                                                                                  |
+| 8.10      | Due payment reminders | Reminder scheduling for upcoming payments                              | Integration tests | lint + typecheck + integration | Deploy     | Reminders scheduled                                                                                  |
 
-### Phase 8: Receipt Processing
+### Phase 9: Receipt Processing
 
 | Iteration | Objective            | Scope                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria   |
 | --------- | -------------------- | ---------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------- |
-| 8.1       | File infra           | Local storage paths, security constraints (outside web root)     | Unit tests        | lint + typecheck + unit        | Deploy     | Files stored securely |
-| 8.2       | Upload API           | Receipt upload endpoint with MIME validation, size limits (10MB) | API tests         | lint + typecheck + integration | Deploy     | Upload works          |
-| 8.3       | Upload UI            | Drag-and-drop UI                                                 | UI tests          | lint + typecheck + unit        | Deploy     | UI uploads            |
-| 8.4       | URL ingestion        | URL receipt input                                                | Integration tests | lint + typecheck + integration | Deploy     | URL saved             |
-| 8.5       | OCR parsing          | Tesseract OCR for images                                         | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted  |
-| 8.6       | Expense from receipt | Create expense flow with currency detection                      | E2E tests         | full suite                     | Deploy     | Expense created       |
-| 8.7       | PDF support          | PDF upload handling                                              | Integration tests | lint + typecheck + integration | Deploy     | PDF accepted          |
-| 8.8       | URL scraping         | URL scraping for online receipts with retry/circuit breaker      | Unit tests        | lint + typecheck + unit        | Deploy     | HTML parsed           |
+| 9.1       | File infra           | Local storage paths, security constraints (outside web root)     | Unit tests        | lint + typecheck + unit        | Deploy     | Files stored securely |
+| 9.2       | Upload API           | Receipt upload endpoint with MIME validation, size limits (10MB) | API tests         | lint + typecheck + integration | Deploy     | Upload works          |
+| 9.3       | Upload UI            | Drag-and-drop UI                                                 | UI tests          | lint + typecheck + unit        | Deploy     | UI uploads            |
+| 9.4       | URL ingestion        | URL receipt input                                                | Integration tests | lint + typecheck + integration | Deploy     | URL saved             |
+| 9.5       | OCR parsing          | Tesseract OCR for images                                         | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted  |
+| 9.6       | Expense from receipt | Create expense flow with currency detection                      | E2E tests         | full suite                     | Deploy     | Expense created       |
+| 9.7       | PDF support          | PDF upload handling                                              | Integration tests | lint + typecheck + integration | Deploy     | PDF accepted          |
+| 9.8       | URL scraping         | URL scraping for online receipts with retry/circuit breaker      | Unit tests        | lint + typecheck + unit        | Deploy     | HTML parsed           |
 
-### Phase 9: Purchase Analytics
+### Phase 10: Purchase Analytics
 
 | Iteration | Objective       | Scope                                                   | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                               |
 | --------- | --------------- | ------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| 9.1       | Stores model    | Stores table with indexes                               | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                    |
-| 9.2       | Goods tracking  | Purchased items model                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Items stored                                                                                                      |
-| 9.3       | Analytics API   | Spending by category/time with pagination               | API tests         | lint + typecheck + integration | Deploy     | API returns spending-by-category, spending-by-month, and top-merchants aggregations with correct totals           |
-| 9.4       | Dashboard UI    | Analytics UI with charts                                | UI tests          | lint + typecheck + unit        | Deploy     | Spending-by-category pie chart and monthly trend line chart render with responsive layout and currency formatting |
-| 9.5       | Price history   | History model with indexes (store_id, product_id, date) | Unit tests        | lint + typecheck + unit        | Deploy     | Price history records saved with store, product, date, and amount                                                 |
-| 9.6       | Price charts    | Trends UI                                               | UI tests          | lint + typecheck + unit        | Deploy     | Price trend line chart shows historical prices per product with date range selector                               |
-| 9.7       | Store analytics | Store breakdown                                         | API tests         | lint + typecheck + integration | Deploy     | API returns per-store spending totals, visit counts, and average transaction amount                               |
-| 9.8       | Group analytics | Group aggregate with member breakdown                   | Integration tests | lint + typecheck + integration | Deploy     | Group analytics shows total group spending with per-member contribution percentages and category breakdown        |
+| 10.1      | Stores model    | Stores table with indexes                               | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                    |
+| 10.2      | Goods tracking  | Purchased items model                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Items stored                                                                                                      |
+| 10.3      | Analytics API   | Spending by category/time with pagination               | API tests         | lint + typecheck + integration | Deploy     | API returns spending-by-category, spending-by-month, and top-merchants aggregations with correct totals           |
+| 10.4      | Dashboard UI    | Analytics UI with charts                                | UI tests          | lint + typecheck + unit        | Deploy     | Spending-by-category pie chart and monthly trend line chart render with responsive layout and currency formatting |
+| 10.5      | Price history   | History model with indexes (store_id, product_id, date) | Unit tests        | lint + typecheck + unit        | Deploy     | Price history records saved with store, product, date, and amount                                                 |
+| 10.6      | Price charts    | Trends UI                                               | UI tests          | lint + typecheck + unit        | Deploy     | Price trend line chart shows historical prices per product with date range selector                               |
+| 10.7      | Store analytics | Store breakdown                                         | API tests         | lint + typecheck + integration | Deploy     | API returns per-store spending totals, visit counts, and average transaction amount                               |
+| 10.8      | Group analytics | Group aggregate with member breakdown                   | Integration tests | lint + typecheck + integration | Deploy     | Group analytics shows total group spending with per-member contribution percentages and category breakdown        |
 
-### Phase 10: Telegram Bot
+### Phase 11: Telegram Bot
 
-#### 10A: Bot Core (Iterations 10.1–10.4)
+#### 11A: Bot Core (Iterations 11.1–11.4)
 
 Setup, commands, and user account linking.
 
 | Iteration | Objective    | Scope                                                  | Testing          | CI/CD                          | Deployment | Acceptance Criteria                            |
 | --------- | ------------ | ------------------------------------------------------ | ---------------- | ------------------------------ | ---------- | ---------------------------------------------- |
-| 10.1      | Bot setup    | Bot registration with BotFather, webhook configuration | Manual test      | lint + typecheck               | Deploy     | Bot responds to /start with welcome message    |
-| 10.2      | Framework    | grammy.js app with middleware, session, error handling | Unit tests       | lint + typecheck + unit        | Deploy     | Bot process runs and handles errors gracefully |
-| 10.3      | Commands     | /start /help with command descriptions                 | Manual test      | lint + typecheck               | Deploy     | Commands respond with formatted help text      |
-| 10.4      | User linking | Link accounts via JWT validation, /link command        | Integration test | lint + typecheck + integration | Deploy     | User can link Telegram to existing web account |
+| 11.1      | Bot setup    | Bot registration with BotFather, webhook configuration | Manual test      | lint + typecheck               | Deploy     | Bot responds to /start with welcome message    |
+| 11.2      | Framework    | grammy.js app with middleware, session, error handling | Unit tests       | lint + typecheck + unit        | Deploy     | Bot process runs and handles errors gracefully |
+| 11.3      | Commands     | /start /help with command descriptions                 | Manual test      | lint + typecheck               | Deploy     | Commands respond with formatted help text      |
+| 11.4      | User linking | Link accounts via JWT validation, /link command        | Integration test | lint + typecheck + integration | Deploy     | User can link Telegram to existing web account |
 
-#### 10B: Bot Transactions (Iterations 10.5–10.9)
+#### 11B: Bot Transactions (Iterations 11.5–11.9)
 
 Expense/income flows and notifications.
 
 | Iteration | Objective             | Scope                                             | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                       |
 | --------- | --------------------- | ------------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------- |
-| 10.5      | Balance command       | Summary balance with currency formatting          | Unit tests        | lint + typecheck + unit        | Deploy     | /balance shows total income, expenses, and net balance    |
-| 10.6a     | Expense flow init     | `/expense` command initialization                 | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
-| 10.6b     | Amount parsing        | Parse amount from message with currency detection | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and currency extracted from input like "50.00 USD" |
-| 10.6c     | Category selection    | Inline keyboard category choice                   | Integration tests | lint + typecheck + integration | Deploy     | Category selected via inline buttons                      |
-| 10.6d     | Description input     | Optional description prompt                       | Integration tests | lint + typecheck + integration | Deploy     | Description captured or skipped                           |
-| 10.6e     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Expense saved with confirmation message                   |
-| 10.7a     | Income flow init      | `/income` command initialization                  | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
-| 10.7b     | Amount/source parsing | Amount and source parsing                         | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and source extracted correctly                     |
-| 10.7c     | Income type selection | Inline keyboard type choice (one-time/recurring)  | Integration tests | lint + typecheck + integration | Deploy     | Type selected via inline buttons                          |
-| 10.7d     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Income saved with confirmation message                    |
-| 10.8      | Recent txns           | Last transactions via /recent command             | API tests         | lint + typecheck + integration | Deploy     | Last 10 transactions shown with amount, category, date    |
-| 10.9      | Notifications         | Due payment and low balance alerts via Telegram   | Integration tests | lint + typecheck + integration | Deploy     | Alerts sent to linked users when thresholds triggered     |
+| 11.5      | Balance command       | Summary balance with currency formatting          | Unit tests        | lint + typecheck + unit        | Deploy     | /balance shows total income, expenses, and net balance    |
+| 11.6a     | Expense flow init     | `/expense` command initialization                 | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
+| 11.6b     | Amount parsing        | Parse amount from message with currency detection | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and currency extracted from input like "50.00 USD" |
+| 11.6c     | Category selection    | Inline keyboard category choice                   | Integration tests | lint + typecheck + integration | Deploy     | Category selected via inline buttons                      |
+| 11.6d     | Description input     | Optional description prompt                       | Integration tests | lint + typecheck + integration | Deploy     | Description captured or skipped                           |
+| 11.6e     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Expense saved with confirmation message                   |
+| 11.7a     | Income flow init      | `/income` command initialization                  | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
+| 11.7b     | Amount/source parsing | Amount and source parsing                         | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and source extracted correctly                     |
+| 11.7c     | Income type selection | Inline keyboard type choice (one-time/recurring)  | Integration tests | lint + typecheck + integration | Deploy     | Type selected via inline buttons                          |
+| 11.7d     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Income saved with confirmation message                    |
+| 11.8      | Recent txns           | Last transactions via /recent command             | API tests         | lint + typecheck + integration | Deploy     | Last 10 transactions shown with amount, category, date    |
+| 11.9      | Notifications         | Due payment and low balance alerts via Telegram   | Integration tests | lint + typecheck + integration | Deploy     | Alerts sent to linked users when thresholds triggered     |
 
-### Phase 11: Telegram Mini App (Expanded)
+### Phase 12: Telegram Mini App (Expanded)
 
 | Iteration | Objective             | Scope                                         | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                           |
 | --------- | --------------------- | --------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------- |
-| 11.1      | Mini app setup        | Mini app project scaffolding                  | Smoke tests       | lint + typecheck + unit        | Deploy     | Mini app builds                                                                               |
-| 11.2      | Mini app auth         | Link mini app session to main account via JWT | Integration tests | lint + typecheck + integration | Deploy     | Account linked                                                                                |
-| 11.3      | Mini app UI shell     | Dashboard layout + navigation                 | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard renders with bottom navigation, balance summary card, and recent activity list      |
-| 11.4      | Expense entry         | Mini app expense form with currency           | Integration tests | lint + typecheck + integration | Deploy     | Expense form submits with amount, category picker, and optional note; saved to backend        |
-| 11.5      | Income entry          | Mini app income form                          | Integration tests | lint + typecheck + integration | Deploy     | Income form submits with amount, source, type, and optional note; saved to backend            |
-| 11.6      | Analytics views       | Spending analytics in mini app                | UI tests          | lint + typecheck + unit        | Deploy     | Mini app shows spending-by-category chart and monthly totals with period selector             |
-| 11.7      | Receipt upload        | Photo upload from mini app                    | Integration tests | lint + typecheck + integration | Deploy     | Camera/gallery photo captured, uploaded, and receipt record created with file reference       |
-| 11.8      | Budget/target view    | Budget management in mini app                 | UI tests          | lint + typecheck + unit        | Deploy     | Budget list shows each target with progress bar, spent/remaining amounts, and timeframe       |
-| 11.9      | Group/family view     | Group balances and members                    | Integration tests | lint + typecheck + integration | Deploy     | Group view displays group name, member avatars, shared balance, and recent group transactions |
-| 11.10     | Group member expenses | View expenses by group member                 | Integration tests | lint + typecheck + integration | Deploy     | Member breakdown visible                                                                      |
+| 12.1      | Mini app setup        | Mini app project scaffolding                  | Smoke tests       | lint + typecheck + unit        | Deploy     | Mini app builds                                                                               |
+| 12.2      | Mini app auth         | Link mini app session to main account via JWT | Integration tests | lint + typecheck + integration | Deploy     | Account linked                                                                                |
+| 12.3      | Mini app UI shell     | Dashboard layout + navigation                 | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard renders with bottom navigation, balance summary card, and recent activity list      |
+| 12.4      | Expense entry         | Mini app expense form with currency           | Integration tests | lint + typecheck + integration | Deploy     | Expense form submits with amount, category picker, and optional note; saved to backend        |
+| 12.5      | Income entry          | Mini app income form                          | Integration tests | lint + typecheck + integration | Deploy     | Income form submits with amount, source, type, and optional note; saved to backend            |
+| 12.6      | Analytics views       | Spending analytics in mini app                | UI tests          | lint + typecheck + unit        | Deploy     | Mini app shows spending-by-category chart and monthly totals with period selector             |
+| 12.7      | Receipt upload        | Photo upload from mini app                    | Integration tests | lint + typecheck + integration | Deploy     | Camera/gallery photo captured, uploaded, and receipt record created with file reference       |
+| 12.8      | Budget/target view    | Budget management in mini app                 | UI tests          | lint + typecheck + unit        | Deploy     | Budget list shows each target with progress bar, spent/remaining amounts, and timeframe       |
+| 12.9      | Group/family view     | Group balances and members                    | Integration tests | lint + typecheck + integration | Deploy     | Group view displays group name, member avatars, shared balance, and recent group transactions |
+| 12.10     | Group member expenses | View expenses by group member                 | Integration tests | lint + typecheck + integration | Deploy     | Member breakdown visible                                                                      |
 
-### Phase 12: Telegram Bot - Receipt Processing (Photo + URL)
+### Phase 13: Telegram Bot - Receipt Processing (Photo + URL)
 
 | Iteration | Objective                 | Scope                                                | Testing           | CI/CD                          | Deployment | Acceptance Criteria          |
 | --------- | ------------------------- | ---------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------- |
-| 12.1      | URL handling              | URL receipt ingestion via bot                        | Integration tests | lint + typecheck + integration | Deploy     | URL stored                   |
-| 12.2      | URL parsing               | Parse receipt from URL                               | Unit tests        | lint + typecheck + unit        | Deploy     | Parsed fields                |
-| 12.3      | Photo handling            | Receive photo from Telegram, download and store file | Integration tests | lint + typecheck + integration | Deploy     | Photo stored                 |
-| 12.4      | Photo OCR                 | Photo → OCR extraction pipeline (reuse Phase 8 OCR)  | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted         |
-| 12.5      | Confirmation flow (URL)   | Review flow for URL receipts                         | E2E tests         | full suite                     | Deploy     | User confirms                |
-| 12.6      | Confirmation flow (photo) | Review flow for photo receipts, show extracted data  | E2E tests         | full suite                     | Deploy     | User confirms extracted data |
-| 12.7      | Quick create (URL)        | Expense creation from URL                            | E2E tests         | full suite                     | Deploy     | Expense created              |
-| 12.8      | Quick create (photo)      | Expense creation from confirmed photo data           | E2E tests         | full suite                     | Deploy     | Expense created              |
+| 13.1      | URL handling              | URL receipt ingestion via bot                        | Integration tests | lint + typecheck + integration | Deploy     | URL stored                   |
+| 13.2      | URL parsing               | Parse receipt from URL                               | Unit tests        | lint + typecheck + unit        | Deploy     | Parsed fields                |
+| 13.3      | Photo handling            | Receive photo from Telegram, download and store file | Integration tests | lint + typecheck + integration | Deploy     | Photo stored                 |
+| 13.4      | Photo OCR                 | Photo → OCR extraction pipeline (reuse Phase 9 OCR)  | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted         |
+| 13.5      | Confirmation flow (URL)   | Review flow for URL receipts                         | E2E tests         | full suite                     | Deploy     | User confirms                |
+| 13.6      | Confirmation flow (photo) | Review flow for photo receipts, show extracted data  | E2E tests         | full suite                     | Deploy     | User confirms extracted data |
+| 13.7      | Quick create (URL)        | Expense creation from URL                            | E2E tests         | full suite                     | Deploy     | Expense created              |
+| 13.8      | Quick create (photo)      | Expense creation from confirmed photo data           | E2E tests         | full suite                     | Deploy     | Expense created              |
 
-### Phase 13: Telegram Bot - Analytics
+### Phase 14: Telegram Bot - Analytics
 
 | Iteration | Objective          | Scope                                | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                      |
 | --------- | ------------------ | ------------------------------------ | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------- |
-| 13.1      | Summary command    | Quick stats with currency formatting | API tests         | lint + typecheck + integration | Deploy     | /stats returns total income, total expenses, net balance, and top 3 expense categories for current month |
-| 13.2      | Category breakdown | Breakdown view                       | API tests         | lint + typecheck + integration | Deploy     | /breakdown shows per-category spending with amounts and percentages, formatted as readable table         |
-| 13.3      | Group analytics    | Group stats with member breakdown    | Integration tests | lint + typecheck + integration | Deploy     | /groupstats shows group total, per-member contributions, and top shared expenses                         |
-| 13.4      | Inline charts      | Text or image chart                  | UI tests          | lint + typecheck + unit        | Deploy     | Chart image generated and sent as photo message with spending distribution visualization                 |
+| 14.1      | Summary command    | Quick stats with currency formatting | API tests         | lint + typecheck + integration | Deploy     | /stats returns total income, total expenses, net balance, and top 3 expense categories for current month |
+| 14.2      | Category breakdown | Breakdown view                       | API tests         | lint + typecheck + integration | Deploy     | /breakdown shows per-category spending with amounts and percentages, formatted as readable table         |
+| 14.3      | Group analytics    | Group stats with member breakdown    | Integration tests | lint + typecheck + integration | Deploy     | /groupstats shows group total, per-member contributions, and top shared expenses                         |
+| 14.4      | Inline charts      | Text or image chart                  | UI tests          | lint + typecheck + unit        | Deploy     | Chart image generated and sent as photo message with spending distribution visualization                 |
 
-### Phase 14: LLM Assistant
+### Phase 15: LLM Assistant
 
 | Iteration | Objective          | Scope                                          | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                      |
 | --------- | ------------------ | ---------------------------------------------- | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------- |
-| 14.1      | LLM integration    | OpenAI client + secrets, retry/circuit breaker | Unit tests        | lint + typecheck + unit        | Deploy     | OpenAI client initialized, API key validated, retry on 429/500 errors with exponential backoff           |
-| 14.2      | Context prep       | Summaries, budgets, currency-aware             | Unit tests        | lint + typecheck + unit        | Deploy     | Context builder produces structured prompt with user income/expense summary, budget status, and currency |
-| 14.3      | Chat API           | Chat endpoint                                  | API tests         | lint + typecheck + integration | Deploy     | POST /chat returns streamed or complete LLM response within 10s timeout                                  |
-| 14.4      | Chat UI            | UI component                                   | UI tests          | lint + typecheck + unit        | Deploy     | Chat widget renders with message input, conversation history, typing indicator, and error state          |
-| 14.5      | Personal Q&A       | Personal insights                              | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
-| 14.6      | Group Q&A          | Group insights                                 | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
-| 14.7      | Insight generation | Recommendations                                | Integration tests | lint + typecheck + integration | Deploy     | Insights shown                                                                                           |
-| 14.8      | LLM receipts       | LLM extraction for PDFs and photos             | E2E tests         | full suite                     | Deploy     | Receipt parsed                                                                                           |
+| 15.1      | LLM integration    | OpenAI client + secrets, retry/circuit breaker | Unit tests        | lint + typecheck + unit        | Deploy     | OpenAI client initialized, API key validated, retry on 429/500 errors with exponential backoff           |
+| 15.2      | Context prep       | Summaries, budgets, currency-aware             | Unit tests        | lint + typecheck + unit        | Deploy     | Context builder produces structured prompt with user income/expense summary, budget status, and currency |
+| 15.3      | Chat API           | Chat endpoint                                  | API tests         | lint + typecheck + integration | Deploy     | POST /chat returns streamed or complete LLM response within 10s timeout                                  |
+| 15.4      | Chat UI            | UI component                                   | UI tests          | lint + typecheck + unit        | Deploy     | Chat widget renders with message input, conversation history, typing indicator, and error state          |
+| 15.5      | Personal Q&A       | Personal insights                              | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
+| 15.6      | Group Q&A          | Group insights                                 | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
+| 15.7      | Insight generation | Recommendations                                | Integration tests | lint + typecheck + integration | Deploy     | Insights shown                                                                                           |
+| 15.8      | LLM receipts       | LLM extraction for PDFs and photos             | E2E tests         | full suite                     | Deploy     | Receipt parsed                                                                                           |
 
 ## 6. Suggested Technology Stack (Details)
 
@@ -630,17 +650,18 @@ This section mirrors the required order with short summaries. Detailed micro-ite
 - **Phase 1**: Core auth (API-first JWT) + protected routes + error handling.
 - **Phase 2**: Google auth integration via NestJS.
 - **Phase 3**: Telegram login integration via NestJS.
-- **Phase 4**: Family/group creation, invites, roles, profile management, and GDPR data export.
-- **Phase 5**: Manual income tracking with currency support and recurring transactions.
-- **Phase 6**: Manual expense tracking with loans/mortgages/installments and recurring transactions.
-- **Phase 7**: Budgets and spending targets with progress tracking and alerts.
-- **Phase 8**: Receipt upload + URL ingestion; parsing V1 with file security.
-- **Phase 9**: Analytics dashboards and models.
-- **Phase 10**: Telegram bot core features with notifications.
-- **Phase 11**: Telegram mini app (expanded: income, analytics, receipts, budgets, group views).
-- **Phase 12**: Bot receipt workflows (both URL and photo with OCR).
-- **Phase 13**: Bot analytics.
-- **Phase 14**: LLM assistant and LLM-based receipt extraction.
+- **Phase 4**: Auth completion — email confirmation, password reset, account deletion, legal pages.
+- **Phase 5**: Family/group creation, invites, roles, profile management, and GDPR data export.
+- **Phase 6**: Manual income tracking with currency support and recurring transactions.
+- **Phase 7**: Manual expense tracking with loans/mortgages/installments and recurring transactions.
+- **Phase 8**: Budgets and spending targets with progress tracking and alerts.
+- **Phase 9**: Receipt upload + URL ingestion; parsing V1 with file security.
+- **Phase 10**: Analytics dashboards and models.
+- **Phase 11**: Telegram bot core features with notifications.
+- **Phase 12**: Telegram mini app (expanded: income, analytics, receipts, budgets, group views).
+- **Phase 13**: Bot receipt workflows (both URL and photo with OCR).
+- **Phase 14**: Bot analytics.
+- **Phase 15**: LLM assistant and LLM-based receipt extraction.
 
 ## 8. Deployment Strategy
 
@@ -829,10 +850,11 @@ The following phases can run in parallel to accelerate delivery:
 | Parallel Track          | Phases                                        | Prerequisites          | Notes                                                  |
 | ----------------------- | --------------------------------------------- | ---------------------- | ------------------------------------------------------ |
 | OAuth Providers         | Phase 2 (Google) ∥ Phase 3 (Telegram)         | Phase 1 complete       | Both depend only on JWT auth                           |
-| Transaction Types       | Phase 5 (Income) ∥ Phase 6 (Expense)          | Phase 4 complete       | Independent schemas and APIs                           |
-| Post-Expense Features   | Phase 8 (Receipts) ∥ Phase 9 (Analytics)      | Phase 6 complete       | Receipts need expenses; Analytics needs income+expense |
-| Telegram Ecosystem      | Phase 10 (Bot) after Phase 3                  | Telegram Auth done     | Bot can start once TG auth exists                      |
-| Mini App + Bot Features | Phase 11 (Mini App) ∥ Phase 12 (Bot Receipts) | Phase 10 Core complete | Both build on bot foundation                           |
+| Auth Completion         | Phase 4 (Auth Completion) after Phase 3       | Phase 3 complete       | Email infra, legal pages can parallel with features    |
+| Transaction Types       | Phase 6 (Income) ∥ Phase 7 (Expense)          | Phase 5 complete       | Independent schemas and APIs                           |
+| Post-Expense Features   | Phase 9 (Receipts) ∥ Phase 10 (Analytics)     | Phase 7 complete       | Receipts need expenses; Analytics needs income+expense |
+| Telegram Ecosystem      | Phase 11 (Bot) after Phase 3                  | Telegram Auth done     | Bot can start once TG auth exists                      |
+| Mini App + Bot Features | Phase 12 (Mini App) ∥ Phase 13 (Bot Receipts) | Phase 11 Core complete | Both build on bot foundation                           |
 
 ### 9.3 Phase Dependency Gantt Chart
 
@@ -849,26 +871,27 @@ gantt
     Phase 1 - Basic Auth           :p1, after p0, 21d
     Phase 2 - Google Auth          :p2, after p1, 7d
     Phase 3 - Telegram Auth        :p3, after p1, 7d
+    Phase 4 - Auth Completion      :p4, after p3, 14d
 
     section Core Features
-    Phase 4 - Groups + Profile     :p4, after p1, 21d
-    Phase 5 - Income               :p5, after p4, 14d
-    Phase 6 - Expense              :p6, after p4, 21d
-    Phase 7 - Budgets              :p7, after p5, 14d
+    Phase 5 - Groups + Profile     :p5, after p4, 21d
+    Phase 6 - Income               :p6, after p5, 14d
+    Phase 7 - Expense              :p7, after p5, 21d
+    Phase 8 - Budgets              :p8, after p6, 14d
 
     section Advanced Features
-    Phase 8 - Receipts             :p8, after p6, 14d
-    Phase 9 - Analytics            :p9, after p6, 14d
+    Phase 9 - Receipts             :p9, after p7, 14d
+    Phase 10 - Analytics           :p10, after p7, 14d
 
     section Telegram
-    Phase 10 - Bot Core            :p10a, after p3, 7d
-    Phase 10 - Bot Transactions    :p10b, after p10a, 21d
-    Phase 11 - Mini App            :p11, after p10a, 14d
-    Phase 12 - Bot Receipts        :p12, after p8, 14d
-    Phase 13 - Bot Analytics       :p13, after p9, 7d
+    Phase 11 - Bot Core            :p11a, after p3, 7d
+    Phase 11 - Bot Transactions    :p11b, after p11a, 21d
+    Phase 12 - Mini App            :p12, after p11a, 14d
+    Phase 13 - Bot Receipts        :p13, after p9, 14d
+    Phase 14 - Bot Analytics       :p14, after p10, 7d
 
     section AI
-    Phase 14 - LLM                 :p14, after p13, 14d
+    Phase 15 - LLM                 :p15, after p14, 14d
 ```
 
 ### 9.4 Recommended Parallel Execution Strategy
@@ -877,16 +900,16 @@ For a team with 2+ developers, consider these parallel tracks:
 
 **Track A (Core Web)**:
 
-1. Phase 0 → Phase 1 → Phase 4 → Phase 5/6 → Phase 7 → Phase 9
+1. Phase 0 → Phase 1 → Phase 4 → Phase 5 → Phase 6/7 → Phase 8 → Phase 10
 
 **Track B (Telegram + OAuth)**:
 
 1. After Phase 1: Phase 2 + Phase 3
-2. After Phase 3: Phase 10 → Phase 11 → Phase 12 → Phase 13
+2. After Phase 3: Phase 11 → Phase 12 → Phase 13 → Phase 14
 
 **Track C (Receipts + LLM)** (can join later):
 
-1. After Phase 6: Phase 8 → Phase 14
+1. After Phase 7: Phase 9 → Phase 15
 
 ## 10. Security and Scalability Considerations
 

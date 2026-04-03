@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-04-03
-> **Current Phase:** Phase 4 — Family/Group Management ⬜ Not Started
+> **Current Phase:** Phase 4 — Auth Completion & Legal Pages ⬜ Not Started
 > **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
 ---
@@ -36,25 +36,26 @@
 
 ## 2. Implementation Progress
 
-| Phase | Name                       | Iterations | Status         | Completion Date |
-| ----- | -------------------------- | ---------- | -------------- | --------------- |
-| 0     | Foundation                 | 8/8        | ✅ Complete    | 2026-02-13      |
-| 1     | Basic Authentication       | 13/13      | ✅ Complete    | 2026-03-14      |
-| 2     | Google Authentication      | 4/4        | ✅ Complete    | 2026-03-25      |
-| 3     | Telegram Authentication    | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Family/Group Management    | 0/14       | ⬜ Not Started | —               |
-| 5     | Income Management          | 0/10       | ⬜ Not Started | —               |
-| 6     | Expense Management         | 0/13       | ⬜ Not Started | —               |
-| 7     | Budgets & Spending Targets | 0/10       | ⬜ Not Started | —               |
-| 8     | Receipt Processing         | 0/8        | ⬜ Not Started | —               |
-| 9     | Purchase Analytics         | 0/8        | ⬜ Not Started | —               |
-| 10    | Telegram Bot               | 0/16       | ⬜ Not Started | —               |
-| 11    | Telegram Mini App          | 0/10       | ⬜ Not Started | —               |
-| 12    | Bot Receipt Processing     | 0/8        | ⬜ Not Started | —               |
-| 13    | Bot Analytics              | 0/4        | ⬜ Not Started | —               |
-| 14    | LLM Assistant              | 0/8        | ⬜ Not Started | —               |
+| Phase | Name                          | Iterations | Status         | Completion Date |
+| ----- | ----------------------------- | ---------- | -------------- | --------------- |
+| 0     | Foundation                    | 8/8        | ✅ Complete    | 2026-02-13      |
+| 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
+| 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
+| 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
+| 4     | Auth Completion & Legal Pages | 0/12       | ⬜ Not Started | —               |
+| 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
+| 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
+| 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
+| 8     | Budgets & Spending Targets    | 0/10       | ⬜ Not Started | —               |
+| 9     | Receipt Processing            | 0/8        | ⬜ Not Started | —               |
+| 10    | Purchase Analytics            | 0/8        | ⬜ Not Started | —               |
+| 11    | Telegram Bot                  | 0/16       | ⬜ Not Started | —               |
+| 12    | Telegram Mini App             | 0/10       | ⬜ Not Started | —               |
+| 13    | Bot Receipt Processing        | 0/8        | ⬜ Not Started | —               |
+| 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
+| 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 128 | **Completed:** 29 | **Remaining:** 99
+**Total iterations:** 140 | **Completed:** 29 | **Remaining:** 111
 
 ---
 
@@ -1311,12 +1312,13 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | [`docs/phase-1-design.md`](phase-1-design.md)                             | Phase 1 authentication architecture and design          |
 | [`docs/phase-2-design.md`](phase-2-design.md)                             | Phase 2 Google OAuth architecture and design            |
 | [`docs/phase-3-design.md`](phase-3-design.md)                             | Phase 3 Telegram authentication architecture and design |
+| [`docs/phase-4-design.md`](phase-4-design.md)                             | Phase 4 Auth Completion & Legal Pages design            |
 | [`docs/deployment.md`](deployment.md)                                     | Deployment guide — full pipeline, test gating, rollback |
 | [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
 | [`docs/server-setup-guide.md`](server-setup-guide.md)                     | Server provisioning guide for Ubuntu + Docker           |
 | [`docs/progress.md`](progress.md)                                         | This document — project progress tracking               |
-| [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md)                     | Full implementation roadmap (15 phases, 128 iterations) |
+| [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md)                     | Full implementation roadmap (16 phases, 140 iterations) |
 | [`SPECIFICATION-USER-STORIES.md`](../SPECIFICATION-USER-STORIES.md)       | User stories and requirements                           |
 | [`.github/BRANCH_PROTECTION.md`](../.github/BRANCH_PROTECTION.md)         | Branch protection rules                                 |
 | [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) | Pull request template                                   |
@@ -1358,8 +1360,27 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 3.3       | Backend — Connected Accounts API + HMAC-SHA256 rewrite + bug fixes  | ✅ Complete |
 | 3.4       | Connected Accounts UI + integration tests + progress update         | ✅ Complete |
 
-### Phase 4: Family/Group Management (Next)
+### Phase 4: Auth Completion & Legal Pages (Next)
 
-- **Phase 4** — Family/Group management (14 iterations)
-- **Phase 5** — Income management (10 iterations)
-- **Phase 6** — Expense management (13 iterations)
+| Iteration | Objective                     | Status         |
+| --------- | ----------------------------- | -------------- |
+| 4.1       | Email service infrastructure  | ⬜ Not Started |
+| 4.2       | Email confirmation — backend  | ⬜ Not Started |
+| 4.3       | Email confirmation — frontend | ⬜ Not Started |
+| 4.4       | Password reset — backend      | ⬜ Not Started |
+| 4.5       | Password reset — frontend     | ⬜ Not Started |
+| 4.6       | Delete account — backend      | ⬜ Not Started |
+| 4.7       | Delete account — frontend     | ⬜ Not Started |
+| 4.8       | Account deletion scheduler    | ⬜ Not Started |
+| 4.9       | Terms of Use + Privacy Policy | ⬜ Not Started |
+| 4.10      | How-to Guide                  | ⬜ Not Started |
+| 4.11      | Consent + footer              | ⬜ Not Started |
+| 4.12      | Integration + E2E tests       | ⬜ Not Started |
+
+> **Detailed design**: See [`docs/phase-4-design.md`](phase-4-design.md) for the full Phase 4 design document.
+
+### Upcoming Phases
+
+- **Phase 5** — Family/Group management (14 iterations)
+- **Phase 6** — Income management (10 iterations)
+- **Phase 7** — Expense management (13 iterations)
