@@ -164,6 +164,13 @@ describe('Header', () => {
       expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
     });
 
+    it('renders connected accounts link', () => {
+      render(<Header />);
+      const settingsLink = screen.getByText('nav.connectedAccounts');
+      expect(settingsLink).toBeInTheDocument();
+      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
+    });
+
     it('renders logout button', () => {
       render(<Header />);
       const logoutBtn = screen.getByText('nav.logout');

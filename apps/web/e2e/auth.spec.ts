@@ -242,3 +242,97 @@ test.describe('Authentication Flows', () => {
     await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 15000 });
   });
 });
+
+test.describe('Connected Accounts Page', () => {
+  const mockUser = {
+    id: 'settings-user-uuid',
+    email: 'settings@example.com',
+    name: 'Settings User',
+    defaultCurrency: 'USD',
+    locale: 'en',
+  };
+
+  const mockConnectedAccounts = {
+    hasPassword: true,
+    providers: [
+      {
+        provider: 'google',
+        name: 'Google User',
+        email: 'google@example.com',
+        avatarUrl: null,
+        connectedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+  };
+
+  test('should redirect to login when not authenticated', async ({ page }) => {
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Unauthorized' }),
+      });
+    });
+
+    await page.goto('/en/settings/connected-accounts');
+
+    // Should redirect to login
+    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 15000 });
+  });
+
+  test('should show connected accounts page when authenticated', async ({ page }) => {
+    // Mock refresh to authenticate
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: mockUser, accessToken: 'mock-access-token' }),
+      });
+    });
+
+    // Mock connected accounts API
+    await page.route('**/api/v1/auth/connected-accounts', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(mockConnectedAccounts),
+        });
+      }
+    });
+
+    await page.goto('/en/settings/connected-accounts');
+
+    // Should show the page title
+    await expect(page.getByRole('heading', { name: /connected accounts/i })).toBeVisible({
+      timeout: 15000,
+    });
+  });
+
+  test('should show provider cards for each auth method', async ({ page }) => {
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: mockUser, accessToken: 'mock-access-token' }),
+      });
+    });
+
+    await page.route('**/api/v1/auth/connected-accounts', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(mockConnectedAccounts),
+        });
+      }
+    });
+
+    await page.goto('/en/settings/connected-accounts');
+
+    // Should show Email & Password, Google, and Telegram sections
+    await expect(page.getByText('Email & Password')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Google')).toBeVisible();
+    await expect(page.getByText('Telegram')).toBeVisible();
+  });
+});

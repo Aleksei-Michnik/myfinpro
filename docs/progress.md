@@ -1,8 +1,8 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-03-27
-> **Current Phase:** Phase 3 — Telegram Authentication 🔄 In Progress
-> **Next Phase:** Phase 3.3 — Connected Accounts
+> **Last updated:** 2026-04-03
+> **Current Phase:** Phase 4 — Family/Group Management ⬜ Not Started
+> **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
 ---
 
@@ -41,7 +41,7 @@
 | 0     | Foundation                 | 8/8        | ✅ Complete    | 2026-02-13      |
 | 1     | Basic Authentication       | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication      | 4/4        | ✅ Complete    | 2026-03-25      |
-| 3     | Telegram Authentication    | 2/4        | 🔄 In Progress | —               |
+| 3     | Telegram Authentication    | 4/4        | ✅ Complete    | 2026-04-03      |
 | 4     | Family/Group Management    | 0/14       | ⬜ Not Started | —               |
 | 5     | Income Management          | 0/10       | ⬜ Not Started | —               |
 | 6     | Expense Management         | 0/13       | ⬜ Not Started | —               |
@@ -54,7 +54,7 @@
 | 13    | Bot Analytics              | 0/4        | ⬜ Not Started | —               |
 | 14    | LLM Assistant              | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 128 | **Completed:** 27 | **Remaining:** 101
+**Total iterations:** 128 | **Completed:** 29 | **Remaining:** 99
 
 ---
 
@@ -1026,16 +1026,20 @@ User clicks "Google" → window.location.href = /api/v1/auth/google
 
 ### Overview
 
-Phase 3 adds Telegram as a third authentication provider. Users can sign in or register with their Telegram account via the official Telegram Login SDK. The implementation uses OIDC JWT verification (via Telegram's JWKS endpoint) rather than the legacy HMAC-SHA256 widget approach, enabling custom-styled buttons that match the app's design system.
+Phase 3 adds Telegram as a third authentication provider. Users can sign in or register with their Telegram account via the official Telegram Login SDK popup. The implementation uses HMAC-SHA256 verification of the classic hash-based auth data.
 
 **Key architecture decisions:**
 
-- **Telegram Login SDK** (`oauth.telegram.org/js/telegram-login.js`) — programmatic API with `Telegram.Login.auth()` for custom button support
-- **OIDC JWT verification** — backend verifies `id_token` via Telegram's JWKS (`jose` library), not HMAC-SHA256
-- **POST-based flow** — frontend sends `{id_token}` to `POST /api/v1/auth/telegram/callback`
+- **Telegram Login SDK v3** (`oauth.telegram.org`) — popup-based flow with `response_type=post_message`, using `window.open` + `postMessage` listener
+- **HMAC-SHA256 verification** — backend verifies hash using bot token as key (classic Telegram Login Widget approach)
+- **POST-based flow** — frontend sends `{id, first_name, auth_date, hash, ...}` to `POST /api/v1/auth/telegram/callback`
 - **No email from Telegram** — placeholder email `telegram_{id}@telegram.user` used
 - **Two separate bots** — staging and production each have their own Telegram bot (BotFather domain restriction)
 - **`NEXT_PUBLIC_TELEGRAM_BOT_ID`** — numeric bot ID derived from bot token at build time in CI/CD
+- **Connected Accounts API** — `GET /connected-accounts`, `POST /link/telegram`, `DELETE /connected-accounts/:provider`
+- **Safety check** — cannot unlink last auth method
+
+**Architectural journey:** Initially planned as OIDC JWT verification (via Telegram's JWKS endpoint + `jose` library), but pivoted back to HMAC-SHA256 after discovering that the Telegram Login SDK v3 popup returns classic hash-based data (`{id, first_name, auth_date, hash}`), not an `id_token`. The SDK's `response_type=post_message` flow communicates via `postMessage` from the popup to the opener window.
 
 ### Iteration 3.1: Backend — Telegram Auth Endpoint (Initial)
 
@@ -1091,6 +1095,91 @@ Phase 3 adds Telegram as a third authentication provider. Users can sign in or r
 - `auth.controller.spec.ts` — 6 tests for telegram callback (valid token, invalid, expired, not configured, bot ID extraction)
 - `TelegramLoginButton.spec.tsx` — 10 tests for `useTelegramLogin` hook
 - Updated all AuthContext mock consumers to include `loginWithTelegram`
+
+### Iteration 3.3: Backend — Connected Accounts API + HMAC-SHA256 Rewrite
+
+**What was implemented:**
+
+**Backend (HMAC-SHA256 rewrite):**
+
+- Reverted from OIDC JWT (`jose` + JWKS) back to HMAC-SHA256 verification after discovering the Telegram Login SDK v3 popup returns classic hash-based data, not `id_token`
+- Rewrote `telegram-auth.util.ts` — `verifyTelegramAuth()` using `createHash('sha256')` + `createHmac('sha256')` with bot token as key
+- Updated `TelegramAuthDto` to accept classic HMAC fields: `{id, first_name, last_name?, username?, photo_url?, auth_date, hash}`
+- Auth date freshness check (max 24h)
+
+**Connected Accounts API:**
+
+- `GET /auth/connected-accounts` — returns `{hasPassword, providers[]}` for authenticated user
+- `POST /auth/link/telegram` — links Telegram to existing user (with conflict detection)
+- `DELETE /auth/connected-accounts/:provider` — unlinks provider with safety check (cannot unlink last auth method)
+- Full unit tests for all three endpoints in `auth.controller.spec.ts` and `auth.service.spec.ts`
+
+**Frontend (popup rewrite):**
+
+- Rewrote `useTelegramLogin` hook — removed SDK dependency, builds popup URL directly with `response_type=post_message`
+- Uses `window.open` + `postMessage` listener for auth result
+- Popup close detection via timer
+- `buildResult()` parser for the postMessage data
+
+**Bug fixes during staging testing:**
+
+- `client_id` vs `bot_id` — SDK v3 `auth()` requires `client_id`, not `bot_id`, which caused a synchronous throw
+- `origin` parameter — SDK popup showed "origin required" because the auth URL was missing the `origin` query param
+- `post_message` flow — SDK returns auth data via `postMessage` from popup to opener, not via callback function
+
+### Iteration 3.4: Connected Accounts UI + Integration Tests + Progress Update
+
+**What was implemented:**
+
+**Frontend — Connected Accounts page:**
+
+- `ConnectedAccountsPage` at `/settings/connected-accounts` — protected route wrapping `ConnectedAccounts` component
+- `ConnectedAccounts` component — fetches and displays connected auth providers:
+  - Email/Password card with "Connected"/"Not set" badge
+  - Google card with Connect/Disconnect actions
+  - Telegram card with Connect (via popup)/Disconnect actions
+- Confirmation dialog before disconnect
+- Error handling: "Cannot disconnect last auth method", conflict detection, network errors
+- Toast notifications for success/error
+- Loading states for fetch, link, and disconnect operations
+
+**Navigation update:**
+
+- Header now shows "Connected Accounts" link for authenticated users (desktop)
+
+**i18n translations:**
+
+- Added `settings.*` namespace with 16 keys in English (`en.json`)
+- Added Hebrew translations (`he.json`) for all settings keys
+- Added `nav.connectedAccounts` key to both locale files
+
+**Integration tests (`telegram-auth.integration.spec.ts`):**
+
+- `POST /auth/telegram/callback` — 7 tests (new user, existing user, invalid hash, expired, missing fields, cookie, JWT)
+- `GET /auth/connected-accounts` — 3 tests (providers list, hasPassword flag, 401 without token)
+- `POST /auth/link/telegram` — 4 tests (link to user, already linked to other, same user idempotent, 401)
+- `DELETE /auth/connected-accounts/:provider` — 4 tests (unlink with password, last method rejection, 401, 404)
+
+**Component tests (`ConnectedAccounts.spec.tsx`):**
+
+- 12 tests including: renders providers, shows Connected/Not connected, Disconnect button, confirmation dialog, API calls, last auth method error, cancel confirmation
+
+**E2E tests (added to `auth.spec.ts`):**
+
+- Connected accounts page redirects to login when not authenticated
+- Shows page with heading when authenticated
+- Shows provider cards for each auth method
+
+**Header tests updated:**
+
+- Added test for "Connected Accounts" link when authenticated
+
+**Key files created:**
+
+- [`apps/web/src/components/auth/ConnectedAccounts.tsx`](../apps/web/src/components/auth/ConnectedAccounts.tsx) — Connected accounts management component
+- [`apps/web/src/components/auth/ConnectedAccounts.spec.tsx`](../apps/web/src/components/auth/ConnectedAccounts.spec.tsx) — Component tests
+- [`apps/web/src/app/[locale]/settings/connected-accounts/page.tsx`](../apps/web/src/app/[locale]/settings/connected-accounts/page.tsx) — Settings page
+- [`apps/api/test/integration/telegram-auth.integration.spec.ts`](../apps/api/test/integration/telegram-auth.integration.spec.ts) — Integration tests
 
 ---
 
@@ -1260,16 +1349,16 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 ## 11. Next Steps
 
-### Phase 3: Telegram Authentication (2/4 iterations remaining)
+### Phase 3: Telegram Authentication ✅ Complete (4/4 iterations)
 
-| Iteration | Objective                                                              | Status         |
-| --------- | ---------------------------------------------------------------------- | -------------- |
-| 3.1       | Backend — Telegram auth endpoint (initial HMAC, updated to JWT in 3.2) | ✅ Complete    |
-| 3.2       | Frontend — Telegram Login SDK + Auth Context + Backend JWT + CI/CD     | ✅ Complete    |
-| 3.3       | Connected accounts — Link Telegram to existing email/password accounts | ⬜ Not Started |
-| 3.4       | Account settings — Manage connected providers, unlink accounts         | ⬜ Not Started |
+| Iteration | Objective                                                           | Status      |
+| --------- | ------------------------------------------------------------------- | ----------- |
+| 3.1       | Backend — Telegram auth endpoint (initial HMAC, updated in 3.2/3.3) | ✅ Complete |
+| 3.2       | Frontend — Telegram Login SDK + Auth Context + CI/CD                | ✅ Complete |
+| 3.3       | Backend — Connected Accounts API + HMAC-SHA256 rewrite + bug fixes  | ✅ Complete |
+| 3.4       | Connected Accounts UI + integration tests + progress update         | ✅ Complete |
 
-### Other Upcoming Work
+### Phase 4: Family/Group Management (Next)
 
 - **Phase 4** — Family/Group management (14 iterations)
 - **Phase 5** — Income management (10 iterations)
