@@ -85,7 +85,25 @@
     "resendVerification": "Resend verification email",
     "resendingVerification": "Resending...",
     "goToDashboard": "Go to Dashboard",
-    "checkInbox": "Check your inbox for a verification link."
+    "checkInbox": "Check your inbox for a verification link.",
+    "forgotPasswordTitle": "Reset your password",
+    "forgotPasswordDescription": "Enter your email address and we'll send you a reset link.",
+    "sendResetLink": "Send Reset Link",
+    "sendingResetLink": "Sending...",
+    "resetLinkSent": "If an account with this email exists, we've sent a password reset link.",
+    "checkYourEmail": "Check your email",
+    "resetPasswordTitle": "Set new password",
+    "newPassword": "New Password",
+    "resetPassword": "Reset Password",
+    "resettingPassword": "Resetting...",
+    "resetPasswordSuccess": "Password reset successfully!",
+    "resetPasswordSuccessDescription": "You can now sign in with your new password.",
+    "resetPasswordExpired": "This reset link has expired. Please request a new one.",
+    "resetPasswordInvalid": "Invalid reset link.",
+    "resetPasswordUsed": "This reset link has already been used.",
+    "requestNewLink": "Request a new link",
+    "backToSignIn": "Back to Sign In",
+    "goToSignIn": "Go to Sign In"
   },
   "toast": {
     "dismiss": "Dismiss"

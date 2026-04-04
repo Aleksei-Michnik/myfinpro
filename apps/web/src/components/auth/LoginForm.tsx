@@ -92,6 +92,15 @@ export function LoginForm() {
         disabled={isLoading}
       />
 
+      <div className="flex justify-end">
+        <Link
+          href="/auth/forgot-password"
+          className="text-primary-600 hover:text-primary-500 text-sm font-medium"
+        >
+          {t('forgotPassword')}
+        </Link>
+      </div>
+
       <Button
         type="submit"
         variant="primary"

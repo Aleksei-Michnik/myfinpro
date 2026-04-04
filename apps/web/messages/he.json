@@ -85,7 +85,25 @@
     "resendVerification": "שלח שוב אימייל אימות",
     "resendingVerification": "שולח שוב...",
     "goToDashboard": "עבור ללוח הבקרה",
-    "checkInbox": "בדוק את תיבת הדואר שלך לקישור אימות."
+    "checkInbox": "בדוק את תיבת הדואר שלך לקישור אימות.",
+    "forgotPasswordTitle": "איפוס סיסמה",
+    "forgotPasswordDescription": "הזן את כתובת המייל שלך ונשלח לך קישור לאיפוס.",
+    "sendResetLink": "שלח קישור איפוס",
+    "sendingResetLink": "שולח...",
+    "resetLinkSent": "אם קיים חשבון עם כתובת מייל זו, שלחנו קישור לאיפוס סיסמה.",
+    "checkYourEmail": "בדוק את המייל שלך",
+    "resetPasswordTitle": "הגדר סיסמה חדשה",
+    "newPassword": "סיסמה חדשה",
+    "resetPassword": "אפס סיסמה",
+    "resettingPassword": "מאפס...",
+    "resetPasswordSuccess": "הסיסמה אופסה בהצלחה!",
+    "resetPasswordSuccessDescription": "כעת תוכל להתחבר עם הסיסמה החדשה.",
+    "resetPasswordExpired": "קישור האיפוס פג תוקף. נא לבקש קישור חדש.",
+    "resetPasswordInvalid": "קישור איפוס לא תקין.",
+    "resetPasswordUsed": "קישור האיפוס הזה כבר נוצל.",
+    "requestNewLink": "בקש קישור חדש",
+    "backToSignIn": "חזרה להתחברות",
+    "goToSignIn": "עבור להתחברות"
   },
   "toast": {
     "dismiss": "סגור"
