@@ -116,4 +116,21 @@ describe('ForgotPasswordForm', () => {
     const link = screen.getByText('backToSignIn');
     expect(link.closest('a')).toHaveAttribute('href', '/auth/login');
   });
+
+  it('has link back to sign in in sent state', async () => {
+    mockPost.mockResolvedValueOnce({});
+    render(<ForgotPasswordForm />);
+
+    fireEvent.change(screen.getByLabelText('email'), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'sendResetLink' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('check-email-state')).toBeInTheDocument();
+    });
+
+    const link = screen.getByText('backToSignIn');
+    expect(link.closest('a')).toHaveAttribute('href', '/auth/login');
+  });
 });
