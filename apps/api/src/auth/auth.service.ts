@@ -12,6 +12,7 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
@@ -45,6 +46,7 @@ export class AuthService {
     private readonly refreshTokenService: RefreshTokenService,
     private readonly oauthService: OAuthService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly accountDeletionService: AccountDeletionService,
   ) {}
 
   async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
@@ -145,8 +147,25 @@ export class AuthService {
       return null;
     }
 
-    // Check if account is active
+    // Check if account is active — with login-based reactivation for soft-deleted accounts
     if (!user.isActive) {
+      // If within grace period, attempt reactivation
+      if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+        // Verify password first before reactivating
+        const isPasswordValid = await this.passwordService.verify(user.passwordHash, password);
+        if (!isPasswordValid) return null;
+        const reactivated = await this.accountDeletionService.reactivateOnLogin(user.id);
+        if (reactivated) {
+          // Fetch fresh user data after reactivation
+          const freshUser = await this.prisma.user.findUnique({
+            where: { id: user.id },
+          });
+          if (!freshUser) return null;
+          const { passwordHash: _ph, ...result } = freshUser;
+          return result;
+        }
+      }
+      // Truly disabled account or reactivation failed
       return null;
     }
 
@@ -300,6 +319,15 @@ export class AuthService {
         });
       }
       if (!user.isActive) {
+        // Attempt login-based reactivation for soft-deleted accounts
+        if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+          await this.accountDeletionService.reactivateOnLogin(user.id);
+          const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+          if (freshUser && freshUser.isActive) {
+            const { passwordHash, ...result } = freshUser;
+            return result;
+          }
+        }
         throw new UnauthorizedException({
           message: 'Account is inactive',
           errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
@@ -317,6 +345,23 @@ export class AuthService {
 
       if (existingUser) {
         if (!existingUser.isActive) {
+          // Attempt login-based reactivation for soft-deleted accounts
+          if (existingUser.scheduledDeletionAt && existingUser.scheduledDeletionAt > new Date()) {
+            await this.accountDeletionService.reactivateOnLogin(existingUser.id);
+            const freshUser = await this.prisma.user.findUnique({
+              where: { id: existingUser.id },
+            });
+            if (freshUser && freshUser.isActive) {
+              // Link Google to the reactivated user
+              await this.oauthService.linkToUser('google', googleId, freshUser.id, {
+                email,
+                name,
+                avatarUrl: picture,
+              });
+              const { passwordHash, ...result } = freshUser;
+              return result;
+            }
+          }
           throw new UnauthorizedException({
             message: 'Account is inactive',
             errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
@@ -404,6 +449,15 @@ export class AuthService {
         });
       }
       if (!user.isActive) {
+        // Attempt login-based reactivation for soft-deleted accounts
+        if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+          await this.accountDeletionService.reactivateOnLogin(user.id);
+          const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+          if (freshUser && freshUser.isActive) {
+            const { passwordHash, ...result } = freshUser;
+            return result;
+          }
+        }
         throw new UnauthorizedException({
           message: 'Account is inactive',
           errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,

@@ -8,8 +8,10 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
+import { TokenService } from './services/token.service';
 jest.mock('./utils/telegram-auth.util', () => ({
   verifyTelegramAuth: jest.fn(),
 }));
@@ -49,6 +51,16 @@ describe('AuthController', () => {
     resetPassword: jest.fn(),
   };
 
+  const mockAccountDeletionService = {
+    requestDeletion: jest.fn(),
+    cancelDeletion: jest.fn(),
+    reactivateOnLogin: jest.fn(),
+  };
+
+  const mockTokenService = {
+    clearRefreshTokenCookie: jest.fn(),
+  };
+
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
 
   const mockConfigService = {
@@ -81,8 +93,10 @@ describe('AuthController', () => {
       providers: [
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: AccountDeletionService, useValue: mockAccountDeletionService },
         { provide: EmailVerificationService, useValue: mockEmailVerificationService },
         { provide: PasswordResetService, useValue: mockPasswordResetService },
+        { provide: TokenService, useValue: mockTokenService },
       ],
     }).compile();
 
@@ -1142,6 +1156,108 @@ describe('AuthController', () => {
         AuthController.prototype.resetPassword,
       );
       const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.resetPassword);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('deleteAccount()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call accountDeletionService.requestDeletion and clear cookie', async () => {
+      const scheduledDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      mockAccountDeletionService.requestDeletion.mockResolvedValue({
+        scheduledDeletionAt: scheduledDate,
+      });
+
+      const result = await controller.deleteAccount(
+        mockJwtPayload,
+        { confirmation: 'test@example.com' },
+        mockResponse,
+      );
+
+      expect(mockAccountDeletionService.requestDeletion).toHaveBeenCalledWith(
+        'test-uuid',
+        'test@example.com',
+      );
+      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
+      expect(result).toEqual({
+        message: 'Account scheduled for deletion',
+        scheduledDeletionAt: scheduledDate,
+      });
+    });
+
+    it('should propagate BadRequestException from service', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAccountDeletionService.requestDeletion.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Confirmation email does not match',
+          errorCode: AUTH_ERRORS.ACCOUNT_DELETION_CONFIRMATION_MISMATCH,
+        }),
+      );
+
+      await expect(
+        controller.deleteAccount(
+          mockJwtPayload,
+          { confirmation: 'wrong@example.com' },
+          mockResponse,
+        ),
+      ).rejects.toThrow('Confirmation email does not match');
+    });
+
+    it('should have @Throttle metadata with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.deleteAccount,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.deleteAccount);
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('cancelDeletion()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call accountDeletionService.cancelDeletion and return success', async () => {
+      mockAccountDeletionService.cancelDeletion.mockResolvedValue(undefined);
+
+      const result = await controller.cancelDeletion(mockJwtPayload);
+
+      expect(mockAccountDeletionService.cancelDeletion).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual({ message: 'Account deletion cancelled' });
+    });
+
+    it('should propagate BadRequestException from service (not deleted)', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAccountDeletionService.cancelDeletion.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Account is not scheduled for deletion',
+          errorCode: AUTH_ERRORS.ACCOUNT_NOT_DELETED,
+        }),
+      );
+
+      await expect(controller.cancelDeletion(mockJwtPayload)).rejects.toThrow(
+        'Account is not scheduled for deletion',
+      );
+    });
+
+    it('should have @Throttle metadata with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.cancelDeletion,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.cancelDeletion);
 
       expect(limit).toBe(5);
       expect(ttl).toBe(600000);

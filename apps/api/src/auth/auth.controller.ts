@@ -36,6 +36,7 @@ import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -44,8 +45,10 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
+import { TokenService } from './services/token.service';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -56,8 +59,10 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly accountDeletionService: AccountDeletionService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordResetService: PasswordResetService,
+    private readonly tokenService: TokenService,
   ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -250,6 +255,50 @@ export class AuthController {
     return {
       message: 'Password reset successfully. Please sign in with your new password.',
     };
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('delete-account')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Request account deletion with 30-day grace period' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account scheduled for deletion',
+  })
+  @ApiBadRequestResponse({ description: 'Confirmation email mismatch or account already deleted' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many deletion requests' })
+  async deleteAccount(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: DeleteAccountDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.accountDeletionService.requestDeletion(user.sub, dto.confirmation);
+    this.tokenService.clearRefreshTokenCookie(response);
+    return {
+      message: 'Account scheduled for deletion',
+      scheduledDeletionAt: result.scheduledDeletionAt,
+    };
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('cancel-deletion')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel pending account deletion' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account deletion cancelled',
+  })
+  @ApiBadRequestResponse({ description: 'Account not deleted or grace period expired' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many cancellation requests' })
+  async cancelDeletion(@CurrentUser() user: JwtPayload) {
+    await this.accountDeletionService.cancelDeletion(user.sub);
+    return { message: 'Account deletion cancelled' };
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })

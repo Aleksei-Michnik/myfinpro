@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordResetService } from './services/password-reset.service';
@@ -45,6 +46,7 @@ import { LocalStrategy } from './strategies/local.strategy';
   ],
   controllers: [AuthController],
   providers: [
+    AccountDeletionService,
     AuthService,
     EmailVerificationService,
     OAuthService,
@@ -57,6 +59,7 @@ import { LocalStrategy } from './strategies/local.strategy';
     GoogleStrategy,
   ],
   exports: [
+    AccountDeletionService,
     AuthService,
     EmailVerificationService,
     OAuthService,

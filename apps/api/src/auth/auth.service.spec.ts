@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
@@ -73,6 +74,12 @@ describe('AuthService', () => {
     resendVerification: jest.fn(),
   };
 
+  const mockAccountDeletionService = {
+    requestDeletion: jest.fn(),
+    cancelDeletion: jest.fn(),
+    reactivateOnLogin: jest.fn(),
+  };
+
   const mockResponse = {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
@@ -88,6 +95,7 @@ describe('AuthService', () => {
         { provide: RefreshTokenService, useValue: mockRefreshTokenService },
         { provide: OAuthService, useValue: mockOAuthService },
         { provide: EmailVerificationService, useValue: mockEmailVerificationService },
+        { provide: AccountDeletionService, useValue: mockAccountDeletionService },
       ],
     }).compile();
 
@@ -341,15 +349,60 @@ describe('AuthService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null for inactive user', async () => {
-      const inactiveUser = { ...mockUser, isActive: false };
+    it('should return null for inactive user (truly disabled, no scheduledDeletionAt)', async () => {
+      const inactiveUser = { ...mockUser, isActive: false, scheduledDeletionAt: null };
       mockPrismaService.user.findUnique.mockResolvedValue(inactiveUser);
 
       const result = await service.validateUser('test@example.com', 'SecurePass123');
 
       expect(result).toBeNull();
-      // Should not even attempt password verification
+      // Should not even attempt password verification for truly disabled user
       expect(mockPasswordService.verify).not.toHaveBeenCalled();
+    });
+
+    it('should reactivate soft-deleted user on login within grace period', async () => {
+      const futureDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      const softDeletedUser = {
+        ...mockUser,
+        isActive: false,
+        scheduledDeletionAt: futureDate,
+        deletedAt: new Date(),
+      };
+      const reactivatedUser = {
+        ...mockUser,
+        isActive: true,
+        scheduledDeletionAt: null,
+        deletedAt: null,
+      };
+
+      mockPrismaService.user.findUnique
+        .mockResolvedValueOnce(softDeletedUser) // First call: fetch user
+        .mockResolvedValueOnce(reactivatedUser); // Second call: fetch fresh user after reactivation
+      mockPasswordService.verify.mockResolvedValue(true);
+      mockAccountDeletionService.reactivateOnLogin.mockResolvedValue(true);
+
+      const result = await service.validateUser('test@example.com', 'SecurePass123');
+
+      expect(result).toBeDefined();
+      expect(result!.isActive).toBe(true);
+      expect(mockAccountDeletionService.reactivateOnLogin).toHaveBeenCalledWith('test-uuid-1234');
+    });
+
+    it('should return null for soft-deleted user with wrong password', async () => {
+      const futureDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+      const softDeletedUser = {
+        ...mockUser,
+        isActive: false,
+        scheduledDeletionAt: futureDate,
+      };
+
+      mockPrismaService.user.findUnique.mockResolvedValue(softDeletedUser);
+      mockPasswordService.verify.mockResolvedValue(false);
+
+      const result = await service.validateUser('test@example.com', 'WrongPass');
+
+      expect(result).toBeNull();
+      expect(mockAccountDeletionService.reactivateOnLogin).not.toHaveBeenCalled();
     });
 
     it('should return null for user without password hash (OAuth-only)', async () => {
