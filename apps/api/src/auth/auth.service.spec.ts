@@ -502,6 +502,7 @@ describe('AuthService', () => {
         name: mockUser.name,
         defaultCurrency: mockUser.defaultCurrency,
         locale: mockUser.locale,
+        timezone: mockUser.timezone,
         emailVerified: mockUser.emailVerified,
       });
       expect(result.accessToken).toBe('mock-jwt-access-token');
@@ -603,6 +604,7 @@ describe('AuthService', () => {
         name: mockUser.name,
         defaultCurrency: mockUser.defaultCurrency,
         locale: mockUser.locale,
+        timezone: undefined,
         emailVerified: undefined,
       });
     });
@@ -1403,6 +1405,80 @@ describe('AuthService', () => {
       await expect(service.unlinkProvider('non-existent', 'telegram')).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('updateProfile()', () => {
+    const mockUserData = {
+      id: 'test-uuid-1234',
+      email: 'test@example.com',
+      name: 'Test User',
+      defaultCurrency: 'USD',
+      locale: 'en',
+      timezone: 'UTC',
+      emailVerified: true,
+    };
+
+    it('should update currency', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUserData,
+        defaultCurrency: 'EUR',
+      });
+
+      const result = await service.updateProfile('test-uuid-1234', { defaultCurrency: 'EUR' });
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'test-uuid-1234' },
+        data: { defaultCurrency: 'EUR' },
+      });
+      expect(result.defaultCurrency).toBe('EUR');
+    });
+
+    it('should update timezone', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUserData,
+        timezone: 'Asia/Jerusalem',
+      });
+
+      const result = await service.updateProfile('test-uuid-1234', { timezone: 'Asia/Jerusalem' });
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'test-uuid-1234' },
+        data: { timezone: 'Asia/Jerusalem' },
+      });
+      expect(result.timezone).toBe('Asia/Jerusalem');
+    });
+
+    it('should update both currency and timezone', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUserData,
+        defaultCurrency: 'GBP',
+        timezone: 'Europe/London',
+      });
+
+      const result = await service.updateProfile('test-uuid-1234', {
+        defaultCurrency: 'GBP',
+        timezone: 'Europe/London',
+      });
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'test-uuid-1234' },
+        data: { defaultCurrency: 'GBP', timezone: 'Europe/London' },
+      });
+      expect(result.defaultCurrency).toBe('GBP');
+      expect(result.timezone).toBe('Europe/London');
+    });
+
+    it('should return current user when dto is empty', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(mockUserData);
+
+      const result = await service.updateProfile('test-uuid-1234', {});
+
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+      expect(result).toEqual(mockUserData);
     });
   });
 });

@@ -38,6 +38,7 @@ describe('AuthController', () => {
     getConnectedAccounts: jest.fn(),
     linkTelegramToUser: jest.fn(),
     unlinkProvider: jest.fn(),
+    updateProfile: jest.fn(),
   };
 
   const mockEmailVerificationService = {
@@ -1261,6 +1262,69 @@ describe('AuthController', () => {
 
       expect(limit).toBe(5);
       expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('updateProfile()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call AuthService.updateProfile() and return result', async () => {
+      const expectedResult = {
+        id: 'test-uuid',
+        email: 'test@example.com',
+        name: 'Test User',
+        defaultCurrency: 'EUR',
+        locale: 'en',
+        timezone: 'Asia/Jerusalem',
+        emailVerified: true,
+      };
+
+      mockAuthService.updateProfile.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateProfile(mockJwtPayload, {
+        defaultCurrency: 'EUR',
+        timezone: 'Asia/Jerusalem',
+      });
+
+      expect(mockAuthService.updateProfile).toHaveBeenCalledWith('test-uuid', {
+        defaultCurrency: 'EUR',
+        timezone: 'Asia/Jerusalem',
+      });
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should handle empty body and return current profile', async () => {
+      const expectedResult = {
+        id: 'test-uuid',
+        email: 'test@example.com',
+        name: 'Test User',
+        defaultCurrency: 'USD',
+        locale: 'en',
+        timezone: 'UTC',
+        emailVerified: true,
+      };
+
+      mockAuthService.updateProfile.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateProfile(mockJwtPayload, {});
+
+      expect(mockAuthService.updateProfile).toHaveBeenCalledWith('test-uuid', {});
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should have @Throttle metadata with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.updateProfile,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.updateProfile);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
     });
   });
 });

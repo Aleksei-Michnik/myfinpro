@@ -19,6 +19,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   deleteAccount: (email: string) => Promise<void>;
   cancelDeletion: () => Promise<void>;
+  updateProfile: (data: { defaultCurrency?: string; timezone?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -229,6 +230,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUser();
   }, [accessToken, refreshUser]);
 
+  const updateProfile = useCallback(
+    async (data: { defaultCurrency?: string; timezone?: string }) => {
+      const token = accessToken;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: 'Failed to update preferences' }));
+        throw new Error((error as { message?: string }).message || 'Failed to update preferences');
+      }
+      const updatedUser: User = await res.json();
+      setUser(updatedUser);
+    },
+    [accessToken],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -246,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         deleteAccount,
         cancelDeletion,
+        updateProfile,
       }}
     >
       {children}

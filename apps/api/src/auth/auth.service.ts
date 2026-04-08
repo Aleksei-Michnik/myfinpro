@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
@@ -129,6 +130,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
         emailVerified: user.emailVerified,
       },
       accessToken,
@@ -233,6 +235,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
         emailVerified: user.emailVerified,
       },
       accessToken,
@@ -274,6 +277,7 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
         emailVerified: user.emailVerified,
       },
       accessToken,
@@ -514,6 +518,23 @@ export class AuthService {
 
     const { passwordHash, ...userWithoutPassword } = result;
     return userWithoutPassword;
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const data: Record<string, string> = {};
+    if (dto.defaultCurrency) data.defaultCurrency = dto.defaultCurrency;
+    if (dto.timezone) data.timezone = dto.timezone;
+
+    if (Object.keys(data).length === 0) {
+      return this.getUser(userId);
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+
+    return this.getUser(userId);
   }
 
   async getUser(userId: string) {

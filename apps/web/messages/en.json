@@ -141,7 +141,13 @@
       "userInfo": "Account Information",
       "email": "Email",
       "name": "Name",
-      "provider": "Sign-in Method"
+      "provider": "Sign-in Method",
+      "preferences": "Preferences",
+      "defaultCurrency": "Default Currency",
+      "timezone": "Timezone",
+      "savePreferences": "Save Preferences",
+      "preferencesSaved": "Preferences saved successfully",
+      "preferencesError": "Failed to save preferences"
     }
   }
 }

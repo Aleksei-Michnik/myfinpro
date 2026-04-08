@@ -1,19 +1,52 @@
 'use client';
 
+import { CURRENCIES, CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
 
 export default function AccountSettingsPage() {
   const t = useTranslations('settings.account');
   const tSettings = useTranslations('settings');
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
+  const { addToast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState(user?.defaultCurrency || 'USD');
+  const [selectedTimezone, setSelectedTimezone] = useState(user?.timezone || 'UTC');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const timezones = useMemo(() => {
+    try {
+      const zones = Intl.supportedValuesOf('timeZone');
+      if (!zones.includes('UTC')) {
+        zones.unshift('UTC');
+      }
+      return zones;
+    } catch {
+      return ['UTC', 'America/New_York', 'Europe/London', 'Asia/Jerusalem', 'Asia/Tokyo'];
+    }
+  }, []);
+
+  const handleSavePreferences = async () => {
+    setIsSaving(true);
+    try {
+      await updateProfile({
+        defaultCurrency: selectedCurrency,
+        timezone: selectedTimezone,
+      });
+      addToast('success', t('preferencesSaved'));
+    } catch {
+      addToast('error', t('preferencesError'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <ProtectedRoute>
@@ -44,6 +77,67 @@ export default function AccountSettingsPage() {
               </dd>
             </div>
           </dl>
+        </div>
+
+        {/* Preferences section */}
+        <div
+          className="mb-8 rounded-lg border border-gray-200 bg-white p-6"
+          data-testid="preferences-section"
+        >
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">{t('preferences')}</h2>
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="currency-select"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                {t('defaultCurrency')}
+              </label>
+              <select
+                id="currency-select"
+                data-testid="currency-select"
+                value={selectedCurrency}
+                onChange={(e) => setSelectedCurrency(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {CURRENCY_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {CURRENCIES[code].symbol} {code} — {CURRENCIES[code].name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="timezone-select"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                {t('timezone')}
+              </label>
+              <select
+                id="timezone-select"
+                data-testid="timezone-select"
+                value={selectedTimezone}
+                onChange={(e) => setSelectedTimezone(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {timezones.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSavePreferences}
+              disabled={isSaving}
+              data-testid="save-preferences-btn"
+            >
+              {isSaving ? '...' : t('savePreferences')}
+            </Button>
+          </div>
         </div>
 
         {/* Connected Accounts section */}

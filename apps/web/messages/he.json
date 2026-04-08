@@ -141,7 +141,13 @@
       "userInfo": "פרטי חשבון",
       "email": "אימייל",
       "name": "שם",
-      "provider": "שיטת כניסה"
+      "provider": "שיטת כניסה",
+      "preferences": "העדפות",
+      "defaultCurrency": "מטבע ברירת מחדל",
+      "timezone": "אזור זמן",
+      "savePreferences": "שמור העדפות",
+      "preferencesSaved": "ההעדפות נשמרו בהצלחה",
+      "preferencesError": "שמירת ההעדפות נכשלה"
     }
   }
 }

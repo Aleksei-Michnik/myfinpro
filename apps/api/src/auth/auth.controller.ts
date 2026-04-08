@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -42,6 +43,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -168,6 +170,19 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   async getMe(@CurrentUser() user: JwtPayload) {
     return this.authService.getUser(user.sub);
+  }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user profile preferences (currency, timezone)' })
+  @ApiResponse({ status: 200, description: 'Profile updated successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid currency or timezone' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  async updateProfile(@CurrentUser() user: JwtPayload, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(user.sub, dto);
   }
 
   @CustomThrottle({ limit: 3, ttl: 600000 })

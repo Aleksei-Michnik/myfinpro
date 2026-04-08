@@ -1,8 +1,21 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AccountSettingsPage from './page';
 
+// Mock Intl.supportedValuesOf for test environment
+if (typeof Intl.supportedValuesOf !== 'function') {
+  (Intl as unknown as Record<string, unknown>).supportedValuesOf = () => [
+    'UTC',
+    'America/New_York',
+    'Europe/London',
+    'Asia/Jerusalem',
+    'Asia/Tokyo',
+  ];
+}
+
 const mockPush = vi.fn();
+const mockAddToast = vi.fn();
+const mockUpdateProfile = vi.fn();
 
 let mockAuthState: {
   user: {
@@ -11,6 +24,7 @@ let mockAuthState: {
     name: string;
     defaultCurrency: string;
     locale: string;
+    timezone: string;
     emailVerified: boolean;
     deletedAt: string | null;
     scheduledDeletionAt: string | null;
@@ -28,6 +42,7 @@ let mockAuthState: {
   refreshUser: ReturnType<typeof vi.fn>;
   deleteAccount: ReturnType<typeof vi.fn>;
   cancelDeletion: ReturnType<typeof vi.fn>;
+  updateProfile: ReturnType<typeof vi.fn>;
 };
 
 vi.mock('next-intl', () => ({
@@ -59,7 +74,7 @@ vi.mock('@/components/auth/ConnectedAccounts', () => ({
 
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({
-    addToast: vi.fn(),
+    addToast: mockAddToast,
     removeToast: vi.fn(),
     toasts: [],
   }),
@@ -68,6 +83,7 @@ vi.mock('@/components/ui/Toast', () => ({
 describe('AccountSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdateProfile.mockResolvedValue(undefined);
     mockAuthState = {
       user: {
         id: '1',
@@ -75,6 +91,7 @@ describe('AccountSettingsPage', () => {
         name: 'Test User',
         defaultCurrency: 'USD',
         locale: 'en',
+        timezone: 'UTC',
         emailVerified: true,
         deletedAt: null,
         scheduledDeletionAt: null,
@@ -92,6 +109,7 @@ describe('AccountSettingsPage', () => {
       refreshUser: vi.fn(),
       deleteAccount: vi.fn(),
       cancelDeletion: vi.fn(),
+      updateProfile: mockUpdateProfile,
     };
   });
 
@@ -135,9 +153,52 @@ describe('AccountSettingsPage', () => {
     render(<AccountSettingsPage />);
     expect(mockPush).not.toHaveBeenCalled();
   });
+
   it('renders connected accounts section', () => {
     render(<AccountSettingsPage />);
     expect(screen.getByTestId('connected-accounts-section')).toBeInTheDocument();
     expect(screen.getByTestId('connected-accounts')).toBeInTheDocument();
+  });
+
+  it('renders preferences section with currency and timezone dropdowns', () => {
+    render(<AccountSettingsPage />);
+    expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
+    expect(screen.getByTestId('currency-select')).toBeInTheDocument();
+    expect(screen.getByTestId('timezone-select')).toBeInTheDocument();
+    expect(screen.getByTestId('save-preferences-btn')).toBeInTheDocument();
+  });
+
+  it('pre-populates dropdowns with current user values', () => {
+    render(<AccountSettingsPage />);
+    expect(screen.getByTestId('currency-select')).toHaveValue('USD');
+    expect(screen.getByTestId('timezone-select')).toHaveValue('UTC');
+  });
+
+  it('save button calls updateProfile', async () => {
+    render(<AccountSettingsPage />);
+    fireEvent.click(screen.getByTestId('save-preferences-btn'));
+    await waitFor(() => {
+      expect(mockUpdateProfile).toHaveBeenCalledWith({
+        defaultCurrency: 'USD',
+        timezone: 'UTC',
+      });
+    });
+  });
+
+  it('shows success toast on save', async () => {
+    render(<AccountSettingsPage />);
+    fireEvent.click(screen.getByTestId('save-preferences-btn'));
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('success', 'preferencesSaved');
+    });
+  });
+
+  it('shows error toast on save failure', async () => {
+    mockUpdateProfile.mockRejectedValueOnce(new Error('Failed'));
+    render(<AccountSettingsPage />);
+    fireEvent.click(screen.getByTestId('save-preferences-btn'));
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith('error', 'preferencesError');
+    });
   });
 });

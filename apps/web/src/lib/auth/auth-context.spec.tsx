@@ -13,6 +13,7 @@ const mockUser = {
   name: 'Test User',
   defaultCurrency: 'USD',
   locale: 'en',
+  timezone: 'UTC',
   emailVerified: true,
 };
 
@@ -33,6 +34,7 @@ function TestConsumer() {
     getAccessToken,
     deleteAccount,
     cancelDeletion,
+    updateProfile,
   } = useAuth();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -77,6 +79,15 @@ function TestConsumer() {
       </button>
       <button onClick={() => cancelDeletion().catch((err: Error) => setError(err.message))}>
         CancelDeletion
+      </button>
+      <button
+        onClick={() =>
+          updateProfile({ defaultCurrency: 'ILS', timezone: 'Asia/Jerusalem' }).catch(
+            (err: Error) => setError(err.message),
+          )
+        }
+      >
+        UpdateProfile
       </button>
     </div>
   );
@@ -577,6 +588,81 @@ describe('AuthContext', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('error-message')).toHaveTextContent('No pending deletion');
+      });
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('calls PATCH /auth/profile and updates user state', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      const updatedUser = { ...mockUser, defaultCurrency: 'ILS', timezone: 'Asia/Jerusalem' };
+
+      // Mock PATCH /auth/profile success
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(updatedUser),
+      });
+
+      await act(async () => {
+        screen.getByText('UpdateProfile').click();
+      });
+
+      // Verify PATCH was called
+      const profileCall = mockFetch.mock.calls[1];
+      expect(profileCall[0]).toContain('/auth/profile');
+      expect(profileCall[1]).toMatchObject({
+        method: 'PATCH',
+        credentials: 'include',
+      });
+
+      // User should still be authenticated
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    });
+
+    it('throws on API error', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock update failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ message: 'Invalid currency' }),
+      });
+
+      await act(async () => {
+        screen.getByText('UpdateProfile').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent('Invalid currency');
       });
     });
   });
