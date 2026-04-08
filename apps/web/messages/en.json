@@ -149,5 +149,94 @@
       "preferencesSaved": "Preferences saved successfully",
       "preferencesError": "Failed to save preferences"
     }
+  },
+  "legal": {
+    "backToHome": "Back to Home",
+    "terms": {
+      "title": "Terms of Use",
+      "lastUpdated": "Last updated: April 2026",
+      "intro": "Welcome to MyFinPro. By accessing or using our personal and family finance management application, you agree to be bound by these Terms of Use. Please read them carefully before using the service.",
+      "acceptance": {
+        "title": "1. Acceptance of Terms",
+        "content": "By creating an account or using MyFinPro, you acknowledge that you have read, understood, and agree to these Terms of Use. If you do not agree, please do not use the service."
+      },
+      "description": {
+        "title": "2. Description of Service",
+        "content": "MyFinPro is a personal and family finance management application that allows you to track income, expenses, and budgets. The service is provided for informational purposes only and does not constitute financial advice."
+      },
+      "registration": {
+        "title": "3. Account Registration & Security",
+        "content": "You may register using email and password, Google OAuth, or Telegram Login. You are responsible for maintaining the confidentiality of your credentials and for all activities that occur under your account."
+      },
+      "responsibilities": {
+        "title": "4. User Responsibilities",
+        "content": "You agree to provide accurate information, use the service lawfully, and not attempt to gain unauthorized access to other accounts or systems. You are solely responsible for the financial data you enter into the application."
+      },
+      "ownership": {
+        "title": "5. Data & Content Ownership",
+        "content": "You retain ownership of all financial data you enter into MyFinPro. We do not claim any ownership rights over your content. You grant us a limited license to store and process your data solely to provide the service."
+      },
+      "liability": {
+        "title": "6. Limitation of Liability",
+        "content": "MyFinPro is provided \"as is\" without warranties of any kind. We are not liable for any financial decisions made based on information displayed in the application. This service is not a substitute for professional financial advice."
+      },
+      "modifications": {
+        "title": "7. Modifications to Terms",
+        "content": "We reserve the right to modify these Terms of Use at any time. Changes will be posted on this page with an updated date. Continued use of the service after changes constitutes acceptance of the new terms."
+      },
+      "contact": {
+        "title": "8. Contact Information",
+        "content": "If you have any questions about these Terms of Use, please contact us through the application's support channels."
+      },
+      "seePrivacy": "See also our {link}.",
+      "privacyLinkText": "Privacy Policy"
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated: April 2026",
+      "intro": "Your privacy is important to us. This Privacy Policy explains how MyFinPro collects, uses, and protects your personal and financial information.",
+      "infoCollect": {
+        "title": "1. Information We Collect",
+        "content": "We collect information you provide during registration (name, email address), financial data you enter (transactions, budgets, income, expenses), and authentication data from third-party providers (Google OAuth, Telegram Login)."
+      },
+      "howWeUse": {
+        "title": "2. How We Use Your Information",
+        "content": "We use your information to provide and improve the finance management service, authenticate your identity, display your financial data, and send important account notifications such as email verification."
+      },
+      "storage": {
+        "title": "3. Data Storage & Security",
+        "content": "Your data is stored on secured servers. Passwords are encrypted using industry-standard hashing algorithms. Authentication tokens are securely managed. We implement appropriate technical measures to protect your information."
+      },
+      "thirdParty": {
+        "title": "4. Third-Party Services",
+        "content": "MyFinPro integrates with Google OAuth and Telegram Login for authentication. When you use these services, their respective privacy policies also apply. We only receive basic profile information necessary for account creation."
+      },
+      "cookies": {
+        "title": "5. Cookies & Local Storage",
+        "content": "We use local storage to manage JWT authentication tokens for maintaining your session. We do not use tracking cookies or third-party analytics cookies."
+      },
+      "retention": {
+        "title": "6. Data Retention & Deletion",
+        "content": "You may request account deletion at any time. Upon deletion request, your account enters a 30-day grace period during which you can cancel the deletion. After the grace period, all your data is permanently and irreversibly deleted."
+      },
+      "rights": {
+        "title": "7. Your Rights",
+        "content": "You have the right to access, correct, and delete your personal data. You can view and update your account information from the settings page. You can request full account deletion at any time."
+      },
+      "children": {
+        "title": "8. Children's Privacy",
+        "content": "MyFinPro is not intended for children under the age of 13. We do not knowingly collect personal information from children. If you believe a child has provided us with their data, please contact us."
+      },
+      "changes": {
+        "title": "9. Changes to Privacy Policy",
+        "content": "We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated date. We encourage you to review this policy periodically."
+      },
+      "contact": {
+        "title": "10. Contact Information",
+        "content": "If you have any questions about this Privacy Policy or your data, please contact us through the application's support channels."
+      },
+      "seeTerms": "See also our {link}.",
+      "termsLinkText": "Terms of Use"
+    }
   }
 }
