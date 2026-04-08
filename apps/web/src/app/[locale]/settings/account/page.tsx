@@ -2,7 +2,7 @@
 
 import { CURRENCIES, CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
@@ -20,6 +20,12 @@ export default function AccountSettingsPage() {
   const [selectedCurrency, setSelectedCurrency] = useState(user?.defaultCurrency || 'USD');
   const [selectedTimezone, setSelectedTimezone] = useState(user?.timezone || 'UTC');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Sync state when user data loads (user may be null on first render)
+  useEffect(() => {
+    if (user?.defaultCurrency) setSelectedCurrency(user.defaultCurrency);
+    if (user?.timezone) setSelectedTimezone(user.timezone);
+  }, [user?.defaultCurrency, user?.timezone]);
 
   const timezones = useMemo(() => {
     try {
