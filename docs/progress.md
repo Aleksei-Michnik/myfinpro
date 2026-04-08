@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 7/13       | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 7/15       | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 141 | **Completed:** 35 | **Remaining:** 106
+**Total iterations:** 143 | **Completed:** 36 | **Remaining:** 107
 
 ---
 
@@ -1362,21 +1362,23 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 ### Phase 4: Auth Completion & Legal Pages (In Progress)
 
-| Iteration | Objective                     | Status         |
-| --------- | ----------------------------- | -------------- |
-| 4.1       | Email service infrastructure  | ✅ Complete    |
-| 4.2       | Email confirmation — backend  | ✅ Complete    |
-| 4.3       | Email confirmation — frontend | ✅ Complete    |
-| 4.4       | Password reset — backend      | ✅ Complete    |
-| 4.5       | Password reset — frontend     | ✅ Complete    |
-| 4.6       | Delete account — backend      | ✅ Complete    |
-| 4.7       | Delete account — frontend     | ✅ Complete    |
-| 4.8       | Account deletion scheduler    | ⬜ Not Started |
-| 4.9       | Terms of Use + Privacy Policy | ⬜ Not Started |
-| 4.10      | How-to Guide                  | ⬜ Not Started |
-| 4.11      | Consent + footer              | ⬜ Not Started |
-| 4.12      | Integration + E2E tests       | ⬜ Not Started |
-| 4.13      | Haraka SMTP infrastructure    | ⬜ Not Started |
+| Iteration | Objective                                    | Status         |
+| --------- | -------------------------------------------- | -------------- |
+| 4.1       | Email service infrastructure                 | ✅ Complete    |
+| 4.2       | Email confirmation — backend                 | ✅ Complete    |
+| 4.3       | Email confirmation — frontend                | ✅ Complete    |
+| 4.4       | Password reset — backend                     | ✅ Complete    |
+| 4.5       | Password reset — frontend                    | ✅ Complete    |
+| 4.6       | Delete account — backend                     | ✅ Complete    |
+| 4.7       | Delete account — frontend                    | ✅ Complete    |
+| 4.7.1     | Consolidate connected accounts into settings | ⬜ Not Started |
+| 4.7.2     | Currency & timezone settings                 | ⬜ Not Started |
+| 4.8       | Account deletion scheduler                   | ⬜ Not Started |
+| 4.9       | Terms of Use + Privacy Policy                | ⬜ Not Started |
+| 4.10      | How-to Guide                                 | ⬜ Not Started |
+| 4.11      | Consent + footer                             | ⬜ Not Started |
+| 4.12      | Integration + E2E tests                      | ⬜ Not Started |
+| 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
 
 ### Iteration 4.7: Delete Account — Frontend (2026-04-08)
 

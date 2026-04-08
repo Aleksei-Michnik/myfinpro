@@ -344,28 +344,28 @@ Full localization can be deferred, but the foundation should be set early to avo
 
 Each iteration is deployable, includes tests, and expands CI/CD coverage. Order follows the required sequence.
 
-**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (13), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 140 iterations.**
+**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (15), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 143 iterations.**
 
 ### Phase Size Guidelines
 
-| Phase                     | Iterations | Size Category | Notes                                                           |
-| ------------------------- | ---------- | ------------- | --------------------------------------------------------------- |
-| Phase 0: Foundation       | 8          | Medium        | Infrastructure setup, one-time                                  |
-| Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                             |
-| Phase 2: Google Auth      | 4          | Small         | OAuth integration                                               |
-| Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                              |
-| Phase 4: Auth Completion  | 13         | Medium        | Email confirm, password reset, delete, legal pages, Haraka SMTP |
-| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)               |
-| Phase 6: Income           | 10         | Medium        | Core transaction type                                           |
-| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments                            |
-| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                                       |
-| Phase 9: Receipts         | 8          | Medium        | File handling complexity                                        |
-| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                                            |
-| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9)              |
-| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                                          |
-| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                                        |
-| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                                |
-| Phase 15: LLM             | 8          | Medium        | AI integration                                                  |
+| Phase                     | Iterations | Size Category | Notes                                                                                                |
+| ------------------------- | ---------- | ------------- | ---------------------------------------------------------------------------------------------------- |
+| Phase 0: Foundation       | 8          | Medium        | Infrastructure setup, one-time                                                                       |
+| Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                                                                  |
+| Phase 2: Google Auth      | 4          | Small         | OAuth integration                                                                                    |
+| Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                                                                   |
+| Phase 4: Auth Completion  | 15         | Medium        | Email confirm, password reset, delete, settings consolidation, currency/TZ, legal pages, Haraka SMTP |
+| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)                                                    |
+| Phase 6: Income           | 10         | Medium        | Core transaction type                                                                                |
+| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments                                                                 |
+| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                                                                            |
+| Phase 9: Receipts         | 8          | Medium        | File handling complexity                                                                             |
+| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                                                                                 |
+| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9)                                                   |
+| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                                                                               |
+| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                                                                             |
+| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                                                                     |
+| Phase 15: LLM             | 8          | Medium        | AI integration                                                                                       |
 
 **Target phase size**: 6-10 iterations recommended. Larger phases are split into logical sub-sections.
 
@@ -419,21 +419,23 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 
 ### Phase 4: Auth Completion & Legal Pages
 
-| Iteration | Objective                     | Scope                                                                                           | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                        |
-| --------- | ----------------------------- | ----------------------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------- |
-| 4.1       | Email service infrastructure  | Nodemailer + SMTP transport, email templates, graceful fallback                                 | Unit tests        | lint + typecheck + unit        | Deploy     | Email service sends emails (or logs in dev)                |
-| 4.2       | Email confirmation — backend  | Verification token model, send/verify endpoints, auto-send on register                          | Unit + API tests  | lint + typecheck + integration | Deploy     | Verification email sent, token validates                   |
-| 4.3       | Email confirmation — frontend | Verification banner, verify-email page, resend button                                           | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Unverified users see banner, verification link works       |
-| 4.4       | Password reset — backend      | Reset token model, forgot-password + reset-password endpoints, session revocation               | Unit + API tests  | lint + typecheck + integration | Deploy     | Password reset flow works end-to-end                       |
-| 4.5       | Password reset — frontend     | Forgot password page, reset password page, login page link update                               | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Forgot password and reset password pages functional        |
-| 4.6       | Delete account — backend      | Soft delete with scheduledDeletionAt, cancel-deletion, login-based reactivation, deletion email | Unit + API tests  | lint + typecheck + integration | Deploy     | Soft delete sets 30-day grace period, cancellation works   |
-| 4.7       | Delete account — frontend     | Account settings page, deletion dialog, deletion banner, cancel deletion                        | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Users can request and cancel deletion via UI               |
-| 4.8       | Account deletion scheduler    | NestJS @Cron daily job: hard delete expired accounts, anonymize audit logs                      | Unit tests        | lint + typecheck + unit        | Deploy     | Expired soft-deleted accounts permanently removed          |
-| 4.9       | Terms of Use + Privacy Policy | Static pages at /legal/terms and /legal/privacy with bilingual content                          | UI tests          | lint + typecheck + unit        | Deploy     | Legal pages render correctly in en and he                  |
-| 4.10      | How-to Guide                  | Help page at /help with step-by-step instructions for all auth features                         | UI tests          | lint + typecheck + unit        | Deploy     | Help page renders with all sections                        |
-| 4.11      | Consent + footer              | Registration consent checkbox, global footer with legal links                                   | UI tests          | lint + typecheck + unit        | Deploy     | Registration requires consent, footer visible on all pages |
-| 4.12      | Integration + E2E tests       | Comprehensive integration tests for all Phase 4 features + E2E Playwright tests                 | Integration + E2E | full suite                     | Deploy     | All Phase 4 features tested end-to-end                     |
-| 4.13      | Haraka SMTP infrastructure    | Self-hosted Haraka SMTP server in Docker, DKIM signing, SPF/DMARC DNS records                   | Manual + delivery | lint + typecheck               | Deploy     | Emails delivered to real inboxes with DKIM/SPF pass        |
+| Iteration | Objective                      | Scope                                                                                           | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                        |
+| --------- | ------------------------------ | ----------------------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------- |
+| 4.1       | Email service infrastructure   | Nodemailer + SMTP transport, email templates, graceful fallback                                 | Unit tests        | lint + typecheck + unit        | Deploy     | Email service sends emails (or logs in dev)                |
+| 4.2       | Email confirmation — backend   | Verification token model, send/verify endpoints, auto-send on register                          | Unit + API tests  | lint + typecheck + integration | Deploy     | Verification email sent, token validates                   |
+| 4.3       | Email confirmation — frontend  | Verification banner, verify-email page, resend button                                           | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Unverified users see banner, verification link works       |
+| 4.4       | Password reset — backend       | Reset token model, forgot-password + reset-password endpoints, session revocation               | Unit + API tests  | lint + typecheck + integration | Deploy     | Password reset flow works end-to-end                       |
+| 4.5       | Password reset — frontend      | Forgot password page, reset password page, login page link update                               | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Forgot password and reset password pages functional        |
+| 4.6       | Delete account — backend       | Soft delete with scheduledDeletionAt, cancel-deletion, login-based reactivation, deletion email | Unit + API tests  | lint + typecheck + integration | Deploy     | Soft delete sets 30-day grace period, cancellation works   |
+| 4.7       | Delete account — frontend      | Account settings page, deletion dialog, deletion banner, cancel deletion                        | UI + E2E tests    | lint + typecheck + unit        | Deploy     | Users can request and cancel deletion via UI               |
+| 4.7.1     | Consolidate connected accounts | Move Connected Accounts into Account Settings page, remove separate nav link and page           | UI tests          | lint + typecheck + unit        | Deploy     | Single unified settings page with all account sections     |
+| 4.7.2     | Currency & timezone settings   | PATCH /auth/profile endpoint, currency/timezone dropdowns on settings page                      | Unit + API tests  | lint + typecheck + unit        | Deploy     | Users can update currency and timezone preferences         |
+| 4.8       | Account deletion scheduler     | NestJS @Cron daily job: hard delete expired accounts, anonymize audit logs                      | Unit tests        | lint + typecheck + unit        | Deploy     | Expired soft-deleted accounts permanently removed          |
+| 4.9       | Terms of Use + Privacy Policy  | Static pages at /legal/terms and /legal/privacy with bilingual content                          | UI tests          | lint + typecheck + unit        | Deploy     | Legal pages render correctly in en and he                  |
+| 4.10      | How-to Guide                   | Help page at /help with step-by-step instructions for all auth features                         | UI tests          | lint + typecheck + unit        | Deploy     | Help page renders with all sections                        |
+| 4.11      | Consent + footer               | Registration consent checkbox, global footer with legal links                                   | UI tests          | lint + typecheck + unit        | Deploy     | Registration requires consent, footer visible on all pages |
+| 4.12      | Integration + E2E tests        | Comprehensive integration tests for all Phase 4 features + E2E Playwright tests                 | Integration + E2E | full suite                     | Deploy     | All Phase 4 features tested end-to-end                     |
+| 4.13      | Haraka SMTP infrastructure     | Self-hosted Haraka SMTP server in Docker, DKIM signing, SPF/DMARC DNS records                   | Manual + delivery | lint + typecheck               | Deploy     | Emails delivered to real inboxes with DKIM/SPF pass        |
 
 > **Detailed design**: See [`docs/phase-4-design.md`](docs/phase-4-design.md) for the full Phase 4 design document.
 

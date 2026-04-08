@@ -16,16 +16,18 @@
 6. [Iteration 4.5: Password Reset — Frontend](#6-iteration-45-password-reset--frontend)
 7. [Iteration 4.6: Delete Account — Backend](#7-iteration-46-delete-account--backend)
 8. [Iteration 4.7: Delete Account — Frontend](#8-iteration-47-delete-account--frontend)
-9. [Iteration 4.8: Account Deletion Scheduler](#9-iteration-48-account-deletion-scheduler)
-10. [Iteration 4.9: Terms of Use & Privacy Policy Pages](#10-iteration-49-terms-of-use--privacy-policy-pages)
-11. [Iteration 4.10: How-to Guide Page](#11-iteration-410-how-to-guide-page)
-12. [Iteration 4.11: Registration Consent & Footer Links](#12-iteration-411-registration-consent--footer-links)
-13. [Iteration 4.12: Integration Tests & E2E Tests](#13-iteration-412-integration-tests--e2e-tests)
-14. [Security Architecture](#14-security-architecture)
-15. [Database Migration Strategy](#15-database-migration-strategy)
-16. [Testing Strategy](#16-testing-strategy)
-17. [File Changes Summary](#17-file-changes-summary)
-18. [Documentation Updates](#18-documentation-updates)
+9. [Iteration 4.7.1: Consolidate Connected Accounts into Account Settings](#9-iteration-471-consolidate-connected-accounts-into-account-settings)
+10. [Iteration 4.7.2: Currency & Timezone Settings](#10-iteration-472-currency--timezone-settings)
+11. [Iteration 4.8: Account Deletion Scheduler](#11-iteration-48-account-deletion-scheduler)
+12. [Iteration 4.9: Terms of Use & Privacy Policy Pages](#12-iteration-49-terms-of-use--privacy-policy-pages)
+13. [Iteration 4.10: How-to Guide Page](#13-iteration-410-how-to-guide-page)
+14. [Iteration 4.11: Registration Consent & Footer Links](#14-iteration-411-registration-consent--footer-links)
+15. [Iteration 4.12: Integration Tests & E2E Tests](#15-iteration-412-integration-tests--e2e-tests)
+16. [Security Architecture](#16-security-architecture)
+17. [Database Migration Strategy](#17-database-migration-strategy)
+18. [Testing Strategy](#18-testing-strategy)
+19. [File Changes Summary](#19-file-changes-summary)
+20. [Documentation Updates](#20-documentation-updates)
 
 ---
 
@@ -747,7 +749,273 @@ If a soft-deleted user somehow lands on the app (e.g., via reactivation):
 
 ---
 
-## 9. Iteration 4.8: Account Deletion Scheduler
+## 9. Iteration 4.7.1: Consolidate Connected Accounts into Account Settings
+
+### Overview
+
+Currently, "Connected Accounts" is a separate page at `/settings/connected-accounts` with its own nav link in the Header. This creates a fragmented settings experience. This iteration consolidates Connected Accounts into the Account Settings page, creating a single unified settings page.
+
+### Changes
+
+**Account Settings page layout** — `/[locale]/settings/account`:
+
+```
+┌─────────────────────────────────────┐
+│          MyFinPro Header            │
+├─────────────────────────────────────┤
+│                                     │
+│  Account Settings                   │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Account Information        │    │
+│  │  Email: user@example.com    │    │
+│  │  Name: John Doe             │    │
+│  │  Sign-in Method: Email      │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  Connected Accounts         │    │
+│  │  Manage your sign-in        │    │
+│  │  methods                    │    │
+│  │  ┌───────────────────────┐  │    │
+│  │  │ Email & Password      │  │    │
+│  │  │ Connected ✓           │  │    │
+│  │  ├───────────────────────┤  │    │
+│  │  │ Google                │  │    │
+│  │  │ Connected ✓ Disconnect│  │    │
+│  │  ├───────────────────────┤  │    │
+│  │  │ Telegram              │  │    │
+│  │  │ Not connected Connect │  │    │
+│  │  └───────────────────────┘  │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  ┌─────────────────────────────┐    │
+│  │  🔴 Delete Account          │    │
+│  │  ...                        │    │
+│  └─────────────────────────────┘    │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+### Implementation Details
+
+1. **Move ConnectedAccounts into Account Settings page** — Import and render `ConnectedAccounts` component as a section in `apps/web/src/app/[locale]/settings/account/page.tsx`, between Account Information and Delete Account sections
+
+2. **Remove separate Connected Accounts page** — Delete `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx`
+
+3. **Remove "Connected Accounts" nav link from Header** — In `apps/web/src/components/layout/Header.tsx`, remove the separate "Connected Accounts" link. Keep only the "Settings" link pointing to `/settings/account`
+
+4. **Update i18n** — Move connected accounts section header key into `settings.account` namespace if needed
+
+5. **Update tests** — Update Header tests to not expect "Connected Accounts" nav link, update account-settings tests to include ConnectedAccounts rendering
+
+### Files Modified
+
+| File                                                                   | Change                               |
+| ---------------------------------------------------------------------- | ------------------------------------ |
+| `apps/web/src/app/[locale]/settings/account/page.tsx`                  | Add ConnectedAccounts section        |
+| `apps/web/src/components/layout/Header.tsx`                            | Remove "Connected Accounts" nav link |
+| `apps/web/src/components/layout/Header.spec.tsx`                       | Update tests                         |
+| `apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx` | Update tests                         |
+
+### Files Deleted
+
+| File                                                             | Reason                             |
+| ---------------------------------------------------------------- | ---------------------------------- |
+| `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx` | Consolidated into account settings |
+
+---
+
+## 10. Iteration 4.7.2: Currency & Timezone Settings
+
+### Overview
+
+Add user preference settings for default currency and timezone to the Account Settings page. This requires a new backend endpoint for updating user profile preferences and frontend UI with dropdown selectors.
+
+### Backend: PATCH /auth/profile
+
+**New endpoint: `PATCH /api/v1/auth/profile`** (authenticated)
+
+- Accepts partial update DTO: `{ defaultCurrency?: string, timezone?: string }`
+- Validates `defaultCurrency` against the `CurrencyCode` enum from `packages/shared`
+- Validates `timezone` against `Intl.supportedValuesOf('timeZone')` or a known timezone list
+- Updates the user record in the database
+- Returns the updated user profile (same shape as `GET /auth/me`)
+- Rate limited: 10 requests per minute
+
+```typescript
+// apps/api/src/auth/dto/update-profile.dto.ts
+import { IsOptional, IsString, IsIn } from 'class-validator';
+import { CURRENCY_CODES } from '@myfinpro/shared';
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(CURRENCY_CODES)
+  defaultCurrency?: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+}
+```
+
+```typescript
+// In auth.controller.ts
+@UseGuards(JwtAuthGuard)
+@Patch('profile')
+@HttpCode(HttpStatus.OK)
+@ApiBearerAuth()
+@ApiOperation({ summary: 'Update user profile preferences' })
+async updateProfile(
+  @CurrentUser() user: JwtPayload,
+  @Body() dto: UpdateProfileDto,
+) {
+  return this.authService.updateProfile(user.sub, dto);
+}
+```
+
+```typescript
+// In auth.service.ts
+async updateProfile(userId: string, dto: UpdateProfileDto) {
+  const data: Record<string, string> = {};
+  if (dto.defaultCurrency) data.defaultCurrency = dto.defaultCurrency;
+  if (dto.timezone) data.timezone = dto.timezone;
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data,
+  });
+
+  return this.getUser(userId);
+}
+```
+
+### Backend: Include timezone in auth responses
+
+Update `login()`, `register()`, and `refreshTokens()` in `auth.service.ts` to include `timezone` in the user object response:
+
+```typescript
+return {
+  user: {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    defaultCurrency: user.defaultCurrency,
+    locale: user.locale,
+    timezone: user.timezone, // <-- add this
+    emailVerified: user.emailVerified,
+  },
+  accessToken,
+};
+```
+
+### Frontend: User type update
+
+Add `timezone` to the `User` interface in `apps/web/src/lib/auth/types.ts`:
+
+```typescript
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  defaultCurrency: string;
+  locale: string;
+  timezone: string; // <-- add this
+  emailVerified: boolean;
+  deletedAt: string | null;
+  scheduledDeletionAt: string | null;
+}
+```
+
+### Frontend: Auth context addition
+
+Add `updateProfile()` method to auth context:
+
+```typescript
+const updateProfile = async (data: { defaultCurrency?: string; timezone?: string }) => {
+  const response = await apiClient.patch('/auth/profile', data, {
+    headers: { Authorization: `Bearer ${state.accessToken}` },
+  });
+  setState((prev) => ({
+    ...prev,
+    user: response.data,
+  }));
+};
+```
+
+### Frontend: Account Settings page — Preferences section
+
+Add a "Preferences" section between "Account Information" and "Connected Accounts":
+
+```
+┌─────────────────────────────────────┐
+│  Preferences                        │
+│                                     │
+│  Default Currency:                  │
+│  ┌─────────────────────────────┐    │
+│  │  $ USD - US Dollar       ▾  │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  Timezone:                          │
+│  ┌─────────────────────────────┐    │
+│  │  Asia/Jerusalem          ▾  │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  [Save Preferences]                 │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+- Currency dropdown populated from `CURRENCIES` registry in `packages/shared`
+- Timezone dropdown populated from `Intl.supportedValuesOf('timeZone')` (available in modern browsers)
+- Save button calls `updateProfile()`, shows success toast on save
+- Dropdowns pre-populated with current user values
+
+### i18n Keys
+
+Add to `messages/en.json` and `messages/he.json`:
+
+```json
+{
+  "settings": {
+    "account": {
+      "preferences": "Preferences",
+      "defaultCurrency": "Default Currency",
+      "timezone": "Timezone",
+      "savePreferences": "Save Preferences",
+      "preferencesSaved": "Preferences saved successfully",
+      "preferencesError": "Failed to save preferences"
+    }
+  }
+}
+```
+
+### Files Created
+
+| File                                          | Purpose                            |
+| --------------------------------------------- | ---------------------------------- |
+| `apps/api/src/auth/dto/update-profile.dto.ts` | Update profile DTO with validation |
+
+### Files Modified
+
+| File                                                                   | Change                                                                           |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `apps/api/src/auth/auth.controller.ts`                                 | Add `PATCH /auth/profile` endpoint                                               |
+| `apps/api/src/auth/auth.controller.spec.ts`                            | Tests for new endpoint                                                           |
+| `apps/api/src/auth/auth.service.ts`                                    | Add `updateProfile()` method, add `timezone` to login/register/refresh responses |
+| `apps/api/src/auth/auth.service.spec.ts`                               | Tests for new method                                                             |
+| `apps/web/src/lib/auth/types.ts`                                       | Add `timezone` to User interface                                                 |
+| `apps/web/src/lib/auth/auth-context.tsx`                               | Add `updateProfile()` method                                                     |
+| `apps/web/src/lib/auth/auth-context.spec.tsx`                          | Tests for new method                                                             |
+| `apps/web/src/app/[locale]/settings/account/page.tsx`                  | Add Preferences section with currency/timezone dropdowns                         |
+| `apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx` | Tests for preferences section                                                    |
+| `apps/web/messages/en.json`                                            | Preferences i18n keys                                                            |
+| `apps/web/messages/he.json`                                            | Hebrew preference translations                                                   |
+
+---
+
+## 11. Iteration 4.8: Account Deletion Scheduler
 
 ### Cron-Based Hard Delete
 
@@ -821,7 +1089,7 @@ Add to `apps/api/package.json`: `@nestjs/schedule`
 
 ---
 
-## 10. Iteration 4.9: Terms of Use & Privacy Policy Pages
+## 12. Iteration 4.9: Terms of Use & Privacy Policy Pages
 
 ### Terms of Use — `/[locale]/legal/terms`
 
@@ -873,7 +1141,7 @@ Both pages are static Next.js pages with i18n content. Content is stored in the 
 
 ---
 
-## 11. Iteration 4.10: How-to Guide Page
+## 13. Iteration 4.10: How-to Guide Page
 
 ### How-to Guide — `/[locale]/help`
 
@@ -913,7 +1181,7 @@ Instructions for existing functionality with visual step-by-step guides:
 
 ---
 
-## 12. Iteration 4.11: Registration Consent & Footer Links
+## 14. Iteration 4.11: Registration Consent & Footer Links
 
 ### Registration Form Update
 
@@ -976,7 +1244,7 @@ Add "Help" link to Header for authenticated users and footer for all users.
 
 ---
 
-## 13. Iteration 4.12: Integration Tests & E2E Tests
+## 15. Iteration 4.12: Integration Tests & E2E Tests
 
 ### API Integration Tests (Testcontainers)
 
@@ -1029,7 +1297,7 @@ Add to `apps/web/e2e/auth.spec.ts`:
 
 ---
 
-## 14. Security Architecture
+## 16. Security Architecture
 
 ### Security Checklist for Phase 4
 
@@ -1059,7 +1327,7 @@ Add to `apps/web/e2e/auth.spec.ts`:
 
 ---
 
-## 15. Database Migration Strategy
+## 17. Database Migration Strategy
 
 ### Migration: Phase 4 Email Verification & Password Reset
 
@@ -1106,7 +1374,7 @@ This follows the **expand-only** pattern — no columns or tables are removed, o
 
 ---
 
-## 16. Testing Strategy
+## 18. Testing Strategy
 
 ### Test Counts per Iteration
 
@@ -1129,7 +1397,7 @@ This follows the **expand-only** pattern — no columns or tables are removed, o
 
 ---
 
-## 17. File Changes Summary
+## 19. File Changes Summary
 
 ### New Files (by module)
 
@@ -1233,7 +1501,7 @@ This follows the **expand-only** pattern — no columns or tables are removed, o
 
 ---
 
-## 18. Documentation Updates
+## 20. Documentation Updates
 
 As part of this phase, update the following documentation:
 
@@ -1306,7 +1574,7 @@ Each iteration deploys to both staging and production via the existing CI/CD pip
 
 ---
 
-## 19. Iteration 4.13: Haraka SMTP Infrastructure
+## 21. Iteration 4.13: Haraka SMTP Infrastructure
 
 ### Overview
 
