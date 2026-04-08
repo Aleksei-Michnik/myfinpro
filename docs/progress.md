@@ -1371,7 +1371,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.5       | Password reset — frontend                    | ✅ Complete    |
 | 4.6       | Delete account — backend                     | ✅ Complete    |
 | 4.7       | Delete account — frontend                    | ✅ Complete    |
-| 4.7.1     | Consolidate connected accounts into settings | ⬜ Not Started |
+| 4.7.1     | Consolidate connected accounts into settings | ✅ Complete    |
 | 4.7.2     | Currency & timezone settings                 | ⬜ Not Started |
 | 4.8       | Account deletion scheduler                   | ⬜ Not Started |
 | 4.9       | Terms of Use + Privacy Policy                | ⬜ Not Started |

@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -10,6 +11,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 
 export default function AccountSettingsPage() {
   const t = useTranslations('settings.account');
+  const tSettings = useTranslations('settings');
   const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -42,6 +44,18 @@ export default function AccountSettingsPage() {
               </dd>
             </div>
           </dl>
+        </div>
+
+        {/* Connected Accounts section */}
+        <div
+          className="mb-8 rounded-lg border border-gray-200 bg-white p-6"
+          data-testid="connected-accounts-section"
+        >
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">
+            {tSettings('connectedAccounts')}
+          </h2>
+          <p className="mb-4 text-sm text-gray-600">{tSettings('connectedAccountsDescription')}</p>
+          <ConnectedAccounts />
         </div>
 
         {!user?.scheduledDeletionAt && (

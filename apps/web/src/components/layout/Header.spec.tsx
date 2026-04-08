@@ -177,11 +177,9 @@ describe('Header', () => {
       expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/account');
     });
 
-    it('renders connected accounts link', () => {
+    it('does not render a separate connected accounts link', () => {
       render(<Header />);
-      const connectedLink = screen.getByText('nav.connectedAccounts');
-      expect(connectedLink).toBeInTheDocument();
-      expect(connectedLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
+      expect(screen.queryByText('nav.connectedAccounts')).not.toBeInTheDocument();
     });
 
     it('renders logout button', () => {

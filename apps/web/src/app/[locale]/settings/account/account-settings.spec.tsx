@@ -53,6 +53,10 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => mockAuthState,
 }));
 
+vi.mock('@/components/auth/ConnectedAccounts', () => ({
+  ConnectedAccounts: () => <div data-testid="connected-accounts">Connected Accounts Mock</div>,
+}));
+
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({
     addToast: vi.fn(),
@@ -130,5 +134,10 @@ describe('AccountSettingsPage', () => {
   it('does not redirect when user is authenticated', () => {
     render(<AccountSettingsPage />);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+  it('renders connected accounts section', () => {
+    render(<AccountSettingsPage />);
+    expect(screen.getByTestId('connected-accounts-section')).toBeInTheDocument();
+    expect(screen.getByTestId('connected-accounts')).toBeInTheDocument();
   });
 });
