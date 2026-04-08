@@ -1,6 +1,6 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-03
+> **Last updated:** 2026-04-08
 > **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
 > **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 5/13       | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 7/13       | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 141 | **Completed:** 33 | **Remaining:** 108
+**Total iterations:** 141 | **Completed:** 35 | **Remaining:** 106
 
 ---
 
@@ -1369,14 +1369,63 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.3       | Email confirmation — frontend | ✅ Complete    |
 | 4.4       | Password reset — backend      | ✅ Complete    |
 | 4.5       | Password reset — frontend     | ✅ Complete    |
-| 4.6       | Delete account — backend      | ⬜ Not Started |
-| 4.7       | Delete account — frontend     | ⬜ Not Started |
+| 4.6       | Delete account — backend      | ✅ Complete    |
+| 4.7       | Delete account — frontend     | ✅ Complete    |
 | 4.8       | Account deletion scheduler    | ⬜ Not Started |
 | 4.9       | Terms of Use + Privacy Policy | ⬜ Not Started |
 | 4.10      | How-to Guide                  | ⬜ Not Started |
 | 4.11      | Consent + footer              | ⬜ Not Started |
 | 4.12      | Integration + E2E tests       | ⬜ Not Started |
 | 4.13      | Haraka SMTP infrastructure    | ⬜ Not Started |
+
+### Iteration 4.7: Delete Account — Frontend (2026-04-08)
+
+**What was implemented:**
+
+- Updated `User` type with `deletedAt` and `scheduledDeletionAt` nullable string fields
+- Added `deleteAccount(email)` and `cancelDeletion()` methods to auth context
+  - `deleteAccount` calls `POST /auth/delete-account` then logs out
+  - `cancelDeletion` calls `POST /auth/cancel-deletion` then refreshes user
+- Created Account Settings page at `/settings/account` (protected route)
+  - Shows user info (email, name, sign-in method)
+  - "Delete Account" button opens deletion confirmation dialog
+  - Shows DeletionBanner when account has `scheduledDeletionAt` set
+- Created `DeleteAccountDialog` component
+  - Modal overlay with warning text about 30-day grace period
+  - Email confirmation input — user must type their email to enable deletion
+  - Loading state and error display during API call
+- Created `DeletionBanner` component
+  - Red warning banner shown when `scheduledDeletionAt` is set
+  - Shows formatted deletion date with "Cancel Deletion" button
+  - Loading state during cancellation API call
+- Updated Dashboard page to show `DeletionBanner` at top when deletion is scheduled
+- Added "Settings" navigation link to Header (visible when authenticated)
+- Added i18n translations for `settings.account.*` namespace (13 keys in en + he)
+
+**Key files created:**
+
+- [`apps/web/src/components/auth/DeleteAccountDialog.tsx`](../apps/web/src/components/auth/DeleteAccountDialog.tsx) — Delete account confirmation dialog
+- [`apps/web/src/components/auth/DeletionBanner.tsx`](../apps/web/src/components/auth/DeletionBanner.tsx) — Scheduled deletion warning banner
+- [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/[locale]/settings/account/page.tsx) — Account settings page
+
+**Tests added:**
+
+- [`apps/web/src/components/auth/DeleteAccountDialog.spec.tsx`](../apps/web/src/components/auth/DeleteAccountDialog.spec.tsx) — 9 tests (rendering, email validation, submit, error handling, loading state)
+- [`apps/web/src/components/auth/DeletionBanner.spec.tsx`](../apps/web/src/components/auth/DeletionBanner.spec.tsx) — 7 tests (rendering, date display, cancel flow, loading)
+- [`apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — 7 tests (page rendering, user info, delete button, banner display)
+- Updated [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — 4 new tests for `deleteAccount` and `cancelDeletion`
+- Updated [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — 1 new test for Settings link
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 314     | Jest                     |
+| Web Unit Tests | 235     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **595** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
 
 > **Detailed design**: See [`docs/phase-4-design.md`](phase-4-design.md) for the full Phase 4 design document.
 
