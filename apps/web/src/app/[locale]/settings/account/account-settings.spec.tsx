@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AccountSettingsPage from './page';
 
 // Mock Intl.supportedValuesOf for test environment
-if (typeof Intl.supportedValuesOf !== 'function') {
-  (Intl as unknown as Record<string, unknown>).supportedValuesOf = () => [
+const IntlAny = Intl as unknown as Record<string, unknown>;
+if (typeof IntlAny.supportedValuesOf !== 'function') {
+  IntlAny.supportedValuesOf = () => [
     'UTC',
     'America/New_York',
     'Europe/London',

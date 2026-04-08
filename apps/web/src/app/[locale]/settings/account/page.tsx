@@ -23,7 +23,9 @@ export default function AccountSettingsPage() {
 
   const timezones = useMemo(() => {
     try {
-      const zones = Intl.supportedValuesOf('timeZone');
+      const zones = (
+        Intl as unknown as { supportedValuesOf: (key: string) => string[] }
+      ).supportedValuesOf('timeZone');
       if (!zones.includes('UTC')) {
         zones.unshift('UTC');
       }
