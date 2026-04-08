@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 7/15       | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 8/15       | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 143 | **Completed:** 36 | **Remaining:** 107
+**Total iterations:** 143 | **Completed:** 37 | **Remaining:** 106
 
 ---
 
@@ -1372,7 +1372,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.6       | Delete account — backend                     | ✅ Complete    |
 | 4.7       | Delete account — frontend                    | ✅ Complete    |
 | 4.7.1     | Consolidate connected accounts into settings | ✅ Complete    |
-| 4.7.2     | Currency & timezone settings                 | ⬜ Not Started |
+| 4.7.2     | Currency & timezone settings                 | ✅ Complete    |
 | 4.8       | Account deletion scheduler                   | ⬜ Not Started |
 | 4.9       | Terms of Use + Privacy Policy                | ⬜ Not Started |
 | 4.10      | How-to Guide                                 | ⬜ Not Started |
@@ -1461,6 +1461,46 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | Web Unit Tests | 236     | Vitest + Testing Library |
 | Shared Package | 46      | Vitest                   |
 | **Total**      | **596** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+### Iteration 4.7.2: Currency & Timezone Settings (2026-04-08)
+
+**What was implemented:**
+
+**Backend:**
+
+- Created [`UpdateProfileDto`](../apps/api/src/auth/dto/update-profile.dto.ts) with validation for currency (from `CURRENCY_CODES`) and timezone (string)
+- Added `PATCH /auth/profile` endpoint to [`auth.controller.ts`](../apps/api/src/auth/auth.controller.ts:173) — updates user preferences (currency, timezone)
+- Added [`updateProfile()`](../apps/api/src/auth/auth.service.ts:520) method to AuthService — conditionally updates fields, returns fresh user data via `getUser()`
+- Added `timezone` field to login, register, and refresh token response objects across all three methods in AuthService
+
+**Frontend:**
+
+- Added `timezone` field to [`User`](../apps/web/src/lib/auth/types.ts:7) type
+- Added [`updateProfile()`](../apps/web/src/lib/auth/auth-context.tsx:232) method to auth context — calls `PATCH /auth/profile` and updates user state
+- Added Preferences section to [`AccountSettingsPage`](../apps/web/src/app/[locale]/settings/account/page.tsx:85) with:
+  - Currency dropdown populated from `@myfinpro/shared` `CURRENCIES` registry (10 currencies)
+  - Timezone dropdown populated from `Intl.supportedValuesOf('timeZone')` with UTC fallback
+  - Save button with loading state
+  - Success/error toast notifications
+- Added i18n translations (6 keys each in [`en.json`](../apps/web/messages/en.json:144) and [`he.json`](../apps/web/messages/he.json:144))
+
+**Tests added:**
+
+- [`auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) — 4 new tests for `updateProfile()` (currency, timezone, both, empty DTO) + updated login/refresh response assertions to include `timezone`
+- [`auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — 3 new tests for `PATCH /auth/profile` endpoint (update, empty body, rate limiting metadata)
+- [`auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — 2 new tests for `updateProfile()` (success + API error)
+- [`account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — 3 new tests (preferences section rendering, save button, success/error toasts)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 321     | Jest                     |
+| Web Unit Tests | 243     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **610** |                          |
 
 **Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
 

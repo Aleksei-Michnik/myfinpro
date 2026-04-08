@@ -156,9 +156,11 @@ export function ConnectedAccounts() {
   return (
     <div className="space-y-4" data-testid="connected-accounts">
       {/* Email & Password Card */}
-      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between dark:border-gray-700">
         <div>
-          <h3 className="text-sm font-medium text-gray-900">{t('emailPassword')}</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {t('emailPassword')}
+          </h3>
           {data.hasPassword ? (
             <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1">
               {t('connected')}
@@ -172,9 +174,9 @@ export function ConnectedAccounts() {
       </div>
 
       {/* Google Card */}
-      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between dark:border-gray-700">
         <div>
-          <h3 className="text-sm font-medium text-gray-900">Google</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Google</h3>
           {googleProvider ? (
             <>
               <p className="text-sm text-gray-500 mt-0.5">
@@ -226,9 +228,9 @@ export function ConnectedAccounts() {
       </div>
 
       {/* Telegram Card */}
-      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+      <div className="rounded-lg border border-gray-200 p-4 flex items-center justify-between dark:border-gray-700">
         <div>
-          <h3 className="text-sm font-medium text-gray-900">Telegram</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Telegram</h3>
           {telegramProvider ? (
             <>
               <p className="text-sm text-gray-500 mt-0.5">{telegramProvider.name}</p>
