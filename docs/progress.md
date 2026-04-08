@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 8/15       | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 11/15      | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 143 | **Completed:** 37 | **Remaining:** 106
+**Total iterations:** 143 | **Completed:** 40 | **Remaining:** 103
 
 ---
 
@@ -1373,8 +1373,8 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.7       | Delete account — frontend                    | ✅ Complete    |
 | 4.7.1     | Consolidate connected accounts into settings | ✅ Complete    |
 | 4.7.2     | Currency & timezone settings                 | ✅ Complete    |
-| 4.8       | Account deletion scheduler                   | ⬜ Not Started |
-| 4.9       | Terms of Use + Privacy Policy                | ⬜ Not Started |
+| 4.8       | Account deletion scheduler                   | ✅ Complete    |
+| 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
 | 4.10      | How-to Guide                                 | ⬜ Not Started |
 | 4.11      | Consent + footer                             | ⬜ Not Started |
 | 4.12      | Integration + E2E tests                      | ⬜ Not Started |
@@ -1553,6 +1553,63 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 **CI Run:** `24150900153` ✅ | **Deploy Staging Run:** `24150900162` ✅
 
 **Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+### Iteration 4.9: Terms of Use + Privacy Policy Pages (2026-04-08)
+
+**What was implemented:**
+
+- Created `/legal/terms` route — server component page with structured Terms of Use content
+- Created `/legal/privacy` route — server component page with structured Privacy Policy content
+- Both pages use `getTranslations` from `next-intl/server` (async server components)
+- Created [`LegalLayout`](../apps/web/src/app/[locale]/legal/layout.tsx) wrapper with consistent padding and max-width
+- Content styled with manual Tailwind classes (no `@tailwindcss/typography` — Tailwind v4)
+- Cross-links between Terms and Privacy pages using `next-intl` rich text with `Link` component
+- "Back to Home" link on both pages
+- Full bilingual content (English + Hebrew) covering all required legal sections
+- RTL support inherited from locale layout
+
+**Terms of Use sections:** Acceptance of Terms, Description of Service, Account Registration & Security, User Responsibilities, Data & Content Ownership, Limitation of Liability, Modifications to Terms, Contact Information
+
+**Privacy Policy sections:** Information We Collect, How We Use Your Information, Data Storage & Security, Third-Party Services (Google OAuth, Telegram Login), Cookies & Local Storage (JWT handling), Data Retention & Deletion (30-day grace period), Your Rights, Children's Privacy, Changes to Privacy Policy, Contact Information
+
+**Key files created:**
+
+- [`apps/web/src/app/[locale]/legal/layout.tsx`](../apps/web/src/app/[locale]/legal/layout.tsx) — Legal pages layout wrapper
+- [`apps/web/src/app/[locale]/legal/terms/page.tsx`](../apps/web/src/app/[locale]/legal/terms/page.tsx) — Terms of Use page (server component)
+- [`apps/web/src/app/[locale]/legal/privacy/page.tsx`](../apps/web/src/app/[locale]/legal/privacy/page.tsx) — Privacy Policy page (server component)
+- [`apps/web/src/app/[locale]/legal/terms/terms.spec.tsx`](../apps/web/src/app/[locale]/legal/terms/terms.spec.tsx) — Terms page tests
+- [`apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx`](../apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx) — Privacy page tests
+
+**Files modified:**
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added `legal` namespace with terms + privacy sections
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew `legal` translations
+
+**Tests added:**
+
+- [`terms.spec.tsx`](../apps/web/src/app/[locale]/legal/terms/terms.spec.tsx) — 5 tests (title, last updated, all 8 section headings, privacy link, back to home link)
+- [`privacy.spec.tsx`](../apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx) — 5 tests (title, last updated, all 10 section headings, terms link, back to home link)
+- Uses `vi.hoisted()` pattern for mock availability in hoisted `vi.mock()` calls
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 253     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **631** |                          |
+
+**CI Run:** `24158484682` ✅ | **Deploy Staging Run:** `24158484680` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+**Routes accessible:**
+
+- `/en/legal/terms` — English Terms of Use
+- `/en/legal/privacy` — English Privacy Policy
+- `/he/legal/terms` — Hebrew Terms of Use (RTL)
+- `/he/legal/privacy` — Hebrew Privacy Policy (RTL)
 
 ### Upcoming Phases
 
