@@ -170,11 +170,18 @@ describe('Header', () => {
       expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
     });
 
+    it('renders settings link', () => {
+      render(<Header />);
+      const settingsLink = screen.getByText('nav.settings');
+      expect(settingsLink).toBeInTheDocument();
+      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/account');
+    });
+
     it('renders connected accounts link', () => {
       render(<Header />);
-      const settingsLink = screen.getByText('nav.connectedAccounts');
-      expect(settingsLink).toBeInTheDocument();
-      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
+      const connectedLink = screen.getByText('nav.connectedAccounts');
+      expect(connectedLink).toBeInTheDocument();
+      expect(connectedLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
     });
 
     it('renders logout button', () => {

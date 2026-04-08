@@ -5,6 +5,8 @@ export interface User {
   defaultCurrency: string;
   locale: string;
   emailVerified: boolean;
+  deletedAt: string | null;
+  scheduledDeletionAt: string | null;
 }
 
 export interface AuthState {

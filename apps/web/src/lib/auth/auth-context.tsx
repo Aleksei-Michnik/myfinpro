@@ -17,6 +17,8 @@ interface AuthContextType {
   getAccessToken: () => string | null;
   resendVerificationEmail: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  deleteAccount: (email: string) => Promise<void>;
+  cancelDeletion: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -187,6 +189,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getAccessToken = useCallback(() => accessToken, [accessToken]);
 
+  const deleteAccount = useCallback(
+    async (email: string) => {
+      const token = accessToken;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/auth/delete-account`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: 'Failed to delete account' }));
+        throw new Error((error as { message?: string }).message || 'Failed to delete account');
+      }
+      await logout();
+    },
+    [accessToken, logout],
+  );
+
+  const cancelDeletion = useCallback(async () => {
+    const token = accessToken;
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE}/auth/cancel-deletion`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: 'Failed to cancel deletion' }));
+      throw new Error((error as { message?: string }).message || 'Failed to cancel deletion');
+    }
+    await refreshUser();
+  }, [accessToken, refreshUser]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -202,6 +244,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getAccessToken,
         resendVerificationEmail,
         refreshUser,
+        deleteAccount,
+        cancelDeletion,
       }}
     >
       {children}

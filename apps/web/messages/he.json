@@ -127,6 +127,21 @@
     "cannotDisconnectLast": "לא ניתן לנתק את שיטת ההתחברות האחרונה",
     "linkSuccess": "{provider} חובר בהצלחה",
     "linkError": "חיבור {provider} נכשל",
-    "alreadyLinked": "חשבון {provider} זה כבר מקושר למשתמש אחר"
+    "alreadyLinked": "חשבון {provider} זה כבר מקושר למשתמש אחר",
+    "account": {
+      "title": "הגדרות חשבון",
+      "deleteAccount": "מחיקת חשבון",
+      "deleteWarning": "פעולה זו תתזמן את מחיקת החשבון שלך. יש לך 30 יום לבטל לפני שהנתונים שלך יימחקו לצמיתות.",
+      "confirmEmail": "הקלד את האימייל שלך לאישור",
+      "deleteButton": "מחק את החשבון שלי",
+      "cancel": "ביטול",
+      "deletionScheduled": "החשבון שלך מתוזמן למחיקה בתאריך {date}.",
+      "cancelDeletion": "ביטול מחיקה",
+      "cancelDeletionSuccess": "מחיקת החשבון בוטלה בהצלחה.",
+      "userInfo": "פרטי חשבון",
+      "email": "אימייל",
+      "name": "שם",
+      "provider": "שיטת כניסה"
+    }
   }
 }

@@ -127,6 +127,21 @@
     "cannotDisconnectLast": "Cannot disconnect your last sign-in method",
     "linkSuccess": "{provider} connected successfully",
     "linkError": "Failed to connect {provider}",
-    "alreadyLinked": "This {provider} account is already linked to another user"
+    "alreadyLinked": "This {provider} account is already linked to another user",
+    "account": {
+      "title": "Account Settings",
+      "deleteAccount": "Delete Account",
+      "deleteWarning": "This action will schedule your account for deletion. You have 30 days to cancel before your data is permanently removed.",
+      "confirmEmail": "Type your email to confirm",
+      "deleteButton": "Delete My Account",
+      "cancel": "Cancel",
+      "deletionScheduled": "Your account is scheduled for deletion on {date}.",
+      "cancelDeletion": "Cancel Deletion",
+      "cancelDeletionSuccess": "Account deletion cancelled successfully.",
+      "userInfo": "Account Information",
+      "email": "Email",
+      "name": "Name",
+      "provider": "Sign-in Method"
+    }
   }
 }

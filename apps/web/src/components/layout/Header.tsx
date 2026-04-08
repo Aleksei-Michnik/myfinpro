@@ -44,6 +44,12 @@ export function Header() {
                 {t('nav.dashboard')}
               </Link>
               <Link
+                href="/settings/account"
+                className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                {t('nav.settings')}
+              </Link>
+              <Link
                 href="/settings/connected-accounts"
                 className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >

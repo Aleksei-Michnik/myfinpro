@@ -31,6 +31,8 @@ function TestConsumer() {
     register,
     logout,
     getAccessToken,
+    deleteAccount,
+    cancelDeletion,
   } = useAuth();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -66,6 +68,16 @@ function TestConsumer() {
         Register
       </button>
       <button onClick={() => logout()}>Logout</button>
+      <button
+        onClick={() =>
+          deleteAccount('test@example.com').catch((err: Error) => setError(err.message))
+        }
+      >
+        DeleteAccount
+      </button>
+      <button onClick={() => cancelDeletion().catch((err: Error) => setError(err.message))}>
+        CancelDeletion
+      </button>
     </div>
   );
 }
@@ -412,6 +424,160 @@ describe('AuthContext', () => {
       });
       expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
       expect(screen.getByTestId('token')).toHaveTextContent('null');
+    });
+  });
+
+  describe('deleteAccount', () => {
+    it('calls delete-account API then logs out', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock delete-account success
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ message: 'Account scheduled for deletion' }),
+      });
+      // Mock logout call
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      await act(async () => {
+        screen.getByText('DeleteAccount').click();
+      });
+
+      // Verify delete-account was called
+      const deleteCall = mockFetch.mock.calls[1];
+      expect(deleteCall[0]).toContain('/auth/delete-account');
+      expect(deleteCall[1]).toMatchObject({
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      // Should be logged out after deletion
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      expect(screen.getByTestId('user')).toHaveTextContent('null');
+    });
+
+    it('throws on API error', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock delete-account failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ message: 'Email does not match' }),
+      });
+
+      await act(async () => {
+        screen.getByText('DeleteAccount').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent('Email does not match');
+      });
+    });
+  });
+
+  describe('cancelDeletion', () => {
+    it('calls cancel-deletion API then refreshes user', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock cancel-deletion success
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ message: 'Account deletion cancelled' }),
+      });
+      // Mock refreshUser /auth/me call
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockUser),
+      });
+
+      await act(async () => {
+        screen.getByText('CancelDeletion').click();
+      });
+
+      // Verify cancel-deletion was called
+      const cancelCall = mockFetch.mock.calls[1];
+      expect(cancelCall[0]).toContain('/auth/cancel-deletion');
+      expect(cancelCall[1]).toMatchObject({
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      // User should still be authenticated
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    });
+
+    it('throws on API error', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock cancel-deletion failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ message: 'No pending deletion' }),
+      });
+
+      await act(async () => {
+        screen.getByText('CancelDeletion').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent('No pending deletion');
+      });
     });
   });
 });
