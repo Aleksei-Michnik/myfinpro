@@ -1431,6 +1431,39 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 > **Detailed design**: See [`docs/phase-4-design.md`](phase-4-design.md) for the full Phase 4 design document.
 
+### Iteration 4.7.1: Consolidate Connected Accounts into Account Settings (2026-04-08)
+
+**What was implemented:**
+
+- Moved `ConnectedAccounts` component from its separate page (`/settings/connected-accounts`) into the Account Settings page (`/settings/account`)
+- Connected Accounts now renders as a section between "Account Information" and "Delete Account" with consistent card styling
+- Removed the separate `/settings/connected-accounts` page
+- Removed "Connected Accounts" nav link from the Header — only "Settings" link remains
+- Updated Header tests to verify the connected accounts link is no longer present
+- Added test for ConnectedAccounts section rendering on the account settings page
+
+**Key files changed:**
+
+- [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/[locale]/settings/account/page.tsx) — Added ConnectedAccounts section
+- [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) — Removed Connected Accounts nav link
+- Deleted `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx`
+
+**Tests updated:**
+
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Updated test: verifies no separate connected accounts link (19 tests)
+- [`apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — Added test for connected accounts section (8 tests)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 314     | Jest                     |
+| Web Unit Tests | 236     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **596** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
