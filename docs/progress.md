@@ -1504,6 +1504,56 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 **Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
 
+### Iteration 4.8: Account Deletion Scheduler (2026-04-08)
+
+**What was implemented:**
+
+- Installed [`@nestjs/schedule@6.1.1`](../apps/api/package.json) (latest) for cron job support
+- Upgraded `@nestjs/common` and `@nestjs/core` to `11.1.18` (latest)
+- Registered [`ScheduleModule.forRoot()`](../apps/api/src/app.module.ts:22) in AppModule
+- Created [`AccountCleanupService`](../apps/api/src/auth/services/account-cleanup.service.ts) with:
+  - Daily cron job at 3:00 AM (`@Cron(CronExpression.EVERY_DAY_AT_3AM)`)
+  - Finds users where `deletedAt` is older than 30 days (grace period expired)
+  - Transaction-based hard deletion of all related records: `OAuthProvider`, `RefreshToken`, `EmailVerificationToken`, `PasswordResetToken`, then `User`
+  - Graceful error handling — catches and logs errors without crashing
+  - Structured logging with account IDs for audit trail
+- Registered `AccountCleanupService` in [`AuthModule`](../apps/api/src/auth/auth.module.ts:49) as a provider
+
+**Key files created/modified:**
+
+- [`apps/api/src/auth/services/account-cleanup.service.ts`](../apps/api/src/auth/services/account-cleanup.service.ts) — New scheduled cleanup service
+- [`apps/api/src/auth/services/account-cleanup.service.spec.ts`](../apps/api/src/auth/services/account-cleanup.service.spec.ts) — 11 comprehensive tests
+- [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) — Added `ScheduleModule.forRoot()`
+- [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts) — Registered `AccountCleanupService`
+- [`apps/api/package.json`](../apps/api/package.json) — Added `@nestjs/schedule`, upgraded NestJS packages
+
+**Tests added:**
+
+- [`apps/api/src/auth/services/account-cleanup.service.spec.ts`](../apps/api/src/auth/services/account-cleanup.service.spec.ts) — 11 tests:
+  - Skip cleanup when no expired accounts found
+  - Find and delete accounts older than 30 days
+  - Delete related records in correct order within transaction
+  - Pass correct user IDs to delete operations
+  - NOT delete recently soft-deleted accounts (within 30-day window)
+  - Handle database errors gracefully without crashing
+  - Handle transaction errors gracefully without crashing
+  - Use correct cutoff date (30 days ago)
+  - Handle single expired account correctly
+  - Handle non-Error objects in catch block
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 243     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **621** |                          |
+
+**CI Run:** `24150900153` ✅ | **Deploy Staging Run:** `24150900162` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
