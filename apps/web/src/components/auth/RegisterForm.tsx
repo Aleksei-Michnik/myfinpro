@@ -17,6 +17,7 @@ interface FieldErrors {
   email?: string;
   password?: string;
   confirmPassword?: string;
+  consent?: string;
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,6 +31,7 @@ export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [generalError, setGeneralError] = useState('');
@@ -86,6 +88,7 @@ export function RegisterForm() {
       email: validateField('email', email),
       password: validateField('password', password),
       confirmPassword: validateField('confirmPassword', confirmPassword),
+      consent: consent ? undefined : t('consentRequired'),
     };
   }
 
@@ -102,7 +105,7 @@ export function RegisterForm() {
 
     const fieldErrors = validateAll();
     setErrors(fieldErrors);
-    setTouched({ name: true, email: true, password: true, confirmPassword: true });
+    setTouched({ name: true, email: true, password: true, confirmPassword: true, consent: true });
 
     const hasErrors = Object.values(fieldErrors).some(Boolean);
     if (hasErrors) return;
@@ -121,6 +124,7 @@ export function RegisterForm() {
   };
 
   const isFormEmpty = !name && !email && !password && !confirmPassword;
+  const isFormDisabled = isLoading || isFormEmpty || !consent;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -186,12 +190,53 @@ export function RegisterForm() {
         disabled={isLoading}
       />
 
+      <div>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => {
+              setConsent(e.target.checked);
+              if (e.target.checked) {
+                setErrors((prev) => ({ ...prev, consent: undefined }));
+              }
+            }}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+            disabled={isLoading}
+            data-testid="consent-checkbox"
+          />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {t.rich('consentLabel', {
+              terms: (chunks) => (
+                <Link
+                  href="/legal/terms"
+                  className="text-primary-600 hover:text-primary-500 underline"
+                >
+                  {chunks}
+                </Link>
+              ),
+              privacy: (chunks) => (
+                <Link
+                  href="/legal/privacy"
+                  className="text-primary-600 hover:text-primary-500 underline"
+                >
+                  {chunks}
+                </Link>
+              ),
+            })}
+          </span>
+        </label>
+        {touched.consent && errors.consent && (
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.consent}</p>
+        )}
+      </div>
+
       <Button
         type="submit"
         variant="primary"
         size="lg"
         className="w-full"
-        disabled={isLoading || isFormEmpty}
+        disabled={isFormDisabled}
       >
         {isLoading ? t('signingUp') : t('signUp')}
       </Button>

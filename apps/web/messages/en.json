@@ -104,7 +104,9 @@
     "resetPasswordUsed": "This reset link has already been used.",
     "requestNewLink": "Request a new link",
     "backToSignIn": "Back to Sign In",
-    "goToSignIn": "Go to Sign In"
+    "goToSignIn": "Go to Sign In",
+    "consentLabel": "I agree to the <terms>Terms of Use</terms> and <privacy>Privacy Policy</privacy>",
+    "consentRequired": "You must agree to the Terms of Use and Privacy Policy"
   },
   "toast": {
     "dismiss": "Dismiss"
@@ -315,6 +317,12 @@
         "title": "Contact & Support",
         "content": "If you need assistance or have questions, please reach out to our support team at support@myfinpro.com. We aim to respond within 24 hours."
       }
+    },
+    "footer": {
+      "terms": "Terms of Use",
+      "privacy": "Privacy Policy",
+      "help": "Help",
+      "copyright": "© {year} MyFinPro. All rights reserved."
     }
   }
 }

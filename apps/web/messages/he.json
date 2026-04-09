@@ -104,7 +104,9 @@
     "resetPasswordUsed": "קישור האיפוס הזה כבר נוצל.",
     "requestNewLink": "בקש קישור חדש",
     "backToSignIn": "חזרה להתחברות",
-    "goToSignIn": "עבור להתחברות"
+    "goToSignIn": "עבור להתחברות",
+    "consentLabel": "אני מסכים/ה ל<terms>תנאי השימוש</terms> ול<privacy>מדיניות הפרטיות</privacy>",
+    "consentRequired": "יש להסכים לתנאי השימוש ומדיניות הפרטיות"
   },
   "toast": {
     "dismiss": "סגור"
@@ -315,6 +317,12 @@
         "title": "יצירת קשר ותמיכה",
         "content": "אם אתם זקוקים לסיוע או שיש לכם שאלות, אנא פנו לצוות התמיכה שלנו בכתובת support@myfinpro.com. אנו שואפים להשיב תוך 24 שעות."
       }
+    },
+    "footer": {
+      "terms": "תנאי שימוש",
+      "privacy": "מדיניות פרטיות",
+      "help": "עזרה",
+      "copyright": "© {year} MyFinPro. כל הזכויות שמורות."
     }
   }
 }

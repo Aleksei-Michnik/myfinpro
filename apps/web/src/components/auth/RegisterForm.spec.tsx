@@ -10,7 +10,18 @@ const originalLocation = window.location;
 
 // Mock next-intl
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => {
+    const t = (key: string) => key;
+    t.rich = (key: string, renderers?: Record<string, (chunks: unknown) => unknown>) => {
+      if (!renderers) return key;
+      const parts: unknown[] = [key];
+      for (const [tag, renderer] of Object.entries(renderers)) {
+        parts.push(renderer(tag));
+      }
+      return parts;
+    };
+    return t;
+  },
 }));
 
 // Mock @/i18n/navigation (Link, useRouter, etc.)
@@ -119,12 +130,13 @@ describe('RegisterForm', () => {
     expect(button).toBeDisabled();
   });
 
-  it('submit button is enabled when all fields have values', () => {
+  it('submit button is enabled when all fields have values and consent is checked', () => {
     render(<RegisterForm />);
     fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
     fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
     fireEvent.change(screen.getByLabelText('confirmPassword'), { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByTestId('consent-checkbox'));
     const button = screen.getByRole('button', { name: 'signUp' });
     expect(button).toBeEnabled();
   });
@@ -189,6 +201,7 @@ describe('RegisterForm', () => {
     fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
     fireEvent.change(screen.getByLabelText('confirmPassword'), { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByTestId('consent-checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'signUp' }));
 
     await waitFor(() => {
@@ -213,6 +226,7 @@ describe('RegisterForm', () => {
     fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
     fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
     fireEvent.change(screen.getByLabelText('confirmPassword'), { target: { value: 'Password1' } });
+    fireEvent.click(screen.getByTestId('consent-checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'signUp' }));
 
     await waitFor(() => {
@@ -239,5 +253,80 @@ describe('RegisterForm', () => {
   it('renders "or sign up with" divider text', () => {
     render(<RegisterForm />);
     expect(screen.getByText('orSignUpWith')).toBeInTheDocument();
+  });
+
+  describe('consent checkbox', () => {
+    it('renders consent checkbox', () => {
+      render(<RegisterForm />);
+      const checkbox = screen.getByTestId('consent-checkbox');
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it('submit button is disabled when consent is not checked', () => {
+      render(<RegisterForm />);
+      fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
+      fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
+      fireEvent.change(screen.getByLabelText('confirmPassword'), {
+        target: { value: 'Password1' },
+      });
+      const button = screen.getByRole('button', { name: 'signUp' });
+      expect(button).toBeDisabled();
+    });
+
+    it('submit button is enabled when all fields filled and consent is checked', () => {
+      render(<RegisterForm />);
+      fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
+      fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
+      fireEvent.change(screen.getByLabelText('confirmPassword'), {
+        target: { value: 'Password1' },
+      });
+      fireEvent.click(screen.getByTestId('consent-checkbox'));
+      const button = screen.getByRole('button', { name: 'signUp' });
+      expect(button).toBeEnabled();
+    });
+
+    it('submits successfully when consent is checked', async () => {
+      mockRegister.mockResolvedValueOnce(undefined);
+
+      render(<RegisterForm />);
+
+      fireEvent.change(screen.getByLabelText('name'), { target: { value: 'Test User' } });
+      fireEvent.change(screen.getByLabelText('email'), { target: { value: 'test@example.com' } });
+      fireEvent.change(screen.getByLabelText('password'), { target: { value: 'Password1' } });
+      fireEvent.change(screen.getByLabelText('confirmPassword'), {
+        target: { value: 'Password1' },
+      });
+      fireEvent.click(screen.getByTestId('consent-checkbox'));
+      fireEvent.click(screen.getByRole('button', { name: 'signUp' }));
+
+      await waitFor(() => {
+        expect(mockRegister).toHaveBeenCalledWith({
+          email: 'test@example.com',
+          password: 'Password1',
+          name: 'Test User',
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/dashboard');
+      });
+    });
+
+    it('consent links point to correct URLs', () => {
+      render(<RegisterForm />);
+      const links = screen
+        .getAllByRole('link')
+        .filter(
+          (link) =>
+            link.getAttribute('href') === '/legal/terms' ||
+            link.getAttribute('href') === '/legal/privacy',
+        );
+      expect(links.length).toBeGreaterThanOrEqual(2);
+      expect(links.some((l) => l.getAttribute('href') === '/legal/terms')).toBe(true);
+      expect(links.some((l) => l.getAttribute('href') === '/legal/privacy')).toBe(true);
+    });
   });
 });
