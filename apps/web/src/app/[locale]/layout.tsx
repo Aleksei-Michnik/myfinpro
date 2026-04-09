@@ -39,21 +39,19 @@ export default async function LocaleLayout({ children, params }: Props) {
 
   const dir = RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr';
 
-  return (
-    <html lang={locale} dir={dir}>
-      <body>
-        <NextIntlClientProvider messages={messages}>
-          <AuthProvider>
-            <ToastProvider>
-              <Header />
-              <VerificationBanner />
-              <ErrorBoundary>{children}</ErrorBoundary>
-              <Footer />
-              <ToastContainer />
-            </ToastProvider>
-          </AuthProvider>
-        </NextIntlClientProvider>
-      </body>
-    </html>
-  );
+  return <html lang={locale} dir={dir}>
+    <body>
+      <NextIntlClientProvider messages={messages}>
+        <AuthProvider>
+          <ToastProvider>
+            <Header />
+            <VerificationBanner />
+            <ErrorBoundary>{children}</ErrorBoundary>
+            <Footer />
+            <ToastContainer />
+          </ToastProvider>
+        </AuthProvider>
+      </NextIntlClientProvider>
+    </body>
+  </html>;
 }

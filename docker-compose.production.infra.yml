@@ -75,12 +75,49 @@ services:
         max-size: '10m'
         max-file: '5'
 
+  # ───── Haraka SMTP Server ─────
+  haraka:
+    build:
+      context: ./infrastructure/haraka
+      dockerfile: Dockerfile
+    container_name: myfinpro-prod-haraka
+    restart: unless-stopped
+    environment:
+      HARAKA_MAIL_DOMAIN: ${HARAKA_MAIL_DOMAIN}
+      HARAKA_MAIL_HOSTNAME: ${HARAKA_MAIL_HOSTNAME}
+    volumes:
+      - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
+      - myfinpro-production-haraka-queue:/opt/haraka/queue
+    networks:
+      - myfinpro-production-net
+    healthcheck:
+      test: ['CMD', 'nc', '-z', 'localhost', '25']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
 volumes:
   myfinpro-production-mysql:
     name: myfinpro-production-mysql
     driver: local
   myfinpro-production-redis:
     name: myfinpro-production-redis
+    driver: local
+  myfinpro-production-haraka-queue:
+    name: myfinpro-production-haraka-queue
     driver: local
 
 networks:

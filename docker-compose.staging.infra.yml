@@ -51,12 +51,37 @@ services:
       retries: 5
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
 
+  # ───── Haraka SMTP Server ─────
+  haraka:
+    build:
+      context: ./infrastructure/haraka
+      dockerfile: Dockerfile
+    container_name: myfinpro-staging-haraka
+    restart: unless-stopped
+    environment:
+      HARAKA_MAIL_DOMAIN: ${HARAKA_MAIL_DOMAIN}
+      HARAKA_MAIL_HOSTNAME: ${HARAKA_MAIL_HOSTNAME}
+    volumes:
+      - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
+      - myfinpro-staging-haraka-queue:/opt/haraka/queue
+    networks:
+      - myfinpro-staging-net
+    healthcheck:
+      test: ['CMD', 'nc', '-z', 'localhost', '25']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   myfinpro-staging-mysql:
     name: myfinpro-staging-mysql
     driver: local
   myfinpro-staging-redis:
     name: myfinpro-staging-redis
+    driver: local
+  myfinpro-staging-haraka-queue:
+    name: myfinpro-staging-haraka-queue
     driver: local
 
 networks:

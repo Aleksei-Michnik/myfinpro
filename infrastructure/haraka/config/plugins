@@ -1,0 +1,11 @@
+# ── Logging ──
+# syslog writes to stdout, captured by Docker
+syslog
+
+# ── DKIM Signing ──
+# Sign all outbound emails with DKIM
+dkim_sign
+
+# ── Outbound Delivery ──
+# Queue and deliver to recipient MX servers
+queue/outbound
