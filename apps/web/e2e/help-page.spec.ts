@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Help Page', () => {
+  test('Help page renders guide title', async ({ page }) => {
+    await page.goto('/en/help');
+    await expect(page.getByRole('heading', { name: 'How to Use MyFinPro' })).toBeVisible();
+  });
+
+  test('Help page has section headings', async ({ page }) => {
+    await page.goto('/en/help');
+    // The help page should contain multiple section headings
+    const headings = page.locator('h2, h3');
+    const count = await headings.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+
+  test('Help page content is non-empty', async ({ page }) => {
+    await page.goto('/en/help');
+    const main = page.locator('main');
+    const text = await main.textContent();
+    expect(text && text.length > 100).toBeTruthy();
+  });
+
+  test('Hebrew help page renders RTL guide title', async ({ page }) => {
+    await page.goto('/he/help');
+    const heading = page.getByRole('heading', { name: 'איך להשתמש ב-MyFinPro' });
+    await expect(heading).toBeVisible();
+  });
+
+  test('Hebrew help page has section headings', async ({ page }) => {
+    await page.goto('/he/help');
+    const headings = page.locator('h2, h3');
+    const count = await headings.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+});

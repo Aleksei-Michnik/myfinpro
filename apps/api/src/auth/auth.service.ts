@@ -11,7 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
+import { AccountDeletionService } from './services/account-deletion.service';
+import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
@@ -43,6 +46,8 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly oauthService: OAuthService,
+    private readonly emailVerificationService: EmailVerificationService,
+    private readonly accountDeletionService: AccountDeletionService,
   ) {}
 
   async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
@@ -103,6 +108,21 @@ export class AuthService {
     // Set refresh token as httpOnly cookie
     this.tokenService.setRefreshTokenCookie(response, refreshToken);
 
+    // Fire-and-forget: send verification email (don't let failure break registration)
+    try {
+      this.emailVerificationService
+        .createAndSendVerification(user.id, user.email, user.name, user.locale || 'en')
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to send verification email for user ${user.id}: ${(err as Error).message}`,
+          );
+        });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to initiate verification email for user ${user.id}: ${(err as Error).message}`,
+      );
+    }
+
     return {
       user: {
         id: user.id,
@@ -110,6 +130,8 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -127,8 +149,25 @@ export class AuthService {
       return null;
     }
 
-    // Check if account is active
+    // Check if account is active — with login-based reactivation for soft-deleted accounts
     if (!user.isActive) {
+      // If within grace period, attempt reactivation
+      if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+        // Verify password first before reactivating
+        const isPasswordValid = await this.passwordService.verify(user.passwordHash, password);
+        if (!isPasswordValid) return null;
+        const reactivated = await this.accountDeletionService.reactivateOnLogin(user.id);
+        if (reactivated) {
+          // Fetch fresh user data after reactivation
+          const freshUser = await this.prisma.user.findUnique({
+            where: { id: user.id },
+          });
+          if (!freshUser) return null;
+          const { passwordHash: _ph, ...result } = freshUser;
+          return result;
+        }
+      }
+      // Truly disabled account or reactivation failed
       return null;
     }
 
@@ -196,6 +235,8 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -236,6 +277,8 @@ export class AuthService {
         name: user.name,
         defaultCurrency: user.defaultCurrency,
         locale: user.locale,
+        timezone: user.timezone,
+        emailVerified: user.emailVerified,
       },
       accessToken,
     };
@@ -280,6 +323,15 @@ export class AuthService {
         });
       }
       if (!user.isActive) {
+        // Attempt login-based reactivation for soft-deleted accounts
+        if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+          await this.accountDeletionService.reactivateOnLogin(user.id);
+          const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+          if (freshUser && freshUser.isActive) {
+            const { passwordHash, ...result } = freshUser;
+            return result;
+          }
+        }
         throw new UnauthorizedException({
           message: 'Account is inactive',
           errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
@@ -297,6 +349,23 @@ export class AuthService {
 
       if (existingUser) {
         if (!existingUser.isActive) {
+          // Attempt login-based reactivation for soft-deleted accounts
+          if (existingUser.scheduledDeletionAt && existingUser.scheduledDeletionAt > new Date()) {
+            await this.accountDeletionService.reactivateOnLogin(existingUser.id);
+            const freshUser = await this.prisma.user.findUnique({
+              where: { id: existingUser.id },
+            });
+            if (freshUser && freshUser.isActive) {
+              // Link Google to the reactivated user
+              await this.oauthService.linkToUser('google', googleId, freshUser.id, {
+                email,
+                name,
+                avatarUrl: picture,
+              });
+              const { passwordHash, ...result } = freshUser;
+              return result;
+            }
+          }
           throw new UnauthorizedException({
             message: 'Account is inactive',
             errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
@@ -384,6 +453,15 @@ export class AuthService {
         });
       }
       if (!user.isActive) {
+        // Attempt login-based reactivation for soft-deleted accounts
+        if (user.scheduledDeletionAt && user.scheduledDeletionAt > new Date()) {
+          await this.accountDeletionService.reactivateOnLogin(user.id);
+          const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+          if (freshUser && freshUser.isActive) {
+            const { passwordHash, ...result } = freshUser;
+            return result;
+          }
+        }
         throw new UnauthorizedException({
           message: 'Account is inactive',
           errorCode: AUTH_ERRORS.OAUTH_ACCOUNT_INACTIVE,
@@ -442,6 +520,23 @@ export class AuthService {
     return userWithoutPassword;
   }
 
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const data: Record<string, string> = {};
+    if (dto.defaultCurrency) data.defaultCurrency = dto.defaultCurrency;
+    if (dto.timezone) data.timezone = dto.timezone;
+
+    if (Object.keys(data).length === 0) {
+      return this.getUser(userId);
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+
+    return this.getUser(userId);
+  }
+
   async getUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -452,6 +547,7 @@ export class AuthService {
         defaultCurrency: true,
         locale: true,
         timezone: true,
+        emailVerified: true,
       },
     });
     if (!user) {

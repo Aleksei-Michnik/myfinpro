@@ -4,6 +4,10 @@ export interface User {
   name: string;
   defaultCurrency: string;
   locale: string;
+  timezone: string;
+  emailVerified: boolean;
+  deletedAt: string | null;
+  scheduledDeletionAt: string | null;
 }
 
 export interface AuthState {

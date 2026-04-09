@@ -8,7 +8,7 @@ let mockAccessToken: string | null = 'mock-token';
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({
     accessToken: mockAccessToken,
-    user: { name: 'Test User' },
+    user: { name: 'Test User', emailVerified: true },
     isAuthenticated: true,
     isLoading: false,
     login: vi.fn(),
@@ -17,6 +17,8 @@ vi.mock('@/lib/auth/auth-context', () => ({
     register: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => mockAccessToken,
+    resendVerificationEmail: vi.fn(),
+    refreshUser: vi.fn(),
   }),
 }));
 

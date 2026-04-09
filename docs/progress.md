@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-03
-> **Current Phase:** Phase 4 — Auth Completion & Legal Pages ⬜ Not Started
+> **Last updated:** 2026-04-09
+> **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
 > **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
 ---
@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 0/12       | ⬜ Not Started | —               |
+| 4     | Auth Completion & Legal Pages | 13/15      | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 140 | **Completed:** 29 | **Remaining:** 111
+**Total iterations:** 143 | **Completed:** 42 | **Remaining:** 101
 
 ---
 
@@ -1360,24 +1360,419 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 3.3       | Backend — Connected Accounts API + HMAC-SHA256 rewrite + bug fixes  | ✅ Complete |
 | 3.4       | Connected Accounts UI + integration tests + progress update         | ✅ Complete |
 
-### Phase 4: Auth Completion & Legal Pages (Next)
+### Phase 4: Auth Completion & Legal Pages (In Progress)
 
-| Iteration | Objective                     | Status         |
-| --------- | ----------------------------- | -------------- |
-| 4.1       | Email service infrastructure  | ⬜ Not Started |
-| 4.2       | Email confirmation — backend  | ⬜ Not Started |
-| 4.3       | Email confirmation — frontend | ⬜ Not Started |
-| 4.4       | Password reset — backend      | ⬜ Not Started |
-| 4.5       | Password reset — frontend     | ⬜ Not Started |
-| 4.6       | Delete account — backend      | ⬜ Not Started |
-| 4.7       | Delete account — frontend     | ⬜ Not Started |
-| 4.8       | Account deletion scheduler    | ⬜ Not Started |
-| 4.9       | Terms of Use + Privacy Policy | ⬜ Not Started |
-| 4.10      | How-to Guide                  | ⬜ Not Started |
-| 4.11      | Consent + footer              | ⬜ Not Started |
-| 4.12      | Integration + E2E tests       | ⬜ Not Started |
+| Iteration | Objective                                    | Status         |
+| --------- | -------------------------------------------- | -------------- |
+| 4.1       | Email service infrastructure                 | ✅ Complete    |
+| 4.2       | Email confirmation — backend                 | ✅ Complete    |
+| 4.3       | Email confirmation — frontend                | ✅ Complete    |
+| 4.4       | Password reset — backend                     | ✅ Complete    |
+| 4.5       | Password reset — frontend                    | ✅ Complete    |
+| 4.6       | Delete account — backend                     | ✅ Complete    |
+| 4.7       | Delete account — frontend                    | ✅ Complete    |
+| 4.7.1     | Consolidate connected accounts into settings | ✅ Complete    |
+| 4.7.2     | Currency & timezone settings                 | ✅ Complete    |
+| 4.8       | Account deletion scheduler                   | ✅ Complete    |
+| 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
+| 4.10      | How-to Guide                                 | ✅ Complete    |
+| 4.11      | Consent + footer                             | ✅ Complete    |
+| 4.12      | Integration + E2E tests                      | ⬜ Not Started |
+| 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
+
+### Iteration 4.7: Delete Account — Frontend (2026-04-08)
+
+**What was implemented:**
+
+- Updated `User` type with `deletedAt` and `scheduledDeletionAt` nullable string fields
+- Added `deleteAccount(email)` and `cancelDeletion()` methods to auth context
+  - `deleteAccount` calls `POST /auth/delete-account` then logs out
+  - `cancelDeletion` calls `POST /auth/cancel-deletion` then refreshes user
+- Created Account Settings page at `/settings/account` (protected route)
+  - Shows user info (email, name, sign-in method)
+  - "Delete Account" button opens deletion confirmation dialog
+  - Shows DeletionBanner when account has `scheduledDeletionAt` set
+- Created `DeleteAccountDialog` component
+  - Modal overlay with warning text about 30-day grace period
+  - Email confirmation input — user must type their email to enable deletion
+  - Loading state and error display during API call
+- Created `DeletionBanner` component
+  - Red warning banner shown when `scheduledDeletionAt` is set
+  - Shows formatted deletion date with "Cancel Deletion" button
+  - Loading state during cancellation API call
+- Updated Dashboard page to show `DeletionBanner` at top when deletion is scheduled
+- Added "Settings" navigation link to Header (visible when authenticated)
+- Added i18n translations for `settings.account.*` namespace (13 keys in en + he)
+
+**Key files created:**
+
+- [`apps/web/src/components/auth/DeleteAccountDialog.tsx`](../apps/web/src/components/auth/DeleteAccountDialog.tsx) — Delete account confirmation dialog
+- [`apps/web/src/components/auth/DeletionBanner.tsx`](../apps/web/src/components/auth/DeletionBanner.tsx) — Scheduled deletion warning banner
+- [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/[locale]/settings/account/page.tsx) — Account settings page
+
+**Tests added:**
+
+- [`apps/web/src/components/auth/DeleteAccountDialog.spec.tsx`](../apps/web/src/components/auth/DeleteAccountDialog.spec.tsx) — 9 tests (rendering, email validation, submit, error handling, loading state)
+- [`apps/web/src/components/auth/DeletionBanner.spec.tsx`](../apps/web/src/components/auth/DeletionBanner.spec.tsx) — 7 tests (rendering, date display, cancel flow, loading)
+- [`apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — 7 tests (page rendering, user info, delete button, banner display)
+- Updated [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — 4 new tests for `deleteAccount` and `cancelDeletion`
+- Updated [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — 1 new test for Settings link
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 314     | Jest                     |
+| Web Unit Tests | 235     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **595** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
 
 > **Detailed design**: See [`docs/phase-4-design.md`](phase-4-design.md) for the full Phase 4 design document.
+
+### Iteration 4.7.1: Consolidate Connected Accounts into Account Settings (2026-04-08)
+
+**What was implemented:**
+
+- Moved `ConnectedAccounts` component from its separate page (`/settings/connected-accounts`) into the Account Settings page (`/settings/account`)
+- Connected Accounts now renders as a section between "Account Information" and "Delete Account" with consistent card styling
+- Removed the separate `/settings/connected-accounts` page
+- Removed "Connected Accounts" nav link from the Header — only "Settings" link remains
+- Updated Header tests to verify the connected accounts link is no longer present
+- Added test for ConnectedAccounts section rendering on the account settings page
+
+**Key files changed:**
+
+- [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/[locale]/settings/account/page.tsx) — Added ConnectedAccounts section
+- [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) — Removed Connected Accounts nav link
+- Deleted `apps/web/src/app/[locale]/settings/connected-accounts/page.tsx`
+
+**Tests updated:**
+
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Updated test: verifies no separate connected accounts link (19 tests)
+- [`apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — Added test for connected accounts section (8 tests)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 314     | Jest                     |
+| Web Unit Tests | 236     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **596** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+### Iteration 4.7.2: Currency & Timezone Settings (2026-04-08)
+
+**What was implemented:**
+
+**Backend:**
+
+- Created [`UpdateProfileDto`](../apps/api/src/auth/dto/update-profile.dto.ts) with validation for currency (from `CURRENCY_CODES`) and timezone (string)
+- Added `PATCH /auth/profile` endpoint to [`auth.controller.ts`](../apps/api/src/auth/auth.controller.ts:173) — updates user preferences (currency, timezone)
+- Added [`updateProfile()`](../apps/api/src/auth/auth.service.ts:520) method to AuthService — conditionally updates fields, returns fresh user data via `getUser()`
+- Added `timezone` field to login, register, and refresh token response objects across all three methods in AuthService
+
+**Frontend:**
+
+- Added `timezone` field to [`User`](../apps/web/src/lib/auth/types.ts:7) type
+- Added [`updateProfile()`](../apps/web/src/lib/auth/auth-context.tsx:232) method to auth context — calls `PATCH /auth/profile` and updates user state
+- Added Preferences section to [`AccountSettingsPage`](../apps/web/src/app/[locale]/settings/account/page.tsx:85) with:
+  - Currency dropdown populated from `@myfinpro/shared` `CURRENCIES` registry (10 currencies)
+  - Timezone dropdown populated from `Intl.supportedValuesOf('timeZone')` with UTC fallback
+  - Save button with loading state
+  - Success/error toast notifications
+- Added i18n translations (6 keys each in [`en.json`](../apps/web/messages/en.json:144) and [`he.json`](../apps/web/messages/he.json:144))
+
+**Tests added:**
+
+- [`auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) — 4 new tests for `updateProfile()` (currency, timezone, both, empty DTO) + updated login/refresh response assertions to include `timezone`
+- [`auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — 3 new tests for `PATCH /auth/profile` endpoint (update, empty body, rate limiting metadata)
+- [`auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — 2 new tests for `updateProfile()` (success + API error)
+- [`account-settings.spec.tsx`](../apps/web/src/app/[locale]/settings/account/account-settings.spec.tsx) — 3 new tests (preferences section rendering, save button, success/error toasts)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 321     | Jest                     |
+| Web Unit Tests | 243     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **610** |                          |
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+### Iteration 4.8: Account Deletion Scheduler (2026-04-08)
+
+**What was implemented:**
+
+- Installed [`@nestjs/schedule@6.1.1`](../apps/api/package.json) (latest) for cron job support
+- Upgraded `@nestjs/common` and `@nestjs/core` to `11.1.18` (latest)
+- Registered [`ScheduleModule.forRoot()`](../apps/api/src/app.module.ts:22) in AppModule
+- Created [`AccountCleanupService`](../apps/api/src/auth/services/account-cleanup.service.ts) with:
+  - Daily cron job at 3:00 AM (`@Cron(CronExpression.EVERY_DAY_AT_3AM)`)
+  - Finds users where `deletedAt` is older than 30 days (grace period expired)
+  - Transaction-based hard deletion of all related records: `OAuthProvider`, `RefreshToken`, `EmailVerificationToken`, `PasswordResetToken`, then `User`
+  - Graceful error handling — catches and logs errors without crashing
+  - Structured logging with account IDs for audit trail
+- Registered `AccountCleanupService` in [`AuthModule`](../apps/api/src/auth/auth.module.ts:49) as a provider
+
+**Key files created/modified:**
+
+- [`apps/api/src/auth/services/account-cleanup.service.ts`](../apps/api/src/auth/services/account-cleanup.service.ts) — New scheduled cleanup service
+- [`apps/api/src/auth/services/account-cleanup.service.spec.ts`](../apps/api/src/auth/services/account-cleanup.service.spec.ts) — 11 comprehensive tests
+- [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) — Added `ScheduleModule.forRoot()`
+- [`apps/api/src/auth/auth.module.ts`](../apps/api/src/auth/auth.module.ts) — Registered `AccountCleanupService`
+- [`apps/api/package.json`](../apps/api/package.json) — Added `@nestjs/schedule`, upgraded NestJS packages
+
+**Tests added:**
+
+- [`apps/api/src/auth/services/account-cleanup.service.spec.ts`](../apps/api/src/auth/services/account-cleanup.service.spec.ts) — 11 tests:
+  - Skip cleanup when no expired accounts found
+  - Find and delete accounts older than 30 days
+  - Delete related records in correct order within transaction
+  - Pass correct user IDs to delete operations
+  - NOT delete recently soft-deleted accounts (within 30-day window)
+  - Handle database errors gracefully without crashing
+  - Handle transaction errors gracefully without crashing
+  - Use correct cutoff date (30 days ago)
+  - Handle single expired account correctly
+  - Handle non-Error objects in catch block
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 243     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **621** |                          |
+
+**CI Run:** `24150900153` ✅ | **Deploy Staging Run:** `24150900162` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+### Iteration 4.9: Terms of Use + Privacy Policy Pages (2026-04-08)
+
+**What was implemented:**
+
+- Created `/legal/terms` route — server component page with structured Terms of Use content
+- Created `/legal/privacy` route — server component page with structured Privacy Policy content
+- Both pages use `getTranslations` from `next-intl/server` (async server components)
+- Created [`LegalLayout`](../apps/web/src/app/[locale]/legal/layout.tsx) wrapper with consistent padding and max-width
+- Content styled with manual Tailwind classes (no `@tailwindcss/typography` — Tailwind v4)
+- Cross-links between Terms and Privacy pages using `next-intl` rich text with `Link` component
+- "Back to Home" link on both pages
+- Full bilingual content (English + Hebrew) covering all required legal sections
+- RTL support inherited from locale layout
+
+**Terms of Use sections:** Acceptance of Terms, Description of Service, Account Registration & Security, User Responsibilities, Data & Content Ownership, Limitation of Liability, Modifications to Terms, Contact Information
+
+**Privacy Policy sections:** Information We Collect, How We Use Your Information, Data Storage & Security, Third-Party Services (Google OAuth, Telegram Login), Cookies & Local Storage (JWT handling), Data Retention & Deletion (30-day grace period), Your Rights, Children's Privacy, Changes to Privacy Policy, Contact Information
+
+**Key files created:**
+
+- [`apps/web/src/app/[locale]/legal/layout.tsx`](../apps/web/src/app/[locale]/legal/layout.tsx) — Legal pages layout wrapper
+- [`apps/web/src/app/[locale]/legal/terms/page.tsx`](../apps/web/src/app/[locale]/legal/terms/page.tsx) — Terms of Use page (server component)
+- [`apps/web/src/app/[locale]/legal/privacy/page.tsx`](../apps/web/src/app/[locale]/legal/privacy/page.tsx) — Privacy Policy page (server component)
+- [`apps/web/src/app/[locale]/legal/terms/terms.spec.tsx`](../apps/web/src/app/[locale]/legal/terms/terms.spec.tsx) — Terms page tests
+- [`apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx`](../apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx) — Privacy page tests
+
+**Files modified:**
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added `legal` namespace with terms + privacy sections
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew `legal` translations
+
+**Tests added:**
+
+- [`terms.spec.tsx`](../apps/web/src/app/[locale]/legal/terms/terms.spec.tsx) — 5 tests (title, last updated, all 8 section headings, privacy link, back to home link)
+- [`privacy.spec.tsx`](../apps/web/src/app/[locale]/legal/privacy/privacy.spec.tsx) — 5 tests (title, last updated, all 10 section headings, terms link, back to home link)
+- Uses `vi.hoisted()` pattern for mock availability in hoisted `vi.mock()` calls
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 253     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **631** |                          |
+
+**CI Run:** `24158484682` ✅ | **Deploy Staging Run:** `24158484680` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-08)
+
+**Routes accessible:**
+
+- `/en/legal/terms` — English Terms of Use
+- `/en/legal/privacy` — English Privacy Policy
+- `/he/legal/terms` — Hebrew Terms of Use (RTL)
+- `/he/legal/privacy` — Hebrew Privacy Policy (RTL)
+
+### Iteration 4.9 Hotfix: Legal Pages Crash Fix + Dark Theme (2026-04-09)
+
+**What was fixed:**
+
+- Fixed legal pages crash caused by using `{variable}` ICU syntax inside `t.rich()` in server components — function references can't be serialized across the RSC→Client Component boundary
+- Switched to `<tag>content</tag>` syntax for rich text in translations
+- Added dark theme support (`dark:` Tailwind classes) to all legal page components
+
+**CI Run:** `24187121578` ✅
+
+### Iteration 4.10: How-to Guide Help Page (2026-04-09)
+
+**What was implemented:**
+
+- Created `/help` route — server component page with comprehensive getting-started guide
+- 6 main sections: Getting Started, Managing Your Account, Using the Dashboard, Settings & Preferences, Security Tips, Getting Help
+- 14 subsections covering account creation, email verification, login, account settings, social accounts, account deletion, dashboard overview, currency, timezone, language, passwords, security, forgot password, and contact/support
+- Added Help link to Header navigation (visible to all users, both authenticated and unauthenticated)
+- Server component using `getTranslations` from `next-intl/server`
+- Rich text link for forgot-password using `<tag>content</tag>` syntax (safe for RSC)
+- Dark theme support with `dark:` Tailwind classes throughout
+- Responsive design with card-style subsection layout (bordered cards with rounded corners)
+- Full bilingual content (English + Hebrew) with RTL support
+
+**Key files created:**
+
+- [`apps/web/src/app/[locale]/help/layout.tsx`](../apps/web/src/app/[locale]/help/layout.tsx) — Help pages layout wrapper
+- [`apps/web/src/app/[locale]/help/page.tsx`](../apps/web/src/app/[locale]/help/page.tsx) — How-to Guide page (server component)
+- [`apps/web/src/app/[locale]/help/help.spec.tsx`](../apps/web/src/app/[locale]/help/help.spec.tsx) — Help page tests (7 tests)
+
+**Files modified:**
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added `help` namespace + `nav.help` key
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew `help` namespace + `nav.help` key
+- [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) — Added Help navigation link
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Added test for Help link
+
+**Tests added:**
+
+- [`help.spec.tsx`](../apps/web/src/app/[locale]/help/help.spec.tsx) — 7 tests (main title, subtitle, 6 section headings, 14 subsection headings, forgot password link, back to home link, renders without crashing)
+- [`Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — 1 new test (help link present with correct href)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 261     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **639** |                          |
+
+**CI Run:** `24191198081` ✅ | **Deploy Staging Run:** `24191198100` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-09)
+
+**Routes accessible:**
+
+- `/en/help` — English How-to Guide
+- `/he/help` — Hebrew How-to Guide (RTL)
+
+### Iteration 4.11: Registration Consent Checkbox + Global Footer (2026-04-09)
+
+**What was implemented:**
+
+**Part 1 — Registration Consent Checkbox:**
+
+- Added consent checkbox to [`RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) below password fields, above submit button
+- Checkbox label uses `t.rich()` with `<terms>` and `<privacy>` tags linking to `/legal/terms` and `/legal/privacy`
+- Submit button is disabled until consent checkbox is checked (in addition to existing empty-fields check)
+- Form validation: consent must be checked to submit — shows error message if attempting to submit without consent
+- Links use Next.js `Link` component from `next-intl` navigation (same-tab navigation)
+- Dark theme support with `dark:` Tailwind classes on checkbox and label
+
+**Part 2 — Global Footer:**
+
+- Created [`Footer.tsx`](../apps/web/src/components/layout/Footer.tsx) client component using `useTranslations('footer')`
+- Horizontal navigation links: Terms of Use, Privacy Policy, Help (separated by `|` dividers on desktop)
+- Dynamic copyright text with `{year}` placeholder (`t('copyright', { year })`)
+- Responsive layout — links wrap on mobile, flex-wrap with gap
+- Subtle styling: smaller text, muted gray colors, border-top separator
+- Dark theme support throughout
+- Added Footer to [`locale layout`](../apps/web/src/app/[locale]/layout.tsx) below ErrorBoundary children (appears on every page)
+
+**Translation keys added:**
+
+- `auth.consentLabel` — Rich text with `<terms>` and `<privacy>` tag placeholders (en + he)
+- `auth.consentRequired` — Validation error message (en + he)
+- `footer.terms`, `footer.privacy`, `footer.help`, `footer.copyright` — Footer navigation and copyright (en + he)
+
+**Key files created:**
+
+- [`apps/web/src/components/layout/Footer.tsx`](../apps/web/src/components/layout/Footer.tsx) — Global footer component
+- [`apps/web/src/components/layout/Footer.spec.tsx`](../apps/web/src/components/layout/Footer.spec.tsx) — Footer tests (6 tests)
+
+**Key files modified:**
+
+- [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) — Added consent checkbox with rich text labels
+- [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) — Added 5 consent tests + updated existing tests for consent flow
+- [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx) — Added Footer import and rendering
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added auth consent + footer translations
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew auth consent + footer translations
+
+**Tests added/updated:**
+
+- [`Footer.spec.tsx`](../apps/web/src/components/layout/Footer.spec.tsx) — 6 tests (footer element, copyright text, terms/privacy/help links with correct hrefs, navigation element)
+- [`RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) — 5 new consent tests (checkbox rendered, disabled without consent, enabled with consent, submit with consent, consent link hrefs) + updated 3 existing tests to include consent checkbox click
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 272     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **650** |                          |
+
+**CI Run:** `24192569435` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-09)
+
+### Iteration 4.12: Integration + E2E Tests for Phase 4 (2026-04-09)
+
+**What was implemented:**
+
+Comprehensive integration tests (API) and E2E Playwright tests (web) covering all Phase 4 features, split into logically grouped files for clear naming and organization.
+
+**API Integration Tests (4 spec files + shared helpers):**
+
+- [`helpers.ts`](../apps/api/test/integration/helpers.ts) — Shared `bootstrapTestApp()`, `registerUser()`, `loginUser()`, `hashToken()` helpers
+- [`email-verification.integration.spec.ts`](../apps/api/test/integration/email-verification.integration.spec.ts) — 7 tests: token creation on register, verify with valid/invalid/empty token, resend verification, already verified user, no auth
+- [`password-reset.integration.spec.ts`](../apps/api/test/integration/password-reset.integration.spec.ts) — 9 tests: forgot-password generic message, token creation in DB, reset with valid/invalid/expired/used tokens, old password fails after reset, invalid email format
+- [`account-deletion.integration.spec.ts`](../apps/api/test/integration/account-deletion.integration.spec.ts) — 7 tests: soft-delete, wrong confirmation, cancel deletion, cancel for active account, login-based reactivation, expired grace period
+- [`profile-update.integration.spec.ts`](../apps/api/test/integration/profile-update.integration.spec.ts) — 8 tests: currency, timezone, both, invalid currency, empty body, no auth, persistence in login/me responses
+
+**Playwright E2E Tests (3 spec files):**
+
+- [`legal-pages.spec.ts`](../apps/web/e2e/legal-pages.spec.ts) — 8 tests: terms/privacy rendering, cross-links, Hebrew/RTL, non-empty content
+- [`help-page.spec.ts`](../apps/web/e2e/help-page.spec.ts) — 5 tests: guide title, section headings, Hebrew/RTL, non-empty content
+- [`registration-consent.spec.ts`](../apps/web/e2e/registration-consent.spec.ts) — 5 tests: checkbox presence, disabled without consent, terms/privacy links, link navigation
+
+**Staging E2E Tests (4 spec files):**
+
+- [`legal-pages.staging.spec.ts`](../apps/web/e2e/staging/legal-pages.staging.spec.ts) — 4 tests: terms/privacy accessibility and cross-links
+- [`help-page.staging.spec.ts`](../apps/web/e2e/staging/help-page.staging.spec.ts) — 2 tests: guide rendering and section headings
+- [`footer.staging.spec.ts`](../apps/web/e2e/staging/footer.staging.spec.ts) — 3 tests: presence, links, copyright
+- [`registration-consent.staging.spec.ts`](../apps/web/e2e/staging/registration-consent.staging.spec.ts) — 2 tests: checkbox and consent links
+
+**Test counts:**
+
+| Category              | Count   | Framework                |
+| --------------------- | ------- | ------------------------ |
+| API Unit Tests        | 332     | Jest                     |
+| API Integration Tests | 31      | Jest + Supertest         |
+| Web Unit Tests        | 272     | Vitest + Testing Library |
+| Web E2E Tests         | 18      | Playwright               |
+| Web Staging E2E Tests | 11      | Playwright               |
+| Shared Package        | 46      | Vitest                   |
+| **Total**             | **710** |                          |
+
+**CI Run:** `24194477791` ✅
+
+**Deployment:** ✅ CI passed (2026-04-09). Playwright E2E tests run in CI only.
 
 ### Upcoming Phases
 

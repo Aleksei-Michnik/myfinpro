@@ -34,6 +34,12 @@ export function Header() {
           >
             {t('nav.home')}
           </Link>
+          <Link
+            href="/help"
+            className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
+          >
+            {t('nav.help')}
+          </Link>
 
           {!isLoading && isAuthenticated && (
             <>
@@ -44,10 +50,10 @@ export function Header() {
                 {t('nav.dashboard')}
               </Link>
               <Link
-                href="/settings/connected-accounts"
+                href="/settings/account"
                 className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
-                {t('nav.connectedAccounts')}
+                {t('nav.settings')}
               </Link>
               <span
                 className="hidden md:inline text-sm text-gray-700 font-medium"

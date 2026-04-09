@@ -15,6 +15,11 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => string | null;
+  resendVerificationEmail: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  deleteAccount: (email: string) => Promise<void>;
+  cancelDeletion: () => Promise<void>;
+  updateProfile: (data: { defaultCurrency?: string; timezone?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -128,6 +133,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resendVerificationEmail = useCallback(async () => {
+    const token = accessToken;
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE}/auth/send-verification-email`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const error = await res
+        .json()
+        .catch(() => ({ message: 'Failed to send verification email' }));
+      throw new Error(
+        (error as { message?: string }).message || 'Failed to send verification email',
+      );
+    }
+  }, [accessToken]);
+
+  const refreshUser = useCallback(async () => {
+    const token = accessToken;
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        const userData: User = await res.json();
+        setUser(userData);
+      }
+    } catch {
+      // Silent fail
+    }
+  }, [accessToken]);
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
@@ -144,6 +190,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getAccessToken = useCallback(() => accessToken, [accessToken]);
 
+  const deleteAccount = useCallback(
+    async (email: string) => {
+      const token = accessToken;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/auth/delete-account`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: 'Failed to delete account' }));
+        throw new Error((error as { message?: string }).message || 'Failed to delete account');
+      }
+      await logout();
+    },
+    [accessToken, logout],
+  );
+
+  const cancelDeletion = useCallback(async () => {
+    const token = accessToken;
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE}/auth/cancel-deletion`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: 'Failed to cancel deletion' }));
+      throw new Error((error as { message?: string }).message || 'Failed to cancel deletion');
+    }
+    await refreshUser();
+  }, [accessToken, refreshUser]);
+
+  const updateProfile = useCallback(
+    async (data: { defaultCurrency?: string; timezone?: string }) => {
+      const token = accessToken;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: 'Failed to update preferences' }));
+        throw new Error((error as { message?: string }).message || 'Failed to update preferences');
+      }
+      const updatedUser: User = await res.json();
+      setUser(updatedUser);
+    },
+    [accessToken],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -157,6 +266,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         getAccessToken,
+        resendVerificationEmail,
+        refreshUser,
+        deleteAccount,
+        cancelDeletion,
+        updateProfile,
       }}
     >
       {children}

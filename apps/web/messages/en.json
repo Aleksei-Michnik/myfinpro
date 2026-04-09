@@ -16,6 +16,7 @@
     "budgets": "Budgets",
     "settings": "Settings",
     "connectedAccounts": "Connected Accounts",
+    "help": "Help",
     "signIn": "Sign In",
     "signUp": "Sign Up",
     "logout": "Logout"
@@ -74,7 +75,38 @@
     "signInWithGoogle": "Sign in with Google",
     "telegramAuthFailed": "Sign-in with Telegram failed. Please try again.",
     "telegramAuthSuccess": "Signed in with Telegram!",
-    "telegramSignIn": "Sign in with Telegram"
+    "telegramSignIn": "Sign in with Telegram",
+    "verifyEmail": "Verify your email",
+    "verifyEmailSent": "Verification email sent! Check your inbox.",
+    "verifyEmailSuccess": "Email verified successfully!",
+    "verifyEmailExpired": "This verification link has expired.",
+    "verifyEmailAlreadyVerified": "Your email is already verified.",
+    "verifyEmailInvalid": "Invalid verification link.",
+    "verifyEmailBanner": "Please verify your email address. Check your inbox or",
+    "resendVerification": "Resend verification email",
+    "resendingVerification": "Resending...",
+    "goToDashboard": "Go to Dashboard",
+    "checkInbox": "Check your inbox for a verification link.",
+    "forgotPasswordTitle": "Reset your password",
+    "forgotPasswordDescription": "Enter your email address and we'll send you a reset link.",
+    "sendResetLink": "Send Reset Link",
+    "sendingResetLink": "Sending...",
+    "resetLinkSent": "If an account with this email exists, we've sent a password reset link.",
+    "checkYourEmail": "Check your email",
+    "resetPasswordTitle": "Set new password",
+    "newPassword": "New Password",
+    "resetPassword": "Reset Password",
+    "resettingPassword": "Resetting...",
+    "resetPasswordSuccess": "Password reset successfully!",
+    "resetPasswordSuccessDescription": "You can now sign in with your new password.",
+    "resetPasswordExpired": "This reset link has expired. Please request a new one.",
+    "resetPasswordInvalid": "Invalid reset link.",
+    "resetPasswordUsed": "This reset link has already been used.",
+    "requestNewLink": "Request a new link",
+    "backToSignIn": "Back to Sign In",
+    "goToSignIn": "Go to Sign In",
+    "consentLabel": "I agree to the <terms>Terms of Use</terms> and <privacy>Privacy Policy</privacy>",
+    "consentRequired": "You must agree to the Terms of Use and Privacy Policy"
   },
   "toast": {
     "dismiss": "Dismiss"
@@ -98,6 +130,199 @@
     "cannotDisconnectLast": "Cannot disconnect your last sign-in method",
     "linkSuccess": "{provider} connected successfully",
     "linkError": "Failed to connect {provider}",
-    "alreadyLinked": "This {provider} account is already linked to another user"
+    "alreadyLinked": "This {provider} account is already linked to another user",
+    "account": {
+      "title": "Account Settings",
+      "deleteAccount": "Delete Account",
+      "deleteWarning": "This action will schedule your account for deletion. You have 30 days to cancel before your data is permanently removed.",
+      "confirmEmail": "Type your email to confirm",
+      "deleteButton": "Delete My Account",
+      "cancel": "Cancel",
+      "deletionScheduled": "Your account is scheduled for deletion on {date}.",
+      "cancelDeletion": "Cancel Deletion",
+      "cancelDeletionSuccess": "Account deletion cancelled successfully.",
+      "userInfo": "Account Information",
+      "email": "Email",
+      "name": "Name",
+      "provider": "Sign-in Method",
+      "preferences": "Preferences",
+      "defaultCurrency": "Default Currency",
+      "timezone": "Timezone",
+      "savePreferences": "Save Preferences",
+      "preferencesSaved": "Preferences saved successfully",
+      "preferencesError": "Failed to save preferences"
+    }
+  },
+  "legal": {
+    "backToHome": "Back to Home",
+    "terms": {
+      "title": "Terms of Use",
+      "lastUpdated": "Last updated: April 2026",
+      "intro": "Welcome to MyFinPro. By accessing or using our personal and family finance management application, you agree to be bound by these Terms of Use. Please read them carefully before using the service.",
+      "acceptance": {
+        "title": "1. Acceptance of Terms",
+        "content": "By creating an account or using MyFinPro, you acknowledge that you have read, understood, and agree to these Terms of Use. If you do not agree, please do not use the service."
+      },
+      "description": {
+        "title": "2. Description of Service",
+        "content": "MyFinPro is a personal and family finance management application that allows you to track income, expenses, and budgets. The service is provided for informational purposes only and does not constitute financial advice."
+      },
+      "registration": {
+        "title": "3. Account Registration & Security",
+        "content": "You may register using email and password, Google OAuth, or Telegram Login. You are responsible for maintaining the confidentiality of your credentials and for all activities that occur under your account."
+      },
+      "responsibilities": {
+        "title": "4. User Responsibilities",
+        "content": "You agree to provide accurate information, use the service lawfully, and not attempt to gain unauthorized access to other accounts or systems. You are solely responsible for the financial data you enter into the application."
+      },
+      "ownership": {
+        "title": "5. Data & Content Ownership",
+        "content": "You retain ownership of all financial data you enter into MyFinPro. We do not claim any ownership rights over your content. You grant us a limited license to store and process your data solely to provide the service."
+      },
+      "liability": {
+        "title": "6. Limitation of Liability",
+        "content": "MyFinPro is provided \"as is\" without warranties of any kind. We are not liable for any financial decisions made based on information displayed in the application. This service is not a substitute for professional financial advice."
+      },
+      "modifications": {
+        "title": "7. Modifications to Terms",
+        "content": "We reserve the right to modify these Terms of Use at any time. Changes will be posted on this page with an updated date. Continued use of the service after changes constitutes acceptance of the new terms."
+      },
+      "contact": {
+        "title": "8. Contact Information",
+        "content": "If you have any questions about these Terms of Use, please contact us through the application's support channels."
+      },
+      "seePrivacy": "See also our <link>Privacy Policy</link>."
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated: April 2026",
+      "intro": "Your privacy is important to us. This Privacy Policy explains how MyFinPro collects, uses, and protects your personal and financial information.",
+      "infoCollect": {
+        "title": "1. Information We Collect",
+        "content": "We collect information you provide during registration (name, email address), financial data you enter (transactions, budgets, income, expenses), and authentication data from third-party providers (Google OAuth, Telegram Login)."
+      },
+      "howWeUse": {
+        "title": "2. How We Use Your Information",
+        "content": "We use your information to provide and improve the finance management service, authenticate your identity, display your financial data, and send important account notifications such as email verification."
+      },
+      "storage": {
+        "title": "3. Data Storage & Security",
+        "content": "Your data is stored on secured servers. Passwords are encrypted using industry-standard hashing algorithms. Authentication tokens are securely managed. We implement appropriate technical measures to protect your information."
+      },
+      "thirdParty": {
+        "title": "4. Third-Party Services",
+        "content": "MyFinPro integrates with Google OAuth and Telegram Login for authentication. When you use these services, their respective privacy policies also apply. We only receive basic profile information necessary for account creation."
+      },
+      "cookies": {
+        "title": "5. Cookies & Local Storage",
+        "content": "We use local storage to manage JWT authentication tokens for maintaining your session. We do not use tracking cookies or third-party analytics cookies."
+      },
+      "retention": {
+        "title": "6. Data Retention & Deletion",
+        "content": "You may request account deletion at any time. Upon deletion request, your account enters a 30-day grace period during which you can cancel the deletion. After the grace period, all your data is permanently and irreversibly deleted."
+      },
+      "rights": {
+        "title": "7. Your Rights",
+        "content": "You have the right to access, correct, and delete your personal data. You can view and update your account information from the settings page. You can request full account deletion at any time."
+      },
+      "children": {
+        "title": "8. Children's Privacy",
+        "content": "MyFinPro is not intended for children under the age of 13. We do not knowingly collect personal information from children. If you believe a child has provided us with their data, please contact us."
+      },
+      "changes": {
+        "title": "9. Changes to Privacy Policy",
+        "content": "We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated date. We encourage you to review this policy periodically."
+      },
+      "contact": {
+        "title": "10. Contact Information",
+        "content": "If you have any questions about this Privacy Policy or your data, please contact us through the application's support channels."
+      },
+      "seeTerms": "See also our <link>Terms of Use</link>."
+    }
+  },
+  "help": {
+    "title": "How to Use MyFinPro",
+    "subtitle": "A step-by-step guide to getting the most out of your personal finance manager.",
+    "backToHome": "Back to Home",
+    "gettingStarted": {
+      "title": "1. Getting Started",
+      "createAccount": {
+        "title": "Creating an Account",
+        "content": "You can sign up for MyFinPro using one of three methods: email and password, Google sign-in, or Telegram Login. Visit the registration page and choose your preferred method."
+      },
+      "verifyEmail": {
+        "title": "Verifying Your Email",
+        "content": "After registering with email, you will receive a verification email. Click the link in the email to verify your account. You can resend the verification email from the banner at the top of the page."
+      },
+      "loggingIn": {
+        "title": "Logging In",
+        "content": "Go to the sign-in page and enter your credentials, or use Google or Telegram to log in. After successful authentication you will be redirected to the dashboard."
+      }
+    },
+    "managingAccount": {
+      "title": "2. Managing Your Account",
+      "settings": {
+        "title": "Account Settings",
+        "content": "From the Account Settings page you can view your profile information, change your default currency and timezone, and update your password."
+      },
+      "socialAccounts": {
+        "title": "Connecting Social Accounts",
+        "content": "You can connect Google and Telegram to your account for easier sign-in. Go to the Connected Accounts section in your settings to link or unlink providers."
+      },
+      "deleteAccount": {
+        "title": "Deleting Your Account",
+        "content": "If you wish to delete your account, go to Account Settings and click Delete Account. Your account will enter a 30-day grace period during which you can cancel the deletion. After 30 days, all data is permanently removed."
+      }
+    },
+    "dashboard": {
+      "title": "3. Using the Dashboard",
+      "overview": {
+        "title": "Dashboard Overview",
+        "content": "The dashboard is your central hub for viewing your financial data at a glance. Financial tracking features including transactions, budgets, and reports are coming soon."
+      }
+    },
+    "settingsPreferences": {
+      "title": "4. Settings & Preferences",
+      "currency": {
+        "title": "Changing Default Currency",
+        "content": "Go to Account Settings and find the Preferences section. Select your preferred currency from the dropdown and click Save. All new transactions will default to this currency."
+      },
+      "timezone": {
+        "title": "Changing Timezone",
+        "content": "In the Preferences section of Account Settings, select your timezone from the dropdown. This affects how dates and times are displayed throughout the application."
+      },
+      "language": {
+        "title": "Changing Language",
+        "content": "Use the language switcher in the top-right corner of the page to switch between English and Hebrew. The interface will update immediately, including right-to-left layout for Hebrew."
+      }
+    },
+    "security": {
+      "title": "5. Security Tips",
+      "strongPassword": {
+        "title": "Strong Password Recommendations",
+        "content": "Use a password that is at least 8 characters long and includes uppercase letters, lowercase letters, and numbers. Avoid using the same password across multiple sites."
+      },
+      "keepSecure": {
+        "title": "Keeping Your Account Secure",
+        "content": "Never share your password with anyone. If you use a shared computer, make sure to log out after each session. Consider connecting a social account as a backup sign-in method."
+      },
+      "forgotPassword": {
+        "title": "Forgot Your Password?",
+        "content": "Go to the <link>forgot password page</link> to request a password reset link. You will receive an email with instructions to set a new password."
+      }
+    },
+    "gettingHelp": {
+      "title": "6. Getting Help",
+      "contact": {
+        "title": "Contact & Support",
+        "content": "If you need assistance or have questions, please reach out to our support team at support@myfinpro.com. We aim to respond within 24 hours."
+      }
+    }
+  },
+  "footer": {
+    "terms": "Terms of Use",
+    "privacy": "Privacy Policy",
+    "help": "Help",
+    "copyright": "© {year} MyFinPro. All rights reserved."
   }
 }

@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import { VerificationBanner } from '@/components/auth/VerificationBanner';
+import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
@@ -44,7 +46,9 @@ export default async function LocaleLayout({ children, params }: Props) {
           <AuthProvider>
             <ToastProvider>
               <Header />
+              <VerificationBanner />
               <ErrorBoundary>{children}</ErrorBoundary>
+              <Footer />
               <ToastContainer />
             </ToastProvider>
           </AuthProvider>

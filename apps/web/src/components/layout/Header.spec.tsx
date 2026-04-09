@@ -16,6 +16,8 @@ let mockAuthState = {
   loginWithTelegram: vi.fn(),
   register: vi.fn(),
   getAccessToken: () => null as string | null,
+  resendVerificationEmail: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 // Mock next-intl hooks
@@ -63,6 +65,8 @@ describe('Header', () => {
       loginWithTelegram: vi.fn(),
       register: vi.fn(),
       getAccessToken: () => null,
+      resendVerificationEmail: vi.fn(),
+      refreshUser: vi.fn(),
     };
   });
 
@@ -92,6 +96,13 @@ describe('Header', () => {
   it('renders home navigation link', () => {
     render(<Header />);
     expect(screen.getByText('nav.home')).toBeInTheDocument();
+  });
+
+  it('renders help navigation link', () => {
+    render(<Header />);
+    const helpLink = screen.getByText('nav.help');
+    expect(helpLink).toBeInTheDocument();
+    expect(helpLink.closest('a')).toHaveAttribute('href', '/help');
   });
 
   it('renders locale switcher links for all locales', () => {
@@ -149,6 +160,8 @@ describe('Header', () => {
         loginWithTelegram: vi.fn(),
         register: vi.fn(),
         getAccessToken: () => 'token',
+        resendVerificationEmail: vi.fn(),
+        refreshUser: vi.fn(),
       };
     });
 
@@ -164,11 +177,16 @@ describe('Header', () => {
       expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
     });
 
-    it('renders connected accounts link', () => {
+    it('renders settings link', () => {
       render(<Header />);
-      const settingsLink = screen.getByText('nav.connectedAccounts');
+      const settingsLink = screen.getByText('nav.settings');
       expect(settingsLink).toBeInTheDocument();
-      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/connected-accounts');
+      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/account');
+    });
+
+    it('does not render a separate connected accounts link', () => {
+      render(<Header />);
+      expect(screen.queryByText('nav.connectedAccounts')).not.toBeInTheDocument();
     });
 
     it('renders logout button', () => {

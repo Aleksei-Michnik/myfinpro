@@ -12,6 +12,7 @@ let mockAuthState = {
     name: string;
     defaultCurrency: string;
     locale: string;
+    emailVerified: boolean;
   } | null,
   accessToken: null as string | null,
   login: vi.fn(),
@@ -20,6 +21,8 @@ let mockAuthState = {
   register: vi.fn(),
   logout: vi.fn(),
   getAccessToken: () => null as string | null,
+  resendVerificationEmail: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 // Mock next-intl
@@ -57,6 +60,8 @@ describe('ProtectedRoute', () => {
       register: vi.fn(),
       logout: vi.fn(),
       getAccessToken: () => null,
+      resendVerificationEmail: vi.fn(),
+      refreshUser: vi.fn(),
     };
   });
 
@@ -68,6 +73,7 @@ describe('ProtectedRoute', () => {
       name: 'Test User',
       defaultCurrency: 'USD',
       locale: 'en',
+      emailVerified: true,
     };
     mockAuthState.accessToken = 'mock-token';
 

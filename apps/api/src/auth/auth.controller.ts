@@ -8,7 +8,9 @@ import {
   HttpStatus,
   Logger,
   Param,
+  Patch,
   Post,
+  Query,
   Req,
   Res,
   UnauthorizedException,
@@ -19,6 +21,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -34,12 +37,20 @@ import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { AccountDeletionService } from './services/account-deletion.service';
+import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordResetService } from './services/password-reset.service';
+import { TokenService } from './services/token.service';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -50,6 +61,10 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly accountDeletionService: AccountDeletionService,
+    private readonly emailVerificationService: EmailVerificationService,
+    private readonly passwordResetService: PasswordResetService,
+    private readonly tokenService: TokenService,
   ) {}
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -155,6 +170,150 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   async getMe(@CurrentUser() user: JwtPayload) {
     return this.authService.getUser(user.sub);
+  }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user profile preferences (currency, timezone)' })
+  @ApiResponse({ status: 200, description: 'Profile updated successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid currency or timezone' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  async updateProfile(@CurrentUser() user: JwtPayload, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(user.sub, dto);
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('send-verification-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Send or resend email verification link' })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email sent or already verified',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification email requests' })
+  async sendVerificationEmail(@CurrentUser() user: JwtPayload) {
+    try {
+      await this.emailVerificationService.resendVerification(user.sub);
+      return { message: 'Verification email sent' };
+    } catch (error) {
+      // If already verified, return 200 with message
+      if (
+        error instanceof BadRequestException &&
+        (error.getResponse() as Record<string, unknown>).errorCode ===
+          AUTH_ERRORS.EMAIL_ALREADY_VERIFIED
+      ) {
+        return { message: 'Email already verified' };
+      }
+      throw error;
+    }
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @Get('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email address using token from email link' })
+  @ApiQuery({ name: 'token', required: true, description: 'Verification token from email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verified successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid verification token' })
+  @ApiBadRequestResponse({ description: 'Token expired or already used' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification attempts' })
+  async verifyEmail(@Query('token') token: string) {
+    if (!token) {
+      throw new BadRequestException({
+        message: 'Verification token is required',
+        errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+      });
+    }
+
+    await this.emailVerificationService.verifyEmail(token);
+    return { message: 'Email verified successfully' };
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiResponse({
+    status: 200,
+    description: 'If an account with this email exists, a reset link has been sent.',
+  })
+  @ApiTooManyRequestsResponse({ description: 'Too many password reset requests' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.passwordResetService.forgotPassword(dto.email);
+    return {
+      message: 'If an account with this email exists, a reset link has been sent.',
+    };
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired reset token' })
+  @ApiBadRequestResponse({ description: 'Token already used or invalid password' })
+  @ApiTooManyRequestsResponse({ description: 'Too many reset attempts' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.passwordResetService.resetPassword(dto.token, dto.password);
+    return {
+      message: 'Password reset successfully. Please sign in with your new password.',
+    };
+  }
+
+  @CustomThrottle({ limit: 3, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('delete-account')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Request account deletion with 30-day grace period' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account scheduled for deletion',
+  })
+  @ApiBadRequestResponse({ description: 'Confirmation email mismatch or account already deleted' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many deletion requests' })
+  async deleteAccount(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: DeleteAccountDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.accountDeletionService.requestDeletion(user.sub, dto.confirmation);
+    this.tokenService.clearRefreshTokenCookie(response);
+    return {
+      message: 'Account scheduled for deletion',
+      scheduledDeletionAt: result.scheduledDeletionAt,
+    };
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 600000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('cancel-deletion')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel pending account deletion' })
+  @ApiResponse({
+    status: 200,
+    description: 'Account deletion cancelled',
+  })
+  @ApiBadRequestResponse({ description: 'Account not deleted or grace period expired' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many cancellation requests' })
+  async cancelDeletion(@CurrentUser() user: JwtPayload) {
+    await this.accountDeletionService.cancelDeletion(user.sub);
+    return { message: 'Account deletion cancelled' };
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })

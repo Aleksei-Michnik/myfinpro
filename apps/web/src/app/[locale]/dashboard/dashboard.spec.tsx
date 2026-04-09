@@ -37,6 +37,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
       name: 'Test User',
       defaultCurrency: 'USD',
       locale: 'en',
+      emailVerified: true,
     },
     accessToken: 'mock-token',
     login: vi.fn(),
@@ -45,6 +46,8 @@ vi.mock('@/lib/auth/auth-context', () => ({
     register: vi.fn(),
     logout: vi.fn(),
     getAccessToken: () => 'mock-token',
+    resendVerificationEmail: vi.fn(),
+    refreshUser: vi.fn(),
   }),
 }));
 

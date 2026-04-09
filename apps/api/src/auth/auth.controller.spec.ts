@@ -8,6 +8,10 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
+import { AccountDeletionService } from './services/account-deletion.service';
+import { EmailVerificationService } from './services/email-verification.service';
+import { PasswordResetService } from './services/password-reset.service';
+import { TokenService } from './services/token.service';
 jest.mock('./utils/telegram-auth.util', () => ({
   verifyTelegramAuth: jest.fn(),
 }));
@@ -34,6 +38,28 @@ describe('AuthController', () => {
     getConnectedAccounts: jest.fn(),
     linkTelegramToUser: jest.fn(),
     unlinkProvider: jest.fn(),
+    updateProfile: jest.fn(),
+  };
+
+  const mockEmailVerificationService = {
+    createAndSendVerification: jest.fn(),
+    verifyEmail: jest.fn(),
+    resendVerification: jest.fn(),
+  };
+
+  const mockPasswordResetService = {
+    forgotPassword: jest.fn(),
+    resetPassword: jest.fn(),
+  };
+
+  const mockAccountDeletionService = {
+    requestDeletion: jest.fn(),
+    cancelDeletion: jest.fn(),
+    reactivateOnLogin: jest.fn(),
+  };
+
+  const mockTokenService = {
+    clearRefreshTokenCookie: jest.fn(),
   };
 
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
@@ -68,6 +94,10 @@ describe('AuthController', () => {
       providers: [
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: AccountDeletionService, useValue: mockAccountDeletionService },
+        { provide: EmailVerificationService, useValue: mockEmailVerificationService },
+        { provide: PasswordResetService, useValue: mockPasswordResetService },
+        { provide: TokenService, useValue: mockTokenService },
       ],
     }).compile();
 
@@ -931,6 +961,370 @@ describe('AuthController', () => {
       );
 
       expect(limit).toBeUndefined();
+    });
+
+    it('should have @Throttle metadata on sendVerificationEmail with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.sendVerificationEmail,
+      );
+      const ttl = Reflect.getMetadata(
+        THROTTLER_TTL_KEY,
+        AuthController.prototype.sendVerificationEmail,
+      );
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+
+    it('should have @Throttle metadata on verifyEmail with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(THROTTLER_LIMIT_KEY, AuthController.prototype.verifyEmail);
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.verifyEmail);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('sendVerificationEmail()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call resendVerification and return success message', async () => {
+      mockEmailVerificationService.resendVerification.mockResolvedValue(undefined);
+
+      const result = await controller.sendVerificationEmail(mockJwtPayload);
+
+      expect(mockEmailVerificationService.resendVerification).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual({ message: 'Verification email sent' });
+    });
+
+    it('should return "Email already verified" when EMAIL_ALREADY_VERIFIED', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.resendVerification.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Email is already verified',
+          errorCode: AUTH_ERRORS.EMAIL_ALREADY_VERIFIED,
+        }),
+      );
+
+      const result = await controller.sendVerificationEmail(mockJwtPayload);
+
+      expect(result).toEqual({ message: 'Email already verified' });
+    });
+
+    it('should propagate other errors', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.resendVerification.mockRejectedValue(
+        new ActualUnauth({
+          message: 'User not found',
+          errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+        }),
+      );
+
+      await expect(controller.sendVerificationEmail(mockJwtPayload)).rejects.toThrow(
+        'User not found',
+      );
+    });
+  });
+
+  describe('verifyEmail()', () => {
+    it('should call verifyEmail and return success message', async () => {
+      mockEmailVerificationService.verifyEmail.mockResolvedValue({ userId: 'user-1' });
+
+      const result = await controller.verifyEmail('valid-token');
+
+      expect(mockEmailVerificationService.verifyEmail).toHaveBeenCalledWith('valid-token');
+      expect(result).toEqual({ message: 'Email verified successfully' });
+    });
+
+    it('should throw BadRequestException when token is empty', async () => {
+      await expect(controller.verifyEmail('')).rejects.toThrow(BadRequestException);
+
+      try {
+        await controller.verifyEmail('');
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+          }),
+        );
+      }
+    });
+
+    it('should propagate errors from EmailVerificationService', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockEmailVerificationService.verifyEmail.mockRejectedValue(
+        new ActualUnauth({
+          message: 'Invalid verification token',
+          errorCode: AUTH_ERRORS.VERIFICATION_TOKEN_INVALID,
+        }),
+      );
+
+      await expect(controller.verifyEmail('bad-token')).rejects.toThrow(
+        'Invalid verification token',
+      );
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    it('should call passwordResetService.forgotPassword and return generic message', async () => {
+      mockPasswordResetService.forgotPassword.mockResolvedValue(undefined);
+
+      const result = await controller.forgotPassword({ email: 'test@example.com' });
+
+      expect(mockPasswordResetService.forgotPassword).toHaveBeenCalledWith('test@example.com');
+      expect(result).toEqual({
+        message: 'If an account with this email exists, a reset link has been sent.',
+      });
+    });
+
+    it('should return same generic message even for non-existent email (prevent enumeration)', async () => {
+      mockPasswordResetService.forgotPassword.mockResolvedValue(undefined);
+
+      const result = await controller.forgotPassword({ email: 'nonexistent@example.com' });
+
+      expect(result).toEqual({
+        message: 'If an account with this email exists, a reset link has been sent.',
+      });
+    });
+
+    it('should have @Throttle metadata with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.forgotPassword,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.forgotPassword);
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('resetPassword()', () => {
+    it('should call passwordResetService.resetPassword and return success message', async () => {
+      mockPasswordResetService.resetPassword.mockResolvedValue({ userId: 'user-1' });
+
+      const result = await controller.resetPassword({
+        token: 'valid-token',
+        password: 'NewSecurePass123',
+      });
+
+      expect(mockPasswordResetService.resetPassword).toHaveBeenCalledWith(
+        'valid-token',
+        'NewSecurePass123',
+      );
+      expect(result).toEqual({
+        message: 'Password reset successfully. Please sign in with your new password.',
+      });
+    });
+
+    it('should propagate UnauthorizedException from service (invalid token)', async () => {
+      const { UnauthorizedException: ActualUnauth } = jest.requireActual('@nestjs/common');
+      mockPasswordResetService.resetPassword.mockRejectedValue(
+        new ActualUnauth({
+          message: 'Invalid password reset token',
+          errorCode: AUTH_ERRORS.RESET_TOKEN_INVALID,
+        }),
+      );
+
+      await expect(
+        controller.resetPassword({ token: 'bad-token', password: 'NewSecurePass123' }),
+      ).rejects.toThrow('Invalid password reset token');
+    });
+
+    it('should propagate BadRequestException from service (used token)', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockPasswordResetService.resetPassword.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Password reset token has already been used',
+          errorCode: AUTH_ERRORS.RESET_TOKEN_USED,
+        }),
+      );
+
+      await expect(
+        controller.resetPassword({ token: 'used-token', password: 'NewSecurePass123' }),
+      ).rejects.toThrow('Password reset token has already been used');
+    });
+
+    it('should have @Throttle metadata with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.resetPassword,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.resetPassword);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('deleteAccount()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call accountDeletionService.requestDeletion and clear cookie', async () => {
+      const scheduledDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      mockAccountDeletionService.requestDeletion.mockResolvedValue({
+        scheduledDeletionAt: scheduledDate,
+      });
+
+      const result = await controller.deleteAccount(
+        mockJwtPayload,
+        { confirmation: 'test@example.com' },
+        mockResponse,
+      );
+
+      expect(mockAccountDeletionService.requestDeletion).toHaveBeenCalledWith(
+        'test-uuid',
+        'test@example.com',
+      );
+      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
+      expect(result).toEqual({
+        message: 'Account scheduled for deletion',
+        scheduledDeletionAt: scheduledDate,
+      });
+    });
+
+    it('should propagate BadRequestException from service', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAccountDeletionService.requestDeletion.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Confirmation email does not match',
+          errorCode: AUTH_ERRORS.ACCOUNT_DELETION_CONFIRMATION_MISMATCH,
+        }),
+      );
+
+      await expect(
+        controller.deleteAccount(
+          mockJwtPayload,
+          { confirmation: 'wrong@example.com' },
+          mockResponse,
+        ),
+      ).rejects.toThrow('Confirmation email does not match');
+    });
+
+    it('should have @Throttle metadata with limit 3 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.deleteAccount,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.deleteAccount);
+
+      expect(limit).toBe(3);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('cancelDeletion()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call accountDeletionService.cancelDeletion and return success', async () => {
+      mockAccountDeletionService.cancelDeletion.mockResolvedValue(undefined);
+
+      const result = await controller.cancelDeletion(mockJwtPayload);
+
+      expect(mockAccountDeletionService.cancelDeletion).toHaveBeenCalledWith('test-uuid');
+      expect(result).toEqual({ message: 'Account deletion cancelled' });
+    });
+
+    it('should propagate BadRequestException from service (not deleted)', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAccountDeletionService.cancelDeletion.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Account is not scheduled for deletion',
+          errorCode: AUTH_ERRORS.ACCOUNT_NOT_DELETED,
+        }),
+      );
+
+      await expect(controller.cancelDeletion(mockJwtPayload)).rejects.toThrow(
+        'Account is not scheduled for deletion',
+      );
+    });
+
+    it('should have @Throttle metadata with limit 5 and ttl 600000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.cancelDeletion,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.cancelDeletion);
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(600000);
+    });
+  });
+
+  describe('updateProfile()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call AuthService.updateProfile() and return result', async () => {
+      const expectedResult = {
+        id: 'test-uuid',
+        email: 'test@example.com',
+        name: 'Test User',
+        defaultCurrency: 'EUR',
+        locale: 'en',
+        timezone: 'Asia/Jerusalem',
+        emailVerified: true,
+      };
+
+      mockAuthService.updateProfile.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateProfile(mockJwtPayload, {
+        defaultCurrency: 'EUR',
+        timezone: 'Asia/Jerusalem',
+      });
+
+      expect(mockAuthService.updateProfile).toHaveBeenCalledWith('test-uuid', {
+        defaultCurrency: 'EUR',
+        timezone: 'Asia/Jerusalem',
+      });
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should handle empty body and return current profile', async () => {
+      const expectedResult = {
+        id: 'test-uuid',
+        email: 'test@example.com',
+        name: 'Test User',
+        defaultCurrency: 'USD',
+        locale: 'en',
+        timezone: 'UTC',
+        emailVerified: true,
+      };
+
+      mockAuthService.updateProfile.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateProfile(mockJwtPayload, {});
+
+      expect(mockAuthService.updateProfile).toHaveBeenCalledWith('test-uuid', {});
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should have @Throttle metadata with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.updateProfile,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.updateProfile);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
     });
   });
 });
