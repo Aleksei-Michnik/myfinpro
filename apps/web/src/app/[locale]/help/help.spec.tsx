@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
+import HelpPage from './page';
 
 // Use vi.hoisted so the mock is available when vi.mock is hoisted
 const { mockT } = vi.hoisted(() => {
@@ -77,8 +78,6 @@ vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) =>
     React.createElement('a', { href, ...props }, children as React.ReactNode),
 }));
-
-import HelpPage from './page';
 
 describe('HelpPage', () => {
   async function renderPage() {

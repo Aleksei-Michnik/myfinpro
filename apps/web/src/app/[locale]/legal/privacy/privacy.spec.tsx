@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
+import PrivacyPage from './page';
 
 // Use vi.hoisted so the mock is available when vi.mock is hoisted
 const { mockT } = vi.hoisted(() => {
@@ -59,8 +60,6 @@ vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) =>
     React.createElement('a', { href, ...props }, children as React.ReactNode),
 }));
-
-import PrivacyPage from './page';
 
 describe('PrivacyPage', () => {
   async function renderPage() {
