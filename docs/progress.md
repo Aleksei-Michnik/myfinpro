@@ -1731,6 +1731,49 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 **Deployment:** ✅ CI passed, staging deployed successfully (2026-04-09)
 
+### Iteration 4.12: Integration + E2E Tests for Phase 4 (2026-04-09)
+
+**What was implemented:**
+
+Comprehensive integration tests (API) and E2E Playwright tests (web) covering all Phase 4 features, split into logically grouped files for clear naming and organization.
+
+**API Integration Tests (4 spec files + shared helpers):**
+
+- [`helpers.ts`](../apps/api/test/integration/helpers.ts) — Shared `bootstrapTestApp()`, `registerUser()`, `loginUser()`, `hashToken()` helpers
+- [`email-verification.integration.spec.ts`](../apps/api/test/integration/email-verification.integration.spec.ts) — 7 tests: token creation on register, verify with valid/invalid/empty token, resend verification, already verified user, no auth
+- [`password-reset.integration.spec.ts`](../apps/api/test/integration/password-reset.integration.spec.ts) — 9 tests: forgot-password generic message, token creation in DB, reset with valid/invalid/expired/used tokens, old password fails after reset, invalid email format
+- [`account-deletion.integration.spec.ts`](../apps/api/test/integration/account-deletion.integration.spec.ts) — 7 tests: soft-delete, wrong confirmation, cancel deletion, cancel for active account, login-based reactivation, expired grace period
+- [`profile-update.integration.spec.ts`](../apps/api/test/integration/profile-update.integration.spec.ts) — 8 tests: currency, timezone, both, invalid currency, empty body, no auth, persistence in login/me responses
+
+**Playwright E2E Tests (3 spec files):**
+
+- [`legal-pages.spec.ts`](../apps/web/e2e/legal-pages.spec.ts) — 8 tests: terms/privacy rendering, cross-links, Hebrew/RTL, non-empty content
+- [`help-page.spec.ts`](../apps/web/e2e/help-page.spec.ts) — 5 tests: guide title, section headings, Hebrew/RTL, non-empty content
+- [`registration-consent.spec.ts`](../apps/web/e2e/registration-consent.spec.ts) — 5 tests: checkbox presence, disabled without consent, terms/privacy links, link navigation
+
+**Staging E2E Tests (4 spec files):**
+
+- [`legal-pages.staging.spec.ts`](../apps/web/e2e/staging/legal-pages.staging.spec.ts) — 4 tests: terms/privacy accessibility and cross-links
+- [`help-page.staging.spec.ts`](../apps/web/e2e/staging/help-page.staging.spec.ts) — 2 tests: guide rendering and section headings
+- [`footer.staging.spec.ts`](../apps/web/e2e/staging/footer.staging.spec.ts) — 3 tests: presence, links, copyright
+- [`registration-consent.staging.spec.ts`](../apps/web/e2e/staging/registration-consent.staging.spec.ts) — 2 tests: checkbox and consent links
+
+**Test counts:**
+
+| Category              | Count   | Framework                |
+| --------------------- | ------- | ------------------------ |
+| API Unit Tests        | 332     | Jest                     |
+| API Integration Tests | 31      | Jest + Supertest         |
+| Web Unit Tests        | 272     | Vitest + Testing Library |
+| Web E2E Tests         | 18      | Playwright               |
+| Web Staging E2E Tests | 11      | Playwright               |
+| Shared Package        | 46      | Vitest                   |
+| **Total**             | **710** |                          |
+
+**CI Run:** `24194477791` ✅
+
+**Deployment:** ✅ CI passed (2026-04-09). Playwright E2E tests run in CI only.
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
