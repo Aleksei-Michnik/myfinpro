@@ -1,6 +1,6 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-08
+> **Last updated:** 2026-04-09
 > **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
 > **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
 
@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 11/15      | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 12/15      | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 143 | **Completed:** 40 | **Remaining:** 103
+**Total iterations:** 143 | **Completed:** 41 | **Remaining:** 102
 
 ---
 
@@ -1375,7 +1375,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.7.2     | Currency & timezone settings                 | ✅ Complete    |
 | 4.8       | Account deletion scheduler                   | ✅ Complete    |
 | 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
-| 4.10      | How-to Guide                                 | ⬜ Not Started |
+| 4.10      | How-to Guide                                 | ✅ Complete    |
 | 4.11      | Consent + footer                             | ⬜ Not Started |
 | 4.12      | Integration + E2E tests                      | ⬜ Not Started |
 | 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
@@ -1610,6 +1610,66 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 - `/en/legal/privacy` — English Privacy Policy
 - `/he/legal/terms` — Hebrew Terms of Use (RTL)
 - `/he/legal/privacy` — Hebrew Privacy Policy (RTL)
+
+### Iteration 4.9 Hotfix: Legal Pages Crash Fix + Dark Theme (2026-04-09)
+
+**What was fixed:**
+
+- Fixed legal pages crash caused by using `{variable}` ICU syntax inside `t.rich()` in server components — function references can't be serialized across the RSC→Client Component boundary
+- Switched to `<tag>content</tag>` syntax for rich text in translations
+- Added dark theme support (`dark:` Tailwind classes) to all legal page components
+
+**CI Run:** `24187121578` ✅
+
+### Iteration 4.10: How-to Guide Help Page (2026-04-09)
+
+**What was implemented:**
+
+- Created `/help` route — server component page with comprehensive getting-started guide
+- 6 main sections: Getting Started, Managing Your Account, Using the Dashboard, Settings & Preferences, Security Tips, Getting Help
+- 14 subsections covering account creation, email verification, login, account settings, social accounts, account deletion, dashboard overview, currency, timezone, language, passwords, security, forgot password, and contact/support
+- Added Help link to Header navigation (visible to all users, both authenticated and unauthenticated)
+- Server component using `getTranslations` from `next-intl/server`
+- Rich text link for forgot-password using `<tag>content</tag>` syntax (safe for RSC)
+- Dark theme support with `dark:` Tailwind classes throughout
+- Responsive design with card-style subsection layout (bordered cards with rounded corners)
+- Full bilingual content (English + Hebrew) with RTL support
+
+**Key files created:**
+
+- [`apps/web/src/app/[locale]/help/layout.tsx`](../apps/web/src/app/[locale]/help/layout.tsx) — Help pages layout wrapper
+- [`apps/web/src/app/[locale]/help/page.tsx`](../apps/web/src/app/[locale]/help/page.tsx) — How-to Guide page (server component)
+- [`apps/web/src/app/[locale]/help/help.spec.tsx`](../apps/web/src/app/[locale]/help/help.spec.tsx) — Help page tests (7 tests)
+
+**Files modified:**
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added `help` namespace + `nav.help` key
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew `help` namespace + `nav.help` key
+- [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) — Added Help navigation link
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Added test for Help link
+
+**Tests added:**
+
+- [`help.spec.tsx`](../apps/web/src/app/[locale]/help/help.spec.tsx) — 7 tests (main title, subtitle, 6 section headings, 14 subsection headings, forgot password link, back to home link, renders without crashing)
+- [`Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — 1 new test (help link present with correct href)
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 261     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **639** |                          |
+
+**CI Run:** `24191198081` ✅ | **Deploy Staging Run:** `24191198100` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-09)
+
+**Routes accessible:**
+
+- `/en/help` — English How-to Guide
+- `/he/help` — Hebrew How-to Guide (RTL)
 
 ### Upcoming Phases
 
