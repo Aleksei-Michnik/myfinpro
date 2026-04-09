@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 12/15      | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 13/15      | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -55,7 +55,7 @@
 | 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
 | 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
 
-**Total iterations:** 143 | **Completed:** 41 | **Remaining:** 102
+**Total iterations:** 143 | **Completed:** 42 | **Remaining:** 101
 
 ---
 
@@ -1376,7 +1376,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.8       | Account deletion scheduler                   | ✅ Complete    |
 | 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
 | 4.10      | How-to Guide                                 | ✅ Complete    |
-| 4.11      | Consent + footer                             | ⬜ Not Started |
+| 4.11      | Consent + footer                             | ✅ Complete    |
 | 4.12      | Integration + E2E tests                      | ⬜ Not Started |
 | 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
 
@@ -1670,6 +1670,66 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 
 - `/en/help` — English How-to Guide
 - `/he/help` — Hebrew How-to Guide (RTL)
+
+### Iteration 4.11: Registration Consent Checkbox + Global Footer (2026-04-09)
+
+**What was implemented:**
+
+**Part 1 — Registration Consent Checkbox:**
+
+- Added consent checkbox to [`RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) below password fields, above submit button
+- Checkbox label uses `t.rich()` with `<terms>` and `<privacy>` tags linking to `/legal/terms` and `/legal/privacy`
+- Submit button is disabled until consent checkbox is checked (in addition to existing empty-fields check)
+- Form validation: consent must be checked to submit — shows error message if attempting to submit without consent
+- Links use Next.js `Link` component from `next-intl` navigation (same-tab navigation)
+- Dark theme support with `dark:` Tailwind classes on checkbox and label
+
+**Part 2 — Global Footer:**
+
+- Created [`Footer.tsx`](../apps/web/src/components/layout/Footer.tsx) client component using `useTranslations('footer')`
+- Horizontal navigation links: Terms of Use, Privacy Policy, Help (separated by `|` dividers on desktop)
+- Dynamic copyright text with `{year}` placeholder (`t('copyright', { year })`)
+- Responsive layout — links wrap on mobile, flex-wrap with gap
+- Subtle styling: smaller text, muted gray colors, border-top separator
+- Dark theme support throughout
+- Added Footer to [`locale layout`](../apps/web/src/app/[locale]/layout.tsx) below ErrorBoundary children (appears on every page)
+
+**Translation keys added:**
+
+- `auth.consentLabel` — Rich text with `<terms>` and `<privacy>` tag placeholders (en + he)
+- `auth.consentRequired` — Validation error message (en + he)
+- `footer.terms`, `footer.privacy`, `footer.help`, `footer.copyright` — Footer navigation and copyright (en + he)
+
+**Key files created:**
+
+- [`apps/web/src/components/layout/Footer.tsx`](../apps/web/src/components/layout/Footer.tsx) — Global footer component
+- [`apps/web/src/components/layout/Footer.spec.tsx`](../apps/web/src/components/layout/Footer.spec.tsx) — Footer tests (6 tests)
+
+**Key files modified:**
+
+- [`apps/web/src/components/auth/RegisterForm.tsx`](../apps/web/src/components/auth/RegisterForm.tsx) — Added consent checkbox with rich text labels
+- [`apps/web/src/components/auth/RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) — Added 5 consent tests + updated existing tests for consent flow
+- [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx) — Added Footer import and rendering
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added auth consent + footer translations
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Added Hebrew auth consent + footer translations
+
+**Tests added/updated:**
+
+- [`Footer.spec.tsx`](../apps/web/src/components/layout/Footer.spec.tsx) — 6 tests (footer element, copyright text, terms/privacy/help links with correct hrefs, navigation element)
+- [`RegisterForm.spec.tsx`](../apps/web/src/components/auth/RegisterForm.spec.tsx) — 5 new consent tests (checkbox rendered, disabled without consent, enabled with consent, submit with consent, consent link hrefs) + updated 3 existing tests to include consent checkbox click
+
+**Test counts:**
+
+| Category       | Count   | Framework                |
+| -------------- | ------- | ------------------------ |
+| API Unit Tests | 332     | Jest                     |
+| Web Unit Tests | 272     | Vitest + Testing Library |
+| Shared Package | 46      | Vitest                   |
+| **Total**      | **650** |                          |
+
+**CI Run:** `24192569435` ✅
+
+**Deployment:** ✅ CI passed, staging deployed successfully (2026-04-09)
 
 ### Upcoming Phases
 
