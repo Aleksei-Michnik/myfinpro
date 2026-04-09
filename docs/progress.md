@@ -1774,6 +1774,26 @@ Comprehensive integration tests (API) and E2E Playwright tests (web) covering al
 
 **Deployment:** ✅ CI passed (2026-04-09). Playwright E2E tests run in CI only.
 
+### Phase 4 Production Merge
+
+- **Date**: April 9, 2026
+- **Merged**: develop → main
+- **Merge Commit**: `ad84f6e`
+- **CI Run**: `24195385169` (Deploy Production)
+- **Status**: ✅ Deployed to production
+- **Features**:
+  - Email verification (backend + frontend)
+  - Password reset (backend + frontend)
+  - Account deletion with 30-day grace period (backend + frontend + scheduler)
+  - Account settings page (connected accounts, currency, timezone preferences)
+  - Terms of Use and Privacy Policy pages (bilingual EN/HE)
+  - How-to Guide help page
+  - Registration consent checkbox
+  - Global footer with legal/help links
+  - Comprehensive integration and E2E tests
+- **Iterations**: 4.1–4.12 (15 iterations including 4.7.1, 4.7.2)
+- **Total tests**: 710 (332 API unit + 31 integration + 272 web unit + 18 E2E + 11 staging E2E + 46 shared)
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
