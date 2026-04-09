@@ -317,12 +317,12 @@
         "title": "Contact & Support",
         "content": "If you need assistance or have questions, please reach out to our support team at support@myfinpro.com. We aim to respond within 24 hours."
       }
-    },
-    "footer": {
-      "terms": "Terms of Use",
-      "privacy": "Privacy Policy",
-      "help": "Help",
-      "copyright": "© {year} MyFinPro. All rights reserved."
     }
+  },
+  "footer": {
+    "terms": "Terms of Use",
+    "privacy": "Privacy Policy",
+    "help": "Help",
+    "copyright": "© {year} MyFinPro. All rights reserved."
   }
 }
