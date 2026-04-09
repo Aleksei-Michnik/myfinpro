@@ -188,8 +188,7 @@
         "title": "8. Contact Information",
         "content": "If you have any questions about these Terms of Use, please contact us through the application's support channels."
       },
-      "seePrivacy": "See also our {link}.",
-      "privacyLinkText": "Privacy Policy"
+      "seePrivacy": "See also our <link>Privacy Policy</link>."
     },
     "privacy": {
       "title": "Privacy Policy",
@@ -235,8 +234,7 @@
         "title": "10. Contact Information",
         "content": "If you have any questions about this Privacy Policy or your data, please contact us through the application's support channels."
       },
-      "seeTerms": "See also our {link}.",
-      "termsLinkText": "Terms of Use"
+      "seeTerms": "See also our <link>Terms of Use</link>."
     }
   }
 }
