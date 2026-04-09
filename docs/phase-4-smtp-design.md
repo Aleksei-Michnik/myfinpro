@@ -51,12 +51,12 @@ Haraka acts as a **local Mail Transfer Agent (MTA)**. The NestJS API submits ema
 
 ### Email Types Handled
 
-| Email Type | Trigger | Template |
-|------------|---------|----------|
-| Email verification | User registers with email | `buildVerificationEmail()` |
-| Password reset | User requests password reset | `buildPasswordResetEmail()` |
-| Account deletion confirmation | User deletes account | `buildDeletionConfirmationEmail()` |
-| Account deletion cancelled | User cancels deletion | `buildDeletionCancelledEmail()` |
+| Email Type                    | Trigger                      | Template                           |
+| ----------------------------- | ---------------------------- | ---------------------------------- |
+| Email verification            | User registers with email    | `buildVerificationEmail()`         |
+| Password reset                | User requests password reset | `buildPasswordResetEmail()`        |
+| Account deletion confirmation | User deletes account         | `buildDeletionConfirmationEmail()` |
+| Account deletion cancelled    | User cancels deletion        | `buildDeletionCancelledEmail()`    |
 
 ---
 
@@ -66,11 +66,11 @@ Haraka acts as a **local Mail Transfer Agent (MTA)**. The NestJS API submits ema
 
 The project uses a **three-tier Docker Compose separation**:
 
-| Tier | Compose File | Contents | Network |
-|------|-------------|----------|---------|
-| Infrastructure | `docker-compose.{env}.infra.yml` | MySQL, Redis, **Haraka** | `myfinpro-{env}-net` external |
-| Application | `docker-compose.{env}.app.yml` | API blue/green, Web blue/green | `myfinpro-{env}-net` external |
-| Shared | `docker-compose.shared-nginx.yml` | Nginx reverse proxy | Both staging + production nets |
+| Tier           | Compose File                      | Contents                       | Network                        |
+| -------------- | --------------------------------- | ------------------------------ | ------------------------------ |
+| Infrastructure | `docker-compose.{env}.infra.yml`  | MySQL, Redis, **Haraka**       | `myfinpro-{env}-net` external  |
+| Application    | `docker-compose.{env}.app.yml`    | API blue/green, Web blue/green | `myfinpro-{env}-net` external  |
+| Shared         | `docker-compose.shared-nginx.yml` | Nginx reverse proxy            | Both staging + production nets |
 
 **Haraka belongs in the Infrastructure tier** — it is a long-lived service, not part of blue/green deployment slots. Both blue and green API slots must reach the same Haraka instance.
 
@@ -109,11 +109,11 @@ flowchart LR
 
 ### Port Requirements
 
-| Port | Direction | Purpose | Exposed to Host? |
-|------|-----------|---------|-------------------|
-| 25 (container) | Internal: API → Haraka | SMTP submission from Nodemailer | **No** — internal Docker network only |
-| 25 (host) | Outbound: Haraka → Internet | Delivering to recipient MX servers | **Yes** — already allowed by `ufw default allow outgoing` |
-| 587 | N/A | Not used — internal SMTP submission does not need STARTTLS | No |
+| Port           | Direction                   | Purpose                                                    | Exposed to Host?                                          |
+| -------------- | --------------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
+| 25 (container) | Internal: API → Haraka      | SMTP submission from Nodemailer                            | **No** — internal Docker network only                     |
+| 25 (host)      | Outbound: Haraka → Internet | Delivering to recipient MX servers                         | **Yes** — already allowed by `ufw default allow outgoing` |
+| 587            | N/A                         | Not used — internal SMTP submission does not need STARTTLS | No                                                        |
 
 ### Data Flow
 
@@ -142,6 +142,7 @@ sequenceDiagram
 **Choice**: Place Haraka in `docker-compose.{env}.infra.yml`
 
 **Rationale**:
+
 - Haraka is a long-lived service like MySQL and Redis — it should NOT restart during blue/green API deployments
 - Both blue and green API slots need to reach the same Haraka instance
 - Infrastructure services are managed separately from application deploys
@@ -152,6 +153,7 @@ sequenceDiagram
 **Choice**: Plain SMTP on internal Docker network, TLS only for outbound delivery
 
 **Rationale**:
+
 - API → Haraka communication is internal Docker network — no TLS or authentication needed
 - No need to share Let's Encrypt/Cloudflare origin certs with Haraka
 - Haraka → recipient MX uses opportunistic TLS (Haraka's outbound plugin enables this by default)
@@ -159,14 +161,14 @@ sequenceDiagram
 
 ### Decision 3: DKIM — 2048-bit RSA, Selector `mail`
 
-| Parameter | Value |
-|-----------|-------|
-| Algorithm | RSA |
-| Key size | 2048-bit |
-| Selector | `mail` |
-| DNS record | `mail._domainkey.<domain>` |
-| Private key storage | Volume-mounted from host, NOT in git |
-| Deployment method | GitHub Secret → written to disk during deploy |
+| Parameter           | Value                                         |
+| ------------------- | --------------------------------------------- |
+| Algorithm           | RSA                                           |
+| Key size            | 2048-bit                                      |
+| Selector            | `mail`                                        |
+| DNS record          | `mail._domainkey.<domain>`                    |
+| Private key storage | Volume-mounted from host, NOT in git          |
+| Deployment method   | GitHub Secret → written to disk during deploy |
 
 **Why 2048-bit**: Industry standard. 1024-bit is considered weak. 4096-bit causes TXT record issues with some DNS providers.
 
@@ -182,6 +184,7 @@ max_unconfirmed=5      ; Max unconfirmed emails per connection
 ```
 
 The API already has rate limiting on email endpoints:
+
 - Verification: 3 per 10 minutes per user
 - Password reset: 3 per 10 minutes per IP
 - Account deletion: 1 per request (authenticated)
@@ -205,6 +208,7 @@ Logs viewable via `docker logs myfinpro-{env}-haraka`. Haraka's `syslog` plugin 
 **Choice**: Store as GitHub Secret, deploy to disk during CI/CD
 
 **Rationale**: The project follows a "no secrets on disk" philosophy (see `docs/server-setup-guide.md` Part 10), but DKIM is an exception — Haraka reads the private key from a file at startup. The key is:
+
 1. Generated once locally
 2. Stored as GitHub Secret `DKIM_PRIVATE_KEY`
 3. Written to disk on the server during deploy workflow
@@ -242,11 +246,13 @@ echo "mail" > infrastructure/haraka/dkim-keys/<domain>/selector
 ```
 
 **Do NOT commit** the private key. Add to `.gitignore`:
+
 ```
 infrastructure/haraka/dkim-keys/<domain>/private
 ```
 
 Extract public key for DNS:
+
 ```bash
 grep -v '^-' infrastructure/haraka/dkim-keys/<domain>/public | tr -d '\n'
 ```
@@ -460,34 +466,34 @@ level=info
 Add after the Redis service:
 
 ```yaml
-  # ───── Haraka SMTP Server ─────
-  haraka:
-    build:
-      context: ./infrastructure/haraka
-      dockerfile: Dockerfile
-    container_name: myfinpro-staging-haraka
-    restart: unless-stopped
-    hostname: mail.<domain>
-    volumes:
-      - ./infrastructure/haraka/config:/opt/haraka/config:ro
-      - ./infrastructure/haraka/dkim-keys:/opt/haraka/config/dkim:ro
-      - myfinpro-staging-haraka-queue:/opt/haraka/queue
-    networks:
-      - myfinpro-staging-net
-    healthcheck:
-      test: ['CMD', 'nc', '-z', 'localhost', '25']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+# ───── Haraka SMTP Server ─────
+haraka:
+  build:
+    context: ./infrastructure/haraka
+    dockerfile: Dockerfile
+  container_name: myfinpro-staging-haraka
+  restart: unless-stopped
+  hostname: mail.<domain>
+  volumes:
+    - ./infrastructure/haraka/config:/opt/haraka/config:ro
+    - ./infrastructure/haraka/dkim-keys:/opt/haraka/config/dkim:ro
+    - myfinpro-staging-haraka-queue:/opt/haraka/queue
+  networks:
+    - myfinpro-staging-net
+  healthcheck:
+    test: ['CMD', 'nc', '-z', 'localhost', '25']
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
 ```
 
 Add to the `volumes:` section:
 
 ```yaml
-  myfinpro-staging-haraka-queue:
-    name: myfinpro-staging-haraka-queue
-    driver: local
+myfinpro-staging-haraka-queue:
+  name: myfinpro-staging-haraka-queue
+  driver: local
 ```
 
 ### `docker-compose.production.infra.yml` — Add Haraka Service
@@ -495,46 +501,46 @@ Add to the `volumes:` section:
 Add after the Redis service:
 
 ```yaml
-  # ───── Haraka SMTP Server ─────
-  haraka:
-    build:
-      context: ./infrastructure/haraka
-      dockerfile: Dockerfile
-    container_name: myfinpro-prod-haraka
-    restart: unless-stopped
-    hostname: mail.<domain>
-    volumes:
-      - ./infrastructure/haraka/config:/opt/haraka/config:ro
-      - ./infrastructure/haraka/dkim-keys:/opt/haraka/config/dkim:ro
-      - myfinpro-production-haraka-queue:/opt/haraka/queue
-    networks:
-      - myfinpro-production-net
-    healthcheck:
-      test: ['CMD', 'nc', '-z', 'localhost', '25']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '5'
+# ───── Haraka SMTP Server ─────
+haraka:
+  build:
+    context: ./infrastructure/haraka
+    dockerfile: Dockerfile
+  container_name: myfinpro-prod-haraka
+  restart: unless-stopped
+  hostname: mail.<domain>
+  volumes:
+    - ./infrastructure/haraka/config:/opt/haraka/config:ro
+    - ./infrastructure/haraka/dkim-keys:/opt/haraka/config/dkim:ro
+    - myfinpro-production-haraka-queue:/opt/haraka/queue
+  networks:
+    - myfinpro-production-net
+  healthcheck:
+    test: ['CMD', 'nc', '-z', 'localhost', '25']
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+  deploy:
+    resources:
+      limits:
+        memory: 256M
+        cpus: '0.5'
+      reservations:
+        memory: 128M
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '5'
 ```
 
 Add to the `volumes:` section:
 
 ```yaml
-  myfinpro-production-haraka-queue:
-    name: myfinpro-production-haraka-queue
-    driver: local
+myfinpro-production-haraka-queue:
+  name: myfinpro-production-haraka-queue
+  driver: local
 ```
 
 ### `docker-compose.staging.app.yml` — Add SMTP Env Vars
@@ -542,12 +548,12 @@ Add to the `volumes:` section:
 Add to the `api` service `environment:` section:
 
 ```yaml
-      SMTP_HOST: ${SMTP_HOST:-haraka}
-      SMTP_PORT: ${SMTP_PORT:-25}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-MyFinPro <noreply@<domain>>}
+SMTP_HOST: ${SMTP_HOST:-haraka}
+SMTP_PORT: ${SMTP_PORT:-25}
+SMTP_SECURE: ${SMTP_SECURE:-false}
+SMTP_USER: ${SMTP_USER:-}
+SMTP_PASS: ${SMTP_PASS:-}
+SMTP_FROM: ${SMTP_FROM:-MyFinPro <noreply@<domain>>}
 ```
 
 ### `docker-compose.production.app.yml` — Add SMTP Env Vars
@@ -555,12 +561,12 @@ Add to the `api` service `environment:` section:
 Same additions as staging, to the `api` service `environment:` section:
 
 ```yaml
-      SMTP_HOST: ${SMTP_HOST:-haraka}
-      SMTP_PORT: ${SMTP_PORT:-25}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-MyFinPro <noreply@<domain>>}
+SMTP_HOST: ${SMTP_HOST:-haraka}
+SMTP_PORT: ${SMTP_PORT:-25}
+SMTP_SECURE: ${SMTP_SECURE:-false}
+SMTP_USER: ${SMTP_USER:-}
+SMTP_PASS: ${SMTP_PASS:-}
+SMTP_FROM: ${SMTP_FROM:-MyFinPro <noreply@<domain>>}
 ```
 
 ### Standalone Compose Files (Non-Blue/Green)
@@ -580,18 +586,19 @@ if (!smtpHost) {
   this.useConsole = true;
 } else {
   this.transporter = nodemailer.createTransport({
-    host: smtpHost,        // → 'haraka' (Docker service name)
-    port: SMTP_PORT,       // → 25
-    secure: SMTP_SECURE,   // → false (no TLS on internal network)
+    host: smtpHost, // → 'haraka' (Docker service name)
+    port: SMTP_PORT, // → 25
+    secure: SMTP_SECURE, // → false (no TLS on internal network)
     auth: {
-      user: SMTP_USER,     // → '' (no auth needed)
-      pass: SMTP_PASS,     // → '' (no auth needed)
+      user: SMTP_USER, // → '' (no auth needed)
+      pass: SMTP_PASS, // → '' (no auth needed)
     },
   });
 }
 ```
 
 When `SMTP_HOST=haraka` is set:
+
 - Nodemailer connects to `haraka:25` via internal Docker DNS
 - No authentication (empty user/pass)
 - No TLS (`secure: false`)
@@ -653,15 +660,15 @@ Same as staging template.
 
 ### GitHub Secrets to Add
 
-| Secret | Value | Notes |
-|--------|-------|-------|
-| `STAGING_SMTP_HOST` | `haraka` | Docker service name |
-| `STAGING_SMTP_PORT` | `25` | Internal SMTP port |
-| `STAGING_SMTP_FROM` | `MyFinPro <noreply@<domain>>` | From address |
-| `PRODUCTION_SMTP_HOST` | `haraka` | Docker service name |
-| `PRODUCTION_SMTP_PORT` | `25` | Internal SMTP port |
-| `PRODUCTION_SMTP_FROM` | `MyFinPro <noreply@<domain>>` | From address |
-| `DKIM_PRIVATE_KEY` | Contents of `infrastructure/haraka/dkim-keys/<domain>/private` | RSA private key PEM |
+| Secret                 | Value                                                          | Notes               |
+| ---------------------- | -------------------------------------------------------------- | ------------------- |
+| `STAGING_SMTP_HOST`    | `haraka`                                                       | Docker service name |
+| `STAGING_SMTP_PORT`    | `25`                                                           | Internal SMTP port  |
+| `STAGING_SMTP_FROM`    | `MyFinPro <noreply@<domain>>`                                  | From address        |
+| `PRODUCTION_SMTP_HOST` | `haraka`                                                       | Docker service name |
+| `PRODUCTION_SMTP_PORT` | `25`                                                           | Internal SMTP port  |
+| `PRODUCTION_SMTP_FROM` | `MyFinPro <noreply@<domain>>`                                  | From address        |
+| `DKIM_PRIVATE_KEY`     | Contents of `infrastructure/haraka/dkim-keys/<domain>/private` | RSA private key PEM |
 
 ---
 
@@ -671,25 +678,25 @@ All records configured in **Cloudflare DNS** for the `<domain>` domain.
 
 ### 9.1 Mail Server A Record
 
-| Type | Name | Value | Proxy | TTL |
-|------|------|-------|-------|-----|
-| A | `mail` | `<ip>` | **DNS only** (gray cloud ☁️) | Auto |
+| Type | Name   | Value  | Proxy                        | TTL  |
+| ---- | ------ | ------ | ---------------------------- | ---- |
+| A    | `mail` | `<ip>` | **DNS only** (gray cloud ☁️) | Auto |
 
 Creates `mail.<domain>` → `<ip>` **without Cloudflare proxy**. SMTP traffic cannot be proxied through Cloudflare.
 
 ### 9.2 MX Record
 
-| Type | Name | Value | Priority | TTL |
-|------|------|-------|----------|-----|
-| MX | `@` | `mail.<domain>` | 10 | Auto |
+| Type | Name | Value           | Priority | TTL  |
+| ---- | ---- | --------------- | -------- | ---- |
+| MX   | `@`  | `mail.<domain>` | 10       | Auto |
 
 Not strictly required for send-only, but some receiving servers verify that the sending domain has an MX record.
 
 ### 9.3 SPF Record
 
-| Type | Name | Value |
-|------|------|-------|
-| TXT | `@` | `v=spf1 ip4:<ip> -all` |
+| Type | Name | Value                  |
+| ---- | ---- | ---------------------- |
+| TXT  | `@`  | `v=spf1 ip4:<ip> -all` |
 
 **Meaning**: Only the server at `<ip>` is authorized to send email for `<domain>`. All other sources should be rejected.
 
@@ -703,11 +710,12 @@ First, extract the public key:
 grep -v '^-' infrastructure/haraka/dkim-keys/<domain>/public | tr -d '\n'
 ```
 
-| Type | Name | Value |
-|------|------|-------|
-| TXT | `mail._domainkey` | `v=DKIM1; k=rsa; p=<PUBLIC_KEY_BASE64>` |
+| Type | Name              | Value                                   |
+| ---- | ----------------- | --------------------------------------- |
+| TXT  | `mail._domainkey` | `v=DKIM1; k=rsa; p=<PUBLIC_KEY_BASE64>` |
 
 **Example** (with placeholder for the actual key):
+
 ```
 v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...IDAQAB
 ```
@@ -715,17 +723,19 @@ v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...IDAQAB
 > **Note**: Cloudflare TXT records support up to 2048 characters per chunk. A 2048-bit RSA public key fits within this limit.
 
 **Verification**:
+
 ```bash
 dig TXT mail._domainkey.<domain> +short
 ```
 
 ### 9.5 DMARC Record
 
-| Type | Name | Value |
-|------|------|-------|
-| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@<domain>; pct=100; adkim=s; aspf=s` |
+| Type | Name     | Value                                                                         |
+| ---- | -------- | ----------------------------------------------------------------------------- |
+| TXT  | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@<domain>; pct=100; adkim=s; aspf=s` |
 
 **Breakdown**:
+
 - `p=quarantine` — emails failing DMARC go to spam (start here; upgrade to `p=reject` after warm-up)
 - `rua=mailto:dmarc@<domain>` — aggregate DMARC reports
 - `pct=100` — apply to 100% of messages
@@ -734,8 +744,8 @@ dig TXT mail._domainkey.<domain> +short
 
 ### 9.6 PTR Record (Reverse DNS)
 
-| IP | PTR Value |
-|----|-----------|
+| IP     | PTR Value       |
+| ------ | --------------- |
 | `<ip>` | `mail.<domain>` |
 
 > ⚠️ **This is configured at the hosting provider level**, NOT in Cloudflare. Contact the VPS provider to set the reverse DNS PTR record.
@@ -770,6 +780,7 @@ _dmarc            TXT     "v=DMARC1; p=quarantine; rua=mailto:dmarc@<domain>; pc
 Add to the SSH deploy step:
 
 1. **Export SMTP environment variables**:
+
 ```bash
 export SMTP_HOST="${{ secrets.STAGING_SMTP_HOST }}"
 export SMTP_PORT="${{ secrets.STAGING_SMTP_PORT }}"
@@ -777,6 +788,7 @@ export SMTP_FROM="${{ secrets.STAGING_SMTP_FROM }}"
 ```
 
 2. **Deploy DKIM private key** (only if not already present):
+
 ```bash
 mkdir -p /opt/myfinpro/staging/infrastructure/haraka/dkim-keys/<domain>
 if [ ! -f /opt/myfinpro/staging/infrastructure/haraka/dkim-keys/<domain>/private ]; then
@@ -787,11 +799,13 @@ echo "mail" > /opt/myfinpro/staging/infrastructure/haraka/dkim-keys/<domain>/sel
 ```
 
 3. **Copy Haraka config files** (add to SCP step):
+
 ```bash
 scp -r infrastructure/haraka/ <server>:/opt/myfinpro/staging/infrastructure/
 ```
 
 4. **Build Haraka container as part of infra compose**:
+
 ```bash
 docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml build haraka
 docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d haraka
@@ -807,34 +821,34 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 
 ### Pre-Deployment Checks
 
-| Check | Command | Expected Result |
-|-------|---------|-----------------|
-| Port 25 outbound | `nc -zv gmail-smtp-in.l.google.com 25 -w 5` | Connection succeeded |
-| DNS SPF record | `dig TXT <domain> +short` | `v=spf1 ip4:<ip> -all` |
-| DNS DKIM record | `dig TXT mail._domainkey.<domain> +short` | `v=DKIM1; k=rsa; p=...` |
-| DNS DMARC record | `dig TXT _dmarc.<domain> +short` | `v=DMARC1; p=quarantine; ...` |
-| PTR record | `dig -x <ip> +short` | `mail.<domain>.` |
+| Check            | Command                                     | Expected Result               |
+| ---------------- | ------------------------------------------- | ----------------------------- |
+| Port 25 outbound | `nc -zv gmail-smtp-in.l.google.com 25 -w 5` | Connection succeeded          |
+| DNS SPF record   | `dig TXT <domain> +short`                   | `v=spf1 ip4:<ip> -all`        |
+| DNS DKIM record  | `dig TXT mail._domainkey.<domain> +short`   | `v=DKIM1; k=rsa; p=...`       |
+| DNS DMARC record | `dig TXT _dmarc.<domain> +short`            | `v=DMARC1; p=quarantine; ...` |
+| PTR record       | `dig -x <ip> +short`                        | `mail.<domain>.`              |
 
 ### Post-Deployment Checks
 
-| Check | Command | Expected Result |
-|-------|---------|-----------------|
-| Haraka container health | `docker ps \| grep haraka` | Status: healthy |
-| Haraka logs | `docker logs myfinpro-staging-haraka` | No errors, SMTP listening |
-| SMTP connectivity from API | `docker exec myfinpro-staging-api-blue sh -c "echo QUIT \| nc haraka 25"` | 220 mail.<domain> ESMTP |
-| Send test email | Trigger verification email from app | Email received |
-| DKIM header | Check email source headers | `dkim=pass` |
-| SPF header | Check email source headers | `spf=pass` |
-| DMARC header | Check email source headers | `dmarc=pass` |
+| Check                      | Command                                                                   | Expected Result           |
+| -------------------------- | ------------------------------------------------------------------------- | ------------------------- |
+| Haraka container health    | `docker ps \| grep haraka`                                                | Status: healthy           |
+| Haraka logs                | `docker logs myfinpro-staging-haraka`                                     | No errors, SMTP listening |
+| SMTP connectivity from API | `docker exec myfinpro-staging-api-blue sh -c "echo QUIT \| nc haraka 25"` | 220 mail.<domain> ESMTP   |
+| Send test email            | Trigger verification email from app                                       | Email received            |
+| DKIM header                | Check email source headers                                                | `dkim=pass`               |
+| SPF header                 | Check email source headers                                                | `spf=pass`                |
+| DMARC header               | Check email source headers                                                | `dmarc=pass`              |
 
 ### External Validation Tools
 
-| Tool | URL | Target Score |
-|------|-----|--------------|
-| Mail Tester | `mail-tester.com` | 9/10 or higher |
-| MX Toolbox | `mxtoolbox.com/SuperTool.aspx` | All green checks |
-| DKIM Validator | `dkimvalidator.com` | Valid signature |
-| Google Postmaster | `postmaster.google.com` | No issues |
+| Tool              | URL                            | Target Score     |
+| ----------------- | ------------------------------ | ---------------- |
+| Mail Tester       | `mail-tester.com`              | 9/10 or higher   |
+| MX Toolbox        | `mxtoolbox.com/SuperTool.aspx` | All green checks |
+| DKIM Validator    | `dkimvalidator.com`            | Valid signature  |
+| Google Postmaster | `postmaster.google.com`        | No issues        |
 
 ### Staging Test Plan
 
@@ -858,6 +872,7 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 **Detection**: `nc -zv gmail-smtp-in.l.google.com 25 -w 5` from the server.
 
 **Mitigation Options**:
+
 - **Option A**: Contact hosting provider to unblock port 25 (may require justification — "transactional email for a personal finance app, low volume")
 - **Option B**: Configure Haraka to relay through a smarthost (e.g., Mailgun, SendGrid SMTP relay) — still get DKIM signing from Haraka
 - **Option C**: Use alternate outbound port if provider supports it
@@ -870,6 +885,7 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 **Problem**: `<ip>` has no email sending history. Major providers may treat emails as suspicious.
 
 **Mitigation**:
+
 - Ensure SPF, DKIM, DMARC are all correctly configured before any emails are sent
 - Start by sending to your own test addresses only
 - Keep volume low initially (< 50 emails/day during warm-up)
@@ -882,6 +898,7 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 **Problem**: Cloudflare proxies HTTP/HTTPS only, NOT SMTP. MX records and SPF references must use the raw server IP.
 
 **Mitigation**:
+
 - The A record for `mail.<domain>` must be **DNS only** (gray cloud, not proxied)
 - The A records for `stage-myfin.<domain>` and `myfin.<domain>` can remain proxied (they serve web traffic)
 - SPF record directly references `ip4:<ip>` — no Cloudflare dependency
@@ -897,6 +914,7 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 **Problem**: If Haraka crashes, emails fail to send.
 
 **Mitigation**:
+
 - `restart: unless-stopped` ensures Docker restarts Haraka automatically
 - Health check detects failures within 30 seconds
 - The API's `MailService` catches all errors and logs them — the app does NOT crash
@@ -915,45 +933,45 @@ Same pattern as staging, with `PRODUCTION_*` secret prefix and `/opt/myfinpro/pr
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `infrastructure/haraka/Dockerfile` | Custom Haraka Docker image |
-| `infrastructure/haraka/.gitignore` | Ignore DKIM private keys |
-| `infrastructure/haraka/config/smtp.ini` | SMTP server config — bind 0.0.0.0:25 |
-| `infrastructure/haraka/config/me` | Hostname for EHLO — mail.<domain> |
-| `infrastructure/haraka/config/host_list` | Allowed sender domain: <domain> |
-| `infrastructure/haraka/config/plugins` | Plugin list: syslog, dkim_sign, queue/outbound |
-| `infrastructure/haraka/config/dkim_sign.ini` | DKIM signing config — selector=mail |
-| `infrastructure/haraka/config/outbound.ini` | Outbound delivery settings |
-| `infrastructure/haraka/config/log.ini` | Logging level config |
-| `infrastructure/haraka/dkim-keys/<domain>/selector` | Contains "mail" |
-| `infrastructure/haraka/dkim-keys/<domain>/private` | ⚠️ NOT committed — deployed via GitHub Secret |
-| `infrastructure/haraka/dkim-keys/<domain>/public` | Public key for DNS record |
+| File                                                | Purpose                                        |
+| --------------------------------------------------- | ---------------------------------------------- |
+| `infrastructure/haraka/Dockerfile`                  | Custom Haraka Docker image                     |
+| `infrastructure/haraka/.gitignore`                  | Ignore DKIM private keys                       |
+| `infrastructure/haraka/config/smtp.ini`             | SMTP server config — bind 0.0.0.0:25           |
+| `infrastructure/haraka/config/me`                   | Hostname for EHLO — mail.<domain>              |
+| `infrastructure/haraka/config/host_list`            | Allowed sender domain: <domain>                |
+| `infrastructure/haraka/config/plugins`              | Plugin list: syslog, dkim_sign, queue/outbound |
+| `infrastructure/haraka/config/dkim_sign.ini`        | DKIM signing config — selector=mail            |
+| `infrastructure/haraka/config/outbound.ini`         | Outbound delivery settings                     |
+| `infrastructure/haraka/config/log.ini`              | Logging level config                           |
+| `infrastructure/haraka/dkim-keys/<domain>/selector` | Contains "mail"                                |
+| `infrastructure/haraka/dkim-keys/<domain>/private`  | ⚠️ NOT committed — deployed via GitHub Secret  |
+| `infrastructure/haraka/dkim-keys/<domain>/public`   | Public key for DNS record                      |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `docker-compose.staging.infra.yml` | Add `haraka` service + queue volume |
-| `docker-compose.production.infra.yml` | Add `haraka` service + queue volume + resource limits |
-| `docker-compose.staging.app.yml` | Add SMTP_* env vars to API service |
-| `docker-compose.production.app.yml` | Add SMTP_* env vars to API service |
-| `docker-compose.staging.yml` | Add haraka service + SMTP env vars (non-blue/green) |
-| `docker-compose.production.yml` | Add haraka service + SMTP env vars (non-blue/green) |
-| `.github/workflows/deploy-staging.yml` | Export SMTP env vars, deploy DKIM key, copy Haraka config |
+| File                                      | Change                                                    |
+| ----------------------------------------- | --------------------------------------------------------- |
+| `docker-compose.staging.infra.yml`        | Add `haraka` service + queue volume                       |
+| `docker-compose.production.infra.yml`     | Add `haraka` service + queue volume + resource limits     |
+| `docker-compose.staging.app.yml`          | Add SMTP\_\* env vars to API service                      |
+| `docker-compose.production.app.yml`       | Add SMTP\_\* env vars to API service                      |
+| `docker-compose.staging.yml`              | Add haraka service + SMTP env vars (non-blue/green)       |
+| `docker-compose.production.yml`           | Add haraka service + SMTP env vars (non-blue/green)       |
+| `.github/workflows/deploy-staging.yml`    | Export SMTP env vars, deploy DKIM key, copy Haraka config |
 | `.github/workflows/deploy-production.yml` | Export SMTP env vars, deploy DKIM key, copy Haraka config |
-| `.env.staging.template` | Update SMTP section for Haraka |
-| `.env.production.template` | Update SMTP section for Haraka |
-| `apps/api/.env.example` | Update SMTP defaults for Haraka |
-| `docs/server-setup-guide.md` | Add PTR record instructions, Haraka section |
-| `docs/progress.md` | Mark iteration 4.13 as complete |
+| `.env.staging.template`                   | Update SMTP section for Haraka                            |
+| `.env.production.template`                | Update SMTP section for Haraka                            |
+| `apps/api/.env.example`                   | Update SMTP defaults for Haraka                           |
+| `docs/server-setup-guide.md`              | Add PTR record instructions, Haraka section               |
+| `docs/progress.md`                        | Mark iteration 4.13 as complete                           |
 
 ### Unchanged Files
 
-| File | Reason |
-|------|--------|
+| File                                | Reason                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------ |
 | `apps/api/src/mail/mail.service.ts` | Already handles SMTP_HOST env var, no-auth, and error fallback correctly |
-| `infrastructure/nginx/*` | Nginx does not proxy SMTP traffic |
+| `infrastructure/nginx/*`            | Nginx does not proxy SMTP traffic                                        |
 
 ---
 
