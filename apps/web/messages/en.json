@@ -16,6 +16,7 @@
     "budgets": "Budgets",
     "settings": "Settings",
     "connectedAccounts": "Connected Accounts",
+    "help": "Help",
     "signIn": "Sign In",
     "signUp": "Sign Up",
     "logout": "Logout"
@@ -235,6 +236,85 @@
         "content": "If you have any questions about this Privacy Policy or your data, please contact us through the application's support channels."
       },
       "seeTerms": "See also our <link>Terms of Use</link>."
+    }
+  },
+  "help": {
+    "title": "How to Use MyFinPro",
+    "subtitle": "A step-by-step guide to getting the most out of your personal finance manager.",
+    "backToHome": "Back to Home",
+    "gettingStarted": {
+      "title": "1. Getting Started",
+      "createAccount": {
+        "title": "Creating an Account",
+        "content": "You can sign up for MyFinPro using one of three methods: email and password, Google sign-in, or Telegram Login. Visit the registration page and choose your preferred method."
+      },
+      "verifyEmail": {
+        "title": "Verifying Your Email",
+        "content": "After registering with email, you will receive a verification email. Click the link in the email to verify your account. You can resend the verification email from the banner at the top of the page."
+      },
+      "loggingIn": {
+        "title": "Logging In",
+        "content": "Go to the sign-in page and enter your credentials, or use Google or Telegram to log in. After successful authentication you will be redirected to the dashboard."
+      }
+    },
+    "managingAccount": {
+      "title": "2. Managing Your Account",
+      "settings": {
+        "title": "Account Settings",
+        "content": "From the Account Settings page you can view your profile information, change your default currency and timezone, and update your password."
+      },
+      "socialAccounts": {
+        "title": "Connecting Social Accounts",
+        "content": "You can connect Google and Telegram to your account for easier sign-in. Go to the Connected Accounts section in your settings to link or unlink providers."
+      },
+      "deleteAccount": {
+        "title": "Deleting Your Account",
+        "content": "If you wish to delete your account, go to Account Settings and click Delete Account. Your account will enter a 30-day grace period during which you can cancel the deletion. After 30 days, all data is permanently removed."
+      }
+    },
+    "dashboard": {
+      "title": "3. Using the Dashboard",
+      "overview": {
+        "title": "Dashboard Overview",
+        "content": "The dashboard is your central hub for viewing your financial data at a glance. Financial tracking features including transactions, budgets, and reports are coming soon."
+      }
+    },
+    "settingsPreferences": {
+      "title": "4. Settings & Preferences",
+      "currency": {
+        "title": "Changing Default Currency",
+        "content": "Go to Account Settings and find the Preferences section. Select your preferred currency from the dropdown and click Save. All new transactions will default to this currency."
+      },
+      "timezone": {
+        "title": "Changing Timezone",
+        "content": "In the Preferences section of Account Settings, select your timezone from the dropdown. This affects how dates and times are displayed throughout the application."
+      },
+      "language": {
+        "title": "Changing Language",
+        "content": "Use the language switcher in the top-right corner of the page to switch between English and Hebrew. The interface will update immediately, including right-to-left layout for Hebrew."
+      }
+    },
+    "security": {
+      "title": "5. Security Tips",
+      "strongPassword": {
+        "title": "Strong Password Recommendations",
+        "content": "Use a password that is at least 8 characters long and includes uppercase letters, lowercase letters, and numbers. Avoid using the same password across multiple sites."
+      },
+      "keepSecure": {
+        "title": "Keeping Your Account Secure",
+        "content": "Never share your password with anyone. If you use a shared computer, make sure to log out after each session. Consider connecting a social account as a backup sign-in method."
+      },
+      "forgotPassword": {
+        "title": "Forgot Your Password?",
+        "content": "Go to the <link>forgot password page</link> to request a password reset link. You will receive an email with instructions to set a new password."
+      }
+    },
+    "gettingHelp": {
+      "title": "6. Getting Help",
+      "contact": {
+        "title": "Contact & Support",
+        "content": "If you need assistance or have questions, please reach out to our support team at support@myfinpro.com. We aim to respond within 24 hours."
+      }
     }
   }
 }

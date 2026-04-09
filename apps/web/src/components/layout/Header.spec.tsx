@@ -98,6 +98,13 @@ describe('Header', () => {
     expect(screen.getByText('nav.home')).toBeInTheDocument();
   });
 
+  it('renders help navigation link', () => {
+    render(<Header />);
+    const helpLink = screen.getByText('nav.help');
+    expect(helpLink).toBeInTheDocument();
+    expect(helpLink.closest('a')).toHaveAttribute('href', '/help');
+  });
+
   it('renders locale switcher links for all locales', () => {
     render(<Header />);
     expect(screen.getByText('EN')).toBeInTheDocument();

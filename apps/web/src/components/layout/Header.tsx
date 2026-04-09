@@ -34,6 +34,12 @@ export function Header() {
           >
             {t('nav.home')}
           </Link>
+          <Link
+            href="/help"
+            className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors"
+          >
+            {t('nav.help')}
+          </Link>
 
           {!isLoading && isAuthenticated && (
             <>
