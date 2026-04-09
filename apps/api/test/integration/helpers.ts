@@ -57,6 +57,9 @@ export async function registerUser(
     .send({ email, password, name })
     .expect(201);
 
+  const rawCookies = res.headers['set-cookie'];
+  const cookies: string[] = Array.isArray(rawCookies) ? rawCookies : rawCookies ? [rawCookies] : [];
+
   return {
     accessToken: res.body.accessToken as string,
     user: res.body.user as {
@@ -68,7 +71,7 @@ export async function registerUser(
       timezone: string;
       emailVerified: boolean;
     },
-    cookies: res.headers['set-cookie'] as string[],
+    cookies,
   };
 }
 
@@ -85,10 +88,13 @@ export async function loginUser(
     .send({ email, password })
     .expect(200);
 
+  const rawCookies = res.headers['set-cookie'];
+  const cookies: string[] = Array.isArray(rawCookies) ? rawCookies : rawCookies ? [rawCookies] : [];
+
   return {
     accessToken: res.body.accessToken as string,
     user: res.body.user,
-    cookies: res.headers['set-cookie'] as string[],
+    cookies,
   };
 }
 
