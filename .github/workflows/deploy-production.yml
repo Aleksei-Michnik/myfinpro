@@ -348,7 +348,7 @@ jobs:
             cd /opt/myfinpro/production
 
             echo "── Ensuring infrastructure is running ──"
-            docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d
+            docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d --build
 
             echo "── Deploying application with blue-green strategy ──"
             chmod +x scripts/deploy.sh scripts/rollback.sh scripts/cleanup-images.sh

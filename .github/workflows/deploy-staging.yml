@@ -267,7 +267,7 @@ jobs:
             cd /opt/myfinpro/staging
 
             echo "── Ensuring infrastructure is running ──"
-            docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d
+            docker compose -p myfinpro-staging-infra -f docker-compose.staging.infra.yml up -d --build
 
             echo "── Waiting for MySQL to be healthy ──"
             for i in $(seq 1 30); do
