@@ -1377,8 +1377,8 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
 | 4.10      | How-to Guide                                 | ✅ Complete    |
 | 4.11      | Consent + footer                             | ✅ Complete    |
-| 4.12      | Integration + E2E tests                      | ⬜ Not Started |
-| 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
+| 4.12      | Integration + E2E tests                      | ✅ Complete    |
+| 4.13      | Haraka SMTP infrastructure                   | 🔄 In Progress |
 
 ### Iteration 4.7: Delete Account — Frontend (2026-04-08)
 
@@ -1773,6 +1773,42 @@ Comprehensive integration tests (API) and E2E Playwright tests (web) covering al
 **CI Run:** `24194477791` ✅
 
 **Deployment:** ✅ CI passed (2026-04-09). Playwright E2E tests run in CI only.
+
+### Iteration 4.13: Haraka SMTP Infrastructure (2026-04-10)
+
+#### Env Var Deduplication (2026-04-10)
+
+**What was implemented:**
+
+Refactored all Haraka SMTP environment variables to derive from existing secrets (DRY principle), eliminating the need for redundant GitHub Secrets like `STAGING_HARAKA_MAIL_DOMAIN`, `PRODUCTION_HARAKA_MAIL_HOSTNAME`, `STAGING_SMTP_FROM`, etc.
+
+**Derivation rules (from `SERVER_NAME`, which comes from `CLOUDFLARE_*_SUBDOMAIN`):**
+
+- `HARAKA_MAIL_DOMAIN` = `${SERVER_NAME}` (same value)
+- `HARAKA_MAIL_HOSTNAME` = derived by [`entrypoint.sh`](../infrastructure/haraka/entrypoint.sh:8) as `mail.${HARAKA_MAIL_DOMAIN}`
+- `SMTP_FROM` = `MyFinPro <noreply@${SERVER_NAME}>` (derived in Docker Compose)
+- `SMTP_HOST` = `haraka` (static: Docker service name)
+- `SMTP_PORT` = `25` (static: internal SMTP)
+- `SMTP_SECURE` = `false` (static: internal network)
+
+**Removed redundant vars:** `SMTP_USER`, `SMTP_PASS` (not needed for internal Haraka relay), `HARAKA_MAIL_HOSTNAME` env var (auto-derived by entrypoint).
+
+**Files changed (8 files):**
+
+- [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml) — Haraka: `HARAKA_MAIL_DOMAIN: ${SERVER_NAME}`
+- [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml) — Same
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — API: static SMTP + derived `SMTP_FROM`
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Same
+- [`docker-compose.staging.yml`](../docker-compose.staging.yml) — Standalone: both Haraka + API changes
+- [`docker-compose.production.yml`](../docker-compose.production.yml) — Same
+- [`.env.staging.template`](../.env.staging.template) — Documentation updated
+- [`.env.production.template`](../.env.production.template) — Documentation updated
+
+**CI/CD workflows:** No changes needed — `SERVER_NAME` already exported by both staging and production deploy workflows.
+
+**Only genuinely new secret needed:** `DKIM_PRIVATE_KEY` (actual cryptographic key, can't be derived).
+
+**Tests:** All existing tests pass (332 API unit + 272 web unit). No test changes needed — this is infrastructure-only.
 
 ### Phase 4 Production Merge
 
