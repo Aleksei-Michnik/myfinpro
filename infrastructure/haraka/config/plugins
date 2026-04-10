@@ -1,7 +1,3 @@
-# ── Logging ──
-# syslog writes to stdout, captured by Docker
-syslog
-
 # ── DKIM Signing ──
 # Sign all outbound emails with DKIM
 dkim_sign
