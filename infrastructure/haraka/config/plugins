@@ -1,3 +1,9 @@
+# ── Relay ACL ──
+# Allow relay from trusted IPs (Docker network containers)
+# Without this plugin, Haraka rejects mail to external domains with
+# "550 I cannot deliver mail for <recipient>" because connection.relaying is false
+relay
+
 # ── DKIM Signing ──
 # Sign all outbound emails with DKIM (haraka-plugin-dkim npm package)
 dkim

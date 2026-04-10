@@ -25,14 +25,14 @@ export class MailService {
       this.transporter = null;
     } else {
       this.useConsole = false;
+      const smtpUser = this.configService.get<string>('SMTP_USER', '');
+      const smtpPass = this.configService.get<string>('SMTP_PASS', '');
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
         port: this.configService.get<number>('SMTP_PORT', 587),
         secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
-        auth: {
-          user: this.configService.get<string>('SMTP_USER', ''),
-          pass: this.configService.get<string>('SMTP_PASS', ''),
-        },
+        // Only include auth when credentials are provided (internal relays like Haraka don't need auth)
+        ...(smtpUser ? { auth: { user: smtpUser, pass: smtpPass } } : {}),
       });
       this.logger.log(`SMTP transport configured (host: ${smtpHost})`);
     }

@@ -65,6 +65,16 @@ describe('MailService', () => {
     });
   });
 
+  it('creates SMTP transporter without auth when SMTP_USER is empty', async () => {
+    await createService({ SMTP_USER: '', SMTP_PASS: '' });
+
+    expect(mockCreateTransport).toHaveBeenCalledWith({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+    });
+  });
+
   it('uses console fallback when SMTP_HOST is not configured', async () => {
     const service = await createService({ SMTP_HOST: undefined });
 
