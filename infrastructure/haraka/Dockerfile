@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:22-alpine
 
 # Install Haraka globally
 RUN npm install -g Haraka@3.1.5
