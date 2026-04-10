@@ -6,8 +6,9 @@ RUN npm install -g Haraka@3.1.5
 # Create Haraka instance directory
 RUN haraka -i /opt/haraka
 
-# Install required Haraka plugins (npm packages)
-RUN cd /opt/haraka && npm install haraka-plugin-dkim@1.0.11
+# DKIM signing uses the built-in dkim_sign plugin (no npm package needed).
+# The npm haraka-plugin-dkim causes "Cannot pipe while currently piping"
+# crash due to a message-stream race condition with queue/deliver.
 
 # Copy static configuration files (domain-agnostic)
 COPY config/ /opt/haraka/config/

@@ -5,8 +5,10 @@
 relay
 
 # ── DKIM Signing ──
-# Sign all outbound emails with DKIM (haraka-plugin-dkim npm package)
-dkim
+# Sign outbound emails with DKIM using the built-in dkim_sign plugin.
+# Note: haraka-plugin-dkim (npm) causes "Cannot pipe while currently piping"
+# crash due to a message-stream race condition with queue/deliver.
+dkim_sign
 
 # ── Outbound Delivery ──
 # Queue and deliver to recipient MX servers
