@@ -59,8 +59,8 @@ services:
     container_name: myfinpro-staging-haraka
     restart: unless-stopped
     environment:
-      HARAKA_MAIL_DOMAIN: ${HARAKA_MAIL_DOMAIN}
-      HARAKA_MAIL_HOSTNAME: ${HARAKA_MAIL_HOSTNAME}
+      # Derived from SERVER_NAME; HARAKA_MAIL_HOSTNAME derived by entrypoint.sh as mail.${HARAKA_MAIL_DOMAIN}
+      HARAKA_MAIL_DOMAIN: ${SERVER_NAME}
     volumes:
       - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
       - myfinpro-staging-haraka-queue:/opt/haraka/queue
