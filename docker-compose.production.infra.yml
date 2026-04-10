@@ -89,7 +89,9 @@ services:
       - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
       - myfinpro-production-haraka-queue:/opt/haraka/queue
     networks:
-      - myfinpro-production-net
+      myfinpro-production-net:
+        aliases:
+          - haraka
     healthcheck:
       test: ['CMD', 'nc', '-z', 'localhost', '25']
       interval: 30s

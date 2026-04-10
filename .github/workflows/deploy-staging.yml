@@ -154,6 +154,7 @@ jobs:
             docker-compose.shared-nginx.yml,
             infrastructure/nginx/,
             infrastructure/mysql/,
+            infrastructure/haraka/,
             scripts/deploy.sh,
             scripts/rollback.sh,
             scripts/cleanup-images.sh
@@ -182,6 +183,8 @@ jobs:
           # ── Telegram Auth ──
           TELEGRAM_BOT_TOKEN_STAGE: ${{ secrets.TELEGRAM_BOT_TOKEN_STAGE }}
           TELEGRAM_BOT_USERNAME_STAGE: ${{ secrets.TELEGRAM_BOT_USERNAME_STAGE }}
+          # ── DKIM ──
+          DKIM_PRIVATE_KEY: ${{ secrets.DKIM_PRIVATE_KEY }}
           # ── Non-secret config ──
           NODE_ENV: staging
           API_PORT: '3001'
@@ -202,7 +205,7 @@ jobs:
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           command_timeout: 30m
-          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,TELEGRAM_BOT_TOKEN_STAGE,TELEGRAM_BOT_USERNAME_STAGE,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,TELEGRAM_BOT_TOKEN_STAGE,TELEGRAM_BOT_USERNAME_STAGE,DKIM_PRIVATE_KEY,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
           script: |
             set -euo pipefail
             cd /opt/myfinpro/staging
@@ -232,6 +235,11 @@ jobs:
             export GHCR_REPO
             export IMAGE_TAG
             export SERVER_NAME
+
+            echo "── Writing DKIM private key ──"
+            mkdir -p /opt/myfinpro/staging/infrastructure/haraka/dkim-keys
+            echo "$DKIM_PRIVATE_KEY" > /opt/myfinpro/staging/infrastructure/haraka/dkim-keys/private
+            chmod 600 /opt/myfinpro/staging/infrastructure/haraka/dkim-keys/private
 
             echo "── Ensuring Docker networks exist ──"
             docker network create myfinpro-staging-net 2>/dev/null || true

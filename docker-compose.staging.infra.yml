@@ -65,7 +65,9 @@ services:
       - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
       - myfinpro-staging-haraka-queue:/opt/haraka/queue
     networks:
-      - myfinpro-staging-net
+      myfinpro-staging-net:
+        aliases:
+          - haraka
     healthcheck:
       test: ['CMD', 'nc', '-z', 'localhost', '25']
       interval: 30s
