@@ -5,10 +5,10 @@
 relay
 
 # ── DKIM Signing ──
-# Sign outbound emails with DKIM using the built-in dkim_sign plugin.
-# Note: haraka-plugin-dkim (npm) causes "Cannot pipe while currently piping"
-# crash due to a message-stream race condition with queue/deliver.
-dkim_sign
+# TODO: Re-enable after resolving haraka-message-stream "Cannot pipe while
+# currently piping" crash in outbound/index.js:309 (affects both dkim npm
+# package and built-in dkim_sign on Haraka 3.1.5 with Node.js 22).
+# dkim_sign
 
 # ── Outbound Delivery ──
 # Queue and deliver to recipient MX servers
