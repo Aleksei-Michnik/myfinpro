@@ -1,7 +1,7 @@
 # ── DKIM Signing ──
-# Sign all outbound emails with DKIM
-dkim_sign
+# Sign all outbound emails with DKIM (haraka-plugin-dkim npm package)
+dkim
 
 # ── Outbound Delivery ──
 # Queue and deliver to recipient MX servers
-queue/outbound
+queue/deliver

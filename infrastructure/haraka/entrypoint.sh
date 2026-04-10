@@ -13,8 +13,8 @@ echo "${MAIL_HOSTNAME}" > /opt/haraka/config/me
 # config/host_list — domains Haraka is authorized to send for
 echo "${MAIL_DOMAIN}" > /opt/haraka/config/host_list
 
-# config/dkim_sign.ini — DKIM signing configuration
-cat > /opt/haraka/config/dkim_sign.ini <<EOF
+# config/dkim.ini — DKIM signing configuration (haraka-plugin-dkim)
+cat > /opt/haraka/config/dkim.ini <<EOF
 ; DKIM signing configuration (generated at startup from env vars)
 disabled=false
 selector=mail
