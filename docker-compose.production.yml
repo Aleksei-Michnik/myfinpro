@@ -138,6 +138,8 @@ services:
       SMTP_PORT: '25'
       SMTP_SECURE: 'false'
       SMTP_FROM: 'MyFinPro <noreply@${MAIL_DOMAIN}>'
+      # DKIM — signed at Nodemailer layer (Haraka dkim_sign plugin has stream crash)
+      DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
     # No exposed ports — accessed through Nginx only
     networks:
       - myfinpro-production

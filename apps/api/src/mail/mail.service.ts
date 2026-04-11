@@ -27,14 +27,30 @@ export class MailService {
       this.useConsole = false;
       const smtpUser = this.configService.get<string>('SMTP_USER', '');
       const smtpPass = this.configService.get<string>('SMTP_PASS', '');
+      const dkimPrivateKey = this.configService.get<string>('DKIM_PRIVATE_KEY', '');
+
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
         port: this.configService.get<number>('SMTP_PORT', 587),
         secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
         // Only include auth when credentials are provided (internal relays like Haraka don't need auth)
         ...(smtpUser ? { auth: { user: smtpUser, pass: smtpPass } } : {}),
+        // DKIM signing at Nodemailer layer (bypasses Haraka dkim_sign plugin crash)
+        ...(dkimPrivateKey
+          ? {
+              dkim: {
+                domainName: this.extractDomain(this.fromAddress),
+                keySelector: 'mail',
+                privateKey: dkimPrivateKey,
+              },
+            }
+          : {}),
       });
+
       this.logger.log(`SMTP transport configured (host: ${smtpHost})`);
+      if (dkimPrivateKey) {
+        this.logger.log(`DKIM signing enabled (domain: ${this.extractDomain(this.fromAddress)})`);
+      }
     }
   }
 
@@ -299,6 +315,14 @@ export class MailService {
       `;
 
     return { subject, html: this.wrapInLayout(content, locale) };
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────
+
+  /** Extract domain from a "Name <user@domain>" or "user@domain" address */
+  private extractDomain(fromAddress: string): string {
+    const match = fromAddress.match(/@([^>]+)/);
+    return match?.[1] || '';
   }
 
   // ── Layout Wrapper ─────────────────────────────────────────────────

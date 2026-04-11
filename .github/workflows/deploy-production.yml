@@ -319,6 +319,7 @@ jobs:
             export IMAGE_TAG
             export SERVER_NAME
             export MAIL_DOMAIN
+            export DKIM_PRIVATE_KEY
 
             echo "── Writing DKIM private key ──"
             mkdir -p /opt/myfinpro/production/infrastructure/haraka/dkim-keys

@@ -4,12 +4,8 @@
 # "550 I cannot deliver mail for <recipient>" because connection.relaying is false
 relay
 
-# ── DKIM Signing ──
-# TODO: Re-enable after resolving haraka-message-stream "Cannot pipe while
-# currently piping" crash in outbound/index.js:309 (affects both dkim npm
-# package and built-in dkim_sign on Haraka 3.1.5 with Node.js 22).
-# dkim_sign
-
 # ── Outbound Delivery ──
 # Queue and deliver to recipient MX servers
+# Note: DKIM signing is handled at the Nodemailer layer in the API service
+# (Haraka's dkim_sign plugin crashes with "Cannot pipe while currently piping")
 queue/deliver

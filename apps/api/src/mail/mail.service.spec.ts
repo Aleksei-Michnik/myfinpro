@@ -75,6 +75,29 @@ describe('MailService', () => {
     });
   });
 
+  it('creates SMTP transporter with DKIM when DKIM_PRIVATE_KEY is set', async () => {
+    await createService({
+      DKIM_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----',
+    });
+
+    expect(mockCreateTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dkim: {
+          domainName: 'example.com',
+          keySelector: 'mail',
+          privateKey: '-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----',
+        },
+      }),
+    );
+  });
+
+  it('creates SMTP transporter without DKIM when DKIM_PRIVATE_KEY is not set', async () => {
+    await createService();
+
+    const callArg = mockCreateTransport.mock.calls[0][0];
+    expect(callArg.dkim).toBeUndefined();
+  });
+
   it('uses console fallback when SMTP_HOST is not configured', async () => {
     const service = await createService({ SMTP_HOST: undefined });
 
