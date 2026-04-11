@@ -97,7 +97,7 @@ describe('VerifyEmailPage', () => {
       json: () =>
         Promise.resolve({
           message: 'Token expired',
-          errorCode: 'EMAIL_VERIFICATION_EXPIRED',
+          errorCode: 'AUTH_VERIFICATION_TOKEN_EXPIRED',
         }),
     });
 
@@ -109,6 +109,46 @@ describe('VerifyEmailPage', () => {
 
     expect(screen.getByText('verifyEmailExpired')).toBeInTheDocument();
     expect(screen.getByTestId('resend-btn')).toBeInTheDocument();
+  });
+
+  it('shows already-verified state when token was already used', async () => {
+    mockSearchParams = new URLSearchParams('token=used-token');
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          message: 'Verification token has already been used',
+          errorCode: 'AUTH_VERIFICATION_TOKEN_USED',
+        }),
+    });
+
+    render(<VerifyEmailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verify-already')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('verifyEmailAlreadyVerified')).toBeInTheDocument();
+  });
+
+  it('shows already-verified state when email is already verified', async () => {
+    mockSearchParams = new URLSearchParams('token=some-token');
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          message: 'Email is already verified',
+          errorCode: 'AUTH_EMAIL_ALREADY_VERIFIED',
+        }),
+    });
+
+    render(<VerifyEmailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verify-already')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('verifyEmailAlreadyVerified')).toBeInTheDocument();
   });
 
   it('shows invalid message on unknown token', async () => {

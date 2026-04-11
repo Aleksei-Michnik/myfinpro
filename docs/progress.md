@@ -1,8 +1,8 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-09
-> **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
-> **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
+> **Last updated:** 2026-04-11
+> **Current Phase:** Phase 5 — Family/Group Management (not started)
+> **Previous Phase:** Phase 4 — Auth Completion, Legal Pages & Email Infrastructure ✅ Complete
 
 ---
 
@@ -1377,8 +1377,8 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | 4.9       | Terms of Use + Privacy Policy                | ✅ Complete    |
 | 4.10      | How-to Guide                                 | ✅ Complete    |
 | 4.11      | Consent + footer                             | ✅ Complete    |
-| 4.12      | Integration + E2E tests                      | ⬜ Not Started |
-| 4.13      | Haraka SMTP infrastructure                   | ⬜ Not Started |
+| 4.12      | Integration + E2E tests                      | ✅ Complete    |
+| 4.13      | Haraka SMTP infrastructure                   | 🔄 In Progress |
 
 ### Iteration 4.7: Delete Account — Frontend (2026-04-08)
 
@@ -1773,6 +1773,163 @@ Comprehensive integration tests (API) and E2E Playwright tests (web) covering al
 **CI Run:** `24194477791` ✅
 
 **Deployment:** ✅ CI passed (2026-04-09). Playwright E2E tests run in CI only.
+
+### Iteration 4.13: Haraka SMTP Infrastructure (2026-04-10)
+
+#### Env Var Deduplication (2026-04-10)
+
+**What was implemented:**
+
+Refactored all Haraka SMTP environment variables to derive from existing secrets (DRY principle), eliminating the need for redundant GitHub Secrets like `STAGING_HARAKA_MAIL_DOMAIN`, `PRODUCTION_HARAKA_MAIL_HOSTNAME`, `STAGING_SMTP_FROM`, etc.
+
+**Derivation rules (from `SERVER_NAME`, which comes from `CLOUDFLARE_*_SUBDOMAIN`):**
+
+- `HARAKA_MAIL_DOMAIN` = `${SERVER_NAME}` (same value)
+- `HARAKA_MAIL_HOSTNAME` = derived by [`entrypoint.sh`](../infrastructure/haraka/entrypoint.sh:8) as `mail.${HARAKA_MAIL_DOMAIN}`
+- `SMTP_FROM` = `MyFinPro <noreply@${SERVER_NAME}>` (derived in Docker Compose)
+- `SMTP_HOST` = `haraka` (static: Docker service name)
+- `SMTP_PORT` = `25` (static: internal SMTP)
+- `SMTP_SECURE` = `false` (static: internal network)
+
+**Removed redundant vars:** `SMTP_USER`, `SMTP_PASS` (not needed for internal Haraka relay), `HARAKA_MAIL_HOSTNAME` env var (auto-derived by entrypoint).
+
+**Files changed (8 files):**
+
+- [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml) — Haraka: `HARAKA_MAIL_DOMAIN: ${SERVER_NAME}`
+- [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml) — Same
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — API: static SMTP + derived `SMTP_FROM`
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Same
+- [`docker-compose.staging.yml`](../docker-compose.staging.yml) — Standalone: both Haraka + API changes
+- [`docker-compose.production.yml`](../docker-compose.production.yml) — Same
+- [`.env.staging.template`](../.env.staging.template) — Documentation updated
+- [`.env.production.template`](../.env.production.template) — Documentation updated
+
+**CI/CD workflows:** No changes needed — `SERVER_NAME` already exported by both staging and production deploy workflows.
+
+**Only genuinely new secret needed:** `DKIM_PRIVATE_KEY` (actual cryptographic key, can't be derived).
+
+**Tests:** All existing tests pass (332 API unit + 272 web unit). No test changes needed — this is infrastructure-only.
+
+### Phase 4 Production Merge
+
+- **Date**: April 9, 2026
+- **Merged**: develop → main
+- **Merge Commit**: `ad84f6e`
+- **CI Run**: `24195385169` (Deploy Production)
+- **Status**: ✅ Deployed to production
+- **Features**:
+  - Email verification (backend + frontend)
+  - Password reset (backend + frontend)
+  - Account deletion with 30-day grace period (backend + frontend + scheduler)
+  - Account settings page (connected accounts, currency, timezone preferences)
+  - Terms of Use and Privacy Policy pages (bilingual EN/HE)
+  - How-to Guide help page
+  - Registration consent checkbox
+  - Global footer with legal/help links
+  - Comprehensive integration and E2E tests
+- **Iterations**: 4.1–4.12 (15 iterations including 4.7.1, 4.7.2)
+- **Total tests**: 710 (332 API unit + 31 integration + 272 web unit + 18 E2E + 11 staging E2E + 46 shared)
+
+### Haraka SMTP Email Delivery Fix (2026-04-11)
+
+**Problem:** Emails sent via Haraka on staging never arrived. Multiple layered issues discovered and fixed.
+
+**Root causes & fixes (5 commits):**
+
+1. **Missing relay plugin** (`e0ea13b`) — Haraka rejected all outbound mail with `550 I cannot deliver mail` because `connection.relaying` was never set. Added `relay` plugin to [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) and created [`relay_acl_allow`](../infrastructure/haraka/config/relay_acl_allow) with Docker network CIDRs.
+
+2. **Nodemailer auth with empty credentials** (`e0ea13b`) — Nodemailer always included `auth: { user: '', pass: '' }` even for internal Haraka relay. Fixed [`mail.service.ts`](../apps/api/src/mail/mail.service.ts:28) to only include auth when `SMTP_USER` is set.
+
+3. **Node.js 24 incompatibility** (`d5870b8`) — Downgraded Haraka Dockerfile from `node:24-alpine` to `node:22-alpine` for stability.
+
+4. **DKIM pipe crash** (`c29e3f1`) — Both `haraka-plugin-dkim` and built-in `dkim_sign` caused `Error: Cannot pipe while currently piping` in `haraka-message-stream`. DKIM temporarily disabled.
+
+5. **Wrong sender domain** (`2b23b10`) — `SMTP_FROM` used `${SERVER_NAME}` which on staging was `stage-myfin.michnik.pro` (no SPF record). Gmail rejected with `550 5.7.26 unauthenticated sender`. Introduced `MAIL_DOMAIN` env var (always production domain) for `SMTP_FROM` and `HARAKA_MAIL_DOMAIN` in all compose files and deploy workflows.
+
+**Verification:** Test email successfully delivered to Gmail via TLS 1.3 with `response="OK"` from `gmail-smtp-in.l.google.com`. Email lands in spam (expected without DKIM).
+
+**Files changed (across 5 commits):**
+
+- [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Added relay, disabled dkim_sign
+- [`infrastructure/haraka/config/relay_acl_allow`](../infrastructure/haraka/config/relay_acl_allow) — New: Docker network CIDRs
+- [`infrastructure/haraka/Dockerfile`](../infrastructure/haraka/Dockerfile) — Node 22, removed haraka-plugin-dkim
+- [`infrastructure/haraka/entrypoint.sh`](../infrastructure/haraka/entrypoint.sh) — dkim_sign.ini config
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — Conditional auth
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — Test for no-auth
+- All 6 Docker Compose files — `MAIL_DOMAIN` instead of `SERVER_NAME` for mail
+- Both deploy workflows — Added `MAIL_DOMAIN` env var
+- Both `.env.*.template` files — Updated documentation
+
+### DKIM Signing via Nodemailer (2026-04-11)
+
+**Problem:** Haraka's DKIM plugins (`haraka-plugin-dkim` and built-in `dkim_sign`) both crash with `Error: Cannot pipe while currently piping` in `haraka-message-stream`. This is a known upstream issue.
+
+**Solution:** Move DKIM signing from Haraka to Nodemailer. Nodemailer has built-in DKIM support that signs messages before handing them to the SMTP transport.
+
+**Implementation:**
+
+- Add DKIM configuration to [`mail.service.ts`](../apps/api/src/mail/mail.service.ts) when `DKIM_PRIVATE_KEY` env var is set
+- Extract domain from `SMTP_FROM` for DKIM `domainName` (reuses existing env var, DRY)
+- Selector `mail` matches the DNS TXT record (`mail._domainkey`)
+- 2048-bit RSA key pair (private key in `DKIM_PRIVATE_KEY` secret, public key in DNS)
+- Pass `DKIM_PRIVATE_KEY` to API containers in Docker Compose files
+- Export `DKIM_PRIVATE_KEY` in deploy workflows for docker-compose
+- Remove DKIM plugins from Haraka (now relay-only)
+- SPF, DKIM, DMARC DNS records all configured and passing
+
+**Verification:** Email delivered to Gmail with `dkim=pass`, `spf=pass`, `dmarc=pass` — lands in inbox (not spam).
+
+**Files changed:**
+
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — DKIM config from env vars
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — DKIM configuration tests
+- [`apps/api/.env.example`](../apps/api/.env.example) — Added `DKIM_PRIVATE_KEY`
+- [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Removed DKIM plugins
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — `DKIM_PRIVATE_KEY` to API
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Same
+- [`docker-compose.staging.yml`](../docker-compose.staging.yml) — Same
+- [`docker-compose.production.yml`](../docker-compose.production.yml) — Same
+- Both deploy workflows — Export `DKIM_PRIVATE_KEY`
+
+### Email Verification Race Condition Fix (2026-04-11)
+
+**Problem:** The verify-email page's `useEffect` had `refreshUser` in its dependency array. When `AuthProvider`'s silent refresh updated `accessToken`, `refreshUser` got a new identity (function reference), causing the `useEffect` to fire twice. The first API call succeeded (200), consuming the token, then the second API call failed (400 — token already used), overwriting the success state with "invalid".
+
+**Fixes:**
+
+1. **useRef guard** — Added a `hasVerified` ref to prevent duplicate verification API calls
+2. **Dependency cleanup** — Removed `refreshUser` from useEffect dependency array (only `token` needed)
+3. **Error code mismatch** — Fixed error code strings to match backend `AUTH_ERRORS` constants:
+   - `EMAIL_VERIFICATION_EXPIRED` → `AUTH_VERIFICATION_TOKEN_EXPIRED`
+   - `EMAIL_ALREADY_VERIFIED` → `AUTH_EMAIL_ALREADY_VERIFIED`
+4. **Token-used handling** — Handle `AUTH_VERIFICATION_TOKEN_USED` as already-verified state (show success, not error)
+
+**Files changed:**
+
+- [`apps/web/src/app/[locale]/auth/verify-email/page.tsx`](../apps/web/src/app/[locale]/auth/verify-email/page.tsx) — useRef guard, dependency fix, error codes
+- [`apps/web/src/app/[locale]/auth/verify-email/verify-email.spec.tsx`](../apps/web/src/app/[locale]/auth/verify-email/verify-email.spec.tsx) — Tests for token-used and already-verified error codes
+
+### Phase 4 Final Production Merge (2026-04-11)
+
+- **Date**: April 11, 2026
+- **Merged**: develop → main
+- **Includes**: Iteration 4.13 (Haraka SMTP with DKIM via Nodemailer) + email verification race condition fix
+- **Phase 4 fully complete**: all 15 iterations (4.1–4.13, including 4.7.1, 4.7.2)
+- **Features delivered in Phase 4**:
+  - Email verification (backend + frontend)
+  - Password reset (backend + frontend)
+  - Account deletion with 30-day grace period (backend + frontend + scheduler)
+  - Account settings page (connected accounts, currency, timezone preferences)
+  - Terms of Use and Privacy Policy pages (bilingual EN/HE)
+  - How-to Guide help page
+  - Registration consent checkbox
+  - Global footer with legal/help links
+  - Self-hosted Haraka SMTP server (relay-only mode in Docker)
+  - DKIM signing via Nodemailer (2048-bit RSA, selector `mail`)
+  - SPF, DKIM, DMARC DNS records configured and passing
+  - All env vars derived from existing secrets (DRY)
+  - Email verification race condition fix (useRef guard)
+  - Comprehensive integration and E2E tests
 
 ### Upcoming Phases
 

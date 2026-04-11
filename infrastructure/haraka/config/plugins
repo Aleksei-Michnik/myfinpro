@@ -1,0 +1,11 @@
+# ── Relay ACL ──
+# Allow relay from trusted IPs (Docker network containers)
+# Without this plugin, Haraka rejects mail to external domains with
+# "550 I cannot deliver mail for <recipient>" because connection.relaying is false
+relay
+
+# ── Outbound Delivery ──
+# Queue and deliver to recipient MX servers
+# Note: DKIM signing is handled at the Nodemailer layer in the API service
+# (Haraka's dkim_sign plugin crashes with "Cannot pipe while currently piping")
+queue/deliver

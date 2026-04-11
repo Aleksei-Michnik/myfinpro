@@ -74,6 +74,46 @@ services:
         max-size: '10m'
         max-file: '5'
 
+  # ───── Haraka SMTP Server ─────
+  haraka:
+    build:
+      context: ./infrastructure/haraka
+      dockerfile: Dockerfile
+    container_name: myfinpro-prod-haraka
+    restart: unless-stopped
+    environment:
+      # Mail domain (always production domain for SPF/DKIM alignment); hostname derived by entrypoint.sh
+      HARAKA_MAIL_DOMAIN: ${MAIL_DOMAIN}
+    volumes:
+      - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
+      - myfinpro-production-haraka-queue:/opt/haraka/queue
+    networks:
+      - myfinpro-production
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "const s=require('net').connect(25,'localhost',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
   # ───── NestJS API ─────
   api:
     image: ghcr.io/${GHCR_REPO}/api:${IMAGE_TAG:-latest}
@@ -93,6 +133,13 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       API_INTERNAL_URL: ${API_INTERNAL_URL}
+      # SMTP — static (internal Haraka relay) + mail domain (always production domain for SPF/DKIM)
+      SMTP_HOST: haraka
+      SMTP_PORT: '25'
+      SMTP_SECURE: 'false'
+      SMTP_FROM: 'MyFinPro <noreply@${MAIL_DOMAIN}>'
+      # DKIM — signed at Nodemailer layer (Haraka dkim_sign plugin has stream crash)
+      DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
     # No exposed ports — accessed through Nginx only
     networks:
       - myfinpro-production
@@ -100,6 +147,8 @@ services:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      haraka:
         condition: service_healthy
     healthcheck:
       test:
@@ -205,6 +254,8 @@ volumes:
   myfinpro-production-mysql:
     driver: local
   myfinpro-production-redis:
+    driver: local
+  myfinpro-production-haraka-queue:
     driver: local
 
 networks:

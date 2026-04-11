@@ -235,6 +235,7 @@ jobs:
             docker-compose.shared-nginx.yml,
             infrastructure/nginx/,
             infrastructure/mysql/,
+            infrastructure/haraka/,
             scripts/deploy.sh,
             scripts/rollback.sh,
             scripts/cleanup-images.sh
@@ -263,6 +264,8 @@ jobs:
           # ── Telegram Auth ──
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+          # ── DKIM ──
+          DKIM_PRIVATE_KEY: ${{ secrets.DKIM_PRIVATE_KEY }}
           # ── Non-secret config ──
           NODE_ENV: production
           API_PORT: '3001'
@@ -278,12 +281,14 @@ jobs:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.sha_short }}
           # ── Server config ──
           SERVER_NAME: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
+          # ── Mail domain (always production domain — SPF/DKIM are configured there) ──
+          MAIL_DOMAIN: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           command_timeout: 30m
-          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,TELEGRAM_BOT_TOKEN,TELEGRAM_BOT_USERNAME,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,TELEGRAM_BOT_TOKEN,TELEGRAM_BOT_USERNAME,DKIM_PRIVATE_KEY,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME,MAIL_DOMAIN
           script: |
             set -euo pipefail
             cd /opt/myfinpro/production
@@ -313,6 +318,13 @@ jobs:
             export GHCR_REPO
             export IMAGE_TAG
             export SERVER_NAME
+            export MAIL_DOMAIN
+            export DKIM_PRIVATE_KEY
+
+            echo "── Writing DKIM private key ──"
+            mkdir -p /opt/myfinpro/production/infrastructure/haraka/dkim-keys
+            echo "$DKIM_PRIVATE_KEY" > /opt/myfinpro/production/infrastructure/haraka/dkim-keys/private
+            chmod 600 /opt/myfinpro/production/infrastructure/haraka/dkim-keys/private
 
             echo "── Ensuring Docker networks exist ──"
             docker network create myfinpro-staging-net 2>/dev/null || true
@@ -340,7 +352,7 @@ jobs:
             cd /opt/myfinpro/production
 
             echo "── Ensuring infrastructure is running ──"
-            docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d
+            docker compose -p myfinpro-production-infra -f docker-compose.production.infra.yml up -d --build
 
             echo "── Deploying application with blue-green strategy ──"
             chmod +x scripts/deploy.sh scripts/rollback.sh scripts/cleanup-images.sh
@@ -374,12 +386,13 @@ jobs:
           GHCR_REPO: aleksei-michnik/myfinpro
           IMAGE_TAG: ${{ needs.build-and-push.outputs.sha_short }}
           SERVER_NAME: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
+          MAIL_DOMAIN: ${{ secrets.CLOUDFLARE_PRODUCTION_SUBDOMAIN }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           command_timeout: 30m
-          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME
+          envs: MYSQL_ROOT_PASSWORD,MYSQL_DATABASE,MYSQL_USER,MYSQL_PASSWORD,DATABASE_URL,JWT_SECRET,JWT_REFRESH_SECRET,REDIS_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,FRONTEND_URL,NODE_ENV,API_PORT,CORS_ORIGINS,LOG_LEVEL,SWAGGER_ENABLED,RATE_LIMIT_TTL,RATE_LIMIT_MAX,NEXT_PUBLIC_API_URL,API_INTERNAL_URL,GHCR_REPO,IMAGE_TAG,SERVER_NAME,MAIL_DOMAIN
           script: |
             echo "⚠️ Production deployment failed — initiating rollback..."
             cd /opt/myfinpro/production
@@ -389,7 +402,7 @@ jobs:
             export GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_CALLBACK_URL FRONTEND_URL
             export NODE_ENV API_PORT CORS_ORIGINS LOG_LEVEL SWAGGER_ENABLED
             export RATE_LIMIT_TTL RATE_LIMIT_MAX NEXT_PUBLIC_API_URL API_INTERNAL_URL
-            export GHCR_REPO IMAGE_TAG SERVER_NAME
+            export GHCR_REPO IMAGE_TAG SERVER_NAME MAIL_DOMAIN
 
             if [ -f scripts/rollback.sh ]; then
               chmod +x scripts/rollback.sh

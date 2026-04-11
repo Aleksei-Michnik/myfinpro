@@ -1,0 +1,5 @@
+# IP ranges allowed to relay outbound mail through Haraka
+# Docker bridge networks use 172.16.0.0/12 and 10.0.0.0/8 ranges
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
