@@ -12,18 +12,18 @@ test.describe('Staging – Legal Pages', () => {
     const response = await page.goto('/en/legal/privacy');
     expect(response).not.toBeNull();
     expect(response!.status()).toBeLessThan(400);
-    await expect(page.getByRole('heading', { name: 'Privacy Policy' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
   });
 
   test('Terms page has cross-link to Privacy', async ({ page }) => {
     await page.goto('/en/legal/terms');
-    const privacyLink = page.locator('a[href*="/legal/privacy"]');
+    const privacyLink = page.getByRole('article').locator('a[href*="/legal/privacy"]');
     await expect(privacyLink).toBeVisible();
   });
 
   test('Privacy page has cross-link to Terms', async ({ page }) => {
     await page.goto('/en/legal/privacy');
-    const termsLink = page.locator('a[href*="/legal/terms"]');
+    const termsLink = page.getByRole('article').locator('a[href*="/legal/terms"]');
     await expect(termsLink).toBeVisible();
   });
 });
