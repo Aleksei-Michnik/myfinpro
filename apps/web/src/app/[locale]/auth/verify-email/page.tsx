@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -19,12 +19,17 @@ export default function VerifyEmailPage() {
   const { resendVerificationEmail, refreshUser } = useAuth();
   const [state, setState] = useState<VerifyState>('loading');
   const [isResending, setIsResending] = useState(false);
+  const verifiedRef = useRef(false);
 
   useEffect(() => {
     if (!token) {
       setState('no-token');
       return;
     }
+
+    // Prevent duplicate verification calls (e.g. when refreshUser identity changes)
+    if (verifiedRef.current) return;
+    verifiedRef.current = true;
 
     const verify = async () => {
       try {
@@ -35,9 +40,12 @@ export default function VerifyEmailPage() {
         } else {
           const error = await res.json().catch(() => ({ errorCode: 'UNKNOWN' }));
           const errorCode = (error as { errorCode?: string }).errorCode;
-          if (errorCode === 'EMAIL_VERIFICATION_EXPIRED') {
+          if (errorCode === 'AUTH_VERIFICATION_TOKEN_EXPIRED') {
             setState('expired');
-          } else if (errorCode === 'EMAIL_ALREADY_VERIFIED') {
+          } else if (
+            errorCode === 'AUTH_EMAIL_ALREADY_VERIFIED' ||
+            errorCode === 'AUTH_VERIFICATION_TOKEN_USED'
+          ) {
             setState('already-verified');
           } else {
             setState('invalid');
@@ -49,7 +57,7 @@ export default function VerifyEmailPage() {
     };
 
     verify();
-  }, [token, refreshUser]);
+  }, [token]);
 
   const handleResend = async () => {
     setIsResending(true);
