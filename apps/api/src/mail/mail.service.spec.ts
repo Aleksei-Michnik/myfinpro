@@ -16,7 +16,7 @@ describe('MailService', () => {
     SMTP_USER: 'user@example.com',
     SMTP_PASS: 'password',
     SMTP_FROM: 'MyFinPro <noreply@example.com>',
-    FRONTEND_URL: 'https://myfinpro.com',
+    SERVER_NAME: 'myfinpro.com',
   };
 
   function createConfigService(overrides: Record<string, string | number | undefined> = {}) {
