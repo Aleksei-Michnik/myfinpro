@@ -1849,11 +1849,13 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
 **Verification:** Test email successfully delivered to Gmail via TLS 1.3 with `response="OK"` from `gmail-smtp-in.l.google.com`. Email lands in spam (expected without DKIM).
 
 **Remaining work:**
+
 - Re-enable DKIM signing (requires fixing `haraka-message-stream` pipe crash)
 - Publish DKIM DNS TXT record (`dkim._domainkey.myfin.michnik.pro`)
 - With DKIM + SPF both passing, emails should move from spam to inbox
 
 **Files changed (across 5 commits):**
+
 - [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Added relay, disabled dkim_sign
 - [`infrastructure/haraka/config/relay_acl_allow`](../infrastructure/haraka/config/relay_acl_allow) — New: Docker network CIDRs
 - [`infrastructure/haraka/Dockerfile`](../infrastructure/haraka/Dockerfile) — Node 22, removed haraka-plugin-dkim
