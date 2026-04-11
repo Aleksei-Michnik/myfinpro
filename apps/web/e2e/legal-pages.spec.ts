@@ -8,18 +8,18 @@ test.describe('Legal Pages', () => {
 
   test('Privacy Policy page renders heading', async ({ page }) => {
     await page.goto('/en/legal/privacy');
-    await expect(page.getByRole('heading', { name: 'Privacy Policy' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
   });
 
   test('Terms page has link to Privacy Policy', async ({ page }) => {
     await page.goto('/en/legal/terms');
-    const privacyLink = page.locator('a[href*="/legal/privacy"]');
+    const privacyLink = page.getByRole('article').locator('a[href*="/legal/privacy"]');
     await expect(privacyLink).toBeVisible();
   });
 
   test('Privacy page has link to Terms of Use', async ({ page }) => {
     await page.goto('/en/legal/privacy');
-    const termsLink = page.locator('a[href*="/legal/terms"]');
+    const termsLink = page.getByRole('article').locator('a[href*="/legal/terms"]');
     await expect(termsLink).toBeVisible();
   });
 
