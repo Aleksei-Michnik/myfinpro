@@ -82,8 +82,8 @@ services:
     container_name: myfinpro-prod-haraka
     restart: unless-stopped
     environment:
-      # Derived from SERVER_NAME; HARAKA_MAIL_HOSTNAME derived by entrypoint.sh as mail.${HARAKA_MAIL_DOMAIN}
-      HARAKA_MAIL_DOMAIN: ${SERVER_NAME}
+      # Mail domain (always production domain for SPF/DKIM alignment); hostname derived by entrypoint.sh
+      HARAKA_MAIL_DOMAIN: ${MAIL_DOMAIN}
     volumes:
       - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
       - myfinpro-production-haraka-queue:/opt/haraka/queue
@@ -133,11 +133,11 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       API_INTERNAL_URL: ${API_INTERNAL_URL}
-      # SMTP — static (internal Haraka relay) + derived from SERVER_NAME
+      # SMTP — static (internal Haraka relay) + mail domain (always production domain for SPF/DKIM)
       SMTP_HOST: haraka
       SMTP_PORT: '25'
       SMTP_SECURE: 'false'
-      SMTP_FROM: 'MyFinPro <noreply@${SERVER_NAME}>'
+      SMTP_FROM: 'MyFinPro <noreply@${MAIL_DOMAIN}>'
     # No exposed ports — accessed through Nginx only
     networks:
       - myfinpro-production

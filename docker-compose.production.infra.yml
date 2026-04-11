@@ -83,8 +83,8 @@ services:
     container_name: myfinpro-prod-haraka
     restart: unless-stopped
     environment:
-      # Derived from SERVER_NAME; HARAKA_MAIL_HOSTNAME derived by entrypoint.sh as mail.${HARAKA_MAIL_DOMAIN}
-      HARAKA_MAIL_DOMAIN: ${SERVER_NAME}
+      # Mail domain (always production domain for SPF/DKIM alignment); hostname derived by entrypoint.sh
+      HARAKA_MAIL_DOMAIN: ${MAIL_DOMAIN}
     volumes:
       - ./infrastructure/haraka/dkim-keys:/opt/haraka/dkim-keys:ro
       - myfinpro-production-haraka-queue:/opt/haraka/queue
