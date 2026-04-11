@@ -1,8 +1,8 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-09
-> **Current Phase:** Phase 4 — Auth Completion & Legal Pages 🔄 In Progress
-> **Previous Phase:** Phase 3 — Telegram Authentication ✅ Complete
+> **Last updated:** 2026-04-11
+> **Current Phase:** Phase 5 — Family/Group Management (not started)
+> **Previous Phase:** Phase 4 — Auth Completion, Legal Pages & Email Infrastructure ✅ Complete
 
 ---
 
@@ -1848,12 +1848,6 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
 
 **Verification:** Test email successfully delivered to Gmail via TLS 1.3 with `response="OK"` from `gmail-smtp-in.l.google.com`. Email lands in spam (expected without DKIM).
 
-**Remaining work:**
-
-- Re-enable DKIM signing (requires fixing `haraka-message-stream` pipe crash)
-- Publish DKIM DNS TXT record (`dkim._domainkey.myfin.michnik.pro`)
-- With DKIM + SPF both passing, emails should move from spam to inbox
-
 **Files changed (across 5 commits):**
 
 - [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Added relay, disabled dkim_sign
@@ -1865,6 +1859,77 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
 - All 6 Docker Compose files — `MAIL_DOMAIN` instead of `SERVER_NAME` for mail
 - Both deploy workflows — Added `MAIL_DOMAIN` env var
 - Both `.env.*.template` files — Updated documentation
+
+### DKIM Signing via Nodemailer (2026-04-11)
+
+**Problem:** Haraka's DKIM plugins (`haraka-plugin-dkim` and built-in `dkim_sign`) both crash with `Error: Cannot pipe while currently piping` in `haraka-message-stream`. This is a known upstream issue.
+
+**Solution:** Move DKIM signing from Haraka to Nodemailer. Nodemailer has built-in DKIM support that signs messages before handing them to the SMTP transport.
+
+**Implementation:**
+
+- Add DKIM configuration to [`mail.service.ts`](../apps/api/src/mail/mail.service.ts) when `DKIM_PRIVATE_KEY` env var is set
+- Extract domain from `SMTP_FROM` for DKIM `domainName` (reuses existing env var, DRY)
+- Selector `mail` matches the DNS TXT record (`mail._domainkey`)
+- 2048-bit RSA key pair (private key in `DKIM_PRIVATE_KEY` secret, public key in DNS)
+- Pass `DKIM_PRIVATE_KEY` to API containers in Docker Compose files
+- Export `DKIM_PRIVATE_KEY` in deploy workflows for docker-compose
+- Remove DKIM plugins from Haraka (now relay-only)
+- SPF, DKIM, DMARC DNS records all configured and passing
+
+**Verification:** Email delivered to Gmail with `dkim=pass`, `spf=pass`, `dmarc=pass` — lands in inbox (not spam).
+
+**Files changed:**
+
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — DKIM config from env vars
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — DKIM configuration tests
+- [`apps/api/.env.example`](../apps/api/.env.example) — Added `DKIM_PRIVATE_KEY`
+- [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Removed DKIM plugins
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — `DKIM_PRIVATE_KEY` to API
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Same
+- [`docker-compose.staging.yml`](../docker-compose.staging.yml) — Same
+- [`docker-compose.production.yml`](../docker-compose.production.yml) — Same
+- Both deploy workflows — Export `DKIM_PRIVATE_KEY`
+
+### Email Verification Race Condition Fix (2026-04-11)
+
+**Problem:** The verify-email page's `useEffect` had `refreshUser` in its dependency array. When `AuthProvider`'s silent refresh updated `accessToken`, `refreshUser` got a new identity (function reference), causing the `useEffect` to fire twice. The first API call succeeded (200), consuming the token, then the second API call failed (400 — token already used), overwriting the success state with "invalid".
+
+**Fixes:**
+
+1. **useRef guard** — Added a `hasVerified` ref to prevent duplicate verification API calls
+2. **Dependency cleanup** — Removed `refreshUser` from useEffect dependency array (only `token` needed)
+3. **Error code mismatch** — Fixed error code strings to match backend `AUTH_ERRORS` constants:
+   - `EMAIL_VERIFICATION_EXPIRED` → `AUTH_VERIFICATION_TOKEN_EXPIRED`
+   - `EMAIL_ALREADY_VERIFIED` → `AUTH_EMAIL_ALREADY_VERIFIED`
+4. **Token-used handling** — Handle `AUTH_VERIFICATION_TOKEN_USED` as already-verified state (show success, not error)
+
+**Files changed:**
+
+- [`apps/web/src/app/[locale]/auth/verify-email/page.tsx`](../apps/web/src/app/[locale]/auth/verify-email/page.tsx) — useRef guard, dependency fix, error codes
+- [`apps/web/src/app/[locale]/auth/verify-email/verify-email.spec.tsx`](../apps/web/src/app/[locale]/auth/verify-email/verify-email.spec.tsx) — Tests for token-used and already-verified error codes
+
+### Phase 4 Final Production Merge (2026-04-11)
+
+- **Date**: April 11, 2026
+- **Merged**: develop → main
+- **Includes**: Iteration 4.13 (Haraka SMTP with DKIM via Nodemailer) + email verification race condition fix
+- **Phase 4 fully complete**: all 15 iterations (4.1–4.13, including 4.7.1, 4.7.2)
+- **Features delivered in Phase 4**:
+  - Email verification (backend + frontend)
+  - Password reset (backend + frontend)
+  - Account deletion with 30-day grace period (backend + frontend + scheduler)
+  - Account settings page (connected accounts, currency, timezone preferences)
+  - Terms of Use and Privacy Policy pages (bilingual EN/HE)
+  - How-to Guide help page
+  - Registration consent checkbox
+  - Global footer with legal/help links
+  - Self-hosted Haraka SMTP server (relay-only mode in Docker)
+  - DKIM signing via Nodemailer (2048-bit RSA, selector `mail`)
+  - SPF, DKIM, DMARC DNS records configured and passing
+  - All env vars derived from existing secrets (DRY)
+  - Email verification race condition fix (useRef guard)
+  - Comprehensive integration and E2E tests
 
 ### Upcoming Phases
 
