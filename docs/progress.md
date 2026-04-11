@@ -1830,6 +1830,40 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
 - **Iterations**: 4.1–4.12 (15 iterations including 4.7.1, 4.7.2)
 - **Total tests**: 710 (332 API unit + 31 integration + 272 web unit + 18 E2E + 11 staging E2E + 46 shared)
 
+### Haraka SMTP Email Delivery Fix (2026-04-11)
+
+**Problem:** Emails sent via Haraka on staging never arrived. Multiple layered issues discovered and fixed.
+
+**Root causes & fixes (5 commits):**
+
+1. **Missing relay plugin** (`e0ea13b`) — Haraka rejected all outbound mail with `550 I cannot deliver mail` because `connection.relaying` was never set. Added `relay` plugin to [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) and created [`relay_acl_allow`](../infrastructure/haraka/config/relay_acl_allow) with Docker network CIDRs.
+
+2. **Nodemailer auth with empty credentials** (`e0ea13b`) — Nodemailer always included `auth: { user: '', pass: '' }` even for internal Haraka relay. Fixed [`mail.service.ts`](../apps/api/src/mail/mail.service.ts:28) to only include auth when `SMTP_USER` is set.
+
+3. **Node.js 24 incompatibility** (`d5870b8`) — Downgraded Haraka Dockerfile from `node:24-alpine` to `node:22-alpine` for stability.
+
+4. **DKIM pipe crash** (`c29e3f1`) — Both `haraka-plugin-dkim` and built-in `dkim_sign` caused `Error: Cannot pipe while currently piping` in `haraka-message-stream`. DKIM temporarily disabled.
+
+5. **Wrong sender domain** (`2b23b10`) — `SMTP_FROM` used `${SERVER_NAME}` which on staging was `stage-myfin.michnik.pro` (no SPF record). Gmail rejected with `550 5.7.26 unauthenticated sender`. Introduced `MAIL_DOMAIN` env var (always production domain) for `SMTP_FROM` and `HARAKA_MAIL_DOMAIN` in all compose files and deploy workflows.
+
+**Verification:** Test email successfully delivered to Gmail via TLS 1.3 with `response="OK"` from `gmail-smtp-in.l.google.com`. Email lands in spam (expected without DKIM).
+
+**Remaining work:**
+- Re-enable DKIM signing (requires fixing `haraka-message-stream` pipe crash)
+- Publish DKIM DNS TXT record (`dkim._domainkey.myfin.michnik.pro`)
+- With DKIM + SPF both passing, emails should move from spam to inbox
+
+**Files changed (across 5 commits):**
+- [`infrastructure/haraka/config/plugins`](../infrastructure/haraka/config/plugins) — Added relay, disabled dkim_sign
+- [`infrastructure/haraka/config/relay_acl_allow`](../infrastructure/haraka/config/relay_acl_allow) — New: Docker network CIDRs
+- [`infrastructure/haraka/Dockerfile`](../infrastructure/haraka/Dockerfile) — Node 22, removed haraka-plugin-dkim
+- [`infrastructure/haraka/entrypoint.sh`](../infrastructure/haraka/entrypoint.sh) — dkim_sign.ini config
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — Conditional auth
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — Test for no-auth
+- All 6 Docker Compose files — `MAIL_DOMAIN` instead of `SERVER_NAME` for mail
+- Both deploy workflows — Added `MAIL_DOMAIN` env var
+- Both `.env.*.template` files — Updated documentation
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
