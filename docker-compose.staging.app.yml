@@ -26,7 +26,7 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
-      FRONTEND_URL: ${FRONTEND_URL}
+      SERVER_NAME: ${SERVER_NAME}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       # SMTP — static (internal Haraka relay) + mail domain (always production domain for SPF/DKIM)
       SMTP_HOST: haraka

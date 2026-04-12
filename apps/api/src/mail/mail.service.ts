@@ -17,7 +17,8 @@ export class MailService {
       'SMTP_FROM',
       'MyFinPro <noreply@example.com>',
     );
-    this.frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const serverName = this.configService.get<string>('SERVER_NAME', '');
+    this.frontendUrl = serverName ? `https://${serverName}` : 'http://localhost:3000';
 
     if (!smtpHost) {
       this.logger.warn('SMTP not configured — emails will be logged to console');

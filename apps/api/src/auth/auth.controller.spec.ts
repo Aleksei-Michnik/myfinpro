@@ -67,7 +67,7 @@ describe('AuthController', () => {
   const mockConfigService = {
     get: jest.fn((key: string, defaultValue?: string) => {
       const config: Record<string, string> = {
-        FRONTEND_URL: 'http://localhost:3000',
+        SERVER_NAME: 'localhost:3000',
         TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN,
       };
       return config[key] ?? defaultValue;
@@ -108,7 +108,7 @@ describe('AuthController', () => {
     // Restore default config mock (tests that override this must do so per-test)
     mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
       const config: Record<string, string> = {
-        FRONTEND_URL: 'http://localhost:3000',
+        SERVER_NAME: 'localhost:3000',
         TELEGRAM_BOT_TOKEN: TEST_BOT_TOKEN,
       };
       return config[key] ?? defaultValue;
@@ -448,7 +448,7 @@ describe('AuthController', () => {
         'TestAgent/1.0',
       );
       expect(redirectResponse.redirect).toHaveBeenCalledWith(
-        'http://localhost:3000/en/auth/callback?token=mock-jwt-token',
+        'https://localhost:3000/en/auth/callback?token=mock-jwt-token',
       );
     });
   });
@@ -680,7 +680,7 @@ describe('AuthController', () => {
       mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'TELEGRAM_BOT_TOKEN') return defaultValue as string;
         const config: Record<string, string> = {
-          FRONTEND_URL: 'http://localhost:3000',
+          SERVER_NAME: 'localhost:3000',
         };
         return config[key] ?? (defaultValue as string);
       });
@@ -844,7 +844,7 @@ describe('AuthController', () => {
       mockConfigService.get.mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'TELEGRAM_BOT_TOKEN') return defaultValue as string;
         const config: Record<string, string> = {
-          FRONTEND_URL: 'http://localhost:3000',
+          SERVER_NAME: 'localhost:3000',
         };
         return config[key] ?? (defaultValue as string);
       });

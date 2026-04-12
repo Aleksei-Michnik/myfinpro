@@ -337,8 +337,9 @@ export class AuthController {
     const userAgent = request.headers['user-agent'];
     const { accessToken } = await this.authService.login(user, response, ip, userAgent);
 
-    // Redirect to frontend with access token
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    // Redirect to frontend with access token (derive from SERVER_NAME)
+    const serverName = this.configService.get<string>('SERVER_NAME', '');
+    const frontendUrl = serverName ? `https://${serverName}` : 'http://localhost:3000';
     const locale = user.locale || 'en';
     const redirectUrl = `${frontendUrl}/${locale}/auth/callback?token=${accessToken}`;
 
