@@ -1931,6 +1931,30 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
   - Email verification race condition fix (useRef guard)
   - Comprehensive integration and E2E tests
 
+### Post-Phase 4 Fix: Consolidate FRONTEND_URL to SERVER_NAME (2026-04-12)
+
+- **Date**: April 12, 2026
+- **Commit**: `c072f85` (develop), merged to main
+- **Production deploy**: CI run `24311815361` — success
+
+**Problem**: Email links (verify, reset, cancel-deletion) and Google OAuth callback redirect used a separate `FRONTEND_URL` env var. Both `FRONTEND_URL` and `SERVER_NAME` were derived from the same `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret in deploy workflows.
+
+**Fix**: Consolidated to a single variable. The API now derives the frontend base URL as `https://${SERVER_NAME}` at runtime, with `http://localhost:3000` fallback for local dev. Removed `FRONTEND_URL` from all deploy workflows, Docker Compose files, and env templates.
+
+**Files changed (11):**
+
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — Read `SERVER_NAME` instead of `FRONTEND_URL`
+- [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) — Read `SERVER_NAME` for Google OAuth redirect
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — Updated test config
+- [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — Updated test config and expectations
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Pass `SERVER_NAME` to API (was `FRONTEND_URL`)
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — Pass `SERVER_NAME` to API (was `FRONTEND_URL`)
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Removed `FRONTEND_URL` from env/envs/exports
+- [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Removed `FRONTEND_URL` from env/envs/exports
+- [`apps/api/.env.example`](../apps/api/.env.example) — Updated documentation
+- [`.env.production.template`](../.env.production.template) — Updated documentation
+- [`.env.staging.template`](../.env.staging.template) — Updated documentation
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (14 iterations)
