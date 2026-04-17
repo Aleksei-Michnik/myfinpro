@@ -22,7 +22,7 @@
     "@myfinpro/eslint-config": "workspace:*",
     "@myfinpro/tsconfig": "workspace:*",
     "@types/node": "^25.6.0",
-    "eslint": "^10.2.0",
+    "eslint": "^10.2.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
