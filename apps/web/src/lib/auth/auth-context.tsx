@@ -19,12 +19,20 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   deleteAccount: (email: string) => Promise<void>;
   cancelDeletion: () => Promise<void>;
-  updateProfile: (data: { defaultCurrency?: string; timezone?: string }) => Promise<void>;
+  updateProfile: (data: {
+    defaultCurrency?: string;
+    timezone?: string;
+    locale?: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
+const syncLocaleCookie = (locale: string) => {
+  document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -46,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const data: AuthResponse = await res.json();
           setUser(data.user);
           setAccessToken(data.accessToken);
+          if (data.user.locale) {
+            syncLocaleCookie(data.user.locale);
+          }
         }
       } catch {
         // Silent fail — user is not logged in
@@ -73,6 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result: AuthResponse = await res.json();
     setUser(result.user);
     setAccessToken(result.accessToken);
+    if (result.user.locale) {
+      syncLocaleCookie(result.user.locale);
+    }
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
@@ -92,6 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result: AuthResponse = await res.json();
     setUser(result.user);
     setAccessToken(result.accessToken);
+    if (result.user.locale) {
+      syncLocaleCookie(result.user.locale);
+    }
   }, []);
 
   const loginWithTelegram = useCallback(async (data: TelegramLoginResult) => {
@@ -108,6 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result: AuthResponse = await res.json();
     setUser(result.user);
     setAccessToken(result.accessToken);
+    if (result.user.locale) {
+      syncLocaleCookie(result.user.locale);
+    }
   }, []);
 
   const loginWithToken = useCallback(async (token: string) => {
@@ -126,6 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const userData: User = await res.json();
       setUser(userData);
+      if (userData.locale) {
+        syncLocaleCookie(userData.locale);
+      }
     } catch (error) {
       setAccessToken(null);
       setUser(null);
@@ -168,6 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const userData: User = await res.json();
         setUser(userData);
+        if (userData.locale) {
+          syncLocaleCookie(userData.locale);
+        }
       }
     } catch {
       // Silent fail
@@ -231,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken, refreshUser]);
 
   const updateProfile = useCallback(
-    async (data: { defaultCurrency?: string; timezone?: string }) => {
+    async (data: { defaultCurrency?: string; timezone?: string; locale?: string }) => {
       const token = accessToken;
       if (!token) throw new Error('Not authenticated');
       const res = await fetch(`${API_BASE}/auth/profile`, {
@@ -249,6 +275,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const updatedUser: User = await res.json();
       setUser(updatedUser);
+      if (data.locale && updatedUser.locale) {
+        syncLocaleCookie(updatedUser.locale);
+        window.location.reload();
+      }
     },
     [accessToken],
   );

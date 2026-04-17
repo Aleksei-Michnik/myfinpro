@@ -524,6 +524,7 @@ export class AuthService {
     const data: Record<string, string> = {};
     if (dto.defaultCurrency) data.defaultCurrency = dto.defaultCurrency;
     if (dto.timezone) data.timezone = dto.timezone;
+    if (dto.locale) data.locale = dto.locale;
 
     if (Object.keys(data).length === 0) {
       return this.getUser(userId);

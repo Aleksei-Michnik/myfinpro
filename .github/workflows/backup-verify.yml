@@ -20,97 +20,204 @@ jobs:
     timeout-minutes: 15
 
     services:
-      mysql:
-        image: mysql:8.4
+      mariadb:
+        image: mariadb:11.8
         env:
-          MYSQL_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
-          MYSQL_USER: ${{ env.MYSQL_USER }}
-          MYSQL_PASSWORD: ${{ env.MYSQL_PASSWORD }}
-          MYSQL_DATABASE: ${{ env.MYSQL_DATABASE }}
+          MARIADB_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+          MARIADB_USER: ${{ env.MYSQL_USER }}
+          MARIADB_PASSWORD: ${{ env.MYSQL_PASSWORD }}
+          MARIADB_DATABASE: ${{ env.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost"
+          --health-cmd="mariadb-admin ping -h localhost"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Make scripts executable
         run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
 
-      - name: Wait for MySQL to be ready
+      - name: Wait for MariaDB to be ready
         run: |
           for i in $(seq 1 30); do
             if mysqladmin ping -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD 2>/dev/null; then
-              echo "MySQL is ready"
+              echo "MariaDB is ready"
               break
             fi
-            echo "Waiting for MySQL... ($i/30)"
+            echo "Waiting for MariaDB... ($i/30)"
             sleep 2
           done
 
       - name: Create test database with sample data
         run: |
           mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD $MYSQL_DATABASE <<'SQL'
-            CREATE TABLE IF NOT EXISTS users (
-              id INT AUTO_INCREMENT PRIMARY KEY,
-              email VARCHAR(255) NOT NULL UNIQUE,
-              name VARCHAR(255) NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            -- Tables matching actual Prisma schema (apps/api/prisma/schema.prisma)
 
-            CREATE TABLE IF NOT EXISTS accounts (
-              id INT AUTO_INCREMENT PRIMARY KEY,
-              user_id INT NOT NULL,
-              name VARCHAR(255) NOT NULL,
-              balance DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-              currency VARCHAR(3) NOT NULL DEFAULT 'USD',
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (user_id) REFERENCES users(id)
-            );
+            CREATE TABLE IF NOT EXISTS `health_checks` (
+              `id` INTEGER NOT NULL AUTO_INCREMENT,
+              `status` VARCHAR(50) NOT NULL,
+              `checked_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-            CREATE TABLE IF NOT EXISTS transactions (
-              id INT AUTO_INCREMENT PRIMARY KEY,
-              account_id INT NOT NULL,
-              amount DECIMAL(15,2) NOT NULL,
-              description VARCHAR(500),
-              transaction_date DATE NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (account_id) REFERENCES accounts(id)
-            );
+            CREATE TABLE IF NOT EXISTS `users` (
+              `id` VARCHAR(36) NOT NULL,
+              `email` VARCHAR(255) NOT NULL,
+              `password_hash` VARCHAR(255) NULL,
+              `name` VARCHAR(100) NOT NULL,
+              `default_currency` VARCHAR(3) NOT NULL DEFAULT 'USD',
+              `locale` VARCHAR(5) NOT NULL DEFAULT 'en',
+              `timezone` VARCHAR(50) NOT NULL DEFAULT 'UTC',
+              `is_active` BOOLEAN NOT NULL DEFAULT true,
+              `email_verified` BOOLEAN NOT NULL DEFAULT false,
+              `last_login_at` DATETIME(3) NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              `updated_at` DATETIME(3) NOT NULL,
+              `deleted_at` DATETIME(3) NULL,
+              `scheduled_deletion_at` DATETIME(3) NULL,
+              UNIQUE INDEX `users_email_key`(`email`),
+              INDEX `users_email_idx`(`email`),
+              INDEX `users_created_at_idx`(`created_at`),
+              INDEX `users_scheduled_deletion_at_idx`(`scheduled_deletion_at`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-            INSERT INTO users (email, name) VALUES
-              ('alice@example.com', 'Alice Johnson'),
-              ('bob@example.com', 'Bob Smith');
+            CREATE TABLE IF NOT EXISTS `refresh_tokens` (
+              `id` VARCHAR(36) NOT NULL,
+              `token_hash` VARCHAR(255) NOT NULL,
+              `user_id` VARCHAR(36) NOT NULL,
+              `expires_at` DATETIME(3) NOT NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              `revoked_at` DATETIME(3) NULL,
+              `replaced_by` VARCHAR(36) NULL,
+              `user_agent` VARCHAR(500) NULL,
+              `ip_address` VARCHAR(45) NULL,
+              UNIQUE INDEX `refresh_tokens_token_hash_key`(`token_hash`),
+              INDEX `refresh_tokens_user_id_idx`(`user_id`),
+              INDEX `refresh_tokens_expires_at_idx`(`expires_at`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-            INSERT INTO accounts (user_id, name, balance, currency) VALUES
-              (1, 'Checking Account', 5000.00, 'USD'),
-              (1, 'Savings Account', 15000.00, 'USD'),
-              (2, 'Main Account', 3200.00, 'EUR');
+            CREATE TABLE IF NOT EXISTS `audit_logs` (
+              `id` VARCHAR(36) NOT NULL,
+              `user_id` VARCHAR(36) NULL,
+              `action` VARCHAR(100) NOT NULL,
+              `entity` VARCHAR(100) NOT NULL,
+              `entity_id` VARCHAR(36) NULL,
+              `details` JSON NULL,
+              `ip_address` VARCHAR(45) NULL,
+              `user_agent` VARCHAR(500) NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              INDEX `audit_logs_user_id_idx`(`user_id`),
+              INDEX `audit_logs_action_idx`(`action`),
+              INDEX `audit_logs_created_at_idx`(`created_at`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-            INSERT INTO transactions (account_id, amount, description, transaction_date) VALUES
-              (1, -50.00, 'Grocery Store', '2025-01-15'),
-              (1, 3000.00, 'Salary', '2025-01-01'),
-              (2, -200.00, 'Transfer to Checking', '2025-01-10'),
-              (3, -45.50, 'Restaurant', '2025-01-12');
+            CREATE TABLE IF NOT EXISTS `oauth_providers` (
+              `id` VARCHAR(36) NOT NULL,
+              `provider` VARCHAR(50) NOT NULL,
+              `provider_id` VARCHAR(255) NOT NULL,
+              `user_id` VARCHAR(36) NOT NULL,
+              `email` VARCHAR(255) NULL,
+              `name` VARCHAR(255) NULL,
+              `avatar_url` VARCHAR(500) NULL,
+              `metadata` JSON NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              `updated_at` DATETIME(3) NOT NULL,
+              INDEX `oauth_providers_user_id_idx`(`user_id`),
+              INDEX `oauth_providers_provider_email_idx`(`provider`, `email`),
+              UNIQUE INDEX `oauth_providers_provider_provider_id_key`(`provider`, `provider_id`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `email_verification_tokens` (
+              `id` VARCHAR(36) NOT NULL,
+              `token_hash` VARCHAR(255) NOT NULL,
+              `user_id` VARCHAR(36) NOT NULL,
+              `expires_at` DATETIME(3) NOT NULL,
+              `used_at` DATETIME(3) NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              UNIQUE INDEX `email_verification_tokens_token_hash_key`(`token_hash`),
+              INDEX `email_verification_tokens_user_id_idx`(`user_id`),
+              INDEX `email_verification_tokens_expires_at_idx`(`expires_at`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
+              `id` VARCHAR(36) NOT NULL,
+              `token_hash` VARCHAR(255) NOT NULL,
+              `user_id` VARCHAR(36) NOT NULL,
+              `expires_at` DATETIME(3) NOT NULL,
+              `used_at` DATETIME(3) NULL,
+              `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              UNIQUE INDEX `password_reset_tokens_token_hash_key`(`token_hash`),
+              INDEX `password_reset_tokens_user_id_idx`(`user_id`),
+              INDEX `password_reset_tokens_expires_at_idx`(`expires_at`),
+              PRIMARY KEY (`id`)
+            ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+            -- Foreign keys
+            ALTER TABLE `refresh_tokens` ADD CONSTRAINT `refresh_tokens_user_id_fkey`
+              FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+            ALTER TABLE `oauth_providers` ADD CONSTRAINT `oauth_providers_user_id_fkey`
+              FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+            ALTER TABLE `email_verification_tokens` ADD CONSTRAINT `email_verification_tokens_user_id_fkey`
+              FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+            ALTER TABLE `password_reset_tokens` ADD CONSTRAINT `password_reset_tokens_user_id_fkey`
+              FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+            -- Realistic test data matching the actual schema
+
+            INSERT INTO `users` (`id`, `email`, `password_hash`, `name`, `default_currency`, `locale`, `timezone`, `is_active`, `email_verified`, `created_at`, `updated_at`) VALUES
+              ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'alice@example.com', '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012', 'Alice Johnson', 'USD', 'en', 'America/New_York', true, true, '2026-01-01 10:00:00.000', '2026-01-15 08:30:00.000'),
+              ('b2c3d4e5-f6a7-8901-bcde-f12345678901', 'bob@example.com', '$2b$10$zyxwvutsrqponmlkjihgfABCDEFGHIJKLMNOPQRSTUVWXYZ012', 'Bob Smith', 'EUR', 'en', 'Europe/London', true, false, '2026-01-05 14:00:00.000', '2026-01-10 12:00:00.000');
+
+            INSERT INTO `refresh_tokens` (`id`, `token_hash`, `user_id`, `expires_at`, `created_at`, `user_agent`, `ip_address`) VALUES
+              ('c3d4e5f6-a7b8-9012-cdef-123456789012', 'hash_abc123def456', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '2026-02-01 10:00:00.000', '2026-01-15 10:00:00.000', 'Mozilla/5.0', '192.168.1.1'),
+              ('d4e5f6a7-b8c9-0123-defa-234567890123', 'hash_xyz789ghi012', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', '2026-02-05 14:00:00.000', '2026-01-10 14:00:00.000', 'Chrome/120.0', '10.0.0.1');
+
+            INSERT INTO `audit_logs` (`id`, `user_id`, `action`, `entity`, `entity_id`, `details`, `ip_address`, `created_at`) VALUES
+              ('e5f6a7b8-c9d0-1234-efab-345678901234', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'LOGIN', 'user', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '{"method": "local"}', '192.168.1.1', '2026-01-15 10:00:00.000'),
+              ('f6a7b8c9-d0e1-2345-fabc-456789012345', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', 'REGISTER', 'user', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', '{"method": "local"}', '10.0.0.1', '2026-01-05 14:00:00.000'),
+              ('a7b8c9d0-e1f2-3456-abcd-567890123456', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'VERIFY_EMAIL', 'user', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', NULL, '192.168.1.1', '2026-01-15 10:05:00.000');
+
+            INSERT INTO `oauth_providers` (`id`, `provider`, `provider_id`, `user_id`, `email`, `name`, `created_at`, `updated_at`) VALUES
+              ('b8c9d0e1-f2a3-4567-bcde-678901234567', 'telegram', '123456789', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'alice@example.com', 'Alice Johnson', '2026-01-10 09:00:00.000', '2026-01-10 09:00:00.000');
+
+            INSERT INTO `email_verification_tokens` (`id`, `token_hash`, `user_id`, `expires_at`, `used_at`, `created_at`) VALUES
+              ('c9d0e1f2-a3b4-5678-cdef-789012345678', 'evtoken_hash_abc123', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', '2026-01-02 10:00:00.000', '2026-01-01 11:00:00.000', '2026-01-01 10:00:00.000'),
+              ('d0e1f2a3-b4c5-6789-defa-890123456789', 'evtoken_hash_xyz789', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', '2026-01-06 14:00:00.000', NULL, '2026-01-05 14:00:00.000');
+
+            INSERT INTO `password_reset_tokens` (`id`, `token_hash`, `user_id`, `expires_at`, `created_at`) VALUES
+              ('e1f2a3b4-c5d6-7890-efab-901234567890', 'prtoken_hash_rst456', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', '2026-01-11 14:00:00.000', '2026-01-10 14:00:00.000');
+
+            INSERT INTO `health_checks` (`status`) VALUES ('ok'), ('ok');
           SQL
 
       - name: Record original data checksums
         id: original
         run: |
           USER_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM users;" $MYSQL_DATABASE)
-          ACCOUNT_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM accounts;" $MYSQL_DATABASE)
-          TX_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM transactions;" $MYSQL_DATABASE)
-          TABLE_CHECKSUM=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "CHECKSUM TABLE users, accounts, transactions;" $MYSQL_DATABASE)
+          REFRESH_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM refresh_tokens;" $MYSQL_DATABASE)
+          AUDIT_LOG_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM audit_logs;" $MYSQL_DATABASE)
+          OAUTH_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM oauth_providers;" $MYSQL_DATABASE)
+          EV_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM email_verification_tokens;" $MYSQL_DATABASE)
+          PR_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM password_reset_tokens;" $MYSQL_DATABASE)
+          TABLE_CHECKSUM=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "CHECKSUM TABLE users, refresh_tokens, audit_logs, oauth_providers, email_verification_tokens, password_reset_tokens;" $MYSQL_DATABASE)
 
           echo "user_count=$USER_COUNT" >> "$GITHUB_OUTPUT"
-          echo "account_count=$ACCOUNT_COUNT" >> "$GITHUB_OUTPUT"
-          echo "tx_count=$TX_COUNT" >> "$GITHUB_OUTPUT"
-          echo "Original counts: users=$USER_COUNT, accounts=$ACCOUNT_COUNT, transactions=$TX_COUNT"
+          echo "refresh_token_count=$REFRESH_TOKEN_COUNT" >> "$GITHUB_OUTPUT"
+          echo "audit_log_count=$AUDIT_LOG_COUNT" >> "$GITHUB_OUTPUT"
+          echo "oauth_count=$OAUTH_COUNT" >> "$GITHUB_OUTPUT"
+          echo "ev_token_count=$EV_TOKEN_COUNT" >> "$GITHUB_OUTPUT"
+          echo "pr_token_count=$PR_TOKEN_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Original counts: users=$USER_COUNT, refresh_tokens=$REFRESH_TOKEN_COUNT, audit_logs=$AUDIT_LOG_COUNT, oauth_providers=$OAUTH_COUNT, email_verification_tokens=$EV_TOKEN_COUNT, password_reset_tokens=$PR_TOKEN_COUNT"
           echo "Checksums: $TABLE_CHECKSUM"
 
       - name: Create backup directory
@@ -182,26 +289,44 @@ jobs:
       - name: Verify restored data matches original
         run: |
           USER_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM users;" $MYSQL_DATABASE)
-          ACCOUNT_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM accounts;" $MYSQL_DATABASE)
-          TX_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM transactions;" $MYSQL_DATABASE)
+          REFRESH_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM refresh_tokens;" $MYSQL_DATABASE)
+          AUDIT_LOG_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM audit_logs;" $MYSQL_DATABASE)
+          OAUTH_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM oauth_providers;" $MYSQL_DATABASE)
+          EV_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM email_verification_tokens;" $MYSQL_DATABASE)
+          PR_TOKEN_COUNT=$(mysql -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD -N -e "SELECT COUNT(*) FROM password_reset_tokens;" $MYSQL_DATABASE)
 
-          echo "Restored counts: users=$USER_COUNT, accounts=$ACCOUNT_COUNT, transactions=$TX_COUNT"
+          echo "Restored counts: users=$USER_COUNT, refresh_tokens=$REFRESH_TOKEN_COUNT, audit_logs=$AUDIT_LOG_COUNT, oauth_providers=$OAUTH_COUNT, email_verification_tokens=$EV_TOKEN_COUNT, password_reset_tokens=$PR_TOKEN_COUNT"
 
           EXPECTED_USERS="${{ steps.original.outputs.user_count }}"
-          EXPECTED_ACCOUNTS="${{ steps.original.outputs.account_count }}"
-          EXPECTED_TX="${{ steps.original.outputs.tx_count }}"
+          EXPECTED_REFRESH_TOKENS="${{ steps.original.outputs.refresh_token_count }}"
+          EXPECTED_AUDIT_LOGS="${{ steps.original.outputs.audit_log_count }}"
+          EXPECTED_OAUTH="${{ steps.original.outputs.oauth_count }}"
+          EXPECTED_EV_TOKENS="${{ steps.original.outputs.ev_token_count }}"
+          EXPECTED_PR_TOKENS="${{ steps.original.outputs.pr_token_count }}"
 
           PASS=true
           if [[ "$USER_COUNT" != "$EXPECTED_USERS" ]]; then
             echo "::error::User count mismatch: got $USER_COUNT, expected $EXPECTED_USERS"
             PASS=false
           fi
-          if [[ "$ACCOUNT_COUNT" != "$EXPECTED_ACCOUNTS" ]]; then
-            echo "::error::Account count mismatch: got $ACCOUNT_COUNT, expected $EXPECTED_ACCOUNTS"
+          if [[ "$REFRESH_TOKEN_COUNT" != "$EXPECTED_REFRESH_TOKENS" ]]; then
+            echo "::error::Refresh token count mismatch: got $REFRESH_TOKEN_COUNT, expected $EXPECTED_REFRESH_TOKENS"
             PASS=false
           fi
-          if [[ "$TX_COUNT" != "$EXPECTED_TX" ]]; then
-            echo "::error::Transaction count mismatch: got $TX_COUNT, expected $EXPECTED_TX"
+          if [[ "$AUDIT_LOG_COUNT" != "$EXPECTED_AUDIT_LOGS" ]]; then
+            echo "::error::Audit log count mismatch: got $AUDIT_LOG_COUNT, expected $EXPECTED_AUDIT_LOGS"
+            PASS=false
+          fi
+          if [[ "$OAUTH_COUNT" != "$EXPECTED_OAUTH" ]]; then
+            echo "::error::OAuth provider count mismatch: got $OAUTH_COUNT, expected $EXPECTED_OAUTH"
+            PASS=false
+          fi
+          if [[ "$EV_TOKEN_COUNT" != "$EXPECTED_EV_TOKENS" ]]; then
+            echo "::error::Email verification token count mismatch: got $EV_TOKEN_COUNT, expected $EXPECTED_EV_TOKENS"
+            PASS=false
+          fi
+          if [[ "$PR_TOKEN_COUNT" != "$EXPECTED_PR_TOKENS" ]]; then
+            echo "::error::Password reset token count mismatch: got $PR_TOKEN_COUNT, expected $EXPECTED_PR_TOKENS"
             PASS=false
           fi
 

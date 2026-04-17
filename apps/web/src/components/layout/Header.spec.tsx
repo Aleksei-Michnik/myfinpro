@@ -20,6 +20,12 @@ let mockAuthState = {
   refreshUser: vi.fn(),
 };
 
+// Mock next/navigation
+const mockRefresh = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: mockRefresh }),
+}));
+
 // Mock next-intl hooks
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -39,6 +45,8 @@ vi.mock('@/i18n/navigation', () => ({
 
 // Mock @/i18n/routing
 vi.mock('@/i18n/routing', () => ({
+  locales: ['en', 'he'] as const,
+  defaultLocale: 'en',
   routing: {
     locales: ['en', 'he'],
     defaultLocale: 'en',
@@ -105,24 +113,26 @@ describe('Header', () => {
     expect(helpLink.closest('a')).toHaveAttribute('href', '/help');
   });
 
-  it('renders locale switcher links for all locales', () => {
+  it('renders locale switcher dropdown with all locales', () => {
     render(<Header />);
-    expect(screen.getByText('EN')).toBeInTheDocument();
-    expect(screen.getByText('HE')).toBeInTheDocument();
+    const select = screen.getByRole('combobox', { name: 'Select language' });
+    expect(select).toBeInTheDocument();
+    expect(screen.getByText('English')).toBeInTheDocument();
+    expect(screen.getByText('עברית')).toBeInTheDocument();
   });
 
-  it('highlights the current locale', () => {
+  it('has current locale selected in dropdown', () => {
     render(<Header />);
-    const enLink = screen.getByText('EN');
-    expect(enLink.className).toContain('bg-primary-100');
-    expect(enLink.className).toContain('font-medium');
+    const select = screen.getByRole('combobox', { name: 'Select language' });
+    expect(select).toHaveValue('en');
   });
 
-  it('does not highlight non-current locale', () => {
+  it('sets cookie and refreshes router on locale switch', () => {
     render(<Header />);
-    const heLink = screen.getByText('HE');
-    expect(heLink.className).not.toContain('bg-primary-100');
-    expect(heLink.className).toContain('text-gray-500');
+    const select = screen.getByRole('combobox', { name: 'Select language' });
+    fireEvent.change(select, { target: { value: 'he' } });
+    expect(document.cookie).toContain('NEXT_LOCALE=he');
+    expect(mockRefresh).toHaveBeenCalled();
   });
 
   describe('when unauthenticated', () => {

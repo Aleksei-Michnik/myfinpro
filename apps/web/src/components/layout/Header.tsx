@@ -1,9 +1,16 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { routing } from '@/i18n/routing';
+import { locales, type Locale } from '@/i18n/routing';
 import { useAuth } from '@/lib/auth/auth-context';
+
+/** Native name display for each locale (add new ones here when scaling) */
+const localeNames: Record<Locale, string> = {
+  en: 'English',
+  he: 'עברית',
+};
 
 /**
  * Header component with app name, auth-aware navigation, and locale switcher.
@@ -11,11 +18,17 @@ import { useAuth } from '@/lib/auth/auth-context';
  */
 export function Header() {
   const t = useTranslations();
-  const currentLocale = useLocale();
+  const locale = useLocale();
+  const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
+  };
+
+  const handleLocaleSwitch = (newLocale: string) => {
+    document.cookie = `NEXT_LOCALE=${newLocale}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+    router.refresh();
   };
 
   return (
@@ -89,23 +102,19 @@ export function Header() {
           )}
         </nav>
 
-        {/* Locale switcher */}
-        <div className="flex items-center gap-2">
-          {routing.locales.map((locale) => (
-            <Link
-              key={locale}
-              href="/"
-              locale={locale}
-              className={`rounded-md px-2 py-1 text-sm transition-colors ${
-                currentLocale === locale
-                  ? 'bg-primary-100 text-primary-700 font-medium'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {locale.toUpperCase()}
-            </Link>
+        {/* Locale switcher — scalable dropdown */}
+        <select
+          value={locale}
+          onChange={(e) => handleLocaleSwitch(e.target.value)}
+          className="bg-transparent border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm"
+          aria-label="Select language"
+        >
+          {locales.map((loc) => (
+            <option key={loc} value={loc}>
+              {localeNames[loc]}
+            </option>
           ))}
-        </div>
+        </select>
       </div>
     </header>
   );

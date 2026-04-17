@@ -177,7 +177,7 @@ export class AuthController {
   @Patch('profile')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user profile preferences (currency, timezone)' })
+  @ApiOperation({ summary: 'Update user profile preferences (currency, timezone, locale)' })
   @ApiResponse({ status: 200, description: 'Profile updated successfully' })
   @ApiBadRequestResponse({ description: 'Invalid currency or timezone' })
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })

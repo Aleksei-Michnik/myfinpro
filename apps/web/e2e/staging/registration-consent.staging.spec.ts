@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Staging – Registration Consent', () => {
   test('registration page has consent checkbox', async ({ page }) => {
-    await page.goto('/en/auth/register');
+    await page.goto('/auth/register');
     await expect(page.locator('form')).toBeVisible();
 
     const checkbox = page.getByTestId('consent-checkbox');
@@ -11,7 +11,7 @@ test.describe('Staging – Registration Consent', () => {
   });
 
   test('consent label links to terms and privacy', async ({ page }) => {
-    await page.goto('/en/auth/register');
+    await page.goto('/auth/register');
     await expect(page.locator('form')).toBeVisible();
 
     const consentArea = page.locator('label:has([data-testid="consent-checkbox"])');

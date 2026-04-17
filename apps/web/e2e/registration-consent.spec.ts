@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Registration Consent', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/en/auth/register');
+    await page.goto('/auth/register');
     // Wait for the form to be fully rendered
     await expect(page.locator('form')).toBeVisible();
   });
@@ -50,13 +50,13 @@ test.describe('Registration Consent', () => {
     const consentArea = page.locator('label:has([data-testid="consent-checkbox"])');
     const termsLink = consentArea.locator('a[href*="/legal/terms"]');
     await termsLink.click();
-    await expect(page).toHaveURL(/\/en\/legal\/terms/);
+    await expect(page).toHaveURL(/\/legal\/terms/);
   });
 
   test('consent privacy link navigates to privacy page', async ({ page }) => {
     const consentArea = page.locator('label:has([data-testid="consent-checkbox"])');
     const privacyLink = consentArea.locator('a[href*="/legal/privacy"]');
     await privacyLink.click();
-    await expect(page).toHaveURL(/\/en\/legal\/privacy/);
+    await expect(page).toHaveURL(/\/legal\/privacy/);
   });
 });

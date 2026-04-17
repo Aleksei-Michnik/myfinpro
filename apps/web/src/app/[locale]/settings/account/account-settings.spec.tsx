@@ -161,9 +161,10 @@ describe('AccountSettingsPage', () => {
     expect(screen.getByTestId('connected-accounts')).toBeInTheDocument();
   });
 
-  it('renders preferences section with currency and timezone dropdowns', () => {
+  it('renders preferences section with language, currency and timezone dropdowns', () => {
     render(<AccountSettingsPage />);
     expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
+    expect(screen.getByTestId('language-select')).toBeInTheDocument();
     expect(screen.getByTestId('currency-select')).toBeInTheDocument();
     expect(screen.getByTestId('timezone-select')).toBeInTheDocument();
     expect(screen.getByTestId('save-preferences-btn')).toBeInTheDocument();
@@ -171,6 +172,7 @@ describe('AccountSettingsPage', () => {
 
   it('pre-populates dropdowns with current user values', () => {
     render(<AccountSettingsPage />);
+    expect(screen.getByTestId('language-select')).toHaveValue('en');
     expect(screen.getByTestId('currency-select')).toHaveValue('USD');
     expect(screen.getByTestId('timezone-select')).toHaveValue('UTC');
   });
@@ -180,6 +182,7 @@ describe('AccountSettingsPage', () => {
     fireEvent.click(screen.getByTestId('save-preferences-btn'));
     await waitFor(() => {
       expect(mockUpdateProfile).toHaveBeenCalledWith({
+        locale: 'en',
         defaultCurrency: 'USD',
         timezone: 'UTC',
       });

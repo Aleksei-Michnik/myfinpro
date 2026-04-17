@@ -42,7 +42,7 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 13/15      | 🔄 In Progress | —               |
+| 4     | Auth Completion & Legal Pages | 15/23      | 🔄 In Progress | —               |
 | 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
@@ -1313,6 +1313,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | [`docs/phase-2-design.md`](phase-2-design.md)                             | Phase 2 Google OAuth architecture and design            |
 | [`docs/phase-3-design.md`](phase-3-design.md)                             | Phase 3 Telegram authentication architecture and design |
 | [`docs/phase-4-design.md`](phase-4-design.md)                             | Phase 4 Auth Completion & Legal Pages design            |
+| [`docs/post-phase-4-design.md`](post-phase-4-design.md)                   | Post-Phase 4: URL redesign, NPM fix, backup fix         |
 | [`docs/deployment.md`](deployment.md)                                     | Deployment guide — full pipeline, test gating, rollback |
 | [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
@@ -1930,6 +1931,45 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
   - All env vars derived from existing secrets (DRY)
   - Email verification race condition fix (useRef guard)
   - Comprehensive integration and E2E tests
+
+### Post-Phase 4 Fix: Consolidate FRONTEND_URL to SERVER_NAME (2026-04-12)
+
+- **Date**: April 12, 2026
+- **Commit**: `c072f85` (develop), merged to main
+- **Production deploy**: CI run `24311815361` — success
+
+**Problem**: Email links (verify, reset, cancel-deletion) and Google OAuth callback redirect used a separate `FRONTEND_URL` env var. Both `FRONTEND_URL` and `SERVER_NAME` were derived from the same `CLOUDFLARE_*_SUBDOMAIN` GitHub Secret in deploy workflows.
+
+**Fix**: Consolidated to a single variable. The API now derives the frontend base URL as `https://${SERVER_NAME}` at runtime, with `http://localhost:3000` fallback for local dev. Removed `FRONTEND_URL` from all deploy workflows, Docker Compose files, and env templates.
+
+**Files changed (11):**
+
+- [`apps/api/src/mail/mail.service.ts`](../apps/api/src/mail/mail.service.ts) — Read `SERVER_NAME` instead of `FRONTEND_URL`
+- [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) — Read `SERVER_NAME` for Google OAuth redirect
+- [`apps/api/src/mail/mail.service.spec.ts`](../apps/api/src/mail/mail.service.spec.ts) — Updated test config
+- [`apps/api/src/auth/auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — Updated test config and expectations
+- [`docker-compose.production.app.yml`](../docker-compose.production.app.yml) — Pass `SERVER_NAME` to API (was `FRONTEND_URL`)
+- [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml) — Pass `SERVER_NAME` to API (was `FRONTEND_URL`)
+- [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml) — Removed `FRONTEND_URL` from env/envs/exports
+- [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) — Removed `FRONTEND_URL` from env/envs/exports
+- [`apps/api/.env.example`](../apps/api/.env.example) — Updated documentation
+- [`.env.production.template`](../.env.production.template) — Updated documentation
+- [`.env.staging.template`](../.env.staging.template) — Updated documentation
+
+### Post-Phase 4: Infrastructure Improvements (Before Phase 5)
+
+Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-phase-4-design.md`](post-phase-4-design.md) for the full design document.
+
+| Iteration | Objective                                                              | Status         |
+| --------- | ---------------------------------------------------------------------- | -------------- |
+| 4.14      | NPM fix — delete `.npmrc` (all settings match pnpm 10 defaults)        | ⬜ Not Started |
+| 4.15      | Backup fix — MariaDB container, Prisma schema, checkout v4             | ⬜ Not Started |
+| 4.16      | URL redesign — backend: add `locale` to UpdateProfileDto + DRY fix     | ⬜ Not Started |
+| 4.17      | URL redesign — i18n config: `localePrefix: 'never'`, proxy matcher     | ⬜ Not Started |
+| 4.18      | URL redesign — locale switcher: cookie-based + login sync              | ⬜ Not Started |
+| 4.19      | URL redesign — settings: Language dropdown + timezone auto-detect      | ⬜ Not Started |
+| 4.20      | URL redesign — redirects: old `/en/`, `/he/` URLs + OAuth callback fix | ⬜ Not Started |
+| 4.21      | URL redesign — tests: E2E + unit test updates for prefix-free URLs     | ⬜ Not Started |
 
 ### Upcoming Phases
 

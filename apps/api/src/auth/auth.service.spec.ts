@@ -1472,6 +1472,22 @@ describe('AuthService', () => {
       expect(result.timezone).toBe('Europe/London');
     });
 
+    it('should update locale', async () => {
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        ...mockUserData,
+        locale: 'he',
+      });
+
+      const result = await service.updateProfile('test-uuid-1234', { locale: 'he' });
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'test-uuid-1234' },
+        data: { locale: 'he' },
+      });
+      expect(result.locale).toBe('he');
+    });
+
     it('should return current user when dto is empty', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUserData);
 

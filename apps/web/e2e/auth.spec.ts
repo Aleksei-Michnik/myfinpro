@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Authentication Flows', () => {
   test('should show login page with all form fields', async ({ page }) => {
-    await page.goto('/en/auth/login');
+    await page.goto('/auth/login');
     await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
     await expect(page.getByLabel(/email/i)).toBeVisible();
     await expect(page.getByLabel(/password/i)).toBeVisible();
@@ -12,7 +12,7 @@ test.describe('Authentication Flows', () => {
   });
 
   test('should show register page with all form fields', async ({ page }) => {
-    await page.goto('/en/auth/register');
+    await page.goto('/auth/register');
     await expect(page.getByRole('heading', { name: /create/i })).toBeVisible();
     await expect(page.getByLabel(/full name/i)).toBeVisible();
     await expect(page.getByLabel(/email/i)).toBeVisible();
@@ -20,7 +20,7 @@ test.describe('Authentication Flows', () => {
   });
 
   test('should navigate between login and register', async ({ page }) => {
-    await page.goto('/en/auth/login');
+    await page.goto('/auth/login');
 
     // Wait for the form to be fully rendered before interacting
     await expect(page.locator('form')).toBeVisible();
@@ -29,7 +29,7 @@ test.describe('Authentication Flows', () => {
     const signUpLink = page.locator('form').getByRole('link', { name: /sign up/i });
     await expect(signUpLink).toBeVisible();
     await signUpLink.click();
-    await expect(page).toHaveURL(/\/en\/auth\/register/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/auth\/register/, { timeout: 10000 });
 
     // Wait for the register form to be fully rendered
     await expect(page.locator('form')).toBeVisible();
@@ -38,11 +38,11 @@ test.describe('Authentication Flows', () => {
     const signInLink = page.locator('form').getByRole('link', { name: /sign in/i });
     await expect(signInLink).toBeVisible();
     await signInLink.click();
-    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 10000 });
   });
 
   test('login form sign in button enables when fields are filled', async ({ page }) => {
-    await page.goto('/en/auth/login');
+    await page.goto('/auth/login');
     const signInButton = page.getByRole('button', { name: /sign in/i });
 
     // Initially disabled
@@ -62,7 +62,7 @@ test.describe('Authentication Flows', () => {
   });
 
   test('register form submit button is visible', async ({ page }) => {
-    await page.goto('/en/auth/register');
+    await page.goto('/auth/register');
     const submitButton = page.getByRole('button', { name: /sign up/i });
     await expect(submitButton).toBeVisible();
     // Disabled when empty (by design)
@@ -70,13 +70,13 @@ test.describe('Authentication Flows', () => {
   });
 
   test('should redirect to login when accessing dashboard unauthenticated', async ({ page }) => {
-    await page.goto('/en/dashboard');
+    await page.goto('/dashboard');
     // Should redirect to login
-    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 10000 });
   });
 
   test('header shows sign in/sign up links when not authenticated', async ({ page }) => {
-    await page.goto('/en');
+    await page.goto('/');
     const nav = page.getByRole('navigation');
     await expect(nav.getByRole('link', { name: /sign in/i })).toBeVisible();
     await expect(nav.getByRole('link', { name: /sign up/i })).toBeVisible();
@@ -132,7 +132,7 @@ test.describe('Authentication Flows', () => {
     });
 
     // 1. Go to login page
-    await page.goto('/en/auth/login');
+    await page.goto('/auth/login');
     await expect(page.getByRole('heading', { name: /sign in/i })).toBeVisible();
 
     // 2. Fill in credentials and submit
@@ -143,7 +143,7 @@ test.describe('Authentication Flows', () => {
     await page.getByRole('button', { name: /sign in/i }).click();
 
     // 3. Should redirect to dashboard
-    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
 
     // 4. Should show authenticated user in header (desktop only — hidden on mobile)
     const userNameEl = page.getByTestId('user-name');
@@ -155,14 +155,14 @@ test.describe('Authentication Flows', () => {
     await page.reload();
 
     // 6. Should still be on dashboard (not redirected to login)
-    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
 
     // 7. Authenticated UI should still be visible
     await expect(logoutButton).toBeVisible({ timeout: 5000 });
   });
 
   test('Google sign-in button is enabled and navigates to OAuth endpoint', async ({ page }) => {
-    await page.goto('/en/auth/login');
+    await page.goto('/auth/login');
 
     // Wait for form to load
     await expect(page.locator('form')).toBeVisible();
@@ -217,13 +217,13 @@ test.describe('Authentication Flows', () => {
       });
     });
 
-    await page.goto('/en/auth/callback?token=valid-google-token');
+    await page.goto('/auth/callback?token=valid-google-token');
 
     // Should show loading spinner initially
     await expect(page.getByText(/signing in with google/i)).toBeVisible({ timeout: 5000 });
 
     // Should eventually redirect to dashboard
-    await expect(page).toHaveURL(/\/en\/dashboard/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
   });
 
   test('OAuth callback page without token redirects to login', async ({ page }) => {
@@ -236,10 +236,10 @@ test.describe('Authentication Flows', () => {
       });
     });
 
-    await page.goto('/en/auth/callback');
+    await page.goto('/auth/callback');
 
     // Should redirect to login page
-    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
   });
 });
 
@@ -274,10 +274,10 @@ test.describe('Connected Accounts Page', () => {
       });
     });
 
-    await page.goto('/en/settings/connected-accounts');
+    await page.goto('/settings/connected-accounts');
 
     // Should redirect to login
-    await expect(page).toHaveURL(/\/en\/auth\/login/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
   });
 
   test('should show connected accounts page when authenticated', async ({ page }) => {
@@ -301,7 +301,7 @@ test.describe('Connected Accounts Page', () => {
       }
     });
 
-    await page.goto('/en/settings/connected-accounts');
+    await page.goto('/settings/connected-accounts');
 
     // Should show the page title
     await expect(page.getByRole('heading', { name: /connected accounts/i })).toBeVisible({
@@ -328,7 +328,7 @@ test.describe('Connected Accounts Page', () => {
       }
     });
 
-    await page.goto('/en/settings/connected-accounts');
+    await page.goto('/settings/connected-accounts');
 
     // Should show Email & Password, Google, and Telegram sections
     await expect(page.getByText('Email & Password')).toBeVisible({ timeout: 15000 });

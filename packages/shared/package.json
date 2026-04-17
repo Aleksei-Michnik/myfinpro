@@ -26,9 +26,9 @@
   "devDependencies": {
     "@myfinpro/eslint-config": "workspace:*",
     "@myfinpro/tsconfig": "workspace:*",
-    "@types/node": "^25.5.0",
-    "eslint": "^10.0.3",
+    "@types/node": "^25.6.0",
+    "eslint": "^10.2.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.4"
   }
 }

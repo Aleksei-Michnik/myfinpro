@@ -6,7 +6,7 @@ import { bootstrapTestApp, registerUser } from './helpers';
  * Integration tests for the Profile Update feature.
  *
  * Covers:
- * - PATCH /auth/profile (currency, timezone, both, empty body, invalid currency, no auth)
+ * - PATCH /auth/profile (currency, timezone, locale, both, empty body, invalid currency/locale, no auth)
  * - Profile data persistence in login and /auth/me responses
  */
 describe('Profile Update Integration Tests', () => {
@@ -56,6 +56,28 @@ describe('Profile Update Integration Tests', () => {
 
     expect(res.body.defaultCurrency).toBe('GBP');
     expect(res.body.timezone).toBe('Europe/London');
+  });
+
+  it('PATCH /auth/profile should update locale', async () => {
+    const { accessToken } = await registerUser(app, 'pu-locale@example.com');
+
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ locale: 'he' })
+      .expect(200);
+
+    expect(res.body.locale).toBe('he');
+  });
+
+  it('PATCH /auth/profile with invalid locale should return 400', async () => {
+    const { accessToken } = await registerUser(app, 'pu-invalid-locale@example.com');
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ locale: 'fr' })
+      .expect(400);
   });
 
   it('PATCH /auth/profile with invalid currency should return 400', async () => {
