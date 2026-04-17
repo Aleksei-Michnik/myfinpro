@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
+import { locales } from './src/i18n/routing';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
@@ -17,6 +18,22 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [],
     },
+  },
+
+  // 301 redirects for old /{locale}/... URLs → /...
+  async redirects() {
+    return locales.flatMap((locale) => [
+      {
+        source: `/${locale}/:path*`,
+        destination: '/:path*',
+        permanent: true,
+      },
+      {
+        source: `/${locale}`,
+        destination: '/',
+        permanent: true,
+      },
+    ]);
   },
 
   // Proxy API requests in development

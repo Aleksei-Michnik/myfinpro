@@ -144,6 +144,13 @@ perform_dump() {
 
   if [[ "$USE_DOCKER" == "true" ]]; then
     log "Using Docker container: $DOCKER_CONTAINER_NAME"
+
+    # --set-gtid-purged is MySQL-only; skip for MariaDB
+    local gtid_flag=""
+    if docker exec "$DOCKER_CONTAINER_NAME" mysqldump --help 2>&1 | grep -q 'set-gtid-purged'; then
+      gtid_flag="--set-gtid-purged=OFF"
+    fi
+
     docker exec "$DOCKER_CONTAINER_NAME" \
       mysqldump \
         --user="$MYSQL_USER" \
@@ -152,10 +159,17 @@ perform_dump() {
         --routines \
         --triggers \
         --events \
-        --set-gtid-purged=OFF \
+        $gtid_flag \
         "$MYSQL_DATABASE" 2>/dev/null | gzip > "$tmp_file"
   else
     log "Using direct MySQL connection: $MYSQL_HOST:$MYSQL_PORT"
+
+    # --set-gtid-purged is MySQL-only; skip for MariaDB
+    local gtid_flag=""
+    if mysqldump --help 2>&1 | grep -q 'set-gtid-purged'; then
+      gtid_flag="--set-gtid-purged=OFF"
+    fi
+
     mysqldump \
       --host="$MYSQL_HOST" \
       --port="$MYSQL_PORT" \
@@ -165,7 +179,7 @@ perform_dump() {
       --routines \
       --triggers \
       --events \
-      --set-gtid-purged=OFF \
+      $gtid_flag \
       "$MYSQL_DATABASE" 2>/dev/null | gzip > "$tmp_file"
   fi
 

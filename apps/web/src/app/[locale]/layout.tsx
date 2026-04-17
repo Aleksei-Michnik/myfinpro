@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import { TimezoneDetector } from '@/components/auth/TimezoneDetector';
 import { VerificationBanner } from '@/components/auth/VerificationBanner';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
@@ -47,6 +48,7 @@ export default async function LocaleLayout({ children, params }: Props) {
             <ToastProvider>
               <Header />
               <VerificationBanner />
+              <TimezoneDetector />
               <ErrorBoundary>{children}</ErrorBoundary>
               <Footer />
               <ToastContainer />

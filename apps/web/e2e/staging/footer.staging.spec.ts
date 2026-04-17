@@ -8,7 +8,7 @@ test.describe('Staging – Footer', () => {
   });
 
   test('footer has Terms, Privacy, and Help links', async ({ page }) => {
-    await page.goto('/en');
+    await page.goto('/');
     const footer = page.locator('footer');
     await expect(footer.locator('a[href*="/legal/terms"]')).toBeVisible();
     await expect(footer.locator('a[href*="/legal/privacy"]')).toBeVisible();
@@ -16,7 +16,7 @@ test.describe('Staging – Footer', () => {
   });
 
   test('footer contains copyright text', async ({ page }) => {
-    await page.goto('/en');
+    await page.goto('/');
     const footer = page.locator('footer');
     const year = new Date().getFullYear().toString();
     await expect(footer).toContainText(`© ${year} MyFinPro`);

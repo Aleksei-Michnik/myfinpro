@@ -1313,7 +1313,7 @@ f9c88e7 feat(phase-1.10): protected routes — dashboard, /auth/me endpoint, Pla
 | [`docs/phase-2-design.md`](phase-2-design.md)                             | Phase 2 Google OAuth architecture and design            |
 | [`docs/phase-3-design.md`](phase-3-design.md)                             | Phase 3 Telegram authentication architecture and design |
 | [`docs/phase-4-design.md`](phase-4-design.md)                             | Phase 4 Auth Completion & Legal Pages design            |
-| [`docs/post-phase-4-design.md`](post-phase-4-design.md)                   | Post-Phase 4: URL redesign, NPM fix, backup fix        |
+| [`docs/post-phase-4-design.md`](post-phase-4-design.md)                   | Post-Phase 4: URL redesign, NPM fix, backup fix         |
 | [`docs/deployment.md`](deployment.md)                                     | Deployment guide — full pipeline, test gating, rollback |
 | [`docs/blue-green-deployment.md`](blue-green-deployment.md)               | Blue-green deployment architecture and procedures       |
 | [`docs/backup.md`](backup.md)                                             | Backup strategy, schedules, and restore procedures      |
@@ -1962,12 +1962,12 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 
 | Iteration | Objective                                                              | Status         |
 | --------- | ---------------------------------------------------------------------- | -------------- |
-| 4.14      | NPM fix — delete `.npmrc` (all settings match pnpm 10 defaults)       | ⬜ Not Started |
+| 4.14      | NPM fix — delete `.npmrc` (all settings match pnpm 10 defaults)        | ⬜ Not Started |
 | 4.15      | Backup fix — MariaDB container, Prisma schema, checkout v4             | ⬜ Not Started |
-| 4.16      | URL redesign — backend: add `locale` to UpdateProfileDto + DRY fix    | ⬜ Not Started |
+| 4.16      | URL redesign — backend: add `locale` to UpdateProfileDto + DRY fix     | ⬜ Not Started |
 | 4.17      | URL redesign — i18n config: `localePrefix: 'never'`, proxy matcher     | ⬜ Not Started |
 | 4.18      | URL redesign — locale switcher: cookie-based + login sync              | ⬜ Not Started |
-| 4.19      | URL redesign — settings: Language dropdown + timezone auto-detect       | ⬜ Not Started |
+| 4.19      | URL redesign — settings: Language dropdown + timezone auto-detect      | ⬜ Not Started |
 | 4.20      | URL redesign — redirects: old `/en/`, `/he/` URLs + OAuth callback fix | ⬜ Not Started |
 | 4.21      | URL redesign — tests: E2E + unit test updates for prefix-free URLs     | ⬜ Not Started |
 

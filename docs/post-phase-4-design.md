@@ -126,22 +126,22 @@ The root layout at [`apps/web/src/app/layout.tsx`](../apps/web/src/app/layout.ts
 
 All files stay exactly where they are:
 
-| File | Purpose |
-|------|---------|
-| `app/[locale]/layout.tsx` | Provides `<html lang>`, `dir`, providers |
-| `app/[locale]/page.tsx` | Home page |
-| `app/[locale]/auth/login/page.tsx` | Login |
-| `app/[locale]/auth/register/page.tsx` | Register |
-| `app/[locale]/auth/callback/page.tsx` | OAuth callback |
-| `app/[locale]/auth/forgot-password/page.tsx` | Forgot password |
-| `app/[locale]/auth/reset-password/page.tsx` | Reset password |
-| `app/[locale]/auth/verify-email/page.tsx` | Email verification |
-| `app/[locale]/dashboard/page.tsx` | Dashboard |
-| `app/[locale]/settings/account/page.tsx` | Account settings |
-| `app/[locale]/help/page.tsx` | Help guide |
-| `app/[locale]/legal/terms/page.tsx` | Terms of Use |
-| `app/[locale]/legal/privacy/page.tsx` | Privacy Policy |
-| `app/[locale]/not-found.tsx` | 404 page |
+| File                                         | Purpose                                  |
+| -------------------------------------------- | ---------------------------------------- |
+| `app/[locale]/layout.tsx`                    | Provides `<html lang>`, `dir`, providers |
+| `app/[locale]/page.tsx`                      | Home page                                |
+| `app/[locale]/auth/login/page.tsx`           | Login                                    |
+| `app/[locale]/auth/register/page.tsx`        | Register                                 |
+| `app/[locale]/auth/callback/page.tsx`        | OAuth callback                           |
+| `app/[locale]/auth/forgot-password/page.tsx` | Forgot password                          |
+| `app/[locale]/auth/reset-password/page.tsx`  | Reset password                           |
+| `app/[locale]/auth/verify-email/page.tsx`    | Email verification                       |
+| `app/[locale]/dashboard/page.tsx`            | Dashboard                                |
+| `app/[locale]/settings/account/page.tsx`     | Account settings                         |
+| `app/[locale]/help/page.tsx`                 | Help guide                               |
+| `app/[locale]/legal/terms/page.tsx`          | Terms of Use                             |
+| `app/[locale]/legal/privacy/page.tsx`        | Privacy Policy                           |
+| `app/[locale]/not-found.tsx`                 | 404 page                                 |
 
 The `[locale]` segment is invisible in the browser URL due to `localePrefix: 'never'` — next-intl middleware rewrites requests internally.
 
@@ -263,8 +263,12 @@ Add a Language dropdown to the Preferences section alongside Currency and Timezo
 ```tsx
 <div>
   <label htmlFor="language-select">{t('language')}</label>
-  <select id="language-select" data-testid="language-select" value={selectedLocale}
-    onChange={(e) => setSelectedLocale(e.target.value)}>
+  <select
+    id="language-select"
+    data-testid="language-select"
+    value={selectedLocale}
+    onChange={(e) => setSelectedLocale(e.target.value)}
+  >
     <option value="en">English</option>
     <option value="he">עברית</option>
   </select>
@@ -356,24 +360,28 @@ async redirects() {
 
 All E2E tests currently use `/en/` prefixed URLs:
 
-| File | Change |
-|------|--------|
-| [`e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts) | `/en/auth/login` → `/auth/login`, URL assertions remove `/en/` |
-| [`e2e/smoke.spec.ts`](../apps/web/e2e/smoke.spec.ts) | Already uses `/` — may need no change |
-| [`e2e/footer.spec.ts`](../apps/web/e2e/footer.spec.ts) | `/en/legal/terms` → `/legal/terms` |
-| [`e2e/legal-pages.spec.ts`](../apps/web/e2e/legal-pages.spec.ts) | `/en/legal/terms` → `/legal/terms` |
-| [`e2e/help-page.spec.ts`](../apps/web/e2e/help-page.spec.ts) | `/en/help` → `/help` |
-| [`e2e/registration-consent.spec.ts`](../apps/web/e2e/registration-consent.spec.ts) | `/en/auth/register` → `/auth/register` |
-| All staging tests in `e2e/staging/` | Same pattern — remove `/en/` prefix |
+| File                                                                               | Change                                                         |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [`e2e/auth.spec.ts`](../apps/web/e2e/auth.spec.ts)                                 | `/en/auth/login` → `/auth/login`, URL assertions remove `/en/` |
+| [`e2e/smoke.spec.ts`](../apps/web/e2e/smoke.spec.ts)                               | Already uses `/` — may need no change                          |
+| [`e2e/footer.spec.ts`](../apps/web/e2e/footer.spec.ts)                             | `/en/legal/terms` → `/legal/terms`                             |
+| [`e2e/legal-pages.spec.ts`](../apps/web/e2e/legal-pages.spec.ts)                   | `/en/legal/terms` → `/legal/terms`                             |
+| [`e2e/help-page.spec.ts`](../apps/web/e2e/help-page.spec.ts)                       | `/en/help` → `/help`                                           |
+| [`e2e/registration-consent.spec.ts`](../apps/web/e2e/registration-consent.spec.ts) | `/en/auth/register` → `/auth/register`                         |
+| All staging tests in `e2e/staging/`                                                | Same pattern — remove `/en/` prefix                            |
 
 For Hebrew/RTL tests, set `NEXT_LOCALE` cookie before navigating:
 
 ```typescript
 test('Hebrew RTL layout', async ({ page, context }) => {
-  await context.addCookies([{
-    name: 'NEXT_LOCALE', value: 'he',
-    domain: 'localhost', path: '/',
-  }]);
+  await context.addCookies([
+    {
+      name: 'NEXT_LOCALE',
+      value: 'he',
+      domain: 'localhost',
+      path: '/',
+    },
+  ]);
   await page.goto('/help');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 });
@@ -394,12 +402,12 @@ test('Hebrew RTL layout', async ({ page, context }) => {
 
 ### Analysis for pnpm 10
 
-| Setting | pnpm 10 default | Current value | Action |
-|---------|-----------------|---------------|--------|
-| `shamefully-hoist` | `false` | `false` | **Remove** — matches default |
-| `strict-peer-dependencies` | `false` | `false` | **Remove** — matches default |
-| `lockfile` | `true` | `true` | **Remove** — matches default |
-| `auto-install-peers` | `true` | `true` | **Remove** — matches default |
+| Setting                    | pnpm 10 default | Current value | Action                       |
+| -------------------------- | --------------- | ------------- | ---------------------------- |
+| `shamefully-hoist`         | `false`         | `false`       | **Remove** — matches default |
+| `strict-peer-dependencies` | `false`         | `false`       | **Remove** — matches default |
+| `lockfile`                 | `true`          | `true`        | **Remove** — matches default |
+| `auto-install-peers`       | `true`          | `true`        | **Remove** — matches default |
 
 ### Solution
 
@@ -411,13 +419,13 @@ test('Hebrew RTL layout', async ({ page, context }) => {
 
 ### Issues Identified in backup-verify.yml
 
-| # | Issue | Severity | Fix |
-|---|-------|----------|-----|
-| 1 | `actions/checkout@v6` may not exist | High | Use `actions/checkout@v4` |
-| 2 | `mysql:8.4` instead of MariaDB | Medium | Switch to `mariadb:11.4` |
-| 3 | Dummy test tables don't match Prisma schema | Medium | Use `prisma db push` for real schema |
-| 4 | `--set-gtid-purged=OFF` is MySQL-specific | Medium | Remove MySQL-specific flags |
-| 5 | Record counts reference `accounts`/`transactions` tables | Low | Reference actual Prisma table names |
+| #   | Issue                                                    | Severity | Fix                                  |
+| --- | -------------------------------------------------------- | -------- | ------------------------------------ |
+| 1   | `actions/checkout@v6` may not exist                      | High     | Use `actions/checkout@v4`            |
+| 2   | `mysql:8.4` instead of MariaDB                           | Medium   | Switch to `mariadb:11.4`             |
+| 3   | Dummy test tables don't match Prisma schema              | Medium   | Use `prisma db push` for real schema |
+| 4   | `--set-gtid-purged=OFF` is MySQL-specific                | Medium   | Remove MySQL-specific flags          |
+| 5   | Record counts reference `accounts`/`transactions` tables | Low      | Reference actual Prisma table names  |
 
 ### Detailed Fixes
 
@@ -512,56 +520,56 @@ The three parts are **independent** and can be committed separately.
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
+| File                                           | Purpose                         |
+| ---------------------------------------------- | ------------------------------- |
 | `apps/web/src/components/TimezoneDetector.tsx` | Browser timezone auto-detection |
 
 ### Deleted Files
 
-| File | Reason |
-|------|--------|
-| `apps/web/src/app/page.tsx` | Root redirect no longer needed |
-| `.npmrc` | All settings match pnpm 10 defaults |
+| File                        | Reason                              |
+| --------------------------- | ----------------------------------- |
+| `apps/web/src/app/page.tsx` | Root redirect no longer needed      |
+| `.npmrc`                    | All settings match pnpm 10 defaults |
 
 ### Modified Files — URL Redesign
 
-| File | Change |
-|------|--------|
-| `apps/web/src/i18n/routing.ts` | Add `localePrefix: 'never'`, `localeCookie` config |
-| `apps/web/src/proxy.ts` | Update matcher for prefix-free pathnames |
-| `apps/web/src/components/layout/Header.tsx` | Cookie-based locale switcher with `router.refresh()` |
-| `apps/web/src/lib/auth/auth-context.tsx` | Sync `NEXT_LOCALE` cookie on login/refresh |
-| `apps/web/src/app/[locale]/settings/account/page.tsx` | Add Language dropdown to Preferences section |
-| `apps/web/src/app/[locale]/layout.tsx` | Add `TimezoneDetector` component |
-| `apps/web/next.config.ts` | Add redirects for old `/en/`, `/he/` prefixed URLs |
-| `apps/api/src/auth/dto/update-profile.dto.ts` | Add `locale` field; use `CURRENCY_CODES` from shared |
-| `apps/api/src/auth/auth.service.ts` | Handle `locale` in `updateProfile()` |
-| `apps/api/src/auth/auth.controller.ts` | Remove locale from Google OAuth redirect URL |
-| `apps/web/messages/en.json` | Add `settings.account.language` key |
-| `apps/web/messages/he.json` | Add `settings.account.language` key |
-| `apps/web/e2e/auth.spec.ts` | Remove `/en/` from all goto/URL assertions |
-| `apps/web/e2e/footer.spec.ts` | Remove `/en/` from goto URLs |
-| `apps/web/e2e/legal-pages.spec.ts` | Remove `/en/` from goto URLs |
-| `apps/web/e2e/help-page.spec.ts` | Remove `/en/` from goto URLs |
-| `apps/web/e2e/registration-consent.spec.ts` | Remove `/en/` from goto URLs |
-| `apps/web/e2e/staging/*.spec.ts` | Remove `/en/` from goto URLs, cookie-based Hebrew tests |
-| Unit tests across `app/[locale]/` | Update path assertions where needed |
+| File                                                  | Change                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| `apps/web/src/i18n/routing.ts`                        | Add `localePrefix: 'never'`, `localeCookie` config      |
+| `apps/web/src/proxy.ts`                               | Update matcher for prefix-free pathnames                |
+| `apps/web/src/components/layout/Header.tsx`           | Cookie-based locale switcher with `router.refresh()`    |
+| `apps/web/src/lib/auth/auth-context.tsx`              | Sync `NEXT_LOCALE` cookie on login/refresh              |
+| `apps/web/src/app/[locale]/settings/account/page.tsx` | Add Language dropdown to Preferences section            |
+| `apps/web/src/app/[locale]/layout.tsx`                | Add `TimezoneDetector` component                        |
+| `apps/web/next.config.ts`                             | Add redirects for old `/en/`, `/he/` prefixed URLs      |
+| `apps/api/src/auth/dto/update-profile.dto.ts`         | Add `locale` field; use `CURRENCY_CODES` from shared    |
+| `apps/api/src/auth/auth.service.ts`                   | Handle `locale` in `updateProfile()`                    |
+| `apps/api/src/auth/auth.controller.ts`                | Remove locale from Google OAuth redirect URL            |
+| `apps/web/messages/en.json`                           | Add `settings.account.language` key                     |
+| `apps/web/messages/he.json`                           | Add `settings.account.language` key                     |
+| `apps/web/e2e/auth.spec.ts`                           | Remove `/en/` from all goto/URL assertions              |
+| `apps/web/e2e/footer.spec.ts`                         | Remove `/en/` from goto URLs                            |
+| `apps/web/e2e/legal-pages.spec.ts`                    | Remove `/en/` from goto URLs                            |
+| `apps/web/e2e/help-page.spec.ts`                      | Remove `/en/` from goto URLs                            |
+| `apps/web/e2e/registration-consent.spec.ts`           | Remove `/en/` from goto URLs                            |
+| `apps/web/e2e/staging/*.spec.ts`                      | Remove `/en/` from goto URLs, cookie-based Hebrew tests |
+| Unit tests across `app/[locale]/`                     | Update path assertions where needed                     |
 
 ### Modified Files — Backup Fix
 
-| File | Change |
-|------|--------|
+| File                                  | Change                                                |
+| ------------------------------------- | ----------------------------------------------------- |
 | `.github/workflows/backup-verify.yml` | MariaDB, Prisma schema, v4 checkout, real table names |
 
 ---
 
 ## Risk Assessment
 
-| Risk | Mitigation |
-|------|-----------|
-| Old bookmarked URLs break | Next.js `redirects` in `next.config.ts` handle `/en/*` → `/*` with 301 |
-| SEO impact from URL change | 301 permanent redirects preserve SEO equity |
-| next-intl cookie name conflict | Using explicit `NEXT_LOCALE` (next-intl v4 default cookie name) |
-| Hebrew RTL broken without URL indicator | RTL driven by `[locale]` param in layout, still works internally |
-| Login flow locale mismatch | Cookie sync on login ensures immediate locale switch |
-| E2E test breakage during transition | Tests updated in same commit as URL changes |
+| Risk                                    | Mitigation                                                             |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| Old bookmarked URLs break               | Next.js `redirects` in `next.config.ts` handle `/en/*` → `/*` with 301 |
+| SEO impact from URL change              | 301 permanent redirects preserve SEO equity                            |
+| next-intl cookie name conflict          | Using explicit `NEXT_LOCALE` (next-intl v4 default cookie name)        |
+| Hebrew RTL broken without URL indicator | RTL driven by `[locale]` param in layout, still works internally       |
+| Login flow locale mismatch              | Cookie sync on login ensures immediate locale switch                   |
+| E2E test breakage during transition     | Tests updated in same commit as URL changes                            |

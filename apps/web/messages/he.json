@@ -146,6 +146,8 @@
       "name": "שם",
       "provider": "שיטת כניסה",
       "preferences": "העדפות",
+      "language": "שפה",
+      "languageDescription": "בחר את השפה המועדפת עליך",
       "defaultCurrency": "מטבע ברירת מחדל",
       "timezone": "אזור זמן",
       "savePreferences": "שמור העדפות",

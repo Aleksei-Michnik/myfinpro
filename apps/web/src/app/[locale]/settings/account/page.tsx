@@ -1,6 +1,6 @@
 'use client';
 
-import { CURRENCIES, CURRENCY_CODES } from '@myfinpro/shared';
+import { CURRENCIES, CURRENCY_CODES, LOCALES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useState, useMemo, useEffect } from 'react';
 import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
@@ -11,21 +11,28 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
 
+const localeNames: Record<string, string> = {
+  en: 'English',
+  he: 'עברית',
+};
+
 export default function AccountSettingsPage() {
   const t = useTranslations('settings.account');
   const tSettings = useTranslations('settings');
   const { user, updateProfile } = useAuth();
   const { addToast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedLocale, setSelectedLocale] = useState(user?.locale || 'en');
   const [selectedCurrency, setSelectedCurrency] = useState(user?.defaultCurrency || 'USD');
   const [selectedTimezone, setSelectedTimezone] = useState(user?.timezone || 'UTC');
   const [isSaving, setIsSaving] = useState(false);
 
   // Sync state when user data loads (user may be null on first render)
   useEffect(() => {
+    if (user?.locale) setSelectedLocale(user.locale);
     if (user?.defaultCurrency) setSelectedCurrency(user.defaultCurrency);
     if (user?.timezone) setSelectedTimezone(user.timezone);
-  }, [user?.defaultCurrency, user?.timezone]);
+  }, [user?.locale, user?.defaultCurrency, user?.timezone]);
 
   const timezones = useMemo(() => {
     try {
@@ -44,11 +51,17 @@ export default function AccountSettingsPage() {
   const handleSavePreferences = async () => {
     setIsSaving(true);
     try {
+      const localeChanged = selectedLocale !== user?.locale;
       await updateProfile({
+        locale: selectedLocale,
         defaultCurrency: selectedCurrency,
         timezone: selectedTimezone,
       });
-      addToast('success', t('preferencesSaved'));
+      // If locale changed, updateProfile triggers window.location.reload()
+      // so the toast below won't be visible — that's expected
+      if (!localeChanged) {
+        addToast('success', t('preferencesSaved'));
+      }
     } catch {
       addToast('error', t('preferencesError'));
     } finally {
@@ -100,6 +113,30 @@ export default function AccountSettingsPage() {
             {t('preferences')}
           </h2>
           <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="language-select"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                {t('language')}
+              </label>
+              <select
+                id="language-select"
+                data-testid="language-select"
+                value={selectedLocale}
+                onChange={(e) => setSelectedLocale(e.target.value)}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              >
+                {LOCALES.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {localeNames[loc] || loc}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {t('languageDescription')}
+              </p>
+            </div>
             <div>
               <label
                 htmlFor="currency-select"
