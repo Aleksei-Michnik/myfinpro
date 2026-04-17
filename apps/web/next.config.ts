@@ -24,8 +24,8 @@ const nextConfig: NextConfig = {
   async redirects() {
     return locales.flatMap((locale) => [
       {
-        source: `/${locale}/:path*`,
-        destination: '/:path*',
+        source: `/${locale}/:path+`,
+        destination: '/:path+',
         permanent: true,
       },
       {
