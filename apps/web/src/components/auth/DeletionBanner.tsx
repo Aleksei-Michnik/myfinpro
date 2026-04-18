@@ -32,7 +32,7 @@ export function DeletionBanner() {
     <div
       role="alert"
       data-testid="deletion-banner"
-      className="flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-3 text-red-900"
+      className="flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-3 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
     >
       <div className="flex items-center gap-2 text-sm">
         <span aria-hidden="true">⚠</span>

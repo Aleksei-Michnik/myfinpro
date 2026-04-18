@@ -51,18 +51,21 @@ export function DeleteAccountDialog({ isOpen, onClose }: DeleteAccountDialogProp
       aria-modal="true"
       aria-labelledby="delete-dialog-title"
     >
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-        <h2 id="delete-dialog-title" className="mb-4 text-lg font-semibold text-red-600">
+      <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h2
+          id="delete-dialog-title"
+          className="mb-4 text-lg font-semibold text-red-600 dark:text-red-400"
+        >
           {t('deleteAccount')}
         </h2>
 
-        <p className="mb-4 text-sm text-gray-600" data-testid="delete-warning">
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400" data-testid="delete-warning">
           {t('deleteWarning')}
         </p>
 
         {error && (
           <div
-            className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
             role="alert"
             data-testid="delete-error"
           >

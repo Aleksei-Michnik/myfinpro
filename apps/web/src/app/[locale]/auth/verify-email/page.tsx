@@ -73,14 +73,14 @@ export default function VerifyEmailPage() {
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-lg border bg-white p-8 text-center shadow-sm">
+      <div className="w-full max-w-md rounded-lg border bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
         {state === 'loading' && (
           <div data-testid="verify-loading">
             <div
               className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600"
               role="status"
             />
-            <p className="text-gray-600">{t('verifyEmail')}...</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('verifyEmail')}...</p>
           </div>
         )}
 
@@ -89,7 +89,9 @@ export default function VerifyEmailPage() {
             <span className="mb-4 block text-4xl" aria-hidden="true">
               ✅
             </span>
-            <h1 className="mb-2 text-xl font-semibold text-green-700">{t('verifyEmailSuccess')}</h1>
+            <h1 className="mb-2 text-xl font-semibold text-green-700 dark:text-green-400">
+              {t('verifyEmailSuccess')}
+            </h1>
             <Link
               href="/dashboard"
               className="mt-4 inline-block rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700"
@@ -104,7 +106,9 @@ export default function VerifyEmailPage() {
             <span className="mb-4 block text-4xl" aria-hidden="true">
               ⏰
             </span>
-            <h1 className="mb-2 text-xl font-semibold text-amber-700">{t('verifyEmailExpired')}</h1>
+            <h1 className="mb-2 text-xl font-semibold text-amber-700 dark:text-amber-400">
+              {t('verifyEmailExpired')}
+            </h1>
             <button
               onClick={handleResend}
               disabled={isResending}
@@ -121,7 +125,7 @@ export default function VerifyEmailPage() {
             <span className="mb-4 block text-4xl" aria-hidden="true">
               ✅
             </span>
-            <h1 className="mb-2 text-xl font-semibold text-green-700">
+            <h1 className="mb-2 text-xl font-semibold text-green-700 dark:text-green-400">
               {t('verifyEmailAlreadyVerified')}
             </h1>
             <Link
@@ -138,7 +142,9 @@ export default function VerifyEmailPage() {
             <span className="mb-4 block text-4xl" aria-hidden="true">
               ❌
             </span>
-            <h1 className="mb-2 text-xl font-semibold text-red-700">{t('verifyEmailInvalid')}</h1>
+            <h1 className="mb-2 text-xl font-semibold text-red-700 dark:text-red-400">
+              {t('verifyEmailInvalid')}
+            </h1>
           </div>
         )}
 
@@ -147,8 +153,10 @@ export default function VerifyEmailPage() {
             <span className="mb-4 block text-4xl" aria-hidden="true">
               ❌
             </span>
-            <h1 className="mb-2 text-xl font-semibold text-red-700">{t('verifyEmailInvalid')}</h1>
-            <p className="mt-2 text-sm text-gray-500">{t('checkInbox')}</p>
+            <h1 className="mb-2 text-xl font-semibold text-red-700 dark:text-red-400">
+              {t('verifyEmailInvalid')}
+            </h1>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{t('checkInbox')}</p>
           </div>
         )}
       </div>

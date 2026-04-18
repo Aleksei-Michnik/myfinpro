@@ -47,7 +47,7 @@ export default function OAuthCallbackPage() {
           role="status"
           aria-label={t('googleSignInProgress')}
         />
-        <p className="mt-4 text-gray-600">{t('googleSignInProgress')}</p>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">{t('googleSignInProgress')}</p>
       </div>
     </div>
   );

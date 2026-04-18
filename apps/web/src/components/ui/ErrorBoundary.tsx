@@ -39,15 +39,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div
-          className="flex min-h-[200px] flex-col items-center justify-center gap-4 rounded-lg bg-gray-50 p-8 text-center"
+          className="flex min-h-[200px] flex-col items-center justify-center gap-4 rounded-lg bg-gray-50 p-8 text-center dark:bg-gray-800"
           role="alert"
           data-testid="error-boundary-fallback"
         >
           <div className="text-4xl">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-900">Something went wrong</h2>
-          <p className="text-sm text-gray-600">An unexpected error occurred. Please try again.</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Something went wrong
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            An unexpected error occurred. Please try again.
+          </p>
           {process.env.NODE_ENV !== 'production' && this.state.error && (
-            <pre className="mt-2 max-w-full overflow-auto rounded bg-red-50 p-3 text-left text-xs text-red-800">
+            <pre className="mt-2 max-w-full overflow-auto rounded bg-red-50 p-3 text-left text-xs text-red-800 dark:bg-red-900/30 dark:text-red-300">
               {this.state.error.message}
             </pre>
           )}

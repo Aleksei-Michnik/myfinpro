@@ -64,8 +64,8 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
       {error && (
-        <div className="rounded-md bg-red-50 p-4" role="alert">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="rounded-md bg-red-50 p-4 dark:bg-red-900/30" role="alert">
+          <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
         </div>
       )}
 
@@ -113,10 +113,12 @@ export function LoginForm() {
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-300" />
+          <div className="w-full border-t border-gray-300 dark:border-gray-600" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-2 text-gray-500">{t('orSignInWith')}</span>
+          <span className="bg-white px-2 text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+            {t('orSignInWith')}
+          </span>
         </div>
       </div>
 
@@ -146,7 +148,7 @@ export function LoginForm() {
         )}
       </div>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="text-center text-sm text-gray-600 dark:text-gray-400">
         {t('noAccount')}{' '}
         <Link href="/auth/register" className="text-primary-600 hover:text-primary-500 font-medium">
           {t('signUp')}

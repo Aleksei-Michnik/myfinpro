@@ -14,7 +14,7 @@ export default function DashboardPage() {
       {user?.scheduledDeletionAt && <DeletionBanner />}
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-4">{t('title')}</h1>
-        <p className="text-gray-600">{t('welcome')}</p>
+        <p className="text-gray-600 dark:text-gray-400">{t('welcome')}</p>
       </div>
     </ProtectedRoute>
   );

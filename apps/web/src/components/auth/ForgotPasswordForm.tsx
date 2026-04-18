@@ -48,13 +48,15 @@ export function ForgotPasswordForm() {
   if (state === 'sent') {
     return (
       <div className="space-y-6 text-center" data-testid="check-email-state">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
           <span className="text-2xl" aria-hidden="true">
             ✉️
           </span>
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">{t('checkYourEmail')}</h2>
-        <p className="text-sm text-gray-600">{t('resetLinkSent')}</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {t('checkYourEmail')}
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{t('resetLinkSent')}</p>
         <Link
           href="/auth/login"
           className="text-primary-600 hover:text-primary-500 inline-block text-sm font-medium"
@@ -67,7 +69,9 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      <p className="text-center text-sm text-gray-600">{t('forgotPasswordDescription')}</p>
+      <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+        {t('forgotPasswordDescription')}
+      </p>
 
       <Input
         name="email"
