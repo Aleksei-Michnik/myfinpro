@@ -42,8 +42,8 @@
 | 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
 | 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
 | 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 15/23      | 🔄 In Progress | —               |
-| 5     | Family/Group Management       | 0/14       | ⬜ Not Started | —               |
+| 4     | Auth Completion & Legal Pages | 23/23      | ✅ Complete    | —               |
+| 5     | Family/Group Management       | 1/14       | 🔄 In Progress | —               |
 | 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
 | 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
 | 8     | Budgets & Spending Targets    | 0/10       | ⬜ Not Started | —               |
@@ -1960,19 +1960,50 @@ Refactored all Haraka SMTP environment variables to derive from existing secrets
 
 Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-phase-4-design.md`](post-phase-4-design.md) for the full design document.
 
-| Iteration | Objective                                                              | Status         |
-| --------- | ---------------------------------------------------------------------- | -------------- |
-| 4.14      | NPM fix — delete `.npmrc` (all settings match pnpm 10 defaults)        | ⬜ Not Started |
-| 4.15      | Backup fix — MariaDB container, Prisma schema, checkout v4             | ⬜ Not Started |
-| 4.16      | URL redesign — backend: add `locale` to UpdateProfileDto + DRY fix     | ⬜ Not Started |
-| 4.17      | URL redesign — i18n config: `localePrefix: 'never'`, proxy matcher     | ⬜ Not Started |
-| 4.18      | URL redesign — locale switcher: cookie-based + login sync              | ⬜ Not Started |
-| 4.19      | URL redesign — settings: Language dropdown + timezone auto-detect      | ⬜ Not Started |
-| 4.20      | URL redesign — redirects: old `/en/`, `/he/` URLs + OAuth callback fix | ⬜ Not Started |
-| 4.21      | URL redesign — tests: E2E + unit test updates for prefix-free URLs     | ⬜ Not Started |
+| Iteration | Objective                                                              | Status      |
+| --------- | ---------------------------------------------------------------------- | ----------- |
+| 4.14      | NPM fix — delete `.npmrc` (all settings match pnpm 10 defaults)        | ✅ Complete |
+| 4.15      | Backup fix — MariaDB container, Prisma schema, checkout v4             | ✅ Complete |
+| 4.16      | URL redesign — backend: add `locale` to UpdateProfileDto + DRY fix     | ✅ Complete |
+| 4.17      | URL redesign — i18n config: `localePrefix: 'never'`, proxy matcher     | ✅ Complete |
+| 4.18      | URL redesign — locale switcher: cookie-based + login sync              | ✅ Complete |
+| 4.19      | URL redesign — settings: Language dropdown + timezone auto-detect      | ✅ Complete |
+| 4.20      | URL redesign — redirects: old `/en/`, `/he/` URLs + OAuth callback fix | ✅ Complete |
+| 4.21      | URL redesign — tests: E2E + unit test updates for prefix-free URLs     | ✅ Complete |
+
+---
+
+## Phase 5: Group Management
+
+### Iteration 5.1: Group Schema Migration (2026-04-19)
+
+- **Date**: April 19, 2026
+- **Commit**: `d2d5725` (develop)
+- **CI run**: `24614249699` — success
+- **Deploy Staging run**: `24614249696` — success
+
+**Changes**: Added 3 new database models for group management.
+
+**New models:**
+
+- **Group** — `groups` table: id, name, type (default: "family"), defaultCurrency, createdById, timestamps
+- **GroupMembership** — `group_memberships` table: explicit many-to-many between Group and User with role field (default: "member"), unique constraint on [groupId, userId], cascade delete
+- **GroupInviteToken** — `group_invite_tokens` table: SHA-256 hashed invite tokens with expiry, used tracking, cascade delete on group
+
+**Design decisions:**
+
+- No foreign key from `Group.createdById` to `User` — avoids circular relation complexity
+- Expand-only migration (new tables only) — safe for blue-green deployment
+- `groupMemberships` relation added to existing `User` model
+- Indexes on all foreign keys and commonly queried fields (createdById, userId, groupId, expiresAt)
+
+**Files changed:**
+
+- [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) — Added Group, GroupMembership, GroupInviteToken models + User relation
+- [`apps/api/prisma/migrations/20260418212111_phase5_group_management/migration.sql`](../apps/api/prisma/migrations/20260418212111_phase5_group_management/migration.sql) — Migration SQL
 
 ### Upcoming Phases
 
-- **Phase 5** — Family/Group management (14 iterations)
+- **Phase 5** — Family/Group management (remaining iterations)
 - **Phase 6** — Income management (10 iterations)
 - **Phase 7** — Expense management (13 iterations)
