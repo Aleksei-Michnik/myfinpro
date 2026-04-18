@@ -49,7 +49,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
       {/* Strength bar */}
       <div className="flex items-center gap-2">
         <div
-          className="h-2 flex-1 rounded-full bg-gray-200"
+          className="h-2 flex-1 rounded-full bg-gray-200 dark:bg-gray-700"
           role="progressbar"
           aria-valuenow={strength}
           aria-valuemin={0}
@@ -73,10 +73,19 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
       <ul className="space-y-1">
         {requirements.map((req) => (
           <li key={req.key} className="flex items-center gap-1.5 text-xs">
-            <span className={req.met ? 'text-green-500' : 'text-gray-400'} aria-hidden="true">
+            <span
+              className={req.met ? 'text-green-500' : 'text-gray-400 dark:text-gray-500'}
+              aria-hidden="true"
+            >
               {req.met ? '✓' : '○'}
             </span>
-            <span className={req.met ? 'text-green-700' : 'text-gray-500'}>{req.label}</span>
+            <span
+              className={
+                req.met ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+              }
+            >
+              {req.label}
+            </span>
           </li>
         ))}
       </ul>

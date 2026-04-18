@@ -142,8 +142,12 @@ export function ConnectedAccounts() {
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4" role="alert" data-testid="error-message">
-        <p className="text-sm text-red-700">{error}</p>
+      <div
+        className="rounded-md bg-red-50 p-4 dark:bg-red-900/30"
+        role="alert"
+        data-testid="error-message"
+      >
+        <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
       </div>
     );
   }
@@ -162,11 +166,11 @@ export function ConnectedAccounts() {
             {t('emailPassword')}
           </h3>
           {data.hasPassword ? (
-            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1">
+            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
               {t('connected')}
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1">
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
               {t('notConnected')}
             </span>
           )}
@@ -179,15 +183,15 @@ export function ConnectedAccounts() {
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Google</h3>
           {googleProvider ? (
             <>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-300">
                 {googleProvider.name || googleProvider.email}
               </p>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1">
+              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
                 {t('connected')}
               </span>
             </>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1">
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
               {t('notConnected')}
             </span>
           )}
@@ -233,13 +237,15 @@ export function ConnectedAccounts() {
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Telegram</h3>
           {telegramProvider ? (
             <>
-              <p className="text-sm text-gray-500 mt-0.5">{telegramProvider.name}</p>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1">
+              <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-300">
+                {telegramProvider.name}
+              </p>
+              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
                 {t('connected')}
               </span>
             </>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1">
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
               {t('notConnected')}
             </span>
           )}
@@ -284,7 +290,10 @@ export function ConnectedAccounts() {
 
       {/* Confirm disconnect dialog */}
       {confirmDisconnect && (
-        <div className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800" role="alert">
+        <div
+          className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+          role="alert"
+        >
           {t('disconnectConfirm', { provider: confirmDisconnect })}
         </div>
       )}

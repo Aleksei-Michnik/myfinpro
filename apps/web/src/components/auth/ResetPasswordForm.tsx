@@ -103,13 +103,17 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   if (state === 'success') {
     return (
       <div className="space-y-6 text-center" data-testid="reset-success-state">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
           <span className="text-2xl" aria-hidden="true">
             ✓
           </span>
         </div>
-        <h2 className="text-xl font-semibold text-gray-900">{t('resetPasswordSuccess')}</h2>
-        <p className="text-sm text-gray-600">{t('resetPasswordSuccessDescription')}</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {t('resetPasswordSuccess')}
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          {t('resetPasswordSuccessDescription')}
+        </p>
         <Link
           href="/auth/login"
           className="text-primary-600 hover:text-primary-500 inline-block text-sm font-medium"
@@ -123,12 +127,12 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   if (state === 'error') {
     return (
       <div className="space-y-6 text-center" data-testid="reset-error-state">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
           <span className="text-2xl" aria-hidden="true">
             ✕
           </span>
         </div>
-        <p className="text-sm text-red-700">{errorMessage}</p>
+        <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
         <Link
           href="/auth/forgot-password"
           className="text-primary-600 hover:text-primary-500 inline-block text-sm font-medium"
