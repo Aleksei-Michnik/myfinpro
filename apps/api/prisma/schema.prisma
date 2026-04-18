@@ -44,6 +44,7 @@ model User {
   oauthProviders           OAuthProvider[]
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
+  groupMemberships         GroupMembership[]
 
   @@index([email])
   @@index([createdAt])
@@ -134,4 +135,53 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+// ── Phase 5: Group Management ──
+
+model Group {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  name            String   @db.VarChar(100)
+  type            String   @default("family") @db.VarChar(50)
+  defaultCurrency String   @default("USD") @map("default_currency") @db.VarChar(3)
+  createdById     String   @map("created_by_id") @db.VarChar(36)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  memberships  GroupMembership[]
+  inviteTokens GroupInviteToken[]
+
+  @@index([createdById])
+  @@map("groups")
+}
+
+model GroupMembership {
+  id       String   @id @default(uuid()) @db.VarChar(36)
+  groupId  String   @map("group_id") @db.VarChar(36)
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String   @map("user_id") @db.VarChar(36)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String   @default("member") @db.VarChar(20)
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("group_memberships")
+}
+
+model GroupInviteToken {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(255)
+  groupId      String    @map("group_id") @db.VarChar(36)
+  group        Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdById  String    @map("created_by_id") @db.VarChar(36)
+  expiresAt    DateTime  @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  usedByUserId String?   @map("used_by_user_id") @db.VarChar(36)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([groupId])
+  @@index([expiresAt])
+  @@map("group_invite_tokens")
 }
