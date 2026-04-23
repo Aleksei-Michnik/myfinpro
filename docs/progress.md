@@ -2002,6 +2002,52 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) — Added Group, GroupMembership, GroupInviteToken models + User relation
 - [`apps/api/prisma/migrations/20260418212111_phase5_group_management/migration.sql`](../apps/api/prisma/migrations/20260418212111_phase5_group_management/migration.sql) — Migration SQL
 
+### Iteration 5.2: Group CRUD API + Shared Types (2026-04-23)
+
+- **Date**: April 23, 2026
+- **Commit**: `774e3a7` (develop)
+- **CI run**: `24852376331` — success
+- **Deploy Staging run**: `24852376296` — success
+
+**Changes**: Implemented the Group module backend — REST CRUD API with role-based access guards and shared type constants.
+
+**Shared package** ([`packages/shared`](../packages/shared)):
+
+- Added [`group.types.ts`](../packages/shared/src/types/group.types.ts) with `GROUP_TYPES` (`['family']`), `GROUP_ROLES` (`['admin', 'member']`), `INVITE_TOKEN_EXPIRY_DAYS = 7`, plus `GroupType` / `GroupRole` type aliases
+- Barrel export in [`types/index.ts`](../packages/shared/src/types/index.ts)
+- Unit tests in [`__tests__/group.test.ts`](../packages/shared/src/__tests__/group.test.ts)
+
+**API Group module** ([`apps/api/src/group`](../apps/api/src/group)):
+
+- [`GroupService`](../apps/api/src/group/group.service.ts) — `createGroup` (transaction: creates Group + adds creator as `admin` GroupMembership), `getUserGroups` (returns all groups the user belongs to with member count and user's role), `getGroup` (returns group detail with full member list), `updateGroup`, `deleteGroup`. All mutations write to `auditLog`.
+- [`GroupController`](../apps/api/src/group/group.controller.ts) — REST endpoints: `POST /groups`, `GET /groups`, `GET /groups/:id`, `PATCH /groups/:id`, `DELETE /groups/:id`. Uses `JwtAuthGuard` globally + `GroupMemberGuard` for read and `GroupAdminGuard` for mutate/delete. Full Swagger documentation with `@ApiTags('Groups')`, `@ApiBearerAuth()`, `@ApiOperation`, `@ApiResponse`. Rate limited with `@CustomThrottle({ limit: 10, ttl: 60000 })`.
+- [`CreateGroupDto`](../apps/api/src/group/dto/create-group.dto.ts) / [`UpdateGroupDto`](../apps/api/src/group/dto/update-group.dto.ts) — `class-validator` DTOs with `@IsIn([...GROUP_TYPES])` and `@IsIn([...CURRENCY_CODES])` from shared constants.
+- [`GroupMemberGuard`](../apps/api/src/group/guards/group-member.guard.ts) / [`GroupAdminGuard`](../apps/api/src/group/guards/group-admin.guard.ts) — Verify membership via `prisma.groupMembership.findUnique({ where: { groupId_userId } })`. Admin guard additionally checks `membership.role === 'admin'`. Both attach `request.groupMembership` for downstream handlers.
+- [`GROUP_ERRORS`](../apps/api/src/group/constants/group-errors.ts) — error code constants (`GROUP_NOT_FOUND`, `GROUP_NOT_A_MEMBER`, `GROUP_NOT_AN_ADMIN`, `GROUP_ALREADY_A_MEMBER`, `GROUP_INVITE_TOKEN_*`, `GROUP_CANNOT_REMOVE_LAST_ADMIN`, `GROUP_CANNOT_LEAVE_AS_LAST_ADMIN`).
+- [`GroupModule`](../apps/api/src/group/group.module.ts) — imports `PrismaModule`, provides `GroupService` + both guards, exports `GroupService`. Registered in [`AppModule`](../apps/api/src/app.module.ts).
+
+**Tests added:**
+
+- [`group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) — 15 tests: create (creator becomes admin via transaction), list (empty + populated), get (with members + not found), update (name/type/currency), delete (audit log written).
+- [`group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) — 14 tests: each endpoint returns correct status, DTO validation (missing name, invalid type, invalid currency), guard overrides pattern.
+
+**Files changed:**
+
+- [`packages/shared/src/types/group.types.ts`](../packages/shared/src/types/group.types.ts)
+- [`packages/shared/src/types/index.ts`](../packages/shared/src/types/index.ts)
+- [`packages/shared/src/__tests__/group.test.ts`](../packages/shared/src/__tests__/group.test.ts)
+- [`apps/api/src/group/constants/group-errors.ts`](../apps/api/src/group/constants/group-errors.ts)
+- [`apps/api/src/group/dto/create-group.dto.ts`](../apps/api/src/group/dto/create-group.dto.ts)
+- [`apps/api/src/group/dto/update-group.dto.ts`](../apps/api/src/group/dto/update-group.dto.ts)
+- [`apps/api/src/group/guards/group-member.guard.ts`](../apps/api/src/group/guards/group-member.guard.ts)
+- [`apps/api/src/group/guards/group-admin.guard.ts`](../apps/api/src/group/guards/group-admin.guard.ts)
+- [`apps/api/src/group/group.service.ts`](../apps/api/src/group/group.service.ts)
+- [`apps/api/src/group/group.controller.ts`](../apps/api/src/group/group.controller.ts)
+- [`apps/api/src/group/group.module.ts`](../apps/api/src/group/group.module.ts)
+- [`apps/api/src/group/group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts)
+- [`apps/api/src/group/group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts)
+- [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) — Registered `GroupModule`
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
