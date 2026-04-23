@@ -11,8 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
-  ApiBearerAuth,
   ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -64,6 +65,39 @@ export class GroupController {
     return this.groupService.getUserGroups(user.sub);
   }
 
+  // NOTE: `/groups/invite/:token` must be declared BEFORE `/groups/:id`
+  // so that NestJS does not match `invite` as an :id path parameter.
+  @CustomThrottle({ limit: 30, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Get('invite/:token')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get invite details (group name, inviter) for a raw invite token' })
+  @ApiParam({ name: 'token', description: 'Raw invite token (UUID)' })
+  @ApiOkResponse({ description: 'Invite info' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Invalid invite token' })
+  @ApiBadRequestResponse({ description: 'Invite token expired or already used' })
+  async getInviteInfo(@Param('token') token: string) {
+    return this.groupService.getInviteInfo(token);
+  }
+
+  @CustomThrottle({ limit: 5, ttl: 60000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('invite/:token/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Accept a group invite and join the group' })
+  @ApiParam({ name: 'token', description: 'Raw invite token (UUID)' })
+  @ApiOkResponse({ description: 'Joined group successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Invalid invite token' })
+  @ApiBadRequestResponse({ description: 'Invite token expired or already used' })
+  @ApiConflictResponse({ description: 'Already a member of this group' })
+  async acceptInvite(@CurrentUser() user: JwtPayload, @Param('token') token: string) {
+    return this.groupService.acceptInvite(token, user.sub);
+  }
+
   @CustomThrottle({ limit: 30, ttl: 60000 })
   @UseGuards(JwtAuthGuard, GroupMemberGuard)
   @Get(':id')
@@ -112,5 +146,20 @@ export class GroupController {
   @ApiNotFoundResponse({ description: 'Group not found' })
   async deleteGroup(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.groupService.deleteGroup(id, user.sub);
+  }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(JwtAuthGuard, GroupAdminGuard)
+  @Post(':id/invites')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate a new invite token for the group (admin only)' })
+  @ApiParam({ name: 'id', description: 'Group ID (UUID)' })
+  @ApiCreatedResponse({ description: 'Invite token created' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiForbiddenResponse({ description: 'Not an admin of this group' })
+  @ApiNotFoundResponse({ description: 'Group not found' })
+  async createInvite(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.groupService.createInvite(id, user.sub);
   }
 }

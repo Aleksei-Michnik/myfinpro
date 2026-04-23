@@ -19,6 +19,9 @@ describe('GroupController', () => {
     getGroup: jest.fn(),
     updateGroup: jest.fn(),
     deleteGroup: jest.fn(),
+    createInvite: jest.fn(),
+    getInviteInfo: jest.fn(),
+    acceptInvite: jest.fn(),
   };
 
   const user: JwtPayload = {
@@ -119,6 +122,55 @@ describe('GroupController', () => {
 
       expect(mockGroupService.deleteGroup).toHaveBeenCalledWith('g1', 'user-1');
       expect(result).toEqual({ message: 'Group deleted successfully' });
+    });
+  });
+
+  describe('POST /groups/:id/invites (createInvite)', () => {
+    it('should return token and expiresAt from service', async () => {
+      const expiresAt = new Date();
+      const fakeResult = { token: 'raw-token-uuid', expiresAt };
+      mockGroupService.createInvite.mockResolvedValue(fakeResult);
+
+      const result = await controller.createInvite(user, 'g1');
+
+      expect(mockGroupService.createInvite).toHaveBeenCalledWith('g1', 'user-1');
+      expect(result).toEqual(fakeResult);
+    });
+  });
+
+  describe('GET /groups/invite/:token (getInviteInfo)', () => {
+    it('should return invite details from service', async () => {
+      const fakeInfo = {
+        groupId: 'g1',
+        groupName: 'Family',
+        groupType: 'family',
+        inviterName: 'Alice',
+      };
+      mockGroupService.getInviteInfo.mockResolvedValue(fakeInfo);
+
+      const result = await controller.getInviteInfo('raw-token-uuid');
+
+      expect(mockGroupService.getInviteInfo).toHaveBeenCalledWith('raw-token-uuid');
+      expect(result).toEqual(fakeInfo);
+    });
+  });
+
+  describe('POST /groups/invite/:token/accept (acceptInvite)', () => {
+    it('should delegate to service with token and user id', async () => {
+      const fakeGroup = {
+        id: 'g1',
+        name: 'Family',
+        type: 'family',
+        defaultCurrency: 'USD',
+        memberCount: 2,
+        role: 'member',
+      };
+      mockGroupService.acceptInvite.mockResolvedValue(fakeGroup);
+
+      const result = await controller.acceptInvite(user, 'raw-token-uuid');
+
+      expect(mockGroupService.acceptInvite).toHaveBeenCalledWith('raw-token-uuid', 'user-1');
+      expect(result).toEqual(fakeGroup);
     });
   });
 

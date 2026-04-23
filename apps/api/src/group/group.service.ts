@@ -1,4 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { INVITE_TOKEN_EXPIRY_DAYS } from '@myfinpro/shared';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GROUP_ERRORS } from './constants/group-errors';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -223,5 +231,188 @@ export class GroupService {
     this.logger.log(`Group deleted: ${existing.name} (${groupId}) by user ${userId}`);
 
     return { message: 'Group deleted successfully' };
+  }
+
+  /**
+   * Generate an invite token for a group. Raw UUID token is returned to the
+   * caller; only the SHA-256 hash is persisted.
+   */
+  async createInvite(groupId: string, userId: string): Promise<{ token: string; expiresAt: Date }> {
+    const rawToken = crypto.randomUUID();
+    const tokenHash = this.hashToken(rawToken);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + INVITE_TOKEN_EXPIRY_DAYS);
+
+    const record = await this.prisma.groupInviteToken.create({
+      data: {
+        tokenHash,
+        groupId,
+        createdById: userId,
+        expiresAt,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'GROUP_INVITE_CREATED',
+        entity: 'GroupInviteToken',
+        entityId: record.id,
+        details: { groupId },
+      },
+    });
+
+    this.logger.log(`Group invite created for group ${groupId} by user ${userId}`);
+
+    return { token: rawToken, expiresAt };
+  }
+
+  /**
+   * Get invite info for the accept page. Validates that the token exists,
+   * is not expired, and not yet used. Returns group and inviter summary.
+   */
+  async getInviteInfo(rawToken: string): Promise<{
+    groupId: string;
+    groupName: string;
+    groupType: string;
+    inviterName: string;
+  }> {
+    const tokenHash = this.hashToken(rawToken);
+
+    const record = await this.prisma.groupInviteToken.findUnique({
+      where: { tokenHash },
+      include: {
+        group: { select: { id: true, name: true, type: true } },
+      },
+    });
+
+    this.ensureInviteUsable(record);
+
+    const inviter = await this.prisma.user.findUnique({
+      where: { id: record!.createdById },
+      select: { name: true },
+    });
+
+    return {
+      groupId: record!.group.id,
+      groupName: record!.group.name,
+      groupType: record!.group.type,
+      inviterName: inviter?.name ?? 'Unknown',
+    };
+  }
+
+  /**
+   * Accept an invite token: validate, ensure the user isn't already a member,
+   * then in a transaction mark the token used and create the membership.
+   */
+  async acceptInvite(rawToken: string, userId: string): Promise<GroupSummary> {
+    const tokenHash = this.hashToken(rawToken);
+
+    const record = await this.prisma.groupInviteToken.findUnique({
+      where: { tokenHash },
+    });
+
+    this.ensureInviteUsable(record);
+
+    const groupId = record!.groupId;
+
+    const existingMembership = await this.prisma.groupMembership.findUnique({
+      where: {
+        groupId_userId: { groupId, userId },
+      },
+    });
+
+    if (existingMembership) {
+      throw new ConflictException({
+        message: 'You are already a member of this group',
+        errorCode: GROUP_ERRORS.ALREADY_A_MEMBER,
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.groupInviteToken.update({
+        where: { id: record!.id },
+        data: { usedAt: new Date(), usedByUserId: userId },
+      });
+
+      await tx.groupMembership.create({
+        data: {
+          groupId,
+          userId,
+          role: 'member',
+        },
+      });
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'GROUP_MEMBER_JOINED',
+        entity: 'Group',
+        entityId: groupId,
+        details: { inviteTokenId: record!.id },
+      },
+    });
+
+    this.logger.log(`User ${userId} joined group ${groupId} via invite ${record!.id}`);
+
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      include: { _count: { select: { memberships: true } } },
+    });
+
+    if (!group) {
+      throw new NotFoundException({
+        message: 'Group not found',
+        errorCode: GROUP_ERRORS.GROUP_NOT_FOUND,
+      });
+    }
+
+    return {
+      id: group.id,
+      name: group.name,
+      type: group.type,
+      defaultCurrency: group.defaultCurrency,
+      createdById: group.createdById,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+      memberCount: group._count.memberships,
+      role: 'member',
+    };
+  }
+
+  /**
+   * Validate that an invite token record exists, is not used, and not expired.
+   * Throws the appropriate error otherwise.
+   */
+  private ensureInviteUsable(record: { usedAt: Date | null; expiresAt: Date } | null): void {
+    if (!record) {
+      throw new NotFoundException({
+        message: 'Invalid invite token',
+        errorCode: GROUP_ERRORS.INVITE_TOKEN_INVALID,
+      });
+    }
+
+    if (record.usedAt) {
+      throw new BadRequestException({
+        message: 'Invite token has already been used',
+        errorCode: GROUP_ERRORS.INVITE_TOKEN_USED,
+      });
+    }
+
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException({
+        message: 'Invite token has expired',
+        errorCode: GROUP_ERRORS.INVITE_TOKEN_EXPIRED,
+      });
+    }
+  }
+
+  /**
+   * SHA-256 hash of a raw token string.
+   */
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 }
