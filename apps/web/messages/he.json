@@ -12,6 +12,7 @@
   "nav": {
     "home": "דף הבית",
     "dashboard": "לוח בקרה",
+    "groups": "קבוצות",
     "transactions": "תנועות",
     "budgets": "תקציבים",
     "settings": "הגדרות",
@@ -114,6 +115,32 @@
   "dashboard": {
     "title": "לוח בקרה",
     "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן."
+  },
+  "groups": {
+    "title": "הקבוצות שלי",
+    "createGroup": "צור קבוצה",
+    "noGroups": "אין לך קבוצות עדיין.",
+    "createFirst": "צור את הקבוצה הראשונה שלך כדי להתחיל.",
+    "memberCount": "{count, plural, one {חבר #} other {# חברים}}",
+    "role": {
+      "admin": "מנהל",
+      "member": "חבר"
+    },
+    "type": {
+      "family": "משפחה"
+    },
+    "create": {
+      "title": "צור קבוצה חדשה",
+      "name": "שם הקבוצה",
+      "namePlaceholder": "הזן שם קבוצה",
+      "type": "סוג קבוצה",
+      "currency": "מטבע ברירת מחדל",
+      "cancel": "ביטול",
+      "create": "צור קבוצה",
+      "creating": "יוצר...",
+      "success": "הקבוצה נוצרה בהצלחה",
+      "error": "יצירת הקבוצה נכשלה"
+    }
   },
   "settings": {
     "connectedAccounts": "חשבונות מחוברים",

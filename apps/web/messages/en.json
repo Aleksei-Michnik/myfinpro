@@ -12,6 +12,7 @@
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",
+    "groups": "Groups",
     "transactions": "Transactions",
     "budgets": "Budgets",
     "settings": "Settings",
@@ -114,6 +115,32 @@
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here."
+  },
+  "groups": {
+    "title": "My Groups",
+    "createGroup": "Create Group",
+    "noGroups": "You don't have any groups yet.",
+    "createFirst": "Create your first group to get started.",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "role": {
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "type": {
+      "family": "Family"
+    },
+    "create": {
+      "title": "Create New Group",
+      "name": "Group Name",
+      "namePlaceholder": "Enter group name",
+      "type": "Group Type",
+      "currency": "Default Currency",
+      "cancel": "Cancel",
+      "create": "Create Group",
+      "creating": "Creating...",
+      "success": "Group created successfully",
+      "error": "Failed to create group"
+    }
   },
   "settings": {
     "connectedAccounts": "Connected Accounts",
