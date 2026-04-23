@@ -2113,6 +2113,55 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json)
 - [`apps/web/messages/he.json`](../apps/web/messages/he.json)
 
+### Iteration 5.4: Invite Token API (2026-04-23)
+
+- **Date**: April 23, 2026
+- **Commit**: `e508f3d` (develop)
+- **CI run**: `24858515179` — success
+- **Deploy Staging run**: `24858515183` — success
+
+**Changes**: Added group invite token generation and acceptance endpoints to the API following the existing UUID v4 → SHA-256 token pattern used in [`EmailVerificationService`](../apps/api/src/auth/services/email-verification.service.ts). The raw UUID is returned to the inviter once; only the SHA-256 hash is persisted.
+
+**GroupService new methods** ([`apps/api/src/group/group.service.ts`](../apps/api/src/group/group.service.ts)):
+
+- `createInvite(groupId, userId)` — Generates `crypto.randomUUID()` raw token, hashes with SHA-256, stores in `GroupInviteToken` with `expiresAt = now + INVITE_TOKEN_EXPIRY_DAYS` (7 days) from `@myfinpro/shared`, writes `GROUP_INVITE_CREATED` audit log, returns `{ token, expiresAt }`.
+- `getInviteInfo(rawToken)` — Hashes the incoming raw token, looks up by `tokenHash` including the related group, validates the token is not expired and not used, then fetches the inviter's name. Returns `{ groupId, groupName, groupType, inviterName }`. Falls back to `"Unknown"` when the inviter has been deleted.
+- `acceptInvite(rawToken, userId)` — Validates the token, checks the user isn't already a member via the `groupId_userId` unique index, then in a single transaction marks the token as used (sets `usedAt` + `usedByUserId`) and creates a `GroupMembership` with role `'member'`. Writes a `GROUP_MEMBER_JOINED` audit log and returns the group summary with updated `memberCount`.
+- Shared `ensureInviteUsable()` private helper centralises the three validation checks (invalid / used / expired) with the correct error codes from [`GROUP_ERRORS`](../apps/api/src/group/constants/group-errors.ts).
+- Shared `hashToken()` private helper mirrors the `EmailVerificationService` pattern (SHA-256 hex).
+
+**GroupController new endpoints** ([`apps/api/src/group/group.controller.ts`](../apps/api/src/group/group.controller.ts)):
+
+- `POST /groups/:id/invites` — Admin-only. Guards: `JwtAuthGuard` + `GroupAdminGuard`. Rate-limited `10 req/min`. Returns `{ token, expiresAt }`.
+- `GET /groups/invite/:token` — Any authenticated user. Guard: `JwtAuthGuard`. Rate-limited `30 req/min`. Returns `{ groupId, groupName, groupType, inviterName }` so the accept page can render "Alice invited you to join Family X".
+- `POST /groups/invite/:token/accept` — Any authenticated user. Guard: `JwtAuthGuard`. Rate-limited `5 req/min`. Returns the group summary.
+- **Route ordering**: The two `invite/:token*` routes are declared **before** the `:id` routes so NestJS does not match the literal `invite` segment as a group ID. The admin `POST /groups/:id/invites` endpoint is declared **after** `:id` because its path starts with the `:id` parameter.
+
+**New error codes used** (already defined in [`group-errors.ts`](../apps/api/src/group/constants/group-errors.ts)):
+
+- `GROUP_INVITE_TOKEN_INVALID` — Unknown token hash (`404 NotFoundException`)
+- `GROUP_INVITE_TOKEN_EXPIRED` — Token past `expiresAt` (`400 BadRequestException`)
+- `GROUP_INVITE_TOKEN_USED` — Token already accepted (`400 BadRequestException`)
+- `GROUP_ALREADY_A_MEMBER` — User is already a member of the group (`409 ConflictException`)
+
+**Tests added**:
+
+- [`group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) — 14 new invite tests: `createInvite` generates a UUID v4 token + 64-char SHA-256 hash, stores `groupId` / `createdById`, sets expiry ~7 days ahead, writes audit log; `getInviteInfo` returns the expected shape for a valid token, throws `INVITE_TOKEN_INVALID` / `INVITE_TOKEN_EXPIRED` / `INVITE_TOKEN_USED` with the correct error codes, falls back to `"Unknown"` when the inviter is missing; `acceptInvite` creates the membership, marks the token used within a transaction, writes the audit log, throws `ALREADY_A_MEMBER` + skips the transaction when the user is already a member, and bubbles the same invalid/expired/used errors.
+- [`group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) — 3 new endpoint tests covering the `createInvite`, `getInviteInfo`, and `acceptInvite` handlers each delegating correctly to the service.
+
+**Results**:
+
+- All 43 group tests pass (14 controller + 29 service).
+- Full monorepo `pnpm run test` passes: 379 api + 303 web + shared/eslint-config suites (all green).
+- CI (`24858515179`) and Deploy Staging (`24858515183`) on `develop` both green.
+
+**Files changed:**
+
+- [`apps/api/src/group/group.service.ts`](../apps/api/src/group/group.service.ts) — Added `createInvite`, `getInviteInfo`, `acceptInvite`, `ensureInviteUsable`, `hashToken`
+- [`apps/api/src/group/group.controller.ts`](../apps/api/src/group/group.controller.ts) — Added 3 invite endpoints with correct route ordering
+- [`apps/api/src/group/group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) — Added invite unit tests
+- [`apps/api/src/group/group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) — Added invite endpoint tests
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
