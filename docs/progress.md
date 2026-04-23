@@ -2048,6 +2048,71 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/api/src/group/group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts)
 - [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) — Registered `GroupModule`
 
+### Iteration 5.3: Group List and Create UI (2026-04-23)
+
+- **Date**: April 23, 2026
+- **Commit**: `ce007ed` (develop)
+- **CI run**: `24854372223` — success
+- **Deploy Staging run**: `24854372255` — success
+
+**Changes**: Implemented the frontend group list page with a create-group dialog, a new `GroupProvider` React context for state management, and a GroupCard component. Added a "Groups" link to the authenticated header navigation and full i18n translations for English and Hebrew.
+
+**Frontend group module** ([`apps/web/src/lib/group`](../apps/web/src/lib/group)):
+
+- [`types.ts`](../apps/web/src/lib/group/types.ts) — `GroupSummary`, `GroupMember`, `GroupDetail`, `CreateGroupData`, `UpdateGroupData` interfaces mirroring the API response shape.
+- [`group-context.tsx`](../apps/web/src/lib/group/group-context.tsx) — `GroupProvider` + `useGroups()` hook. Uses `useAuth().getAccessToken()` for bearer-token auth and the same `API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1'` pattern as auth-context. Exposes `groups`, `isLoading`, `fetchGroups`, `createGroup`, `updateGroup`, `deleteGroup`. Auto-fetches groups when the user becomes authenticated and clears state on logout.
+
+**Group UI components** ([`apps/web/src/components/group`](../apps/web/src/components/group)):
+
+- [`GroupCard.tsx`](../apps/web/src/components/group/GroupCard.tsx) — Clickable card linking to `/groups/{id}` with group name heading, type badge (translated via `GROUP_TYPES` from shared), currency code, pluralised member count (`{count, plural, ...}`), and admin/member role badge. Graceful fallback to raw type/role when unknown. Follows the same `rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800` styling as the account settings sections.
+- [`CreateGroupDialog.tsx`](../apps/web/src/components/group/CreateGroupDialog.tsx) — Modal dialog styled like `DeleteAccountDialog`. Form fields: name (required), type dropdown (populated from `GROUP_TYPES`, default "family"), currency dropdown (populated from `CURRENCY_CODES`, default "USD"). Create button is disabled until a non-whitespace name is entered. Shows loading state (`Creating...`) while submitting, success / error toasts via `useToast()`, and closes on success; errors keep the dialog open.
+
+**Groups list page** ([`apps/web/src/app/[locale]/groups`](../apps/web/src/app/[locale]/groups)):
+
+- [`page.tsx`](../apps/web/src/app/[locale]/groups/page.tsx) — Wrapped in `ProtectedRoute`. Shows page title, a "Create Group" button in the header (when there are groups), a responsive `grid-cols-1 md:grid-cols-2 gap-4` grid of `GroupCard`s, a skeleton loader while fetching the first time, and a prominent empty state ("You don't have any groups yet" + "Create your first group to get started.") with a large CTA when the user has no groups.
+
+**Header navigation** ([`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx)):
+
+- Added a "Groups" link (`t('nav.groups')`) to the authenticated nav between Dashboard and Settings, following the same styling as the existing links.
+
+**Locale layout** ([`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx)):
+
+- Added `<GroupProvider>` wrapping `<ToastProvider>` inside the existing `<AuthProvider>` so the group context can read the current access token.
+
+**i18n translations**:
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — Added `nav.groups: "Groups"` and a full `groups.*` section: `title`, `createGroup`, `noGroups`, `createFirst`, pluralised `memberCount`, `role.admin`/`role.member`, `type.family`, and the `create.*` dialog strings.
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Same keys with Hebrew translations ("הקבוצות שלי", "צור קבוצה", etc.) — verified to work with the existing RTL layout.
+
+**Tests added**:
+
+- [`GroupCard.spec.tsx`](../apps/web/src/components/group/GroupCard.spec.tsx) — 10 tests: renders name, translated type badge, pluralised member count (singular + plural), currency, admin/member role badges, absence of role badge when undefined, correct link href, fallback to raw type for unknown values.
+- [`CreateGroupDialog.spec.tsx`](../apps/web/src/components/group/CreateGroupDialog.spec.tsx) — 10 tests: does not render when closed, renders all form fields when open, create button disabled until a non-whitespace name is entered, calls `createGroup` with trimmed name / selected type / currency, shows the `Creating...` loading state, displays error toast on failure, cancel button invokes `onClose` without calling the API.
+- [`groups.spec.tsx`](../apps/web/src/app/[locale]/groups/groups.spec.tsx) — 8 tests: renders title, empty state with CTA when no groups, skeleton while loading, grid of cards when groups exist, both header and empty-state CTAs open the create dialog, cancel closes the dialog.
+- [`Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Added a test verifying the `Groups` link renders with `href="/groups"` when authenticated.
+
+**Results**:
+
+- All 303 web unit tests pass (up from 274 before this iteration, +29 new tests).
+- Full monorepo `pnpm run test` passes: 303 web + 365 api + shared/eslint-config suites.
+- CI (`24854372223`) and Deploy Staging (`24854372255`) on `develop` both green.
+
+**Files changed:**
+
+- [`apps/web/src/lib/group/types.ts`](../apps/web/src/lib/group/types.ts)
+- [`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx)
+- [`apps/web/src/components/group/GroupCard.tsx`](../apps/web/src/components/group/GroupCard.tsx)
+- [`apps/web/src/components/group/GroupCard.spec.tsx`](../apps/web/src/components/group/GroupCard.spec.tsx)
+- [`apps/web/src/components/group/CreateGroupDialog.tsx`](../apps/web/src/components/group/CreateGroupDialog.tsx)
+- [`apps/web/src/components/group/CreateGroupDialog.spec.tsx`](../apps/web/src/components/group/CreateGroupDialog.spec.tsx)
+- [`apps/web/src/app/[locale]/groups/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/page.tsx)
+- [`apps/web/src/app/[locale]/groups/groups.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/groups.spec.tsx)
+- [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/%5Blocale%5D/layout.tsx) — Wrap children in `<GroupProvider>`
+- [`apps/web/src/components/layout/Header.tsx`](../apps/web/src/components/layout/Header.tsx) — Added Groups link
+- [`apps/web/src/components/layout/Header.spec.tsx`](../apps/web/src/components/layout/Header.spec.tsx) — Added Groups link test
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json)
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json)
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
