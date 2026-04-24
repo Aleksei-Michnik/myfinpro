@@ -439,31 +439,40 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 
 > **Detailed design**: See [`docs/phase-4-design.md`](docs/phase-4-design.md) for the full Phase 4 design document.
 
-### Phase 5: Family/Group Management
+### Phase 5: Group Management & Password Change
 
-#### 5A: Group Management (Iterations 5.1–5.8)
+> **Detailed design**: See [`docs/phase-5-design.md`](docs/phase-5-design.md) for the Phase 5 design document with architecture, schema, API endpoints, and iteration-by-iteration plan.
 
-| Iteration | Objective         | Scope                                   | Testing          | CI/CD                          | Deployment | Acceptance Criteria                                                                |
-| --------- | ----------------- | --------------------------------------- | ---------------- | ------------------------------ | ---------- | ---------------------------------------------------------------------------------- |
-| 5.1       | Group schema      | Groups, memberships tables with indexes | Migration tests  | lint + typecheck + unit        | Deploy     | Schema applied                                                                     |
-| 5.2       | Create API        | Create group endpoint                   | Unit tests       | lint + typecheck + unit        | Deploy     | Group created                                                                      |
-| 5.3       | Create UI         | Group creation UI                       | UI tests         | lint + typecheck + unit        | Deploy     | UI creates group                                                                   |
-| 5.4       | Invite API        | Invite tokens                           | Unit tests       | lint + typecheck + unit        | Deploy     | Invite generated                                                                   |
-| 5.5       | Accept invite     | Join flow                               | Integration test | lint + typecheck + integration | Deploy     | Member joins                                                                       |
-| 5.6       | Group dashboard   | Basic view                              | UI tests         | lint + typecheck + unit        | Deploy     | Dashboard displays group name, member list, recent transactions, and total balance |
-| 5.7       | Member management | List/remove members                     | E2E tests        | full suite                     | Deploy     | Members managed                                                                    |
-| 5.8       | Roles/permissions | Admin/member roles with audit logging   | Permission tests | lint + typecheck + unit        | Deploy     | Access enforced                                                                    |
+> **Scope changes from original plan**: After auditing the original iterations, several 5B items were found to be already implemented in Phase 4 (profile view 5.9, profile edit 5.10, account deletion 5.12) and were skipped. Data export (5.13, 5.14) was deferred to post-Phase 6 since no meaningful data exists to export yet. Groups were redesigned as a scalable, type-based entity (not hardcoded "family") with `type` field supporting `family` now and extensible to `team`, `project`, `company`, etc. later. Effective Phase 5 scope: 5.1–5.8 + 5.11 = **9 iterations**.
 
-#### 5B: User Profile Management (Iterations 5.9–5.14)
+#### 5A: Group Management (Iterations 5.1–5.8) — ✅ Complete
 
-| Iteration | Objective        | Scope                                                                              | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                            |
-| --------- | ---------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------- |
-| 5.9       | Profile view     | User profile page with avatar, name, email, timezone, default currency, and locale | UI tests          | lint + typecheck + unit        | Deploy     | Profile page displays all user settings with edit buttons      |
-| 5.10      | Profile edit     | Name, timezone, default currency, locale preferences                               | Integration tests | lint + typecheck + integration | Deploy     | Profile updates saved and reflected immediately in UI          |
-| 5.11      | Password change  | Change password flow with current password validation                              | Integration tests | lint + typecheck + integration | Deploy     | Password updated with confirmation email sent                  |
-| 5.12      | Account deletion | GDPR-compliant deletion with cascade                                               | E2E tests         | full suite                     | Deploy     | Account and all associated data permanently removed            |
-| 5.13      | Data export      | JSON/CSV export of all user data                                                   | Integration tests | lint + typecheck + integration | Deploy     | Export contains transactions, groups, categories, and settings |
-| 5.14      | Export UI        | Profile page download button                                                       | UI tests          | lint + typecheck + unit        | Deploy     | Download initiates and completes with progress indicator       |
+| Iteration | Objective                | Scope                                                                                        | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                      | Status |
+| --------- | ------------------------ | -------------------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | -------------------------------------------------------- | ------ |
+| 5.1       | Group schema             | Group, GroupMembership, GroupInviteToken tables; expand-only migration                       | Migration tests    | lint + typecheck + unit        | Deploy     | Schema applied to staging and production                 | ✅     |
+| 5.2       | Group CRUD API           | NestJS GroupModule with create/list/get/update/delete; shared types in packages/shared       | Unit tests         | lint + typecheck + unit        | Deploy     | Group CRUD works via API with role-based guards          | ✅     |
+| 5.3       | Group list + create UI   | /groups page with grid of cards; CreateGroupDialog; Header nav link                          | UI tests           | lint + typecheck + unit        | Deploy     | Users can view and create groups from the web UI         | ✅     |
+| 5.4       | Invite token API         | POST :id/invites, GET /invite/:token, POST /invite/:token/accept; SHA-256 hash, 7-day expiry | Unit tests         | lint + typecheck + unit        | Deploy     | Invite tokens can be generated and accepted              | ✅     |
+| 5.5       | Accept invite UI         | /groups/invite/[token] page with join flow, error handling for invalid/expired/used tokens   | Unit + E2E tests   | lint + typecheck + integration | Deploy     | Users can accept invite links and join groups            | ✅     |
+| 5.6       | Group dashboard view     | /groups/[groupId] page with members list, roles, joined dates, "You" marker                  | UI tests           | lint + typecheck + unit        | Deploy     | Group dashboard renders with full member info            | ✅     |
+| 5.7       | Group settings + members | Admin-only settings page: group info edit, invite link generation, role management, delete   | Unit + integration | full suite                     | Deploy     | Admins can manage all aspects of their groups            | ✅     |
+| 5.8       | Leave group + audit logs | POST :id/leave; last-admin protection; last-member auto-delete; full audit log coverage      | Unit + integration | lint + typecheck + unit        | Deploy     | Members can leave groups; all group actions audit-logged | ✅     |
+
+#### 5B: Password Change (Iteration 5.11) — ✅ Complete
+
+| Iteration | Objective       | Scope                                                                                                                                                       | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                      | Status |
+| --------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------- | ------ |
+| 5.11      | Password change | POST /auth/change-password with argon2 verify/hash; revokes all refresh tokens; rejects OAuth-only users; ChangePasswordForm integrated in Account Settings | Unit + integration | lint + typecheck + integration | Deploy     | Users with a password can change it; OAuth-only users get clear "use password reset" CTA | ✅     |
+
+#### 5C: Skipped / Deferred (from original plan)
+
+| Original | Objective        | Reason                                                                                                                                   |
+| -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 5.9      | Profile view     | Already implemented in Phase 4.7 (Account Settings page)                                                                                 |
+| 5.10     | Profile edit     | Already implemented in Phase 4.7.2 (currency/timezone settings) and Phase 4.16 (locale settings)                                         |
+| 5.12     | Account deletion | Already implemented in Phase 4.6–4.8 (soft-delete, grace period, scheduler); cascade behavior for groups handled in 5.7/5.8 delete flows |
+| 5.13     | Data export      | Deferred to post-Phase 6 — no meaningful financial data exists to export until transactions are implemented                              |
+| 5.14     | Export UI        | Deferred — depends on 5.13                                                                                                               |
 
 ### Phase 6: Income Management
 
