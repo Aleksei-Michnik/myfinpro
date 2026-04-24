@@ -2532,6 +2532,25 @@ All other Phase 5 `<label>` elements and muted helper texts already had matching
 `dark:text-gray-300` / `dark:text-gray-400` variants, so the one-file change propagates to
 every form using `<Input />`. Tests: 379/379 frontend tests still pass.
 
+### Phase 5 Complete — Production Deployment Verified
+
+Phase 5 (Group Management & Password Change) merged from `develop` to `main` and deployed
+to the production environment.
+
+- **Plan update commit** (develop): `57d1545` — docs: update IMPLEMENTATION-PLAN.md with
+  Phase 5 scope changes.
+- **Merge commit** (main): `7bae5dd` — Merge Phase 5 with `--no-ff`, detailed commit body
+  documenting 5.1–5.8 (Group Management), 5.11 (Password Change), polish, skipped items
+  (5.9, 5.10, 5.12 — already covered by Phase 4) and deferred items (5.13, 5.14 — data
+  export, post-Phase 6).
+- **Production deploy run ID**: `24904752930` — completed successfully on 2026-04-24.
+  Jobs: Validate Deployment ✓, Wait for CI ✓, Verify Staging Tests ✓, Build & Push Images
+  ✓ (2m33s), Deploy to Production ✓ (1m49s, blue-green).
+- **Test summary**: 415 API tests + 379 web tests + 54 shared tests, all passing; CI and
+  staging tests green on the merged commit.
+
+All iterations are now live in the production environment.
+
 ### Upcoming Phases
 
 - **Phase 6** — Income management (10 iterations)
