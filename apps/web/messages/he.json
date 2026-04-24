@@ -140,6 +140,24 @@
       "creating": "יוצר...",
       "success": "הקבוצה נוצרה בהצלחה",
       "error": "יצירת הקבוצה נכשלה"
+    },
+    "invite": {
+      "title": "הוזמנת",
+      "joinMessage": "הוזמנת להצטרף אל",
+      "invitedBy": "הוזמנת על ידי {name}",
+      "accept": "קבל והצטרף",
+      "accepting": "מצטרף...",
+      "decline": "דחה",
+      "acceptSuccess": "הצטרפת אל {name}",
+      "alreadyMember": "אתה כבר חבר בקבוצה זו",
+      "goToGroups": "עבור לקבוצות",
+      "loading": "טוען הזמנה...",
+      "error": {
+        "invalid": "קישור ההזמנה אינו תקין",
+        "expired": "ההזמנה פגה",
+        "used": "ההזמנה כבר נוצלה",
+        "generic": "לא ניתן לטעון את ההזמנה"
+      }
     }
   },
   "settings": {

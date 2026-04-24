@@ -38,3 +38,10 @@ export interface UpdateGroupData {
   type?: string;
   defaultCurrency?: string;
 }
+
+export interface InviteInfo {
+  groupId: string;
+  groupName: string;
+  groupType: string;
+  inviterName: string;
+}

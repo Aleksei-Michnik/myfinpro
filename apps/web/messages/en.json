@@ -140,6 +140,24 @@
       "creating": "Creating...",
       "success": "Group created successfully",
       "error": "Failed to create group"
+    },
+    "invite": {
+      "title": "You've been invited",
+      "joinMessage": "You've been invited to join",
+      "invitedBy": "Invited by {name}",
+      "accept": "Accept & Join",
+      "accepting": "Joining...",
+      "decline": "Decline",
+      "acceptSuccess": "You've joined {name}",
+      "alreadyMember": "You're already a member of this group",
+      "goToGroups": "Go to Groups",
+      "loading": "Loading invite...",
+      "error": {
+        "invalid": "This invite link is not valid",
+        "expired": "This invite has expired",
+        "used": "This invite has already been used",
+        "generic": "Unable to load invite"
+      }
     }
   },
   "settings": {

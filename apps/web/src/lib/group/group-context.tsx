@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { CreateGroupData, GroupSummary, UpdateGroupData } from './types';
+import type { CreateGroupData, GroupSummary, InviteInfo, UpdateGroupData } from './types';
 import { useAuth } from '@/lib/auth/auth-context';
 
 interface GroupContextType {
@@ -11,6 +11,24 @@ interface GroupContextType {
   createGroup: (data: CreateGroupData) => Promise<GroupSummary>;
   updateGroup: (groupId: string, data: UpdateGroupData) => Promise<GroupSummary>;
   deleteGroup: (groupId: string) => Promise<void>;
+  getInviteInfo: (token: string) => Promise<InviteInfo>;
+  acceptInvite: (token: string) => Promise<GroupSummary>;
+}
+
+/**
+ * Parse a fetch response error payload and throw an Error with an optional
+ * `.errorCode` property so callers can differentiate specific failure modes.
+ */
+async function throwApiError(res: Response, fallback: string): Promise<never> {
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    errorCode?: string;
+  };
+  const err = new Error(body.message || fallback) as Error & { errorCode?: string };
+  if (body.errorCode) {
+    err.errorCode = body.errorCode;
+  }
+  throw err;
 }
 
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
@@ -116,6 +134,50 @@ export function GroupProvider({ children }: { children: ReactNode }) {
     [getAccessToken],
   );
 
+  const getInviteInfo = useCallback(
+    async (inviteToken: string): Promise<InviteInfo> => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/groups/invite/${encodeURIComponent(inviteToken)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        await throwApiError(res, 'Failed to load invite');
+      }
+      return (await res.json()) as InviteInfo;
+    },
+    [getAccessToken],
+  );
+
+  const acceptInvite = useCallback(
+    async (inviteToken: string): Promise<GroupSummary> => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(
+        `${API_BASE}/groups/invite/${encodeURIComponent(inviteToken)}/accept`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      if (!res.ok) {
+        await throwApiError(res, 'Failed to accept invite');
+      }
+      const group = (await res.json()) as GroupSummary;
+      // Refresh group list so the newly joined group appears
+      await fetchGroups();
+      return group;
+    },
+    [getAccessToken, fetchGroups],
+  );
+
   // Auto-fetch groups when the user becomes authenticated
   useEffect(() => {
     if (isAuthenticated) {
@@ -134,6 +196,8 @@ export function GroupProvider({ children }: { children: ReactNode }) {
         createGroup,
         updateGroup,
         deleteGroup,
+        getInviteInfo,
+        acceptInvite,
       }}
     >
       {children}
