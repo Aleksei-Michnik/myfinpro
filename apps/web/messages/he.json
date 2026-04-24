@@ -151,7 +151,17 @@
       "membersTitle": "חברים",
       "memberCount": "{count, plural, =1 {# חבר} other {# חברים}}",
       "joinedOn": "הצטרף {date}",
-      "you": "אתה"
+      "you": "אתה",
+      "leaveButton": "עזוב קבוצה",
+      "leaveConfirmTitle": "לעזוב את {name}?",
+      "leaveConfirmMessage": "האם אתה בטוח שברצונך לעזוב את הקבוצה?",
+      "leaveConfirmButton": "עזוב",
+      "leaveCancelButton": "ביטול",
+      "leaveSuccess": "עזבת את {name}",
+      "leaveErrors": {
+        "lastAdmin": "אתה המנהל האחרון. קדם חבר אחר תחילה.",
+        "generic": "עזיבת הקבוצה נכשלה"
+      }
     },
     "invite": {
       "title": "הוזמנת",

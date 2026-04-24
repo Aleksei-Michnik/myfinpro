@@ -31,6 +31,7 @@ interface GroupContextType {
   createInvite: (groupId: string) => Promise<InviteCreatedResult>;
   updateMemberRole: (groupId: string, userId: string, role: GroupRole) => Promise<void>;
   removeMember: (groupId: string, userId: string) => Promise<void>;
+  leaveGroup: (groupId: string) => Promise<void>;
 }
 
 /**
@@ -297,6 +298,26 @@ export function GroupProvider({ children }: { children: ReactNode }) {
     [getAccessToken],
   );
 
+  const leaveGroup = useCallback(
+    async (groupId: string): Promise<void> => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        await throwApiError(res, 'Failed to leave group');
+      }
+      // Remove the group from local state — the user no longer has access.
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    },
+    [getAccessToken],
+  );
+
   // Auto-fetch groups when the user becomes authenticated
   useEffect(() => {
     if (isAuthenticated) {
@@ -322,6 +343,7 @@ export function GroupProvider({ children }: { children: ReactNode }) {
         createInvite,
         updateMemberRole,
         removeMember,
+        leaveGroup,
       }}
     >
       {children}

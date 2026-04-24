@@ -25,6 +25,7 @@ describe('GroupController', () => {
     acceptInvite: jest.fn(),
     updateMemberRole: jest.fn(),
     removeMember: jest.fn(),
+    leaveGroup: jest.fn(),
   };
 
   const user: JwtPayload = {
@@ -251,6 +252,24 @@ describe('GroupController', () => {
 
       expect(mockGroupService.removeMember).toHaveBeenCalledWith('g1', 'user-2', 'user-1');
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('POST /groups/:id/leave (leaveGroup)', () => {
+    it('should delegate to service with groupId and current user id', async () => {
+      mockGroupService.leaveGroup.mockResolvedValue({ groupDeleted: false });
+
+      const result = await controller.leaveGroup(user, 'g1');
+
+      expect(mockGroupService.leaveGroup).toHaveBeenCalledWith('g1', 'user-1');
+      expect(result).toBeUndefined();
+    });
+
+    it('should propagate service errors (e.g. last admin conflict)', async () => {
+      const err = new Error('last admin');
+      mockGroupService.leaveGroup.mockRejectedValue(err);
+
+      await expect(controller.leaveGroup(user, 'g1')).rejects.toBe(err);
     });
   });
 

@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
@@ -35,7 +36,8 @@ function GroupDashboardInner() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const { getGroup } = useGroups();
+  const { getGroup, leaveGroup } = useGroups();
+  const { addToast } = useToast();
 
   const groupId =
     typeof params?.groupId === 'string'
@@ -47,6 +49,10 @@ function GroupDashboardInner() {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  // Leave group dialog state
+  const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   useEffect(() => {
     if (!groupId) return;
@@ -81,6 +87,33 @@ function GroupDashboardInner() {
     [group, user],
   );
   const isCurrentUserAdmin = currentUserMembership?.role === 'admin';
+
+  const handleOpenLeaveDialog = () => {
+    setIsLeaveDialogOpen(true);
+  };
+
+  const handleCloseLeaveDialog = () => {
+    if (isLeaving) return;
+    setIsLeaveDialogOpen(false);
+  };
+
+  const handleConfirmLeave = async () => {
+    if (!group) return;
+    setIsLeaving(true);
+    try {
+      await leaveGroup(group.id);
+      addToast('success', t('dashboard.leaveSuccess', { name: group.name }));
+      router.push('/groups');
+    } catch (err) {
+      const errorCode = (err as { errorCode?: string }).errorCode;
+      if (errorCode === 'GROUP_CANNOT_LEAVE_AS_LAST_ADMIN') {
+        addToast('error', t('dashboard.leaveErrors.lastAdmin'));
+      } else {
+        addToast('error', t('dashboard.leaveErrors.generic'));
+      }
+      setIsLeaving(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -162,15 +195,25 @@ function GroupDashboardInner() {
               </span>
             </div>
           </div>
-          {isCurrentUserAdmin && (
-            <Link
-              href={`/groups/${group.id}/settings`}
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
-              data-testid="group-dashboard-settings-btn"
+          <div className="flex flex-wrap items-center gap-2">
+            {isCurrentUserAdmin && (
+              <Link
+                href={`/groups/${group.id}/settings`}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+                data-testid="group-dashboard-settings-btn"
+              >
+                {t('dashboard.settingsButton')}
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={handleOpenLeaveDialog}
+              className="inline-flex items-center rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-700 dark:bg-gray-700 dark:text-red-300 dark:hover:bg-red-900/30"
+              data-testid="group-dashboard-leave-btn"
             >
-              {t('dashboard.settingsButton')}
-            </Link>
-          )}
+              {t('dashboard.leaveButton')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -289,6 +332,52 @@ function GroupDashboardInner() {
           })}
         </ul>
       </section>
+
+      {isLeaveDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-group-dialog-title"
+          data-testid="group-dashboard-leave-dialog"
+        >
+          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h2
+              id="leave-group-dialog-title"
+              className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100"
+            >
+              {t('dashboard.leaveConfirmTitle', { name: group.name })}
+            </h2>
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              {t('dashboard.leaveConfirmMessage')}
+            </p>
+            <div className="mt-6 flex gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                className="flex-1"
+                onClick={handleCloseLeaveDialog}
+                disabled={isLeaving}
+                data-testid="group-dashboard-leave-cancel-btn"
+              >
+                {t('dashboard.leaveCancelButton')}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+                onClick={handleConfirmLeave}
+                disabled={isLeaving}
+                data-testid="group-dashboard-leave-confirm-btn"
+              >
+                {isLeaving ? '...' : t('dashboard.leaveConfirmButton')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

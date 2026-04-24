@@ -498,6 +498,106 @@ export class GroupService {
   }
 
   /**
+   * Leave a group (remove the authenticated user's own membership).
+   *
+   * Rules:
+   * - If the user is the last admin and there are other members → throw 409.
+   * - If the user is the last admin AND the only member → delete the group
+   *   entirely (last person out deletes).
+   * - Otherwise → simply remove the membership.
+   */
+  async leaveGroup(groupId: string, userId: string): Promise<{ groupDeleted: boolean }> {
+    const membership = await this.prisma.groupMembership.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+
+    if (!membership) {
+      // Guard should prevent this, but fail safely if it somehow gets through.
+      throw new NotFoundException({
+        message: 'You are not a member of this group',
+        errorCode: GROUP_ERRORS.NOT_A_MEMBER,
+      });
+    }
+
+    const totalMembers = await this.prisma.groupMembership.count({ where: { groupId } });
+
+    // Admin-specific checks
+    if (membership.role === 'admin') {
+      const adminCount = await this.prisma.groupMembership.count({
+        where: { groupId, role: 'admin' },
+      });
+
+      // Last admin, but other (non-admin) members exist → block.
+      if (adminCount <= 1 && totalMembers > 1) {
+        throw new ConflictException({
+          message:
+            'You are the last admin — promote another member to admin before leaving the group',
+          errorCode: GROUP_ERRORS.CANNOT_LEAVE_AS_LAST_ADMIN,
+        });
+      }
+
+      // Last admin AND only member → delete the group.
+      if (adminCount <= 1 && totalMembers <= 1) {
+        await this.prisma.group.delete({ where: { id: groupId } });
+
+        try {
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'group.member.left',
+              entity: 'Group',
+              entityId: groupId,
+              details: { userId, wasLastAdmin: true },
+            },
+          });
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'group.deleted_on_leave',
+              entity: 'Group',
+              entityId: groupId,
+              details: { userId },
+            },
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Failed to write audit log for leaveGroup (delete) ${groupId} by ${userId}: ${(err as Error).message}`,
+          );
+        }
+
+        this.logger.log(`Group ${groupId} deleted on leave by user ${userId} (last member out)`);
+
+        return { groupDeleted: true };
+      }
+    }
+
+    // Normal case: remove the membership.
+    await this.prisma.groupMembership.delete({
+      where: { groupId_userId: { groupId, userId } },
+    });
+
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'group.member.left',
+          entity: 'Group',
+          entityId: groupId,
+          details: { userId, wasLastAdmin: false },
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to write audit log for leaveGroup ${groupId} by ${userId}: ${(err as Error).message}`,
+      );
+    }
+
+    this.logger.log(`User ${userId} left group ${groupId}`);
+
+    return { groupDeleted: false };
+  }
+
+  /**
    * Validate that an invite token record exists, is not used, and not expired.
    * Throws the appropriate error otherwise.
    */

@@ -208,4 +208,20 @@ export class GroupController {
   ): Promise<void> {
     await this.groupService.removeMember(id, userId, user.sub);
   }
+
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @UseGuards(JwtAuthGuard, GroupMemberGuard)
+  @Post(':id/leave')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Leave the group (any member). Deletes the group if last member.' })
+  @ApiParam({ name: 'id', description: 'Group ID (UUID)' })
+  @ApiOkResponse({ description: 'Left the group successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiForbiddenResponse({ description: 'Not a member of this group' })
+  @ApiNotFoundResponse({ description: 'Group not found or user not a member' })
+  @ApiConflictResponse({ description: 'Cannot leave as last admin while other members exist' })
+  async leaveGroup(@CurrentUser() user: JwtPayload, @Param('id') id: string): Promise<void> {
+    await this.groupService.leaveGroup(id, user.sub);
+  }
 }

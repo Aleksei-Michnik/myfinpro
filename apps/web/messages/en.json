@@ -151,7 +151,17 @@
       "membersTitle": "Members",
       "memberCount": "{count, plural, =1 {# member} other {# members}}",
       "joinedOn": "Joined {date}",
-      "you": "You"
+      "you": "You",
+      "leaveButton": "Leave Group",
+      "leaveConfirmTitle": "Leave {name}?",
+      "leaveConfirmMessage": "Are you sure you want to leave this group?",
+      "leaveConfirmButton": "Leave",
+      "leaveCancelButton": "Cancel",
+      "leaveSuccess": "You've left {name}",
+      "leaveErrors": {
+        "lastAdmin": "You're the last admin. Promote another member first.",
+        "generic": "Failed to leave group"
+      }
     },
     "invite": {
       "title": "You've been invited",

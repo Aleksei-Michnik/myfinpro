@@ -4,6 +4,7 @@ import GroupDashboardPage from './page';
 import type { GroupDetail, GroupSummary } from '@/lib/group/types';
 
 const mockPush = vi.fn();
+const mockAddToast = vi.fn();
 
 let mockGroupState: {
   groups: GroupSummary[];
@@ -15,6 +16,7 @@ let mockGroupState: {
   deleteGroup: ReturnType<typeof vi.fn>;
   getInviteInfo: ReturnType<typeof vi.fn>;
   acceptInvite: ReturnType<typeof vi.fn>;
+  leaveGroup: ReturnType<typeof vi.fn>;
 };
 
 let mockParamsGroupId: string | string[] | undefined = 'group-1';
@@ -28,6 +30,12 @@ vi.mock('next-intl', () => ({
     if (key === 'dashboard.joinedOn' && values?.date !== undefined) {
       return `Joined ${values.date}`;
     }
+    if (key === 'dashboard.leaveConfirmTitle' && values?.name !== undefined) {
+      return `Leave ${values.name}?`;
+    }
+    if (key === 'dashboard.leaveSuccess' && values?.name !== undefined) {
+      return `You've left ${values.name}`;
+    }
     const translations: Record<string, string> = {
       'dashboard.loading': 'Loading group...',
       'dashboard.notFound': "Group not found or you don't have access",
@@ -38,6 +46,12 @@ vi.mock('next-intl', () => ({
         'More features coming soon — budgets, expenses, and shared goals.',
       'dashboard.membersTitle': 'Members',
       'dashboard.you': 'You',
+      'dashboard.leaveButton': 'Leave Group',
+      'dashboard.leaveConfirmMessage': 'Are you sure you want to leave this group?',
+      'dashboard.leaveConfirmButton': 'Leave',
+      'dashboard.leaveCancelButton': 'Cancel',
+      'dashboard.leaveErrors.lastAdmin': "You're the last admin. Promote another member first.",
+      'dashboard.leaveErrors.generic': 'Failed to leave group',
       'type.family': 'Family',
       'role.admin': 'Admin',
       'role.member': 'Member',
@@ -72,6 +86,10 @@ vi.mock('@/lib/auth/auth-context', () => ({
 
 vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => mockGroupState,
+}));
+
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({ addToast: mockAddToast }),
 }));
 
 const sampleGroup: GroupDetail = {
@@ -145,6 +163,7 @@ describe('GroupDashboardPage', () => {
       deleteGroup: vi.fn(),
       getInviteInfo: vi.fn(),
       acceptInvite: vi.fn(),
+      leaveGroup: vi.fn().mockResolvedValue(undefined),
     };
   });
 
@@ -333,5 +352,126 @@ describe('GroupDashboardPage', () => {
     });
 
     expect(screen.getByTestId('group-member-joined-user-1').textContent).toMatch(/^Joined /);
+  });
+
+  describe('Leave Group flow', () => {
+    it('shows the Leave Group button for admins', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('group-dashboard-leave-btn')).toHaveTextContent('Leave Group');
+    });
+
+    it('shows the Leave Group button for non-admin members', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(memberOnlyGroup);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+    });
+
+    it('opens the confirmation dialog when Leave Group is clicked', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-btn'));
+
+      expect(screen.getByTestId('group-dashboard-leave-dialog')).toBeInTheDocument();
+      expect(screen.getByText('Leave The Smiths?')).toBeInTheDocument();
+    });
+
+    it('closes the dialog when Cancel is clicked', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-btn'));
+      expect(screen.getByTestId('group-dashboard-leave-dialog')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-cancel-btn'));
+
+      expect(screen.queryByTestId('group-dashboard-leave-dialog')).not.toBeInTheDocument();
+      expect(mockGroupState.leaveGroup).not.toHaveBeenCalled();
+    });
+
+    it('calls leaveGroup and navigates to /groups on success', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+      mockGroupState.leaveGroup = vi.fn().mockResolvedValue(undefined);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-btn'));
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-confirm-btn'));
+
+      await waitFor(() => {
+        expect(mockGroupState.leaveGroup).toHaveBeenCalledWith('group-1');
+      });
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/groups');
+      });
+      expect(mockAddToast).toHaveBeenCalledWith('success', "You've left The Smiths");
+    });
+
+    it('shows the last-admin error toast when server responds with CANNOT_LEAVE_AS_LAST_ADMIN', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+      const err = Object.assign(new Error('Last admin'), {
+        errorCode: 'GROUP_CANNOT_LEAVE_AS_LAST_ADMIN',
+      });
+      mockGroupState.leaveGroup = vi.fn().mockRejectedValue(err);
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-btn'));
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-confirm-btn'));
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith(
+          'error',
+          "You're the last admin. Promote another member first.",
+        );
+      });
+      expect(mockPush).not.toHaveBeenCalledWith('/groups');
+    });
+
+    it('shows a generic error toast on unexpected failure', async () => {
+      mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
+      mockGroupState.leaveGroup = vi.fn().mockRejectedValue(new Error('boom'));
+
+      render(<GroupDashboardPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-dashboard-leave-btn')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-btn'));
+      fireEvent.click(screen.getByTestId('group-dashboard-leave-confirm-btn'));
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith('error', 'Failed to leave group');
+      });
+    });
   });
 });

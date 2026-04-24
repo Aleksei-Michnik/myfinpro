@@ -772,4 +772,162 @@ describe('GroupService', () => {
       expect(mockPrismaService.groupMembership.delete).toHaveBeenCalled();
     });
   });
+
+  describe('leaveGroup()', () => {
+    const groupId = 'g1';
+    const userId = 'user-1';
+
+    it('should remove own membership normally and audit log (not last admin)', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId,
+        role: 'member',
+        joinedAt: new Date(),
+      });
+      // totalMembers count
+      mockPrismaService.groupMembership.count.mockResolvedValue(3);
+      mockPrismaService.groupMembership.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.leaveGroup(groupId, userId);
+
+      expect(mockPrismaService.groupMembership.delete).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId, userId } },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId,
+          action: 'group.member.left',
+          entity: 'Group',
+          entityId: groupId,
+          details: expect.objectContaining({ userId, wasLastAdmin: false }),
+        }),
+      });
+      expect(mockPrismaService.group.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ groupDeleted: false });
+    });
+
+    it('should allow an admin to leave when other admins remain', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      // totalMembers = 3, adminCount = 2
+      mockPrismaService.groupMembership.count
+        .mockResolvedValueOnce(3) // totalMembers
+        .mockResolvedValueOnce(2); // adminCount
+      mockPrismaService.groupMembership.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.leaveGroup(groupId, userId);
+
+      expect(mockPrismaService.groupMembership.delete).toHaveBeenCalled();
+      expect(mockPrismaService.group.delete).not.toHaveBeenCalled();
+      expect(result).toEqual({ groupDeleted: false });
+    });
+
+    it('should throw ConflictException when last admin tries to leave with other members', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      // totalMembers = 3, adminCount = 1 — service calls count twice per invocation
+      // (totalMembers first, adminCount second). Use a sequence that works for both
+      // invocations made below.
+      mockPrismaService.groupMembership.count
+        .mockResolvedValueOnce(3) // 1st call totalMembers
+        .mockResolvedValueOnce(1) // 1st call adminCount
+        .mockResolvedValueOnce(3) // 2nd call totalMembers
+        .mockResolvedValueOnce(1); // 2nd call adminCount
+
+      await expect(service.leaveGroup(groupId, userId)).rejects.toThrow(ConflictException);
+
+      try {
+        await service.leaveGroup(groupId, userId);
+      } catch (error) {
+        const response = (error as ConflictException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({ errorCode: GROUP_ERRORS.CANNOT_LEAVE_AS_LAST_ADMIN }),
+        );
+      }
+
+      expect(mockPrismaService.groupMembership.delete).not.toHaveBeenCalled();
+      expect(mockPrismaService.group.delete).not.toHaveBeenCalled();
+    });
+
+    it('should delete the group when the last admin is the last member', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      // totalMembers = 1, adminCount = 1
+      mockPrismaService.groupMembership.count
+        .mockResolvedValueOnce(1) // totalMembers
+        .mockResolvedValueOnce(1); // adminCount
+      mockPrismaService.group.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.leaveGroup(groupId, userId);
+
+      expect(mockPrismaService.group.delete).toHaveBeenCalledWith({ where: { id: groupId } });
+      // Membership delete not needed because group cascade will handle it
+      expect(mockPrismaService.groupMembership.delete).not.toHaveBeenCalled();
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId,
+          action: 'group.member.left',
+          entity: 'Group',
+          entityId: groupId,
+          details: expect.objectContaining({ userId, wasLastAdmin: true }),
+        }),
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId,
+          action: 'group.deleted_on_leave',
+          entity: 'Group',
+          entityId: groupId,
+        }),
+      });
+      expect(result).toEqual({ groupDeleted: true });
+    });
+
+    it('should throw NotFoundException when the user is not a member', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue(null);
+
+      await expect(service.leaveGroup(groupId, userId)).rejects.toThrow(NotFoundException);
+
+      try {
+        await service.leaveGroup(groupId, userId);
+      } catch (error) {
+        const response = (error as NotFoundException).getResponse();
+        expect(response).toEqual(expect.objectContaining({ errorCode: GROUP_ERRORS.NOT_A_MEMBER }));
+      }
+
+      expect(mockPrismaService.groupMembership.delete).not.toHaveBeenCalled();
+      expect(mockPrismaService.group.delete).not.toHaveBeenCalled();
+    });
+
+    it('should not fail the main operation when audit log creation fails', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId,
+        role: 'member',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.count.mockResolvedValue(3);
+      mockPrismaService.groupMembership.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockRejectedValue(new Error('audit failed'));
+
+      await expect(service.leaveGroup(groupId, userId)).resolves.toEqual({ groupDeleted: false });
+
+      expect(mockPrismaService.groupMembership.delete).toHaveBeenCalled();
+    });
+  });
 });
