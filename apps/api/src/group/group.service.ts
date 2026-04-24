@@ -383,6 +383,121 @@ export class GroupService {
   }
 
   /**
+   * Update a member's role within a group. Enforces that the last admin
+   * cannot be demoted to a member.
+   */
+  async updateMemberRole(
+    groupId: string,
+    targetUserId: string,
+    actorUserId: string,
+    newRole: string,
+  ): Promise<{ groupId: string; userId: string; role: string; joinedAt: Date }> {
+    const membership = await this.prisma.groupMembership.findUnique({
+      where: { groupId_userId: { groupId, userId: targetUserId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException({
+        message: 'User is not a member of this group',
+        errorCode: GROUP_ERRORS.NOT_A_MEMBER,
+      });
+    }
+
+    const oldRole = membership.role;
+
+    // If demoting an admin, ensure at least one other admin remains.
+    if (oldRole === 'admin' && newRole !== 'admin') {
+      const adminCount = await this.prisma.groupMembership.count({
+        where: { groupId, role: 'admin' },
+      });
+      if (adminCount <= 1) {
+        throw new ConflictException({
+          message: 'Cannot remove the last admin of the group',
+          errorCode: GROUP_ERRORS.CANNOT_REMOVE_LAST_ADMIN,
+        });
+      }
+    }
+
+    const updated = await this.prisma.groupMembership.update({
+      where: { groupId_userId: { groupId, userId: targetUserId } },
+      data: { role: newRole },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: 'group.member.role_changed',
+        entity: 'GroupMembership',
+        entityId: groupId,
+        details: { targetUserId, oldRole, newRole },
+      },
+    });
+
+    this.logger.log(
+      `Group ${groupId} member ${targetUserId} role changed ${oldRole} -> ${newRole} by ${actorUserId}`,
+    );
+
+    return {
+      groupId: updated.groupId,
+      userId: updated.userId,
+      role: updated.role,
+      joinedAt: updated.joinedAt,
+    };
+  }
+
+  /**
+   * Remove a member from a group. Enforces that a user cannot remove
+   * themselves via this endpoint and that the last admin cannot be removed.
+   */
+  async removeMember(groupId: string, targetUserId: string, actorUserId: string): Promise<void> {
+    if (targetUserId === actorUserId) {
+      throw new BadRequestException({
+        message: 'You cannot remove yourself from a group — use the leave endpoint instead',
+        errorCode: GROUP_ERRORS.CANNOT_REMOVE_SELF,
+      });
+    }
+
+    const membership = await this.prisma.groupMembership.findUnique({
+      where: { groupId_userId: { groupId, userId: targetUserId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException({
+        message: 'User is not a member of this group',
+        errorCode: GROUP_ERRORS.NOT_A_MEMBER,
+      });
+    }
+
+    if (membership.role === 'admin') {
+      const adminCount = await this.prisma.groupMembership.count({
+        where: { groupId, role: 'admin' },
+      });
+      if (adminCount <= 1) {
+        throw new ConflictException({
+          message: 'Cannot remove the last admin of the group',
+          errorCode: GROUP_ERRORS.CANNOT_REMOVE_LAST_ADMIN,
+        });
+      }
+    }
+
+    await this.prisma.groupMembership.delete({
+      where: { groupId_userId: { groupId, userId: targetUserId } },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorUserId,
+        action: 'group.member.removed',
+        entity: 'GroupMembership',
+        entityId: groupId,
+        details: { targetUserId },
+      },
+    });
+
+    this.logger.log(`Group ${groupId} member ${targetUserId} removed by ${actorUserId}`);
+  }
+
+  /**
    * Validate that an invite token record exists, is not used, and not expired.
    * Throws the appropriate error otherwise.
    */

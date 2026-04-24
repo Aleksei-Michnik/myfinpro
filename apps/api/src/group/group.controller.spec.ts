@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
 import { GroupAdminGuard } from './guards/group-admin.guard';
@@ -22,6 +23,8 @@ describe('GroupController', () => {
     createInvite: jest.fn(),
     getInviteInfo: jest.fn(),
     acceptInvite: jest.fn(),
+    updateMemberRole: jest.fn(),
+    removeMember: jest.fn(),
   };
 
   const user: JwtPayload = {
@@ -214,6 +217,66 @@ describe('GroupController', () => {
       const dto = plainToInstance(CreateGroupDto, { name: 'Family' });
       const errors = await validate(dto);
       expect(errors).toHaveLength(0);
+    });
+  });
+
+  describe('PATCH /groups/:id/members/:userId (updateMemberRole)', () => {
+    it('should delegate to service with groupId, targetUserId, actorUserId, and role', async () => {
+      const dto: UpdateMemberRoleDto = { role: 'admin' };
+      const fakeResult = {
+        groupId: 'g1',
+        userId: 'user-2',
+        role: 'admin',
+        joinedAt: new Date(),
+      };
+      mockGroupService.updateMemberRole.mockResolvedValue(fakeResult);
+
+      const result = await controller.updateMemberRole(user, 'g1', 'user-2', dto);
+
+      expect(mockGroupService.updateMemberRole).toHaveBeenCalledWith(
+        'g1',
+        'user-2',
+        'user-1',
+        'admin',
+      );
+      expect(result).toEqual(fakeResult);
+    });
+  });
+
+  describe('DELETE /groups/:id/members/:userId (removeMember)', () => {
+    it('should delegate to service and return undefined (204)', async () => {
+      mockGroupService.removeMember.mockResolvedValue(undefined);
+
+      const result = await controller.removeMember(user, 'g1', 'user-2');
+
+      expect(mockGroupService.removeMember).toHaveBeenCalledWith('g1', 'user-2', 'user-1');
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('UpdateMemberRoleDto validation', () => {
+    it('should accept valid role "admin"', async () => {
+      const dto = plainToInstance(UpdateMemberRoleDto, { role: 'admin' });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should accept valid role "member"', async () => {
+      const dto = plainToInstance(UpdateMemberRoleDto, { role: 'member' });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should fail with an invalid role', async () => {
+      const dto = plainToInstance(UpdateMemberRoleDto, { role: 'superuser' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'role')).toBe(true);
+    });
+
+    it('should fail when role is missing', async () => {
+      const dto = plainToInstance(UpdateMemberRoleDto, {});
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'role')).toBe(true);
     });
   });
 

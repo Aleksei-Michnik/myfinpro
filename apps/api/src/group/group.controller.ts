@@ -30,6 +30,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { GroupService } from './group.service';
 import { GroupAdminGuard } from './guards/group-admin.guard';
 import { GroupMemberGuard } from './guards/group-member.guard';
@@ -161,5 +162,50 @@ export class GroupController {
   @ApiNotFoundResponse({ description: 'Group not found' })
   async createInvite(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.groupService.createInvite(id, user.sub);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60000 })
+  @UseGuards(JwtAuthGuard, GroupAdminGuard)
+  @Patch(':id/members/:userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a member role within a group (admin only)' })
+  @ApiParam({ name: 'id', description: 'Group ID (UUID)' })
+  @ApiParam({ name: 'userId', description: 'Target member user ID (UUID)' })
+  @ApiOkResponse({ description: 'Membership updated successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid role' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiForbiddenResponse({ description: 'Not an admin of this group' })
+  @ApiNotFoundResponse({ description: 'User is not a member of this group' })
+  @ApiConflictResponse({ description: 'Cannot demote the last admin' })
+  async updateMemberRole(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+  ) {
+    return this.groupService.updateMemberRole(id, userId, user.sub, dto.role);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60000 })
+  @UseGuards(JwtAuthGuard, GroupAdminGuard)
+  @Delete(':id/members/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a member from the group (admin only)' })
+  @ApiParam({ name: 'id', description: 'Group ID (UUID)' })
+  @ApiParam({ name: 'userId', description: 'Target member user ID (UUID)' })
+  @ApiOkResponse({ description: 'Member removed successfully' })
+  @ApiBadRequestResponse({ description: 'Cannot remove yourself via this endpoint' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiForbiddenResponse({ description: 'Not an admin of this group' })
+  @ApiNotFoundResponse({ description: 'User is not a member of this group' })
+  @ApiConflictResponse({ description: 'Cannot remove the last admin' })
+  async removeMember(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ): Promise<void> {
+    await this.groupService.removeMember(id, userId, user.sub);
   }
 }

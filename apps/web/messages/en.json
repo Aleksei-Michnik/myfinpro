@@ -170,6 +170,68 @@
         "used": "This invite has already been used",
         "generic": "Unable to load invite"
       }
+    },
+    "settings": {
+      "title": "Group Settings",
+      "loading": "Loading group settings...",
+      "noPermission": "You don't have permission to access group settings",
+      "backToGroup": "Back to Group",
+      "backToGroups": "Back to Groups",
+      "info": {
+        "title": "Group Information",
+        "nameLabel": "Group Name",
+        "typeLabel": "Type",
+        "currencyLabel": "Default Currency",
+        "saveButton": "Save Changes",
+        "saving": "Saving...",
+        "saveSuccess": "Group updated",
+        "saveError": "Failed to update group"
+      },
+      "invite": {
+        "title": "Invite Members",
+        "description": "Generate a shareable invite link. Anyone with the link can join this group.",
+        "generateButton": "Generate Invite Link",
+        "generating": "Generating...",
+        "copyButton": "Copy",
+        "copied": "Link copied to clipboard",
+        "linkLabel": "Invite Link",
+        "expiresOn": "Link expires on {date}",
+        "regenerateButton": "Generate new link",
+        "error": "Failed to generate invite"
+      },
+      "members": {
+        "title": "Manage Members ({count})",
+        "roleLabel": "Role",
+        "admin": "Admin",
+        "member": "Member",
+        "removeButton": "Remove",
+        "removeConfirmTitle": "Remove member",
+        "removeConfirmMessage": "Are you sure you want to remove {name} from this group?",
+        "removeConfirmButton": "Remove",
+        "cancelButton": "Cancel",
+        "roleChangeSuccess": "Role updated",
+        "removeSuccess": "Member removed",
+        "errors": {
+          "cannotRemoveLastAdmin": "Cannot remove the last admin",
+          "cannotRemoveSelf": "You can't remove yourself — use leave group instead",
+          "notAMember": "User is no longer a member",
+          "generic": "Operation failed"
+        }
+      },
+      "dangerZone": {
+        "title": "Danger Zone",
+        "deleteHeading": "Delete Group",
+        "deleteDescription": "Permanently delete this group and all of its data. This cannot be undone.",
+        "deleteButton": "Delete Group",
+        "dialogTitle": "Delete {name}?",
+        "dialogMessage": "This will permanently delete the group and all its data. Type the group name to confirm.",
+        "dialogInputPlaceholder": "Type group name",
+        "dialogConfirmButton": "Delete permanently",
+        "dialogCancelButton": "Cancel",
+        "mismatchError": "Group name does not match",
+        "deleteSuccess": "Group deleted",
+        "deleteError": "Failed to delete group"
+      }
     }
   },
   "settings": {

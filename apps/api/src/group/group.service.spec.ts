@@ -18,6 +18,9 @@ describe('GroupService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      count: jest.fn(),
     },
     groupInviteToken: {
       create: jest.fn(),
@@ -559,6 +562,214 @@ describe('GroupService', () => {
       });
 
       await expect(service.acceptInvite('used', userId)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('updateMemberRole()', () => {
+    const groupId = 'g1';
+    const targetUserId = 'user-2';
+    const actorUserId = 'user-1';
+
+    it('should update role and create audit log', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'member',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.update.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.updateMemberRole(groupId, targetUserId, actorUserId, 'admin');
+
+      expect(mockPrismaService.groupMembership.update).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId, userId: targetUserId } },
+        data: { role: 'admin' },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: actorUserId,
+          action: 'group.member.role_changed',
+          entity: 'GroupMembership',
+          entityId: groupId,
+          details: expect.objectContaining({
+            targetUserId,
+            oldRole: 'member',
+            newRole: 'admin',
+          }),
+        }),
+      });
+      expect(result.role).toBe('admin');
+    });
+
+    it('should throw NotFoundException when user is not a member', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateMemberRole(groupId, targetUserId, actorUserId, 'admin'),
+      ).rejects.toThrow(NotFoundException);
+
+      try {
+        await service.updateMemberRole(groupId, targetUserId, actorUserId, 'admin');
+      } catch (error) {
+        const response = (error as NotFoundException).getResponse();
+        expect(response).toEqual(expect.objectContaining({ errorCode: GROUP_ERRORS.NOT_A_MEMBER }));
+      }
+    });
+
+    it('should throw ConflictException when demoting the last admin', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.count.mockResolvedValue(1);
+
+      await expect(
+        service.updateMemberRole(groupId, targetUserId, actorUserId, 'member'),
+      ).rejects.toThrow(ConflictException);
+
+      try {
+        await service.updateMemberRole(groupId, targetUserId, actorUserId, 'member');
+      } catch (error) {
+        const response = (error as ConflictException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({ errorCode: GROUP_ERRORS.CANNOT_REMOVE_LAST_ADMIN }),
+        );
+      }
+      expect(mockPrismaService.groupMembership.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow demoting an admin when another admin exists', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.count.mockResolvedValue(2);
+      mockPrismaService.groupMembership.update.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'member',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      const result = await service.updateMemberRole(groupId, targetUserId, actorUserId, 'member');
+
+      expect(result.role).toBe('member');
+    });
+  });
+
+  describe('removeMember()', () => {
+    const groupId = 'g1';
+    const targetUserId = 'user-2';
+    const actorUserId = 'user-1';
+
+    it('should remove member and create audit log', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'member',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.removeMember(groupId, targetUserId, actorUserId);
+
+      expect(mockPrismaService.groupMembership.delete).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId, userId: targetUserId } },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: actorUserId,
+          action: 'group.member.removed',
+          entity: 'GroupMembership',
+          entityId: groupId,
+          details: expect.objectContaining({ targetUserId }),
+        }),
+      });
+    });
+
+    it('should throw BadRequestException when removing self', async () => {
+      await expect(service.removeMember(groupId, actorUserId, actorUserId)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      try {
+        await service.removeMember(groupId, actorUserId, actorUserId);
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({ errorCode: GROUP_ERRORS.CANNOT_REMOVE_SELF }),
+        );
+      }
+
+      expect(mockPrismaService.groupMembership.findUnique).not.toHaveBeenCalled();
+      expect(mockPrismaService.groupMembership.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when user is not a member', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeMember(groupId, targetUserId, actorUserId)).rejects.toThrow(
+        NotFoundException,
+      );
+
+      try {
+        await service.removeMember(groupId, targetUserId, actorUserId);
+      } catch (error) {
+        const response = (error as NotFoundException).getResponse();
+        expect(response).toEqual(expect.objectContaining({ errorCode: GROUP_ERRORS.NOT_A_MEMBER }));
+      }
+    });
+
+    it('should throw ConflictException when removing the last admin', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.count.mockResolvedValue(1);
+
+      await expect(service.removeMember(groupId, targetUserId, actorUserId)).rejects.toThrow(
+        ConflictException,
+      );
+
+      try {
+        await service.removeMember(groupId, targetUserId, actorUserId);
+      } catch (error) {
+        const response = (error as ConflictException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({ errorCode: GROUP_ERRORS.CANNOT_REMOVE_LAST_ADMIN }),
+        );
+      }
+      expect(mockPrismaService.groupMembership.delete).not.toHaveBeenCalled();
+    });
+
+    it('should allow removing an admin when another admin exists', async () => {
+      mockPrismaService.groupMembership.findUnique.mockResolvedValue({
+        groupId,
+        userId: targetUserId,
+        role: 'admin',
+        joinedAt: new Date(),
+      });
+      mockPrismaService.groupMembership.count.mockResolvedValue(2);
+      mockPrismaService.groupMembership.delete.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.removeMember(groupId, targetUserId, actorUserId);
+
+      expect(mockPrismaService.groupMembership.delete).toHaveBeenCalled();
     });
   });
 });

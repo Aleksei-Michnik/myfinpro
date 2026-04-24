@@ -170,6 +170,68 @@
         "used": "ההזמנה כבר נוצלה",
         "generic": "לא ניתן לטעון את ההזמנה"
       }
+    },
+    "settings": {
+      "title": "הגדרות קבוצה",
+      "loading": "טוען הגדרות קבוצה...",
+      "noPermission": "אין לך הרשאה לגשת להגדרות הקבוצה",
+      "backToGroup": "חזרה לקבוצה",
+      "backToGroups": "חזרה לקבוצות",
+      "info": {
+        "title": "פרטי הקבוצה",
+        "nameLabel": "שם הקבוצה",
+        "typeLabel": "סוג",
+        "currencyLabel": "מטבע ברירת מחדל",
+        "saveButton": "שמור שינויים",
+        "saving": "שומר...",
+        "saveSuccess": "הקבוצה עודכנה",
+        "saveError": "עדכון הקבוצה נכשל"
+      },
+      "invite": {
+        "title": "הזמנת חברים",
+        "description": "צור קישור הזמנה שניתן לשתף. כל מי שיש לו את הקישור יוכל להצטרף לקבוצה.",
+        "generateButton": "צור קישור הזמנה",
+        "generating": "יוצר...",
+        "copyButton": "העתק",
+        "copied": "הקישור הועתק ללוח",
+        "linkLabel": "קישור הזמנה",
+        "expiresOn": "הקישור יפוג בתאריך {date}",
+        "regenerateButton": "צור קישור חדש",
+        "error": "יצירת ההזמנה נכשלה"
+      },
+      "members": {
+        "title": "ניהול חברים ({count})",
+        "roleLabel": "תפקיד",
+        "admin": "מנהל",
+        "member": "חבר",
+        "removeButton": "הסר",
+        "removeConfirmTitle": "הסרת חבר",
+        "removeConfirmMessage": "האם אתה בטוח שברצונך להסיר את {name} מהקבוצה?",
+        "removeConfirmButton": "הסר",
+        "cancelButton": "ביטול",
+        "roleChangeSuccess": "התפקיד עודכן",
+        "removeSuccess": "החבר הוסר",
+        "errors": {
+          "cannotRemoveLastAdmin": "לא ניתן להסיר את המנהל האחרון",
+          "cannotRemoveSelf": "לא ניתן להסיר את עצמך — השתמש ביציאה מהקבוצה במקום זאת",
+          "notAMember": "המשתמש כבר אינו חבר",
+          "generic": "הפעולה נכשלה"
+        }
+      },
+      "dangerZone": {
+        "title": "אזור מסוכן",
+        "deleteHeading": "מחיקת קבוצה",
+        "deleteDescription": "מחק לצמיתות את הקבוצה ואת כל הנתונים שלה. לא ניתן לבטל פעולה זו.",
+        "deleteButton": "מחק קבוצה",
+        "dialogTitle": "למחוק את {name}?",
+        "dialogMessage": "פעולה זו תמחק לצמיתות את הקבוצה ואת כל הנתונים שלה. הקלד את שם הקבוצה לאישור.",
+        "dialogInputPlaceholder": "הקלד את שם הקבוצה",
+        "dialogConfirmButton": "מחק לצמיתות",
+        "dialogCancelButton": "ביטול",
+        "mismatchError": "שם הקבוצה אינו תואם",
+        "deleteSuccess": "הקבוצה נמחקה",
+        "deleteError": "מחיקת הקבוצה נכשלה"
+      }
     }
   },
   "settings": {
