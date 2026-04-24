@@ -1,13 +1,20 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { CreateGroupData, GroupSummary, InviteInfo, UpdateGroupData } from './types';
+import type {
+  CreateGroupData,
+  GroupDetail,
+  GroupSummary,
+  InviteInfo,
+  UpdateGroupData,
+} from './types';
 import { useAuth } from '@/lib/auth/auth-context';
 
 interface GroupContextType {
   groups: GroupSummary[];
   isLoading: boolean;
   fetchGroups: () => Promise<void>;
+  getGroup: (groupId: string) => Promise<GroupDetail>;
   createGroup: (data: CreateGroupData) => Promise<GroupSummary>;
   updateGroup: (groupId: string, data: UpdateGroupData) => Promise<GroupSummary>;
   deleteGroup: (groupId: string) => Promise<void>;
@@ -67,6 +74,25 @@ export function GroupProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, [getAccessToken]);
+
+  const getGroup = useCallback(
+    async (groupId: string): Promise<GroupDetail> => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        await throwApiError(res, 'Failed to load group');
+      }
+      return (await res.json()) as GroupDetail;
+    },
+    [getAccessToken],
+  );
 
   const createGroup = useCallback(
     async (data: CreateGroupData) => {
@@ -193,6 +219,7 @@ export function GroupProvider({ children }: { children: ReactNode }) {
         groups,
         isLoading,
         fetchGroups,
+        getGroup,
         createGroup,
         updateGroup,
         deleteGroup,

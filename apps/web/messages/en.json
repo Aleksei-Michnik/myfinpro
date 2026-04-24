@@ -141,6 +141,18 @@
       "success": "Group created successfully",
       "error": "Failed to create group"
     },
+    "dashboard": {
+      "loading": "Loading group...",
+      "notFound": "Group not found or you don't have access",
+      "backToGroups": "Back to Groups",
+      "settingsButton": "Settings",
+      "overviewTitle": "Overview",
+      "overviewPlaceholder": "More features coming soon — budgets, expenses, and shared goals.",
+      "membersTitle": "Members",
+      "memberCount": "{count, plural, =1 {# member} other {# members}}",
+      "joinedOn": "Joined {date}",
+      "you": "You"
+    },
     "invite": {
       "title": "You've been invited",
       "joinMessage": "You've been invited to join",

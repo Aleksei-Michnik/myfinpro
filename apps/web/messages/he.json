@@ -141,6 +141,18 @@
       "success": "הקבוצה נוצרה בהצלחה",
       "error": "יצירת הקבוצה נכשלה"
     },
+    "dashboard": {
+      "loading": "טוען קבוצה...",
+      "notFound": "הקבוצה לא נמצאה או שאין לך גישה",
+      "backToGroups": "חזרה לקבוצות",
+      "settingsButton": "הגדרות",
+      "overviewTitle": "סקירה",
+      "overviewPlaceholder": "עוד תכונות בקרוב — תקציבים, הוצאות ויעדים משותפים.",
+      "membersTitle": "חברים",
+      "memberCount": "{count, plural, =1 {# חבר} other {# חברים}}",
+      "joinedOn": "הצטרף {date}",
+      "you": "אתה"
+    },
     "invite": {
       "title": "הוזמנת",
       "joinMessage": "הוזמנת להצטרף אל",
