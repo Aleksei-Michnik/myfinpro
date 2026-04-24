@@ -2215,6 +2215,55 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.invite.*`
 - [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations
 
+### Iteration 5.6: Group Dashboard View (2026-04-24)
+
+- **Date**: April 24, 2026
+- **Commit**: `efc7cd0` (develop)
+- **CI run**: `24882200339` — success
+- **Deploy Staging run**: `24882200336` — success
+
+**Changes**: Implemented the single-group dashboard page that closes the navigation loop after an invite is accepted. The page lives at `/groups/[groupId]`, is wrapped in `ProtectedRoute`, loads the group via the existing iteration 5.2 `GET /groups/:id` endpoint (which already returns full member details via Prisma `include`), and renders the group header, a placeholder overview section, and a sortable member list.
+
+**GroupContext extension** ([`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx)):
+
+- Added `getGroup(groupId)` that calls `GET /groups/:id` with bearer auth, reuses the shared `throwApiError()` helper introduced in iteration 5.5, and returns the existing `GroupDetail` type.
+
+**Dashboard page** ([`apps/web/src/app/[locale]/groups/[groupId]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/page.tsx)):
+
+- `'use client'` page extracting `groupId` via `useParams()` from `next/navigation`, locale-aware navigation via `@/i18n/navigation`.
+- **Loading state**: skeleton card with animated placeholder bars for header and member rows.
+- **Error state**: dedicated error card with localised title ("Group not found or you don't have access") and a "Back to Groups" button — covers both 404 (group missing) and 403 (not a member) without leaking distinguishing detail.
+- **Header**: large group name, type badge (translated via `groups.type.*`), currency badge (monospace font), and a "Settings" button linked to the future `/groups/{groupId}/settings` page. The settings button is rendered only when the current user's membership role is `admin`.
+- **Overview**: placeholder card with icon and localised "More features coming soon — budgets, expenses, and shared goals." message.
+- **Members**: heading "Members (N members)" with ICU pluralisation; list of rows with a 10×10 avatar displaying the first letter of the member's name, name (with "(You)" suffix for the current user), email, admin badge (rendered only for admins), and a "Joined {date}" line using `toLocaleDateString(locale)` with short-month formatting. Rows are sorted admins-first, then by `joinedAt` ascending.
+
+**i18n translations** (added under existing `groups.*` namespace, keeping DRY by sharing `groups.role.*` / `groups.type.*` with the list and card):
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.dashboard.*`: `loading`, `notFound`, `backToGroups`, `settingsButton`, `overviewTitle`, `overviewPlaceholder`, `membersTitle`, `memberCount` (plural form), `joinedOn`, `you`.
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Same keys with Hebrew translations.
+
+**GroupCard**: already clickable via a `Link` from `@/i18n/navigation` pointing at `/groups/{group.id}` (introduced in iteration 5.3). No changes required, existing test `renders link to the group detail page` already covers navigation.
+
+**Tests added**:
+
+- [`dashboard.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/dashboard.spec.tsx) — 14 tests: loading skeleton render; header rendering with name, type badge, currency badge; member count pluralisation for both plural and singular; member row rendering with name and email; `(You)` marker on the current user only; admin badge shown only for admin members; sort order (admins first then by `joinedAt` ascending); Settings button rendered for admins with correct `href`; Settings button hidden for non-admin members; error card render on a rejected `getGroup`; "Back to Groups" navigation from the error card; overview placeholder render; joined date line present with "Joined " prefix.
+
+**Results**:
+
+- All 14 new dashboard tests pass. Full web suite: 328 web unit tests passing.
+- Full monorepo `pnpm run test` passes: 379 api + 328 web + 54 shared.
+- CI (`24882200339`) and Deploy Staging (`24882200336`) on `develop` both green.
+
+**Backend**: no changes required — the iteration 5.2 `GroupService.getGroup()` already includes `memberships.include.user` and maps to the full `GroupDetail` shape (`id`, `name`, `email`, `role`, `joinedAt` per member), and the controller already wires the `GroupMemberGuard` so the endpoint returns 403 for non-members and 404 for missing groups.
+
+**Files changed:**
+
+- [`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx) — Added `getGroup(groupId)` and exposed it on the context
+- [`apps/web/src/app/[locale]/groups/[groupId]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/page.tsx) — New dashboard page
+- [`apps/web/src/app/[locale]/groups/[groupId]/dashboard.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/dashboard.spec.tsx) — New tests
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.dashboard.*`
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
