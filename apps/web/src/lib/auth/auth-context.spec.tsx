@@ -35,6 +35,7 @@ function TestConsumer() {
     deleteAccount,
     cancelDeletion,
     updateProfile,
+    changePassword,
   } = useAuth();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -88,6 +89,15 @@ function TestConsumer() {
         }
       >
         UpdateProfile
+      </button>
+      <button
+        onClick={() =>
+          changePassword('OldPass123', 'NewPass456').catch((err: Error & { errorCode?: string }) =>
+            setError(err.errorCode || err.message),
+          )
+        }
+      >
+        ChangePassword
       </button>
     </div>
   );
@@ -663,6 +673,89 @@ describe('AuthContext', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('error-message')).toHaveTextContent('Invalid currency');
+      });
+    });
+  });
+
+  describe('changePassword', () => {
+    it('POSTs to /auth/change-password with bearer token and succeeds (204)', async () => {
+      // Start authenticated
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Mock successful change-password (204 No Content)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: () => Promise.resolve({}),
+      });
+
+      await act(async () => {
+        screen.getByText('ChangePassword').click();
+      });
+
+      const call = mockFetch.mock.calls[1];
+      expect(call[0]).toContain('/auth/change-password');
+      expect(call[1]).toMatchObject({
+        method: 'POST',
+        credentials: 'include',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer mock-access-token',
+        }),
+      });
+      expect(JSON.parse(call[1].body as string)).toEqual({
+        currentPassword: 'OldPass123',
+        newPassword: 'NewPass456',
+      });
+      // Should remain authenticated after successful change
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    });
+
+    it('throws an ApiError with errorCode on API error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAuthResponse),
+      });
+
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: () =>
+          Promise.resolve({
+            message: 'Current password is incorrect',
+            errorCode: 'AUTH_INVALID_CURRENT_PASSWORD',
+          }),
+      });
+
+      await act(async () => {
+        screen.getByText('ChangePassword').click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toHaveTextContent(
+          'AUTH_INVALID_CURRENT_PASSWORD',
+        );
       });
     });
   });

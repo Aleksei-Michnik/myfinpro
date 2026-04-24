@@ -187,6 +187,13 @@ describe('Header', () => {
       expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
     });
 
+    it('renders groups link', () => {
+      render(<Header />);
+      const groupsLink = screen.getByText('nav.groups');
+      expect(groupsLink).toBeInTheDocument();
+      expect(groupsLink.closest('a')).toHaveAttribute('href', '/groups');
+    });
+
     it('renders settings link', () => {
       render(<Header />);
       const settingsLink = screen.getByText('nav.settings');

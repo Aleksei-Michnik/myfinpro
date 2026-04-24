@@ -454,6 +454,7 @@ describe('AuthService', () => {
       timezone: 'UTC',
       isActive: true,
       emailVerified: false,
+      hasPassword: true,
       lastLoginAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       updatedAt: new Date('2026-01-01T00:00:00Z'),
@@ -504,6 +505,7 @@ describe('AuthService', () => {
         locale: mockUser.locale,
         timezone: mockUser.timezone,
         emailVerified: mockUser.emailVerified,
+        hasPassword: true,
       });
       expect(result.accessToken).toBe('mock-jwt-access-token');
     });
@@ -571,6 +573,7 @@ describe('AuthService', () => {
       defaultCurrency: 'USD',
       locale: 'en',
       isActive: true,
+      passwordHash: '$argon2id$hashed',
     };
 
     it('should rotate token and return new access token with user data', async () => {
@@ -606,6 +609,7 @@ describe('AuthService', () => {
         locale: mockUser.locale,
         timezone: undefined,
         emailVerified: undefined,
+        hasPassword: true,
       });
     });
 
@@ -673,14 +677,17 @@ describe('AuthService', () => {
       defaultCurrency: 'USD',
       locale: 'en',
       timezone: 'UTC',
+      emailVerified: true,
+      passwordHash: '$argon2id$hashed',
     };
 
-    it('should return user data when user exists', async () => {
+    it('should return user data with hasPassword flag when user exists', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
 
       const result = await service.getUser('test-uuid-1234');
 
-      expect(result).toEqual(mockUser);
+      const { passwordHash, ...expected } = mockUser;
+      expect(result).toEqual({ ...expected, hasPassword: true });
       expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'test-uuid-1234' },
         select: {
@@ -691,8 +698,17 @@ describe('AuthService', () => {
           locale: true,
           timezone: true,
           emailVerified: true,
+          passwordHash: true,
         },
       });
+    });
+
+    it('should return hasPassword false for OAuth-only user', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({ ...mockUser, passwordHash: null });
+
+      const result = await service.getUser('test-uuid-1234');
+
+      expect(result).toMatchObject({ hasPassword: false });
     });
 
     it('should throw UnauthorizedException with USER_NOT_FOUND errorCode when user not found', async () => {
@@ -1417,6 +1433,7 @@ describe('AuthService', () => {
       locale: 'en',
       timezone: 'UTC',
       emailVerified: true,
+      passwordHash: '$argon2id$hashed',
     };
 
     it('should update currency', async () => {
@@ -1494,7 +1511,171 @@ describe('AuthService', () => {
       const result = await service.updateProfile('test-uuid-1234', {});
 
       expect(mockPrismaService.user.update).not.toHaveBeenCalled();
-      expect(result).toEqual(mockUserData);
+      const { passwordHash, ...expected } = mockUserData;
+      expect(result).toEqual({ ...expected, hasPassword: true });
+    });
+  });
+
+  describe('changePassword()', () => {
+    const userId = 'user-uuid';
+    const dto = {
+      currentPassword: 'CurrentPass123',
+      newPassword: 'NewSecurePass456',
+    };
+
+    it('should change password successfully when current password is valid', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: '$argon2id$currentHashed',
+      });
+      mockPasswordService.verify.mockResolvedValue(true);
+      mockPasswordService.hash.mockResolvedValue('$argon2id$newHashed');
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockRefreshTokenService.revokeAllUserTokens.mockResolvedValue(undefined);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.changePassword(userId, dto);
+
+      expect(mockPasswordService.verify).toHaveBeenCalledWith(
+        '$argon2id$currentHashed',
+        dto.currentPassword,
+      );
+      expect(mockPasswordService.hash).toHaveBeenCalledWith(dto.newPassword);
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: { passwordHash: '$argon2id$newHashed' },
+      });
+    });
+
+    it('should revoke all refresh tokens for the user after changing password', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: '$argon2id$currentHashed',
+      });
+      mockPasswordService.verify.mockResolvedValue(true);
+      mockPasswordService.hash.mockResolvedValue('$argon2id$newHashed');
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockRefreshTokenService.revokeAllUserTokens.mockResolvedValue(undefined);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.changePassword(userId, dto);
+
+      expect(mockRefreshTokenService.revokeAllUserTokens).toHaveBeenCalledWith(userId);
+    });
+
+    it('should create an audit log entry with action auth.password_changed', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: '$argon2id$currentHashed',
+      });
+      mockPasswordService.verify.mockResolvedValue(true);
+      mockPasswordService.hash.mockResolvedValue('$argon2id$newHashed');
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockRefreshTokenService.revokeAllUserTokens.mockResolvedValue(undefined);
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.changePassword(userId, dto);
+
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId,
+          action: 'auth.password_changed',
+          entity: 'User',
+          entityId: userId,
+        },
+      });
+    });
+
+    it('should throw BadRequestException with INVALID_CURRENT_PASSWORD when current password is wrong', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: '$argon2id$currentHashed',
+      });
+      mockPasswordService.verify.mockResolvedValue(false);
+
+      await expect(service.changePassword(userId, dto)).rejects.toThrow(BadRequestException);
+
+      try {
+        await service.changePassword(userId, dto);
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.INVALID_CURRENT_PASSWORD,
+          }),
+        );
+      }
+
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+      expect(mockRefreshTokenService.revokeAllUserTokens).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException with PASSWORD_NOT_SET for OAuth-only user', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: null,
+      });
+
+      await expect(service.changePassword(userId, dto)).rejects.toThrow(BadRequestException);
+
+      try {
+        await service.changePassword(userId, dto);
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.PASSWORD_NOT_SET,
+          }),
+        );
+      }
+
+      expect(mockPasswordService.verify).not.toHaveBeenCalled();
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException with PASSWORD_SAME_AS_CURRENT when new equals current', async () => {
+      const sameDto = {
+        currentPassword: 'SamePass123',
+        newPassword: 'SamePass123',
+      };
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: userId,
+        passwordHash: '$argon2id$currentHashed',
+      });
+      mockPasswordService.verify.mockResolvedValue(true);
+
+      await expect(service.changePassword(userId, sameDto)).rejects.toThrow(BadRequestException);
+
+      try {
+        await service.changePassword(userId, sameDto);
+      } catch (error) {
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.PASSWORD_SAME_AS_CURRENT,
+          }),
+        );
+      }
+
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+      expect(mockRefreshTokenService.revokeAllUserTokens).not.toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException with USER_NOT_FOUND when user does not exist', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.changePassword(userId, dto)).rejects.toThrow(UnauthorizedException);
+
+      try {
+        await service.changePassword(userId, dto);
+      } catch (error) {
+        const response = (error as UnauthorizedException).getResponse();
+        expect(response).toEqual(
+          expect.objectContaining({
+            errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+          }),
+        );
+      }
     });
   });
 });

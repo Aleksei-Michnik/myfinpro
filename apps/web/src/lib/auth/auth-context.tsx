@@ -24,6 +24,20 @@ interface AuthContextType {
     timezone?: string;
     locale?: string;
   }) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+}
+
+interface ApiErrorPayload {
+  message?: string;
+  errorCode?: string;
+}
+
+class ApiError extends Error {
+  errorCode?: string;
+  constructor(message: string, errorCode?: string) {
+    super(message);
+    this.errorCode = errorCode;
+  }
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -256,6 +270,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshUser();
   }, [accessToken, refreshUser]);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const token = accessToken;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      if (!res.ok) {
+        const error = (await res.json().catch(() => ({
+          message: 'Failed to change password',
+        }))) as ApiErrorPayload;
+        throw new ApiError(error.message || 'Failed to change password', error.errorCode);
+      }
+    },
+    [accessToken],
+  );
+
   const updateProfile = useCallback(
     async (data: { defaultCurrency?: string; timezone?: string; locale?: string }) => {
       const token = accessToken;
@@ -301,6 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         deleteAccount,
         cancelDeletion,
         updateProfile,
+        changePassword,
       }}
     >
       {children}

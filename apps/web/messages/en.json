@@ -12,6 +12,7 @@
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",
+    "groups": "Groups",
     "transactions": "Transactions",
     "budgets": "Budgets",
     "settings": "Settings",
@@ -115,6 +116,134 @@
     "title": "Dashboard",
     "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here."
   },
+  "groups": {
+    "title": "My Groups",
+    "createGroup": "Create Group",
+    "noGroups": "You don't have any groups yet.",
+    "createFirst": "Create your first group to get started.",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "role": {
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "type": {
+      "family": "Family"
+    },
+    "create": {
+      "title": "Create New Group",
+      "name": "Group Name",
+      "namePlaceholder": "Enter group name",
+      "type": "Group Type",
+      "currency": "Default Currency",
+      "cancel": "Cancel",
+      "create": "Create Group",
+      "creating": "Creating...",
+      "success": "Group created successfully",
+      "error": "Failed to create group"
+    },
+    "dashboard": {
+      "loading": "Loading group...",
+      "notFound": "Group not found or you don't have access",
+      "backToGroups": "Back to Groups",
+      "settingsButton": "Settings",
+      "overviewTitle": "Overview",
+      "overviewPlaceholder": "More features coming soon — budgets, expenses, and shared goals.",
+      "membersTitle": "Members",
+      "memberCount": "{count, plural, =1 {# member} other {# members}}",
+      "joinedOn": "Joined {date}",
+      "you": "You",
+      "leaveButton": "Leave Group",
+      "leaveConfirmTitle": "Leave {name}?",
+      "leaveConfirmMessage": "Are you sure you want to leave this group?",
+      "leaveConfirmButton": "Leave",
+      "leaveCancelButton": "Cancel",
+      "leaveSuccess": "You've left {name}",
+      "leaveErrors": {
+        "lastAdmin": "You're the last admin. Promote another member first.",
+        "generic": "Failed to leave group"
+      }
+    },
+    "invite": {
+      "title": "You've been invited",
+      "joinMessage": "You've been invited to join",
+      "invitedBy": "Invited by {name}",
+      "accept": "Accept & Join",
+      "accepting": "Joining...",
+      "decline": "Decline",
+      "acceptSuccess": "You've joined {name}",
+      "alreadyMember": "You're already a member of this group",
+      "goToGroups": "Go to Groups",
+      "loading": "Loading invite...",
+      "error": {
+        "invalid": "This invite link is not valid",
+        "expired": "This invite has expired",
+        "used": "This invite has already been used",
+        "generic": "Unable to load invite"
+      }
+    },
+    "settings": {
+      "title": "Group Settings",
+      "loading": "Loading group settings...",
+      "noPermission": "You don't have permission to access group settings",
+      "backToGroup": "Back to Group",
+      "backToGroups": "Back to Groups",
+      "info": {
+        "title": "Group Information",
+        "nameLabel": "Group Name",
+        "typeLabel": "Type",
+        "currencyLabel": "Default Currency",
+        "saveButton": "Save Changes",
+        "saving": "Saving...",
+        "saveSuccess": "Group updated",
+        "saveError": "Failed to update group"
+      },
+      "invite": {
+        "title": "Invite Members",
+        "description": "Generate a shareable invite link. Anyone with the link can join this group.",
+        "generateButton": "Generate Invite Link",
+        "generating": "Generating...",
+        "copyButton": "Copy",
+        "copied": "Link copied to clipboard",
+        "linkLabel": "Invite Link",
+        "expiresOn": "Link expires on {date}",
+        "regenerateButton": "Generate new link",
+        "error": "Failed to generate invite"
+      },
+      "members": {
+        "title": "Manage Members ({count})",
+        "roleLabel": "Role",
+        "admin": "Admin",
+        "member": "Member",
+        "removeButton": "Remove",
+        "removeConfirmTitle": "Remove member",
+        "removeConfirmMessage": "Are you sure you want to remove {name} from this group?",
+        "removeConfirmButton": "Remove",
+        "cancelButton": "Cancel",
+        "roleChangeSuccess": "Role updated",
+        "removeSuccess": "Member removed",
+        "errors": {
+          "cannotRemoveLastAdmin": "Cannot remove the last admin",
+          "cannotRemoveSelf": "You can't remove yourself — use leave group instead",
+          "notAMember": "User is no longer a member",
+          "generic": "Operation failed"
+        }
+      },
+      "dangerZone": {
+        "title": "Danger Zone",
+        "deleteHeading": "Delete Group",
+        "deleteDescription": "Permanently delete this group and all of its data. This cannot be undone.",
+        "deleteButton": "Delete Group",
+        "dialogTitle": "Delete {name}?",
+        "dialogMessage": "This will permanently delete the group and all its data. Type the group name to confirm.",
+        "dialogInputPlaceholder": "Type group name",
+        "dialogConfirmButton": "Delete permanently",
+        "dialogCancelButton": "Cancel",
+        "mismatchError": "Group name does not match",
+        "deleteSuccess": "Group deleted",
+        "deleteError": "Failed to delete group"
+      }
+    }
+  },
   "settings": {
     "connectedAccounts": "Connected Accounts",
     "connectedAccountsDescription": "Manage your sign-in methods",
@@ -152,7 +281,30 @@
       "timezone": "Timezone",
       "savePreferences": "Save Preferences",
       "preferencesSaved": "Preferences saved successfully",
-      "preferencesError": "Failed to save preferences"
+      "preferencesError": "Failed to save preferences",
+      "password": {
+        "title": "Password",
+        "currentPasswordLabel": "Current Password",
+        "newPasswordLabel": "New Password",
+        "confirmPasswordLabel": "Confirm New Password",
+        "submitButton": "Change Password",
+        "submitting": "Changing password...",
+        "successMessage": "Password changed successfully",
+        "oauthOnlyTitle": "No password set",
+        "oauthOnlyMessage": "You signed in with your OAuth provider. To set a password, use the password reset flow.",
+        "resetPasswordLink": "Set password via reset",
+        "errors": {
+          "currentRequired": "Current password is required",
+          "newRequired": "New password is required",
+          "confirmRequired": "Please confirm your new password",
+          "newTooShort": "New password must be at least 8 characters",
+          "passwordMismatch": "Passwords do not match",
+          "sameAsCurrent": "New password must be different from current password",
+          "invalidCurrent": "Current password is incorrect",
+          "passwordNotSet": "You need to set a password first. Use the password reset flow.",
+          "generic": "Failed to change password"
+        }
+      }
     }
   },
   "legal": {

@@ -12,6 +12,7 @@
   "nav": {
     "home": "דף הבית",
     "dashboard": "לוח בקרה",
+    "groups": "קבוצות",
     "transactions": "תנועות",
     "budgets": "תקציבים",
     "settings": "הגדרות",
@@ -115,6 +116,134 @@
     "title": "לוח בקרה",
     "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן."
   },
+  "groups": {
+    "title": "הקבוצות שלי",
+    "createGroup": "צור קבוצה",
+    "noGroups": "אין לך קבוצות עדיין.",
+    "createFirst": "צור את הקבוצה הראשונה שלך כדי להתחיל.",
+    "memberCount": "{count, plural, one {חבר #} other {# חברים}}",
+    "role": {
+      "admin": "מנהל",
+      "member": "חבר"
+    },
+    "type": {
+      "family": "משפחה"
+    },
+    "create": {
+      "title": "צור קבוצה חדשה",
+      "name": "שם הקבוצה",
+      "namePlaceholder": "הזן שם קבוצה",
+      "type": "סוג קבוצה",
+      "currency": "מטבע ברירת מחדל",
+      "cancel": "ביטול",
+      "create": "צור קבוצה",
+      "creating": "יוצר...",
+      "success": "הקבוצה נוצרה בהצלחה",
+      "error": "יצירת הקבוצה נכשלה"
+    },
+    "dashboard": {
+      "loading": "טוען קבוצה...",
+      "notFound": "הקבוצה לא נמצאה או שאין לך גישה",
+      "backToGroups": "חזרה לקבוצות",
+      "settingsButton": "הגדרות",
+      "overviewTitle": "סקירה",
+      "overviewPlaceholder": "עוד תכונות בקרוב — תקציבים, הוצאות ויעדים משותפים.",
+      "membersTitle": "חברים",
+      "memberCount": "{count, plural, =1 {# חבר} other {# חברים}}",
+      "joinedOn": "הצטרף {date}",
+      "you": "אתה",
+      "leaveButton": "עזוב קבוצה",
+      "leaveConfirmTitle": "לעזוב את {name}?",
+      "leaveConfirmMessage": "האם אתה בטוח שברצונך לעזוב את הקבוצה?",
+      "leaveConfirmButton": "עזוב",
+      "leaveCancelButton": "ביטול",
+      "leaveSuccess": "עזבת את {name}",
+      "leaveErrors": {
+        "lastAdmin": "אתה המנהל האחרון. קדם חבר אחר תחילה.",
+        "generic": "עזיבת הקבוצה נכשלה"
+      }
+    },
+    "invite": {
+      "title": "הוזמנת",
+      "joinMessage": "הוזמנת להצטרף אל",
+      "invitedBy": "הוזמנת על ידי {name}",
+      "accept": "קבל והצטרף",
+      "accepting": "מצטרף...",
+      "decline": "דחה",
+      "acceptSuccess": "הצטרפת אל {name}",
+      "alreadyMember": "אתה כבר חבר בקבוצה זו",
+      "goToGroups": "עבור לקבוצות",
+      "loading": "טוען הזמנה...",
+      "error": {
+        "invalid": "קישור ההזמנה אינו תקין",
+        "expired": "ההזמנה פגה",
+        "used": "ההזמנה כבר נוצלה",
+        "generic": "לא ניתן לטעון את ההזמנה"
+      }
+    },
+    "settings": {
+      "title": "הגדרות קבוצה",
+      "loading": "טוען הגדרות קבוצה...",
+      "noPermission": "אין לך הרשאה לגשת להגדרות הקבוצה",
+      "backToGroup": "חזרה לקבוצה",
+      "backToGroups": "חזרה לקבוצות",
+      "info": {
+        "title": "פרטי הקבוצה",
+        "nameLabel": "שם הקבוצה",
+        "typeLabel": "סוג",
+        "currencyLabel": "מטבע ברירת מחדל",
+        "saveButton": "שמור שינויים",
+        "saving": "שומר...",
+        "saveSuccess": "הקבוצה עודכנה",
+        "saveError": "עדכון הקבוצה נכשל"
+      },
+      "invite": {
+        "title": "הזמנת חברים",
+        "description": "צור קישור הזמנה שניתן לשתף. כל מי שיש לו את הקישור יוכל להצטרף לקבוצה.",
+        "generateButton": "צור קישור הזמנה",
+        "generating": "יוצר...",
+        "copyButton": "העתק",
+        "copied": "הקישור הועתק ללוח",
+        "linkLabel": "קישור הזמנה",
+        "expiresOn": "הקישור יפוג בתאריך {date}",
+        "regenerateButton": "צור קישור חדש",
+        "error": "יצירת ההזמנה נכשלה"
+      },
+      "members": {
+        "title": "ניהול חברים ({count})",
+        "roleLabel": "תפקיד",
+        "admin": "מנהל",
+        "member": "חבר",
+        "removeButton": "הסר",
+        "removeConfirmTitle": "הסרת חבר",
+        "removeConfirmMessage": "האם אתה בטוח שברצונך להסיר את {name} מהקבוצה?",
+        "removeConfirmButton": "הסר",
+        "cancelButton": "ביטול",
+        "roleChangeSuccess": "התפקיד עודכן",
+        "removeSuccess": "החבר הוסר",
+        "errors": {
+          "cannotRemoveLastAdmin": "לא ניתן להסיר את המנהל האחרון",
+          "cannotRemoveSelf": "לא ניתן להסיר את עצמך — השתמש ביציאה מהקבוצה במקום זאת",
+          "notAMember": "המשתמש כבר אינו חבר",
+          "generic": "הפעולה נכשלה"
+        }
+      },
+      "dangerZone": {
+        "title": "אזור מסוכן",
+        "deleteHeading": "מחיקת קבוצה",
+        "deleteDescription": "מחק לצמיתות את הקבוצה ואת כל הנתונים שלה. לא ניתן לבטל פעולה זו.",
+        "deleteButton": "מחק קבוצה",
+        "dialogTitle": "למחוק את {name}?",
+        "dialogMessage": "פעולה זו תמחק לצמיתות את הקבוצה ואת כל הנתונים שלה. הקלד את שם הקבוצה לאישור.",
+        "dialogInputPlaceholder": "הקלד את שם הקבוצה",
+        "dialogConfirmButton": "מחק לצמיתות",
+        "dialogCancelButton": "ביטול",
+        "mismatchError": "שם הקבוצה אינו תואם",
+        "deleteSuccess": "הקבוצה נמחקה",
+        "deleteError": "מחיקת הקבוצה נכשלה"
+      }
+    }
+  },
   "settings": {
     "connectedAccounts": "חשבונות מחוברים",
     "connectedAccountsDescription": "נהל את שיטות ההתחברות שלך",
@@ -152,7 +281,30 @@
       "timezone": "אזור זמן",
       "savePreferences": "שמור העדפות",
       "preferencesSaved": "ההעדפות נשמרו בהצלחה",
-      "preferencesError": "שמירת ההעדפות נכשלה"
+      "preferencesError": "שמירת ההעדפות נכשלה",
+      "password": {
+        "title": "סיסמה",
+        "currentPasswordLabel": "סיסמה נוכחית",
+        "newPasswordLabel": "סיסמה חדשה",
+        "confirmPasswordLabel": "אישור סיסמה חדשה",
+        "submitButton": "שינוי סיסמה",
+        "submitting": "משנה סיסמה...",
+        "successMessage": "הסיסמה שונתה בהצלחה",
+        "oauthOnlyTitle": "לא מוגדרת סיסמה",
+        "oauthOnlyMessage": "התחברת באמצעות ספק זיהוי חיצוני. כדי להגדיר סיסמה, השתמש בזרימת איפוס הסיסמה.",
+        "resetPasswordLink": "הגדר סיסמה באמצעות איפוס",
+        "errors": {
+          "currentRequired": "נדרשת סיסמה נוכחית",
+          "newRequired": "נדרשת סיסמה חדשה",
+          "confirmRequired": "נא לאשר את הסיסמה החדשה",
+          "newTooShort": "הסיסמה החדשה חייבת להכיל לפחות 8 תווים",
+          "passwordMismatch": "הסיסמאות אינן תואמות",
+          "sameAsCurrent": "הסיסמה החדשה חייבת להיות שונה מהסיסמה הנוכחית",
+          "invalidCurrent": "הסיסמה הנוכחית שגויה",
+          "passwordNotSet": "עליך להגדיר סיסמה תחילה. השתמש בזרימת איפוס הסיסמה.",
+          "generic": "שינוי הסיסמה נכשל"
+        }
+      }
     }
   },
   "legal": {

@@ -3,12 +3,14 @@
 import { CURRENCIES, CURRENCY_CODES, LOCALES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useState, useMemo, useEffect } from 'react';
+import { ChangePasswordForm } from '@/components/auth/ChangePasswordForm';
 import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 
 const localeNames: Record<string, string> = {
@@ -203,6 +205,37 @@ export default function AccountSettingsPage() {
             {tSettings('connectedAccountsDescription')}
           </p>
           <ConnectedAccounts />
+        </div>
+
+        {/* Password section */}
+        <div
+          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+          data-testid="password-section"
+        >
+          <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {t('password.title')}
+          </h2>
+          {user?.hasPassword ? (
+            <ChangePasswordForm />
+          ) : (
+            <div
+              className="rounded-md border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/30"
+              data-testid="password-oauth-only-notice"
+            >
+              <p className="mb-1 text-sm font-medium text-blue-900 dark:text-blue-100">
+                {t('password.oauthOnlyTitle')}
+              </p>
+              <p className="mb-3 text-sm text-blue-800 dark:text-blue-200">
+                {t('password.oauthOnlyMessage')}
+              </p>
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm font-medium text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
+              >
+                {t('password.resetPasswordLink')}
+              </Link>
+            </div>
+          )}
         </div>
 
         {!user?.scheduledDeletionAt && (

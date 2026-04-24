@@ -8,6 +8,7 @@ import { RequestContextMiddleware } from './common/context/request-context.middl
 import { LoggerModule } from './common/logger/logger.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { AppThrottlerModule } from './common/throttler/throttler.module';
+import { GroupModule } from './group/group.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -26,6 +27,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AppThrottlerModule,
     HealthModule,
     AuthModule,
+    GroupModule,
   ],
   controllers: [AppController],
   providers: [AppService],

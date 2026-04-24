@@ -63,6 +63,12 @@ export function Header() {
                 {t('nav.dashboard')}
               </Link>
               <Link
+                href="/groups"
+                className="text-sm text-gray-600 hover:text-primary-600 transition-colors dark:text-gray-300 dark:hover:text-primary-400"
+              >
+                {t('nav.groups')}
+              </Link>
+              <Link
                 href="/settings/account"
                 className="hidden md:inline text-sm text-gray-600 hover:text-primary-600 transition-colors dark:text-gray-300 dark:hover:text-primary-400"
               >
