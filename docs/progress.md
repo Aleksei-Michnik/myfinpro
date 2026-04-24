@@ -2264,6 +2264,105 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.dashboard.*`
 - [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations
 
+### Iteration 5.7: Group Settings + Member Management UI (2026-04-24)
+
+- **Date**: April 24, 2026
+- **Commit**: `9b85f75` (develop)
+- **CI run**: `24889057760` — success (1m33s)
+- **Deploy Staging run**: `24889057828` — success (5m24s)
+
+**Changes**: Closed the group-management loop by implementing the admin-only group settings page. The page lives at `/groups/[groupId]/settings`, is wrapped in `ProtectedRoute`, and bundles group info editing, invite-link generation, member-role management, member removal, and a typed-name delete flow. Two new REST endpoints were added to back the member-management UI.
+
+**Backend** — `apps/api/src/group`:
+
+- `GROUP_ERRORS.CANNOT_REMOVE_SELF: 'GROUP_CANNOT_REMOVE_SELF'` added to the error catalogue ([`constants/group-errors.ts`](../apps/api/src/group/constants/group-errors.ts)).
+- New [`UpdateMemberRoleDto`](../apps/api/src/group/dto/update-member-role.dto.ts) with `role` validated via `@IsIn([...GROUP_ROLES])`.
+- `GroupService.updateMemberRole(groupId, targetUserId, actorUserId, newRole)`:
+  - 404 `GROUP_NOT_A_MEMBER` if the target user is not a member.
+  - Returns early without writes when role is unchanged.
+  - When demoting the last admin, counts remaining admins via `groupMembership.count({ role: 'admin', NOT: { userId: targetUserId } })` and throws 409 `GROUP_CANNOT_REMOVE_LAST_ADMIN` if none remain.
+  - Persists the update and writes an audit log with `action: 'group.member.role_changed'`, `details: { targetUserId, oldRole, newRole }`.
+- `GroupService.removeMember(groupId, targetUserId, actorUserId)`:
+  - 400 `GROUP_CANNOT_REMOVE_SELF` if the actor attempts to remove themselves (directs them to the leave flow).
+  - 404 `GROUP_NOT_A_MEMBER` if the target is not a member.
+  - Last-admin protection: identical admin-count check; throws 409 `GROUP_CANNOT_REMOVE_LAST_ADMIN` when removing the sole admin.
+  - Deletes the membership and writes audit log `action: 'group.member.removed'`, `details: { targetUserId }`.
+- [`GroupController`](../apps/api/src/group/group.controller.ts) exposes:
+  - `PATCH /groups/:id/members/:userId` with `JwtAuthGuard + GroupAdminGuard`, 200 returning the updated membership.
+  - `DELETE /groups/:id/members/:userId` with `JwtAuthGuard + GroupAdminGuard`, 204 No Content.
+- Tests: 13 new cases across [`group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) and [`group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) covering success, `NOT_A_MEMBER`, last-admin protection, unchanged-role no-op, self-removal blocked, DTO validation, and controller delegation.
+
+**Frontend — GroupContext extension** ([`group-context.tsx`](../apps/web/src/lib/group/group-context.tsx)):
+
+- `createInvite(groupId)` — `POST /groups/:id/invites`, returns `{ token, expiresAt, inviteUrl }`. Backend returns a path-only `inviteUrl` (e.g. `/groups/invite/:token`); the context prepends `window.location.origin` client-side so consumers always receive an absolute URL.
+- `updateMemberRole(groupId, userId, role)` — `PATCH /groups/:id/members/:userId` with `{ role }` body.
+- `removeMember(groupId, userId)` — `DELETE /groups/:id/members/:userId`.
+- `refreshGroup(groupId)` — simple wrapper around `getGroup()` used by callers after mutations.
+- `updateGroup` and `deleteGroup` were migrated from a legacy inline error parser to the shared `throwApiError()` helper so all group-context calls consistently attach `.errorCode` to thrown errors (required by the new settings page for localising error toasts).
+
+**InviteLink component** ([`InviteLink.tsx`](../apps/web/src/components/group/InviteLink.tsx)):
+
+- Props: `groupId`.
+- Renders a "Generate Invite Link" button; on click calls `createInvite(groupId)` and shows a loading state.
+- On success: read-only input with the full URL, a Copy button (uses `navigator.clipboard.writeText` when available, falls back to `input.select()` + `document.execCommand('copy')` for SSR/older browsers), an "Expires on {date}" line using `toLocaleString(locale)`, and a "Generate new link" button.
+- Toast notifications for copy success and API failure; all strings via `useTranslations('groups.settings.invite')`.
+
+**MemberManagement component** ([`MemberManagement.tsx`](../apps/web/src/components/group/MemberManagement.tsx)):
+
+- Props: `group: GroupDetail`, `currentUserId: string`.
+- Renders the member list sorted admins-first then by `joinedAt`, each row showing avatar, name (with "(You)" marker), email, joined date, a native `<select>` role dropdown, and a Remove button.
+- Current-user row: role dropdown and remove button both disabled — the user must use the leave flow (iteration 5.8) to self-demote/transfer admin.
+- Role change dispatches `updateMemberRole` with an `onUpdated` callback; removal opens a simple div-based confirmation dialog (mirrors the `DeleteAccountDialog` pattern) before calling `removeMember`.
+- Error codes from the context (`GROUP_CANNOT_REMOVE_LAST_ADMIN`, `GROUP_NOT_A_MEMBER`, `GROUP_CANNOT_REMOVE_SELF`) are mapped to localised toast messages.
+
+**Settings page** ([`/groups/[groupId]/settings/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/settings/page.tsx)):
+
+- `'use client'` wrapped in `ProtectedRoute`, extracts `groupId` via `useParams()` from `next/navigation`.
+- On mount calls `getGroup(groupId)`; shows a loading skeleton while pending.
+- Non-admin detection: renders a dedicated "no permission" card with a "Back to Group" link.
+- Load failure (404/403): error card with a "Back to Groups" button.
+- **Group Info** card — inputs for name (text), type (dropdown sourced from `GROUP_TYPES`), default currency (dropdown sourced from `CURRENCIES`); Save button wired to `updateGroup()` with loading state and localised success/error toasts; refreshes the group on success.
+- **Invite Members** card — renders `<InviteLink groupId={groupId} />`.
+- **Members** card — renders `<MemberManagement group={group} currentUserId={user.id} />` with an `onUpdated` refresh handler.
+- **Danger Zone** card (red border) — "Delete Group" button opens a confirmation dialog that requires the user to type the group name (mirrors the [`DeleteAccountDialog`](../apps/web/src/components/auth/DeleteAccountDialog.tsx) pattern — confirm button disabled until the input matches `group.name` exactly, with a mismatch error when partial). On confirm calls `deleteGroup(groupId)`, navigates to `/groups`, and shows the success toast.
+
+**Dashboard wiring**: the Settings button in the group dashboard (iteration 5.6) already pointed at `/groups/{groupId}/settings`; no changes required — the link now resolves to a real page.
+
+**i18n translations** — new `groups.settings.*` namespace added to both [`en.json`](../apps/web/messages/en.json) and [`he.json`](../apps/web/messages/he.json):
+
+- Top-level: `title`, `loading`, `noPermission`, `backToGroup`, `backToGroups`.
+- `info.*` — `title`, `nameLabel`, `typeLabel`, `currencyLabel`, `saveButton`, `saving`, `saveSuccess`, `saveError`.
+- `invite.*` — `title`, `description`, `generateButton`, `generating`, `copyButton`, `copied`, `linkLabel`, `expiresOn` (with `{date}` ICU arg), `regenerateButton`, `error`.
+- `members.*` — `title` (with `{count}` ICU arg), `roleLabel`, `admin`, `member`, `removeButton`, `removeConfirmTitle`, `removeConfirmMessage` (with `{name}`), `removeConfirmButton`, `cancelButton`, `roleChangeSuccess`, `removeSuccess`, and a nested `errors.*` block (`cannotRemoveLastAdmin`, `cannotRemoveSelf`, `notAMember`, `generic`).
+- `dangerZone.*` — `title`, `deleteHeading`, `deleteDescription`, `deleteButton`, `dialogTitle` (with `{name}`), `dialogMessage`, `dialogInputPlaceholder`, `dialogConfirmButton`, `dialogCancelButton`, `mismatchError`, `deleteSuccess`, `deleteError`.
+
+**Tests added**:
+
+- [`InviteLink.spec.tsx`](../apps/web/src/components/group/InviteLink.spec.tsx) — 6 tests: generate button render, successful link generation, clipboard copy with toast, API error toast, clipboard-unavailable fallback to `select()`, regenerate flow replacing the previous link.
+- [`MemberManagement.spec.tsx`](../apps/web/src/components/group/MemberManagement.spec.tsx) — 12 tests: member list render, sort order (admins first then by `joinedAt`), disabled controls on current-user row, role change success with refresh callback, role change API failure toast, remove opens confirmation dialog, cancel closes it, confirm calls `removeMember` + toast + refresh, error code mapping (`CANNOT_REMOVE_LAST_ADMIN`, `CANNOT_REMOVE_SELF`, `NOT_A_MEMBER`, generic).
+- [`settings.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/settings/settings.spec.tsx) — 10 tests: loading skeleton, non-admin permission card with correct back-link, load-error card with navigation, all four cards render for admins, info form prefill, save flow with success toast and payload assertion, delete dialog mismatch/match state, delete-confirmation flow calling `deleteGroup` and navigating to `/groups`, invite and member sections render inside the page.
+
+**Results**:
+
+- Full `pnpm run test` on develop: **api 394/394 • web 356/356 • shared 54/54** — all passing.
+- Prettier applied to all 15 changed files; no lint regressions (the pre-existing import-order annotation on `invite/[token]/page.tsx` is unrelated and unchanged by this iteration).
+- CI (`24889057760`, 1m33s) and Deploy Staging (`24889057828`, 5m24s) on `develop` both green.
+
+**Files changed:**
+
+- [`apps/api/src/group/constants/group-errors.ts`](../apps/api/src/group/constants/group-errors.ts) — `CANNOT_REMOVE_SELF` code.
+- [`apps/api/src/group/dto/update-member-role.dto.ts`](../apps/api/src/group/dto/update-member-role.dto.ts) — new DTO.
+- [`apps/api/src/group/group.service.ts`](../apps/api/src/group/group.service.ts) — `updateMemberRole()`, `removeMember()`.
+- [`apps/api/src/group/group.controller.ts`](../apps/api/src/group/group.controller.ts) — PATCH/DELETE endpoints.
+- [`apps/api/src/group/group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) — new tests.
+- [`apps/api/src/group/group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) — new tests.
+- [`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx) — `createInvite`, `updateMemberRole`, `removeMember`, `refreshGroup`, `InviteCreatedResult`; `updateGroup`/`deleteGroup` migrated to `throwApiError`.
+- [`apps/web/src/components/group/InviteLink.tsx`](../apps/web/src/components/group/InviteLink.tsx) + [`InviteLink.spec.tsx`](../apps/web/src/components/group/InviteLink.spec.tsx).
+- [`apps/web/src/components/group/MemberManagement.tsx`](../apps/web/src/components/group/MemberManagement.tsx) + [`MemberManagement.spec.tsx`](../apps/web/src/components/group/MemberManagement.spec.tsx).
+- [`apps/web/src/app/[locale]/groups/[groupId]/settings/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/settings/page.tsx) + [`settings.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/settings/settings.spec.tsx).
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.settings.*`.
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations.
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
