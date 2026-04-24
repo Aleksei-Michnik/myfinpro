@@ -2437,6 +2437,86 @@ No permission gaps found; no code changes needed.
 - [`apps/web/src/app/[locale]/groups/[groupId]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/page.tsx) + [`dashboard.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/dashboard.spec.tsx).
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json), [`he.json`](../apps/web/messages/he.json).
 
+### Iteration 5.11: Password Change (2026-04-24)
+
+- **Date**: April 24, 2026
+- **Commit**: `2f85f6a` (develop)
+- **CI run**: `24902520185` — success (1m28s)
+- **Deploy Staging run**: `24902520204` — success
+
+**Changes**: Final functional iteration of Phase 5. Authenticated users can now change their password from the Account Settings page. OAuth-only users (no `passwordHash`) see a friendly info card directing them to the password-reset flow instead of the form.
+
+**Backend** — [`apps/api/src/auth`](../apps/api/src/auth):
+
+- [`ChangePasswordDto`](../apps/api/src/auth/dto/change-password.dto.ts) — `currentPassword` (required string) + `newPassword` (8–128 chars, must contain upper/lower/digit via `@Matches`).
+- [`AUTH_ERRORS`](../apps/api/src/auth/constants/auth-errors.ts) — three new codes: `PASSWORD_NOT_SET: 'AUTH_PASSWORD_NOT_SET'`, `INVALID_CURRENT_PASSWORD: 'AUTH_INVALID_CURRENT_PASSWORD'`, `PASSWORD_SAME_AS_CURRENT: 'AUTH_PASSWORD_SAME_AS_CURRENT'`.
+- [`AuthService.changePassword(userId, dto)`](../apps/api/src/auth/auth.service.ts):
+  - Loads the user (selects `passwordHash`).
+  - Throws 400 `PASSWORD_NOT_SET` when `passwordHash === null` (OAuth-only users).
+  - Verifies `currentPassword` via the existing `PasswordService` (argon2id — matches the rest of the codebase); throws 400 `INVALID_CURRENT_PASSWORD` on mismatch.
+  - Throws 400 `PASSWORD_SAME_AS_CURRENT` when the new password equals the current one (checked via `passwordService.verify` against the existing hash, not string comparison, to stay consistent with hashed storage).
+  - Hashes the new password and updates the user.
+  - Invalidates all refresh tokens via `refreshTokenService.revokeAllUserTokens(userId)` (reuses the existing helper used by the password-reset flow).
+  - Writes an audit log with `action: 'auth.password_changed'`, `entity: 'User'`, `entityId: userId`.
+- [`AuthController`](../apps/api/src/auth/auth.controller.ts) exposes `POST /auth/change-password` with `JwtAuthGuard`, rate-limited via `@CustomThrottle({ limit: 5, ttl: 60000 })`, returns 204 No Content. Full Swagger annotations.
+- [`ValidatedUser`](../apps/api/src/auth/interfaces/validated-user.interface.ts) grew a new `hasPassword: boolean` field. Every AuthService method that returns a user (register, login, Google/Telegram find-or-create, refresh, `getUser`, `updateProfile`) now sets `hasPassword: user.passwordHash !== null`. `getUser()` selects `passwordHash` on the Prisma query and strips it from the returned object after deriving the flag.
+
+**Backend tests**:
+
+- [`auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) — 7 new cases for `changePassword`: success path (updates hash, revokes tokens, writes audit log), wrong current password, OAuth-only user, same-as-current password, and explicit assertions for refresh-token revocation and audit-log payload. Existing `mockUser` fixtures throughout the file were updated to include `passwordHash` + `hasPassword: true`.
+- [`auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — 5 tests covering happy path, delegation to the service, and validation-error propagation.
+- [`password-change.integration.spec.ts`](../apps/api/test/integration/password-change.integration.spec.ts) — 7 integration tests: register → change password → login with new password succeeds → login with old password fails; plus 401/400 coverage, audit log creation check, and refresh-token revocation check against the real DB.
+
+**Frontend** — [`apps/web/src](../apps/web/src):
+
+- [`User`](../apps/web/src/lib/auth/types.ts) type grew `hasPassword: boolean`.
+- [`AuthContext`](../apps/web/src/lib/auth/auth-context.tsx) — new `changePassword(currentPassword, newPassword)` method POSTing to `/auth/change-password` with bearer auth. Introduced an `ApiError` class (extends `Error`, adds `errorCode`) and `throwApiError()` helper mirroring the group-context pattern so consumers can switch on `.errorCode`.
+- [`ChangePasswordForm`](../apps/web/src/components/auth/ChangePasswordForm.tsx) component:
+  - Three password inputs (current, new, confirm) each with the show/hide eye toggle reused from the existing reset/login flows.
+  - Reuses the shared [`PasswordStrength`](../apps/web/src/components/auth/PasswordStrength.tsx) component for the new password field.
+  - Client-side validation: all required, new ≥ 8 chars, matches confirm, and must differ from current before hitting the API.
+  - On success: clears the form + success toast. Error codes are mapped to localised toasts (`AUTH_PASSWORD_NOT_SET`, `AUTH_INVALID_CURRENT_PASSWORD`, `AUTH_PASSWORD_SAME_AS_CURRENT`, generic fallback).
+- [`Account Settings page`](../apps/web/src/app/%5Blocale%5D/settings/account/page.tsx) — a new "Password" section between Preferences and Delete Account:
+  - Renders `<ChangePasswordForm />` when `user.hasPassword === true`.
+  - Renders an info card with a link to `/auth/forgot-password` when the user has no password set (OAuth-only).
+
+**i18n** — new `settings.account.password.*` namespace in [`en.json`](../apps/web/messages/en.json) and [`he.json`](../apps/web/messages/he.json): labels (`title`, `changeHeading`, `currentPasswordLabel`, `newPasswordLabel`, `confirmPasswordLabel`), show/hide toggle text, submit/submitting strings, success message, OAuth-only copy, and a nested `errors.*` block (`currentRequired`, `newRequired`, `confirmRequired`, `newTooShort`, `passwordMismatch`, `sameAsCurrent`, `invalidCurrent`, `passwordNotSet`, `generic`). Hebrew translations follow the existing style and RTL conventions used elsewhere in the settings namespace.
+
+**Frontend tests**:
+
+- [`ChangePasswordForm.spec.tsx`](../apps/web/src/components/auth/ChangePasswordForm.spec.tsx) — 11 tests: renders fields, show/hide toggle, required-field validation, min-length check, mismatch check, same-as-current pre-check, loading state, success path (toast + form cleared), and error-code → localised toast mapping for all three server error codes.
+- [`account-settings.spec.tsx`](../apps/web/src/app/%5Blocale%5D/settings/account/account-settings.spec.tsx) — 3 new tests verifying the Password section renders the form when `hasPassword: true` and the OAuth-only notice (with link to `/auth/forgot-password`) when `hasPassword: false`. The existing mock user was updated with the `hasPassword` field and `changePassword: vi.fn()`.
+- [`auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — 2 new tests for the `changePassword` method: success path (204 → no throw) and error-code propagation (4xx → rethrows with `.errorCode`).
+
+**Results**:
+
+- Backend: `pnpm test` → **415/415** passing (29 suites).
+- Frontend: `pnpm test` → **379/379** passing (35 suites).
+- Prettier applied to all 17 changed files; typecheck clean on both `apps/api` and `apps/web`.
+- CI (`24902520185`, 1m28s) and Deploy Staging (`24902520204`) on `develop` both green.
+
+**Security notes**:
+
+- Old password is verified via argon2 — never compared as plaintext.
+- `PASSWORD_SAME_AS_CURRENT` is checked against the stored hash, not against `currentPassword` in-memory, so even if the frontend validation is bypassed the server still rejects unchanged passwords.
+- All refresh tokens are revoked immediately after a password change, so any attacker holding a stolen refresh token loses access at the next token-refresh cycle. The current access token remains valid until its 15-minute expiry by design (classic trade-off — avoiding forced re-login while still bounding the compromise window).
+
+**Files touched**:
+
+- [`apps/api/src/auth/dto/change-password.dto.ts`](../apps/api/src/auth/dto/change-password.dto.ts) — new DTO.
+- [`apps/api/src/auth/constants/auth-errors.ts`](../apps/api/src/auth/constants/auth-errors.ts) — new error codes.
+- [`apps/api/src/auth/interfaces/validated-user.interface.ts`](../apps/api/src/auth/interfaces/validated-user.interface.ts) — `hasPassword`.
+- [`apps/api/src/auth/auth.service.ts`](../apps/api/src/auth/auth.service.ts) — `changePassword()`, `hasPassword` on every return site.
+- [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts) — `POST /auth/change-password`.
+- [`apps/api/src/auth/auth.service.spec.ts`](../apps/api/src/auth/auth.service.spec.ts) + [`auth.controller.spec.ts`](../apps/api/src/auth/auth.controller.spec.ts) — new tests + fixture updates.
+- [`apps/api/test/integration/password-change.integration.spec.ts`](../apps/api/test/integration/password-change.integration.spec.ts) — new integration suite.
+- [`apps/web/src/lib/auth/types.ts`](../apps/web/src/lib/auth/types.ts) — `hasPassword` on User.
+- [`apps/web/src/lib/auth/auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx) — `changePassword`, `ApiError`, `throwApiError`.
+- [`apps/web/src/lib/auth/auth-context.spec.tsx`](../apps/web/src/lib/auth/auth-context.spec.tsx) — new tests.
+- [`apps/web/src/components/auth/ChangePasswordForm.tsx`](../apps/web/src/components/auth/ChangePasswordForm.tsx) + [`ChangePasswordForm.spec.tsx`](../apps/web/src/components/auth/ChangePasswordForm.spec.tsx).
+- [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/%5Blocale%5D/settings/account/page.tsx) + [`account-settings.spec.tsx`](../apps/web/src/app/%5Blocale%5D/settings/account/account-settings.spec.tsx).
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json), [`apps/web/messages/he.json`](../apps/web/messages/he.json).
+
 ### Upcoming Phases
 
 - **Phase 6** — Income management (10 iterations)
