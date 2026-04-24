@@ -9,6 +9,7 @@ import {
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -132,6 +133,7 @@ export class AuthService {
         locale: user.locale,
         timezone: user.timezone,
         emailVerified: user.emailVerified,
+        hasPassword: user.passwordHash !== null,
       },
       accessToken,
     };
@@ -164,7 +166,7 @@ export class AuthService {
           });
           if (!freshUser) return null;
           const { passwordHash: _ph, ...result } = freshUser;
-          return result;
+          return { ...result, hasPassword: _ph !== null };
         }
       }
       // Truly disabled account or reactivation failed
@@ -188,7 +190,7 @@ export class AuthService {
 
     // Return user without password hash
     const { passwordHash, ...result } = user;
-    return result;
+    return { ...result, hasPassword: passwordHash !== null };
   }
 
   async login(user: ValidatedUser, response: Response, ip?: string, userAgent?: string) {
@@ -237,6 +239,7 @@ export class AuthService {
         locale: user.locale,
         timezone: user.timezone,
         emailVerified: user.emailVerified,
+        hasPassword: user.hasPassword,
       },
       accessToken,
     };
@@ -279,6 +282,7 @@ export class AuthService {
         locale: user.locale,
         timezone: user.timezone,
         emailVerified: user.emailVerified,
+        hasPassword: user.passwordHash !== null,
       },
       accessToken,
     };
@@ -329,7 +333,7 @@ export class AuthService {
           const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
           if (freshUser && freshUser.isActive) {
             const { passwordHash, ...result } = freshUser;
-            return result;
+            return { ...result, hasPassword: passwordHash !== null };
           }
         }
         throw new UnauthorizedException({
@@ -338,7 +342,7 @@ export class AuthService {
         });
       }
       const { passwordHash, ...result } = user;
-      return result;
+      return { ...result, hasPassword: passwordHash !== null };
     }
 
     // 2. If email is verified, check if a user with this email already exists
@@ -363,7 +367,7 @@ export class AuthService {
                 avatarUrl: picture,
               });
               const { passwordHash, ...result } = freshUser;
-              return result;
+              return { ...result, hasPassword: passwordHash !== null };
             }
           }
           throw new UnauthorizedException({
@@ -384,7 +388,7 @@ export class AuthService {
         );
 
         const { passwordHash, ...result } = existingUser;
-        return result;
+        return { ...result, hasPassword: passwordHash !== null };
       }
     }
 
@@ -434,7 +438,7 @@ export class AuthService {
     });
 
     const { passwordHash, ...userWithoutPassword } = result;
-    return userWithoutPassword;
+    return { ...userWithoutPassword, hasPassword: passwordHash !== null };
   }
 
   async findOrCreateTelegramUser(profile: TelegramProfile): Promise<ValidatedUser> {
@@ -459,7 +463,7 @@ export class AuthService {
           const freshUser = await this.prisma.user.findUnique({ where: { id: user.id } });
           if (freshUser && freshUser.isActive) {
             const { passwordHash, ...result } = freshUser;
-            return result;
+            return { ...result, hasPassword: passwordHash !== null };
           }
         }
         throw new UnauthorizedException({
@@ -468,7 +472,7 @@ export class AuthService {
         });
       }
       const { passwordHash, ...result } = user;
-      return result;
+      return { ...result, hasPassword: passwordHash !== null };
     }
 
     // 2. No email matching for Telegram — always create new User + OAuthProvider
@@ -517,7 +521,7 @@ export class AuthService {
     });
 
     const { passwordHash, ...userWithoutPassword } = result;
-    return userWithoutPassword;
+    return { ...userWithoutPassword, hasPassword: passwordHash !== null };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -549,6 +553,7 @@ export class AuthService {
         locale: true,
         timezone: true,
         emailVerified: true,
+        passwordHash: true,
       },
     });
     if (!user) {
@@ -557,7 +562,8 @@ export class AuthService {
         errorCode: AUTH_ERRORS.USER_NOT_FOUND,
       });
     }
-    return user;
+    const { passwordHash, ...rest } = user;
+    return { ...rest, hasPassword: passwordHash !== null };
   }
 
   async getConnectedAccounts(userId: string) {
@@ -701,5 +707,74 @@ export class AuthService {
 
     // 6. Return updated connected accounts
     return this.getConnectedAccounts(userId);
+  }
+
+  /**
+   * Change the password for the currently authenticated user.
+   * - Rejects OAuth-only users (no password set).
+   * - Verifies the current password.
+   * - Rejects if new password matches current password.
+   * - Revokes all existing refresh tokens after change (security best practice).
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException({
+        message: 'User not found',
+        errorCode: AUTH_ERRORS.USER_NOT_FOUND,
+      });
+    }
+
+    if (!user.passwordHash) {
+      throw new BadRequestException({
+        message:
+          'No password is set on this account. Please set a password via password reset first.',
+        errorCode: AUTH_ERRORS.PASSWORD_NOT_SET,
+      });
+    }
+
+    const isCurrentValid = await this.passwordService.verify(
+      user.passwordHash,
+      dto.currentPassword,
+    );
+    if (!isCurrentValid) {
+      throw new BadRequestException({
+        message: 'Current password is incorrect',
+        errorCode: AUTH_ERRORS.INVALID_CURRENT_PASSWORD,
+      });
+    }
+
+    if (dto.newPassword === dto.currentPassword) {
+      throw new BadRequestException({
+        message: 'New password must be different from current password',
+        errorCode: AUTH_ERRORS.PASSWORD_SAME_AS_CURRENT,
+      });
+    }
+
+    const newPasswordHash = await this.passwordService.hash(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    // Invalidate all refresh tokens for this user after password change.
+    await this.refreshTokenService.revokeAllUserTokens(userId);
+
+    // Audit log
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'auth.password_changed',
+        entity: 'User',
+        entityId: userId,
+      },
+    });
+
+    this.logger.log(`Password changed for user ${userId}`);
   }
 }

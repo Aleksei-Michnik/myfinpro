@@ -281,7 +281,30 @@
       "timezone": "אזור זמן",
       "savePreferences": "שמור העדפות",
       "preferencesSaved": "ההעדפות נשמרו בהצלחה",
-      "preferencesError": "שמירת ההעדפות נכשלה"
+      "preferencesError": "שמירת ההעדפות נכשלה",
+      "password": {
+        "title": "סיסמה",
+        "currentPasswordLabel": "סיסמה נוכחית",
+        "newPasswordLabel": "סיסמה חדשה",
+        "confirmPasswordLabel": "אישור סיסמה חדשה",
+        "submitButton": "שינוי סיסמה",
+        "submitting": "משנה סיסמה...",
+        "successMessage": "הסיסמה שונתה בהצלחה",
+        "oauthOnlyTitle": "לא מוגדרת סיסמה",
+        "oauthOnlyMessage": "התחברת באמצעות ספק זיהוי חיצוני. כדי להגדיר סיסמה, השתמש בזרימת איפוס הסיסמה.",
+        "resetPasswordLink": "הגדר סיסמה באמצעות איפוס",
+        "errors": {
+          "currentRequired": "נדרשת סיסמה נוכחית",
+          "newRequired": "נדרשת סיסמה חדשה",
+          "confirmRequired": "נא לאשר את הסיסמה החדשה",
+          "newTooShort": "הסיסמה החדשה חייבת להכיל לפחות 8 תווים",
+          "passwordMismatch": "הסיסמאות אינן תואמות",
+          "sameAsCurrent": "הסיסמה החדשה חייבת להיות שונה מהסיסמה הנוכחית",
+          "invalidCurrent": "הסיסמה הנוכחית שגויה",
+          "passwordNotSet": "עליך להגדיר סיסמה תחילה. השתמש בזרימת איפוס הסיסמה.",
+          "generic": "שינוי הסיסמה נכשל"
+        }
+      }
     }
   },
   "legal": {

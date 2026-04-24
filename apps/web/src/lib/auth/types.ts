@@ -6,6 +6,7 @@ export interface User {
   locale: string;
   timezone: string;
   emailVerified: boolean;
+  hasPassword: boolean;
   deletedAt: string | null;
   scheduledDeletionAt: string | null;
 }

@@ -27,6 +27,7 @@ let mockAuthState: {
     locale: string;
     timezone: string;
     emailVerified: boolean;
+    hasPassword: boolean;
     deletedAt: string | null;
     scheduledDeletionAt: string | null;
   } | null;
@@ -44,6 +45,7 @@ let mockAuthState: {
   deleteAccount: ReturnType<typeof vi.fn>;
   cancelDeletion: ReturnType<typeof vi.fn>;
   updateProfile: ReturnType<typeof vi.fn>;
+  changePassword: ReturnType<typeof vi.fn>;
 };
 
 vi.mock('next-intl', () => ({
@@ -73,6 +75,10 @@ vi.mock('@/components/auth/ConnectedAccounts', () => ({
   ConnectedAccounts: () => <div data-testid="connected-accounts">Connected Accounts Mock</div>,
 }));
 
+vi.mock('@/components/auth/ChangePasswordForm', () => ({
+  ChangePasswordForm: () => <div data-testid="change-password-form">Change Password Form Mock</div>,
+}));
+
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({
     addToast: mockAddToast,
@@ -94,6 +100,7 @@ describe('AccountSettingsPage', () => {
         locale: 'en',
         timezone: 'UTC',
         emailVerified: true,
+        hasPassword: true,
         deletedAt: null,
         scheduledDeletionAt: null,
       },
@@ -111,6 +118,7 @@ describe('AccountSettingsPage', () => {
       deleteAccount: vi.fn(),
       cancelDeletion: vi.fn(),
       updateProfile: mockUpdateProfile,
+      changePassword: vi.fn(),
     };
   });
 
@@ -203,6 +211,30 @@ describe('AccountSettingsPage', () => {
     fireEvent.click(screen.getByTestId('save-preferences-btn'));
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith('error', 'preferencesError');
+    });
+  });
+
+  describe('Password section', () => {
+    it('renders password section with change form for users with password', () => {
+      render(<AccountSettingsPage />);
+      expect(screen.getByTestId('password-section')).toBeInTheDocument();
+      expect(screen.getByTestId('change-password-form')).toBeInTheDocument();
+      expect(screen.queryByTestId('password-oauth-only-notice')).not.toBeInTheDocument();
+    });
+
+    it('renders OAuth-only notice for users without password', () => {
+      mockAuthState.user!.hasPassword = false;
+      render(<AccountSettingsPage />);
+      expect(screen.getByTestId('password-section')).toBeInTheDocument();
+      expect(screen.getByTestId('password-oauth-only-notice')).toBeInTheDocument();
+      expect(screen.queryByTestId('change-password-form')).not.toBeInTheDocument();
+    });
+
+    it('OAuth-only notice includes link to forgot-password', () => {
+      mockAuthState.user!.hasPassword = false;
+      render(<AccountSettingsPage />);
+      const link = screen.getByRole('link', { name: /resetPasswordLink/ });
+      expect(link).toHaveAttribute('href', '/auth/forgot-password');
     });
   });
 });

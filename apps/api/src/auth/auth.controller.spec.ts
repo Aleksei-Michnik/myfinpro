@@ -39,6 +39,7 @@ describe('AuthController', () => {
     linkTelegramToUser: jest.fn(),
     unlinkProvider: jest.fn(),
     updateProfile: jest.fn(),
+    changePassword: jest.fn(),
   };
 
   const mockEmailVerificationService = {
@@ -1324,6 +1325,83 @@ describe('AuthController', () => {
       const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.updateProfile);
 
       expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
+    });
+  });
+
+  describe('changePassword()', () => {
+    const mockJwtPayload = {
+      sub: 'test-uuid',
+      email: 'test@example.com',
+      name: 'Test User',
+    };
+
+    it('should call AuthService.changePassword() with user sub and dto', async () => {
+      mockAuthService.changePassword.mockResolvedValue(undefined);
+
+      const dto = {
+        currentPassword: 'CurrentPass123',
+        newPassword: 'NewSecurePass456',
+      };
+
+      await controller.changePassword(mockJwtPayload, dto);
+
+      expect(mockAuthService.changePassword).toHaveBeenCalledWith('test-uuid', dto);
+    });
+
+    it('should return void (204 No Content)', async () => {
+      mockAuthService.changePassword.mockResolvedValue(undefined);
+
+      const result = await controller.changePassword(mockJwtPayload, {
+        currentPassword: 'CurrentPass123',
+        newPassword: 'NewSecurePass456',
+      });
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should propagate BadRequestException with INVALID_CURRENT_PASSWORD', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAuthService.changePassword.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'Current password is incorrect',
+          errorCode: AUTH_ERRORS.INVALID_CURRENT_PASSWORD,
+        }),
+      );
+
+      await expect(
+        controller.changePassword(mockJwtPayload, {
+          currentPassword: 'Wrong',
+          newPassword: 'NewSecurePass456',
+        }),
+      ).rejects.toThrow('Current password is incorrect');
+    });
+
+    it('should propagate BadRequestException with PASSWORD_NOT_SET for OAuth-only user', async () => {
+      const { BadRequestException: ActualBadRequest } = jest.requireActual('@nestjs/common');
+      mockAuthService.changePassword.mockRejectedValue(
+        new ActualBadRequest({
+          message: 'No password is set on this account',
+          errorCode: AUTH_ERRORS.PASSWORD_NOT_SET,
+        }),
+      );
+
+      await expect(
+        controller.changePassword(mockJwtPayload, {
+          currentPassword: 'Anything',
+          newPassword: 'NewSecurePass456',
+        }),
+      ).rejects.toThrow('No password is set on this account');
+    });
+
+    it('should have @Throttle metadata with limit 5 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.changePassword,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.changePassword);
+
+      expect(limit).toBe(5);
       expect(ttl).toBe(60000);
     });
   });

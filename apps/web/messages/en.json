@@ -281,7 +281,30 @@
       "timezone": "Timezone",
       "savePreferences": "Save Preferences",
       "preferencesSaved": "Preferences saved successfully",
-      "preferencesError": "Failed to save preferences"
+      "preferencesError": "Failed to save preferences",
+      "password": {
+        "title": "Password",
+        "currentPasswordLabel": "Current Password",
+        "newPasswordLabel": "New Password",
+        "confirmPasswordLabel": "Confirm New Password",
+        "submitButton": "Change Password",
+        "submitting": "Changing password...",
+        "successMessage": "Password changed successfully",
+        "oauthOnlyTitle": "No password set",
+        "oauthOnlyMessage": "You signed in with your OAuth provider. To set a password, use the password reset flow.",
+        "resetPasswordLink": "Set password via reset",
+        "errors": {
+          "currentRequired": "Current password is required",
+          "newRequired": "New password is required",
+          "confirmRequired": "Please confirm your new password",
+          "newTooShort": "New password must be at least 8 characters",
+          "passwordMismatch": "Passwords do not match",
+          "sameAsCurrent": "New password must be different from current password",
+          "invalidCurrent": "Current password is incorrect",
+          "passwordNotSet": "You need to set a password first. Use the password reset flow.",
+          "generic": "Failed to change password"
+        }
+      }
     }
   },
   "legal": {
