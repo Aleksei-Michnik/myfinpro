@@ -2162,6 +2162,59 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/api/src/group/group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) — Added invite unit tests
 - [`apps/api/src/group/group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts) — Added invite endpoint tests
 
+### Iteration 5.5: Accept Invite UI + Join Flow (2026-04-24)
+
+- **Date**: April 24, 2026
+- **Commit**: `d7af50d` (develop)
+- **CI run**: `24878841627` — success
+- **Deploy Staging run**: `24878841574` — success
+
+**Changes**: Implemented the frontend UI for accepting group invites. The page lives at `/groups/invite/[token]`, is wrapped in `ProtectedRoute`, loads invite details from the iteration 5.4 API, and lets the user accept or decline the invitation.
+
+**Frontend types** ([`apps/web/src/lib/group/types.ts`](../apps/web/src/lib/group/types.ts)):
+
+- Added `InviteInfo` interface (`groupId`, `groupName`, `groupType`, `inviterName`) mirroring the `GET /groups/invite/:token` response.
+
+**GroupContext extensions** ([`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx)):
+
+- Added `getInviteInfo(token)` — `GET /groups/invite/:token` with bearer auth, returns `InviteInfo`.
+- Added `acceptInvite(token)` — `POST /groups/invite/:token/accept`, refreshes the local group list on success, returns the joined `GroupSummary`.
+- Introduced a shared `throwApiError()` helper that parses the API's `{ message, errorCode }` envelope and rethrows an `Error` with an attached `.errorCode` property, so the UI can distinguish `GROUP_INVITE_TOKEN_INVALID` / `_EXPIRED` / `_USED` / `GROUP_ALREADY_A_MEMBER`.
+
+**Invite page** ([`apps/web/src/app/[locale]/groups/invite/[token]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/invite/%5Btoken%5D/page.tsx)):
+
+- `'use client'` page extracting `token` via `useParams()` from `next/navigation`, using the `@/i18n/navigation` router for locale-aware navigation.
+- Loading state: skeleton card while fetching invite details.
+- Error state: dedicated error card with a localised title per error kind (`invalid`, `expired`, `used`, `generic`) and a "Go to Groups" button.
+- Success state: card with group name (large, bold), translated type badge, "Invited by {name}" line, and two buttons — "Decline" (secondary → navigates to `/groups`) and "Accept & Join" (primary).
+- Accept flow: disables the button, shows "Joining..." state, navigates to `/groups/{groupId}` on success with a success toast, shows "You're already a member" info toast and navigates after 1.5s on `GROUP_ALREADY_A_MEMBER`, shows a localised error toast and re-enables the button for other errors.
+
+**i18n translations** (added under existing `groups.*` namespace):
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.invite.*`: `title`, `joinMessage`, `invitedBy`, `accept`, `accepting`, `decline`, `acceptSuccess`, `alreadyMember`, `goToGroups`, `loading`, `error.{invalid,expired,used,generic}`.
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Same keys with Hebrew translations.
+
+**Tests added**:
+
+- [`invite.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/invite/%5Btoken%5D/invite.spec.tsx) — 11 tests: loading skeleton, successful render (group name, type, inviter), error cards for invalid / expired / used / generic tokens, "Go to Groups" navigation on error, Accept flow success + toast + navigation, `GROUP_ALREADY_A_MEMBER` handling with fake timers advancing the 1.5s delay, non-member error toast with button re-enabled, Decline navigation.
+
+**Results**:
+
+- All 11 new invite tests pass. Full web suite: 314 web unit tests passing.
+- Full monorepo `pnpm run test` passes: 379 api + 314 web + 54 shared.
+- CI (`24878841627`) and Deploy Staging (`24878841574`) on `develop` both green.
+
+**Note on login redirect**: The existing `ProtectedRoute` already preserves the return URL via `?redirect=...`, so after logging in the user is returned to the invite page without any extra work.
+
+**Files changed:**
+
+- [`apps/web/src/lib/group/types.ts`](../apps/web/src/lib/group/types.ts) — Added `InviteInfo`
+- [`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx) — Added `getInviteInfo`, `acceptInvite`, `throwApiError`
+- [`apps/web/src/app/[locale]/groups/invite/[token]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/invite/%5Btoken%5D/page.tsx) — New invite page
+- [`apps/web/src/app/[locale]/groups/invite/[token]/invite.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/invite/%5Btoken%5D/invite.spec.tsx) — New tests
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.invite.*`
+- [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations
+
 ### Upcoming Phases
 
 - **Phase 5** — Family/Group management (remaining iterations)
