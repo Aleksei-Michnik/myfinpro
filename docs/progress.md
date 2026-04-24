@@ -2363,8 +2363,81 @@ Three infrastructure tasks to complete before starting Phase 5. See [`docs/post-
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json) — `groups.settings.*`.
 - [`apps/web/messages/he.json`](../apps/web/messages/he.json) — Hebrew translations.
 
+### Iteration 5.8: Leave Group + Audit Logging Review (2026-04-24)
+
+- **Date**: April 24, 2026
+- **Commit**: `fcf9c39` (develop)
+- **CI run**: `24899736063` — success
+- **Deploy Staging run**: `24899736079` — success (1m46s)
+
+**Changes**: Completed Phase 5 group-management by adding a self-service "Leave Group" flow and reviewing/hardening audit logging across all group operations. Users can now leave groups from the dashboard; when the last admin is also the last member, the group is deleted as a convenience ("last one out, turn off the lights").
+
+**Backend** — [`apps/api/src/group`](../apps/api/src/group):
+
+- `GroupService.leaveGroup(groupId, userId)` in [`group.service.ts`](../apps/api/src/group/group.service.ts):
+  - Looks up the caller's membership (guard already enforces member access; this is a defence-in-depth check → 404 `GROUP_NOT_A_MEMBER`).
+  - Counts total members, and admins if the caller is an admin.
+  - **Last admin + other members** → throws 409 `GROUP_CANNOT_LEAVE_AS_LAST_ADMIN` with a message telling the user to promote another member first.
+  - **Last admin + only member** → deletes the whole group (cascade removes memberships/invites) and writes two audit logs: `group.member.left` (with `wasLastAdmin: true`) and `group.deleted_on_leave`.
+  - **Normal case** → deletes the caller's `GroupMembership` and writes `group.member.left` (with `wasLastAdmin: false`).
+  - All audit log writes are wrapped in `try/catch` and logged via `this.logger.warn(...)` so an audit failure never breaks the main operation.
+- [`group.controller.ts`](../apps/api/src/group/group.controller.ts) exposes `POST /groups/:id/leave` with `JwtAuthGuard + GroupMemberGuard`, 204 No Content, throttled at 10 requests per minute.
+- Swagger responses: 401, 403 (non-member), 404, 409 (last admin).
+- 6 new unit tests in [`group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts): normal leave, admin leaves with co-admin, last-admin-blocked, last-member-deletes-group, not-a-member (404), and audit-log-failure-is-swallowed. 2 new controller tests in [`group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts): delegation + error propagation.
+
+**Audit logging review** — Verified audit logs already exist (or were added in this iteration) for every group operation:
+
+| Service method             | Action                            | Status      |
+| -------------------------- | --------------------------------- | ----------- |
+| `createGroup`              | `GROUP_CREATED`                   | ✓ 5.2       |
+| `updateGroup`              | `GROUP_UPDATED` (details.changes) | ✓ 5.2       |
+| `deleteGroup`              | `GROUP_DELETED`                   | ✓ 5.2       |
+| `createInvite`             | `GROUP_INVITE_CREATED`            | ✓ 5.4       |
+| `acceptInvite`             | `GROUP_MEMBER_JOINED`             | ✓ 5.5       |
+| `updateMemberRole`         | `group.member.role_changed`       | ✓ 5.7       |
+| `removeMember`             | `group.member.removed`            | ✓ 5.7       |
+| `leaveGroup`               | `group.member.left`               | ✓ 5.8 (new) |
+| `leaveGroup` (last member) | `group.deleted_on_leave`          | ✓ 5.8 (new) |
+
+Action-name style is historically mixed (`UPPER_SNAKE_CASE` in older iterations, `dot.notation` in newer ones); left as-is to preserve historical audit continuity. Noted for a possible future clean-up.
+
+**Permission hardening review** — Verified guard coverage across [`group.controller.ts`](../apps/api/src/group/group.controller.ts):
+
+- Admin-only: `PATCH /:id`, `DELETE /:id`, `POST /:id/invites`, `PATCH /:id/members/:userId`, `DELETE /:id/members/:userId` all use `JwtAuthGuard + GroupAdminGuard`.
+- Member-only: `GET /:id`, `POST /:id/leave` use `JwtAuthGuard + GroupMemberGuard`.
+- `GET /groups` uses only `JwtAuthGuard` (filters by `userId` server-side).
+- `GET /groups/invite/:token` and `POST /groups/invite/:token/accept` use only `JwtAuthGuard` (no membership yet).
+
+No permission gaps found; no code changes needed.
+
+**Frontend** — [`group-context.tsx`](../apps/web/src/lib/group/group-context.tsx):
+
+- New `leaveGroup(groupId)` method — `POST /groups/:id/leave`, uses the shared `throwApiError()` helper so the thrown `Error` carries an `.errorCode` (e.g. `GROUP_CANNOT_LEAVE_AS_LAST_ADMIN`). On success, removes the group from the local `groups[]` state.
+
+**Group dashboard page** — [`/groups/[groupId]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/page.tsx):
+
+- Added a "Leave Group" button in the header action area next to the (admin-only) Settings button. Visible to **all members** including admins.
+- Style: white background with a red border/text, deliberately less prominent than the full-red "Delete Group" button in Settings.
+- Click opens an inline confirmation dialog ("Leave {name}?" + Cancel/Leave) — no typed-name gate, since leaving is reversible (re-invite) whereas deleting is not.
+- On success: `addToast('success', "You've left {name}")` and `router.push('/groups')`.
+- On `GROUP_CANNOT_LEAVE_AS_LAST_ADMIN`: localised error toast. All other errors: generic fallback toast.
+
+**i18n** ([`en.json`](../apps/web/messages/en.json), [`he.json`](../apps/web/messages/he.json)): added `groups.dashboard.leaveButton`, `leaveConfirmTitle`, `leaveConfirmMessage`, `leaveConfirmButton`, `leaveCancelButton`, `leaveSuccess`, and `leaveErrors.lastAdmin` / `leaveErrors.generic`.
+
+**Tests** — [`dashboard.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/dashboard.spec.tsx): 6 new tests — button visible for admins and for non-admin members, dialog opens on click, Cancel closes without calling the API, success path calls `leaveGroup` + navigates + success toast, last-admin error toast, generic error toast.
+
+**Test totals**: 402 backend + 363 frontend tests pass (`pnpm run test`).
+
+**Files touched**:
+
+- [`apps/api/src/group/group.service.ts`](../apps/api/src/group/group.service.ts) — `leaveGroup()`.
+- [`apps/api/src/group/group.controller.ts`](../apps/api/src/group/group.controller.ts) — `POST :id/leave`.
+- [`apps/api/src/group/group.service.spec.ts`](../apps/api/src/group/group.service.spec.ts) + [`group.controller.spec.ts`](../apps/api/src/group/group.controller.spec.ts).
+- [`apps/web/src/lib/group/group-context.tsx`](../apps/web/src/lib/group/group-context.tsx) — `leaveGroup` method.
+- [`apps/web/src/app/[locale]/groups/[groupId]/page.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/page.tsx) + [`dashboard.spec.tsx`](../apps/web/src/app/%5Blocale%5D/groups/%5BgroupId%5D/dashboard.spec.tsx).
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json), [`he.json`](../apps/web/messages/he.json).
+
 ### Upcoming Phases
 
-- **Phase 5** — Family/Group management (remaining iterations)
 - **Phase 6** — Income management (10 iterations)
 - **Phase 7** — Expense management (13 iterations)
