@@ -2517,6 +2517,21 @@ No permission gaps found; no code changes needed.
 - [`apps/web/src/app/[locale]/settings/account/page.tsx`](../apps/web/src/app/%5Blocale%5D/settings/account/page.tsx) + [`account-settings.spec.tsx`](../apps/web/src/app/%5Blocale%5D/settings/account/account-settings.spec.tsx).
 - [`apps/web/messages/en.json`](../apps/web/messages/en.json), [`apps/web/messages/he.json`](../apps/web/messages/he.json).
 
+### Post-5.11 Polish: Dark-mode Contrast Fixes for Phase 5 Form Labels
+
+User reported that form labels in several Phase 5 screens (Group Information form on
+`/groups/[groupId]/settings`, Change Password form on `/settings/account`) were barely
+legible in dark mode. Root cause: the shared [`Input`](../apps/web/src/components/ui/Input.tsx:1)
+component's `<label>` used `text-gray-700` with no `dark:` variant, and the `<input>` itself
+had no dark styles, so all labels rendered by `<Input />` (Group Name, Current/New/Confirm
+Password, etc.) had insufficient contrast on a dark background.
+
+Fix: added `dark:text-gray-300` to the label, dark background/text/placeholder classes to the
+input, and `dark:text-red-400` to the error message inside [`Input`](../apps/web/src/components/ui/Input.tsx:1).
+All other Phase 5 `<label>` elements and muted helper texts already had matching
+`dark:text-gray-300` / `dark:text-gray-400` variants, so the one-file change propagates to
+every form using `<Input />`. Tests: 379/379 frontend tests still pass.
+
 ### Upcoming Phases
 
 - **Phase 6** — Income management (10 iterations)
