@@ -2693,3 +2693,38 @@ First implementation iteration of Phase 6. Intentionally scoped to types-only ch
 **No runtime impact** on `apps/api` or `apps/web` — types only.
 
 **Next step**: Iteration 6.2 — DB schema + migration (Prisma models for `Payment`, `PaymentPlan`, `PaymentAttribution`, `Category`, `PaymentNote`, `Document`, `PaymentStar`, `PaymentComment`).
+
+### Iteration 6.2 — DB schema + migration (2026-04-25)
+
+Second implementation iteration of Phase 6. Adds the 8 new Prisma models backing every Phase 6 feature and an expand-only migration that applies cleanly on a fresh staging database.
+
+**New Prisma models** added to [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma):
+
+- `Payment` — core entity (`direction`, `type`, `amountCents`, `currency`, `occurredAt`, `status`, `categoryId`, optional self-relation `parentPaymentId` for recurring/plan occurrences, `note`, `createdById`). Indexes on `(direction, occurredAt)`, `categoryId`, `(createdById, occurredAt)`, `parentPaymentId`, `(type, status)`.
+- `PaymentAttribution` — many-to-many attribution table with polymorphic scope (`scopeType: 'personal' | 'group'`, optional `userId` / `groupId`). Composite unique on `(paymentId, scopeType, userId, groupId)` to prevent duplicate attributions; cascade delete from payments / users / groups.
+- `Category` — system + user + group categories with polymorphic owner (`ownerType`, `ownerId`), direction-aware (`IN`/`OUT`/`BOTH`). Unique on `(ownerType, ownerId, slug, direction)`. Owner is resolved at the service layer — no FK.
+- `PaymentSchedule` — 1:1 with `Payment` via `@unique paymentId`. Fields for `frequency`, `interval`, `startsAt`, `nextOccurrenceAt`, `endsAt`, `maxOccurrences`, `generatedCount`, `isActive`. Index on `(isActive, nextOccurrenceAt)` for the recurring worker scan.
+- `PaymentPlan` — 1:1 with `Payment` for installments / loans / mortgages. Stores `principalCents`, `interestRate` (Decimal(8,6)), `paymentsCount`, `frequency`, `firstDueAt`, `amortizationMethod` (default `"french"`).
+- `PaymentDocument` — placeholder for Phase 9 uploads. Tracks `kind`, `fileRef`, `originalName`, `mimeType`, `sizeBytes`, `uploadedById`.
+- `PaymentComment` — per-payment comments with soft-delete (`deletedAt`). Indexed on `(paymentId, createdAt)` for threaded list render.
+- `PaymentStar` — per-user star/favourite. Composite unique on `(paymentId, userId)`.
+
+**Back-references** on existing models:
+
+- [`User`](../apps/api/prisma/schema.prisma) — `paymentsCreated`, `paymentAttributions` (named relation), `paymentComments`, `paymentStars`, `paymentDocuments`.
+- [`Group`](../apps/api/prisma/schema.prisma) — `paymentAttributions`.
+
+**Migration**: [`apps/api/prisma/migrations/20260425201935_phase6_payments/migration.sql`](../apps/api/prisma/migrations/20260425201935_phase6_payments/migration.sql) — **expand-only**, 182 lines, 8 `CREATE TABLE` blocks + 15 `ADD CONSTRAINT FOREIGN KEY` blocks. No `DROP`, no `ALTER COLUMN`, no re-ordering of existing columns. Cascade-on-delete where the Prisma relation specifies `onDelete: Cascade`; `ON DELETE RESTRICT` on `payments.categoryId` and `payments.createdById` (Prisma default for non-cascading FKs).
+
+**Test added**: [`apps/api/src/payment/__tests__/prisma-models.spec.ts`](../apps/api/src/payment/__tests__/prisma-models.spec.ts) — compile-time smoke test that imports all 8 new Prisma types from `@prisma/client`. Fails at typecheck if any model is renamed/removed.
+
+**Test counts**: 416 API unit tests (+1 new), 379 web, 73 shared — all green under `pnpm run test`. Note: the Testcontainers integration suite wasn't run locally (no testcontainers runner up), but CI runs it on every push and was green.
+
+**Staging migration notes** — first deploy attempt failed mid-way at the staging server due to **"No space left on device"** (unrelated infrastructure issue: 99 GB disk at 100% from stale Docker images). Cleanup freed 16 GB; the partial migration had left an entry for `20260425201935_phase6_payments` in `_prisma_migrations` with `finished_at = NULL`. Recovery: `npx prisma migrate resolve --rolled-back 20260425201935_phase6_payments` followed by `npx prisma migrate deploy` inside the API container — migration applied cleanly. No data loss (the 8 new tables had not yet been created when the first attempt failed). Verified on staging DB: all 8 new tables (`payments`, `payment_attributions`, `categories`, `payment_schedules`, `payment_plans`, `payment_documents`, `payment_comments`, `payment_stars`) present.
+
+**Commit**: `df9c6d1` (feat(phase-6.2): add Phase 6 Prisma models and expand-only migration).
+**CI run**: `24939872391` ✓
+**Deploy Staging run**: `24939872389` ✓ (after disk cleanup + manual migration recovery).
+**Staging verification**: user confirmed healthy.
+
+**Next step**: Iteration 6.3 — Seed default categories (system-owned, EN labels; i18n handled at UI layer).
