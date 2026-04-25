@@ -2666,3 +2666,30 @@ Additional requirements added during planning (per user direction):
 6. Append an iteration entry to [`docs/progress.md`](progress.md) (files changed, tests added, CI & Deploy Staging run IDs) and commit `docs(phase-6.X): update progress`.
 
 After 6.21 passes, merge `develop` → `main` (with `--no-ff` matching the Phase 5 merge style) and watch the production deploy.
+
+### Iteration 6.1 — Shared types & default-category slugs (2026-04-25)
+
+First implementation iteration of Phase 6. Intentionally scoped to types-only changes in `@myfinpro/shared` so every later iteration can import stable shapes and category slugs from day one.
+
+**Files created**:
+
+- [`packages/shared/src/types/payment.types.ts`](../packages/shared/src/types/payment.types.ts) — `PAYMENT_DIRECTIONS`, `PAYMENT_TYPES`, `PAYMENT_STATUSES`, `PAYMENT_FREQUENCIES`, `CATEGORY_OWNER_TYPES`, `CATEGORY_DIRECTIONS`, `ATTRIBUTION_SCOPE_TYPES`, `AttributionScope` discriminated union, `PAYMENT_SORTS`, `AMORTIZATION_METHODS`, `PAYMENT_PLAN_KINDS`.
+- [`packages/shared/src/constants/default-categories.ts`](../packages/shared/src/constants/default-categories.ts) — 15 OUT + 7 IN system-owned category defs (slug / name / direction / icon). Uses `other_out` / `other_in` / `gift_in` to keep slugs unique across directions (defensive against collisions under the `(owner_type, owner_id, slug, direction)` DB uniqueness).
+- [`packages/shared/src/__tests__/payment-types.test.ts`](../packages/shared/src/__tests__/payment-types.test.ts) — non-empty readonly-tuple checks, JSON roundtrip, `PAYMENT_PLAN_KINDS ⊂ PAYMENT_TYPES`, discriminated-union compile-check.
+- [`packages/shared/src/__tests__/default-categories.test.ts`](../packages/shared/src/__tests__/default-categories.test.ts) — OUT/IN = combined, direction assertions, `(slug, direction)` uniqueness, slug regex, minimum coverage.
+
+**Files modified** (barrel re-exports):
+
+- [`packages/shared/src/types/index.ts`](../packages/shared/src/types/index.ts)
+- [`packages/shared/src/constants/index.ts`](../packages/shared/src/constants/index.ts)
+
+**Tests**: +19 unit tests in `packages/shared` (13 payment-types + 6 default-categories). Full workspace test run green: shared 73 / api 415 / web 379.
+
+**Commit**: `5498494bc24e3d302e093b73cfc149061026d40c`
+**CI run**: `24937626180` ✓
+**Deploy Staging run**: `24937626185` ✓
+**Staging verification**: user confirmed healthy.
+
+**No runtime impact** on `apps/api` or `apps/web` — types only.
+
+**Next step**: Iteration 6.2 — DB schema + migration (Prisma models for `Payment`, `PaymentPlan`, `PaymentAttribution`, `Category`, `PaymentNote`, `Document`, `PaymentStar`, `PaymentComment`).
