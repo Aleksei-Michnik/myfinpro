@@ -11,6 +11,7 @@ import { AppThrottlerModule } from './common/throttler/throttler.module';
 import { GroupModule } from './group/group.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { PrismaModule } from './prisma/prisma.module';
     HealthModule,
     AuthModule,
     GroupModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
