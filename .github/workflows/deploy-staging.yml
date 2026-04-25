@@ -162,7 +162,7 @@ jobs:
           overwrite: true
 
       - name: Deploy with blue-green strategy
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         env:
           # ── Database secrets (mapped from STAGING_* GitHub secrets) ──
           MYSQL_ROOT_PASSWORD: ${{ secrets.STAGING_MYSQL_ROOT_PASSWORD }}
@@ -294,7 +294,7 @@ jobs:
 
       - name: Rollback on failure
         if: failure()
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         env:
           MYSQL_ROOT_PASSWORD: ${{ secrets.STAGING_MYSQL_ROOT_PASSWORD }}
           MYSQL_DATABASE: ${{ secrets.STAGING_MYSQL_DATABASE }}
