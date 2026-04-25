@@ -1,8 +1,12 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-11
-> **Current Phase:** Phase 5 — Family/Group Management (not started)
-> **Previous Phase:** Phase 4 — Auth Completion, Legal Pages & Email Infrastructure ✅ Complete
+> **Last updated:** 2026-04-25
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — planning complete, starting implementation
+> **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
+>
+> **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
+>
+> **Scope change (2026-04-25)**: Original Phase 6 (Income, 10 iterations) and Phase 7 (Expense, 13 iterations) are merged into a single **Phase 6: Payment Management** (21 iterations). Incomes and expenses now share a single `Payment` entity with a `direction` field (`IN` / `OUT`) — dramatically reducing duplication. Phase 6 also introduces payment notes, a documents placeholder for Phase 9 receipts, per-user stars, and comments. Phase 7 is now empty / subsumed.
 
 ---
 
@@ -36,26 +40,26 @@
 
 ## 2. Implementation Progress
 
-| Phase | Name                          | Iterations | Status         | Completion Date |
-| ----- | ----------------------------- | ---------- | -------------- | --------------- |
-| 0     | Foundation                    | 8/8        | ✅ Complete    | 2026-02-13      |
-| 1     | Basic Authentication          | 13/13      | ✅ Complete    | 2026-03-14      |
-| 2     | Google Authentication         | 4/4        | ✅ Complete    | 2026-03-25      |
-| 3     | Telegram Authentication       | 4/4        | ✅ Complete    | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages | 23/23      | ✅ Complete    | —               |
-| 5     | Family/Group Management       | 1/14       | 🔄 In Progress | —               |
-| 6     | Income Management             | 0/10       | ⬜ Not Started | —               |
-| 7     | Expense Management            | 0/13       | ⬜ Not Started | —               |
-| 8     | Budgets & Spending Targets    | 0/10       | ⬜ Not Started | —               |
-| 9     | Receipt Processing            | 0/8        | ⬜ Not Started | —               |
-| 10    | Purchase Analytics            | 0/8        | ⬜ Not Started | —               |
-| 11    | Telegram Bot                  | 0/16       | ⬜ Not Started | —               |
-| 12    | Telegram Mini App             | 0/10       | ⬜ Not Started | —               |
-| 13    | Bot Receipt Processing        | 0/8        | ⬜ Not Started | —               |
-| 14    | Bot Analytics                 | 0/4        | ⬜ Not Started | —               |
-| 15    | LLM Assistant                 | 0/8        | ⬜ Not Started | —               |
+| Phase | Name                                            | Iterations | Status                 | Completion Date |
+| ----- | ----------------------------------------------- | ---------- | ---------------------- | --------------- |
+| 0     | Foundation                                      | 8/8        | ✅ Complete            | 2026-02-13      |
+| 1     | Basic Authentication                            | 13/13      | ✅ Complete            | 2026-03-14      |
+| 2     | Google Authentication                           | 4/4        | ✅ Complete            | 2026-03-25      |
+| 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
+| 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
+| 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
+| 6     | Payment Management (unified incomes + expenses) | 0/21       | 🔄 Planned — starting  | —               |
+| 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
+| 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
+| 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
+| 10    | Purchase Analytics                              | 0/8        | ⬜ Not Started         | —               |
+| 11    | Telegram Bot                                    | 0/16       | ⬜ Not Started         | —               |
+| 12    | Telegram Mini App                               | 0/10       | ⬜ Not Started         | —               |
+| 13    | Bot Receipt Processing                          | 0/8        | ⬜ Not Started         | —               |
+| 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
+| 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 143 | **Completed:** 42 | **Remaining:** 101
+**Total iterations:** 140 | **Completed:** 51 | **Remaining:** 89
 
 ---
 
@@ -2553,5 +2557,112 @@ All iterations are now live in the production environment.
 
 ### Upcoming Phases
 
-- **Phase 6** — Income management (10 iterations)
-- **Phase 7** — Expense management (13 iterations)
+- **Phase 6** — Payment Management — _unified incomes + expenses_ (21 iterations, see below)
+- **Phase 7** — _subsumed by Phase 6 as of 2026-04-25_
+- **Phase 8** — Budgets & Spending Targets (10 iterations, unchanged)
+
+---
+
+## Phase 6: Payment Management — Planning (2026-04-25)
+
+### Scope Change — Combining Phases 6 + 7
+
+Original `IMPLEMENTATION-PLAN.md` split tracking into two phases: **Phase 6 — Income Management** (10 iterations) and **Phase 7 — Expense Management** (13 iterations). As part of planning, both phases have been merged into a single unified **Phase 6: Payment Management** (21 iterations).
+
+**Rationale**: income and expense are the same entity with opposite sign — merging them into one `Payment` model with a `direction` field (`IN` / `OUT`) aligns with the [`dna.md`](../.kilocode/rules/dna.md) DRY principle. Every CRUD path, UI component, category, schedule, plan, star, and comment is shared between the two directions — halving the implementation surface area and tests, and eliminating the "income table" vs "expense table" duplication that would otherwise bleed into every downstream phase (budgets, receipts, analytics, telegram bot, mini-app, LLM).
+
+Additional requirements added during planning (per user direction):
+
+- **Single aggregated dashboard** at `/dashboard` with totals + recent + starred + scope entry cards (one for personal, one per member group). The "expanded single view" per scope is reached from the dashboard.
+- **Note** field on every payment.
+- **Documents placeholder** — schema now (`payment_documents` table), upload UI in Phase 9.
+- **Comments** — any user with access to a payment can post comments; author can edit/delete their own.
+- **Star / favourite** — per-user, with a "Starred" filter/shortcut.
+
+### Design Decisions (see [`docs/phase-6-payments-design.md`](phase-6-payments-design.md))
+
+| Area               | Decision                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entity             | Single `Payment` with `direction: 'IN' \| 'OUT'`.                                                                                                                 |
+| Attribution        | Many-to-many via `PaymentAttribution` (scope = `personal:userId` or `group:groupId`). Defaults to personal initially; last-used set remembered in `localStorage`. |
+| Delete semantics   | Per-scope delete (default) or "delete from all accessible scopes" (opt-in). Scopes owned by other users or non-member groups are never touched.                   |
+| Categories         | System defaults (seeded) + user-scoped + group-scoped. Direction-aware.                                                                                           |
+| Edit permissions   | Creator only (via `PaymentOwnerGuard`).                                                                                                                           |
+| Payment types      | `ONE_TIME`, `RECURRING`, `LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`, `MORTGAGE`. Shared form; type-specific disclosures.                                             |
+| Recurring engine   | BullMQ queue `payment-recurring` + hourly cron via `@nestjs/schedule`; catch-up for missed runs; runs in-process inside the existing API container.               |
+| Amortisation       | Pure util supporting `equal` (0 % installments) and `french` (loans/mortgages). All N occurrences pre-generated at plan creation.                                 |
+| Migration strategy | Single expand-only migration `20260425_phase6_payments` — safe for blue-green deploy.                                                                             |
+
+### Iteration Plan (21 total)
+
+**Part A — Foundations (4)**
+
+| #   | Objective                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 6.1 | Shared types & DTOs in `@myfinpro/shared` (PaymentDirection, PaymentType, Frequency, AttributionScope, default category slugs).                                          |
+| 6.2 | DB schema: `payments`, `payment_attributions`, `categories`, `payment_schedules`, `payment_plans`, `payment_documents`, `payment_comments`, `payment_stars` + migration. |
+| 6.3 | Seed default categories (system-owned, EN labels; i18n at UI layer).                                                                                                     |
+| 6.4 | Categories API (`/categories` with owner scoping; personal + group CRUD).                                                                                                |
+
+**Part B — Payment core API (4)**
+
+| #   | Objective                                                                                                       |
+| --- | --------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------- |
+| 6.5 | `POST /payments` (ONE_TIME; attribution + category + currency validation).                                      |
+| 6.6 | `GET /payments` with cursor pagination + filters (scope, direction, category, date range, starred, type, sort). |
+| 6.7 | `GET /payments/:id` (access guard) + `PATCH /payments/:id` (creator only).                                      |
+| 6.8 | `DELETE /payments/:id?scope=personal                                                                            | group:<id> | all` with attribution-only delete + last-attribution hard delete. |
+
+**Part C — Social features API (2)**
+
+| #    | Objective                                                  |
+| ---- | ---------------------------------------------------------- |
+| 6.9  | Star toggle API (`POST /payments/:id/star`) per-user.      |
+| 6.10 | Comments API (list / create / edit-own / soft-delete-own). |
+
+**Part D — DRY frontend (5)**
+
+| #    | Objective                                                                                                                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 6.11 | `PaymentContext` + frontend types + money/date formatters + `remember.ts` (localStorage for last-used scopes/direction/type).          |
+| 6.12 | Reusable `<PaymentsList>` (filter/sort/controls/star) + `<PaymentRow>`.                                                                |
+| 6.13 | Reusable `<PaymentFormDialog>` (direction, amount+currency, note, scope multi-select with "remember", category picker, type selector). |
+| 6.14 | Single payment detail page `/payments/:id` (note, documents placeholder, comments thread, star, edit/delete).                          |
+| 6.15 | Aggregated dashboard `/dashboard` — totals, recent, starred, scope entry cards.                                                        |
+
+**Part E — Per-scope views & categories UI (1)**
+
+| #    | Objective                                                                                                                                       |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6.16 | `/payments?scope=...`, `/payments/starred`, Payments tab on `/groups/[groupId]`, CategoryManager embedded in account settings + group settings. |
+
+**Part F — Recurring & limited-period (2)**
+
+| #    | Objective                                                                         |
+| ---- | --------------------------------------------------------------------------------- |
+| 6.17 | Schedules API + BullMQ worker with catch-up for missed runs + notifications hook. |
+| 6.18 | Recurring UI (form disclosure + schedule summary + pause/cancel on detail page).  |
+
+**Part G — Installments & loans/mortgages (2)**
+
+| #    | Objective                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------- |
+| 6.19 | Plans API + amortisation service (equal + french); pre-generate all occurrences at creation. |
+| 6.20 | Plans UI (installment / loan / mortgage form + amortisation table on detail page).           |
+
+**Part H — Polish & production merge (1)**
+
+| #    | Objective                                                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6.21 | Audit-log coverage review, integration + E2E happy paths, i18n EN+HE sweep, dark-mode pass, merge `develop` → `main` and verify production. |
+
+### Iteration Loop (enforced per iteration)
+
+1. `pnpm run test` across all workspaces — all green.
+2. `npx prettier --write` on changed files with supported extensions.
+3. Commit with `feat(phase-6.X): ...` / `fix` / `docs` message.
+4. Push to `develop`; watch `gh run watch <ID> --exit-status` until exit success.
+5. Ask the user to verify the staging site is functional for what the iteration delivered.
+6. Append an iteration entry to [`docs/progress.md`](progress.md) (files changed, tests added, CI & Deploy Staging run IDs) and commit `docs(phase-6.X): update progress`.
+
+After 6.21 passes, merge `develop` → `main` (with `--no-ff` matching the Phase 5 merge style) and watch the production deploy.
