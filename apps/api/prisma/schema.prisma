@@ -25,26 +25,31 @@ model HealthCheck {
 // ── Phase 1: Authentication models ──
 
 model User {
-  id                    String    @id @default(uuid()) @db.VarChar(36)
-  email                 String    @unique @db.VarChar(255)
-  passwordHash          String?   @map("password_hash") @db.VarChar(255)
-  name                  String    @db.VarChar(100)
-  defaultCurrency       String    @default("USD") @map("default_currency") @db.VarChar(3)
-  locale                String    @default("en") @db.VarChar(5)
-  timezone              String    @default("UTC") @db.VarChar(50)
-  isActive              Boolean   @default(true) @map("is_active")
-  emailVerified         Boolean   @default(false) @map("email_verified")
-  lastLoginAt           DateTime? @map("last_login_at")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-  deletedAt             DateTime? @map("deleted_at")
-  scheduledDeletionAt   DateTime? @map("scheduled_deletion_at")
+  id                  String    @id @default(uuid()) @db.VarChar(36)
+  email               String    @unique @db.VarChar(255)
+  passwordHash        String?   @map("password_hash") @db.VarChar(255)
+  name                String    @db.VarChar(100)
+  defaultCurrency     String    @default("USD") @map("default_currency") @db.VarChar(3)
+  locale              String    @default("en") @db.VarChar(5)
+  timezone            String    @default("UTC") @db.VarChar(50)
+  isActive            Boolean   @default(true) @map("is_active")
+  emailVerified       Boolean   @default(false) @map("email_verified")
+  lastLoginAt         DateTime? @map("last_login_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+  scheduledDeletionAt DateTime? @map("scheduled_deletion_at")
 
-  refreshTokens            RefreshToken[]
-  oauthProviders           OAuthProvider[]
-  emailVerificationTokens  EmailVerificationToken[]
-  passwordResetTokens      PasswordResetToken[]
-  groupMemberships         GroupMembership[]
+  refreshTokens           RefreshToken[]
+  oauthProviders          OAuthProvider[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  groupMemberships        GroupMembership[]
+  paymentsCreated         Payment[]                @relation("PaymentCreator")
+  paymentAttributions     PaymentAttribution[]     @relation("PaymentAttributionUser")
+  paymentComments         PaymentComment[]
+  paymentStars            PaymentStar[]
+  paymentDocuments        PaymentDocument[]
 
   @@index([email])
   @@index([createdAt])
@@ -148,8 +153,9 @@ model Group {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  memberships  GroupMembership[]
-  inviteTokens GroupInviteToken[]
+  memberships         GroupMembership[]
+  inviteTokens        GroupInviteToken[]
+  paymentAttributions PaymentAttribution[]
 
   @@index([createdById])
   @@map("groups")
@@ -184,4 +190,161 @@ model GroupInviteToken {
   @@index([groupId])
   @@index([expiresAt])
   @@map("group_invite_tokens")
+}
+
+// ── Phase 6: Payment Management ──
+
+model Payment {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  direction       String    @db.VarChar(3)
+  type            String    @db.VarChar(20)
+  amountCents     Int       @map("amount_cents")
+  currency        String    @db.VarChar(3)
+  occurredAt      DateTime  @map("occurred_at")
+  status          String    @default("POSTED") @db.VarChar(20)
+  categoryId      String    @map("category_id") @db.VarChar(36)
+  category        Category  @relation(fields: [categoryId], references: [id])
+  parentPaymentId String?   @map("parent_payment_id") @db.VarChar(36)
+  parent          Payment?  @relation("PaymentOccurrences", fields: [parentPaymentId], references: [id], onDelete: Cascade)
+  occurrences     Payment[] @relation("PaymentOccurrences")
+  note            String?   @db.Text
+  createdById     String    @map("created_by_id") @db.VarChar(36)
+  createdBy       User      @relation("PaymentCreator", fields: [createdById], references: [id])
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  attributions PaymentAttribution[]
+  comments     PaymentComment[]
+  stars        PaymentStar[]
+  documents    PaymentDocument[]
+  schedule     PaymentSchedule?
+  plan         PaymentPlan?
+
+  @@index([direction, occurredAt])
+  @@index([categoryId])
+  @@index([createdById, occurredAt])
+  @@index([parentPaymentId])
+  @@index([type, status])
+  @@map("payments")
+}
+
+model PaymentAttribution {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  paymentId String   @map("payment_id") @db.VarChar(36)
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  scopeType String   @map("scope_type") @db.VarChar(10)
+  userId    String?  @map("user_id") @db.VarChar(36)
+  user      User?    @relation("PaymentAttributionUser", fields: [userId], references: [id], onDelete: Cascade)
+  groupId   String?  @map("group_id") @db.VarChar(36)
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([paymentId, scopeType, userId, groupId], name: "payment_scope_unique")
+  @@index([userId, scopeType])
+  @@index([groupId, scopeType])
+  @@index([paymentId])
+  @@map("payment_attributions")
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  slug      String   @db.VarChar(64)
+  name      String   @db.VarChar(100)
+  icon      String?  @db.VarChar(32)
+  color     String?  @db.VarChar(16)
+  direction String   @db.VarChar(3)
+  ownerType String   @map("owner_type") @db.VarChar(10)
+  ownerId   String?  @map("owner_id") @db.VarChar(36)
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payments Payment[]
+
+  @@unique([ownerType, ownerId, slug, direction], name: "category_owner_slug_unique")
+  @@index([ownerType, ownerId])
+  @@index([direction])
+  @@map("categories")
+}
+
+model PaymentSchedule {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  paymentId        String    @unique @map("payment_id") @db.VarChar(36)
+  payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  frequency        String    @db.VarChar(20)
+  interval         Int       @default(1)
+  startsAt         DateTime  @map("starts_at")
+  nextOccurrenceAt DateTime  @map("next_occurrence_at")
+  endsAt           DateTime? @map("ends_at")
+  maxOccurrences   Int?      @map("max_occurrences")
+  generatedCount   Int       @default(0) @map("generated_count")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive, nextOccurrenceAt])
+  @@map("payment_schedules")
+}
+
+model PaymentPlan {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  paymentId          String   @unique @map("payment_id") @db.VarChar(36)
+  payment            Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  kind               String   @db.VarChar(20)
+  principalCents     Int      @map("principal_cents")
+  interestRate       Decimal  @default(0) @map("interest_rate") @db.Decimal(8, 6)
+  paymentsCount      Int      @map("payments_count")
+  frequency          String   @db.VarChar(20)
+  firstDueAt         DateTime @map("first_due_at")
+  amortizationMethod String   @default("french") @map("amortization_method") @db.VarChar(16)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("payment_plans")
+}
+
+model PaymentDocument {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  paymentId    String   @map("payment_id") @db.VarChar(36)
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  kind         String   @db.VarChar(20)
+  fileRef      String   @map("file_ref") @db.VarChar(500)
+  originalName String?  @map("original_name") @db.VarChar(255)
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
+  sizeBytes    Int?     @map("size_bytes")
+  uploadedById String   @map("uploaded_by_id") @db.VarChar(36)
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([paymentId])
+  @@map("payment_documents")
+}
+
+model PaymentComment {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  paymentId String    @map("payment_id") @db.VarChar(36)
+  payment   Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  userId    String    @map("user_id") @db.VarChar(36)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String    @db.Text
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([paymentId, createdAt])
+  @@index([userId])
+  @@map("payment_comments")
+}
+
+model PaymentStar {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  paymentId String   @map("payment_id") @db.VarChar(36)
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id") @db.VarChar(36)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([paymentId, userId])
+  @@index([userId, createdAt])
+  @@map("payment_stars")
 }
