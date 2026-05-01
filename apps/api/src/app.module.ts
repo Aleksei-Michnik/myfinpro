@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CategoryModule } from './category/category.module';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
 import { LoggerModule } from './common/logger/logger.module';
 import { MetricsModule } from './common/metrics/metrics.module';
@@ -30,6 +31,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuthModule,
     GroupModule,
     PaymentModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
