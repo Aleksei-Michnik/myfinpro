@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 4/21       | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 5/21       | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -2855,83 +2855,94 @@ Swagger UI at `/api/docs#/Categories` shows all five endpoints with full schemas
 
 **Next step**: Iteration 6.5 — Create Payment API (POST `/api/v1/payments` with attribution, schedule, and plan support).
 
-### Iteration 6.4 — Categories API (2026-05-01)
+### Iteration 6.5 — Create Payment API (ONE_TIME only) (2026-05-01)
 
-**Scope delivered**: full CRUD for user- and group-owned categories, with system categories read-only for everyone. Ownership, direction filtering, in-use reassignment, and audit log.
+First iteration of the Payment domain itself. Ships the `POST /api/v1/payments` endpoint for `type=ONE_TIME` only; RECURRING / LIMITED_PERIOD / INSTALLMENT / LOAN / MORTGAGE are explicitly rejected with dedicated error codes and will be enabled in iterations 6.17 and 6.19. GET/PATCH/DELETE land in 6.6–6.8.
 
-**Endpoints** (all under `/api/v1/categories`, `JwtAuthGuard` on every route):
+**Endpoint**: `POST /api/v1/payments` — `JwtAuthGuard`, rate-limited **30/min** (design §5.8), returns `201` with a [`PaymentSummaryDto`](../apps/api/src/payment/dto/payment-summary.dto.ts:1).
 
-| Method | Path              | Rate limit | Purpose                                                                                          |
-| ------ | ----------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| GET    | `/categories`     | 120/min    | List visible categories (system + personal + member-groups), filterable by `direction` + `scope` |
-| GET    | `/categories/:id` | 120/min    | Fetch one — 404 if not visible                                                                   |
-| POST   | `/categories`     | 20/min     | Create personal (any user) or group (admin only); auto-generates slug                            |
-| PATCH  | `/categories/:id` | 20/min     | Edit name/icon/color/direction; direction change blocked when in use                             |
-| DELETE | `/categories/:id` | 20/min     | Delete, optionally reassigning payments via `?replaceWithCategoryId=<uuid>`                      |
+**Validation pipeline** (order matters — each check short-circuits):
 
-Rate limits match `docs/phase-6-payments-design.md` §5.8 exactly.
+1. `type === 'ONE_TIME'` — else `400 PAYMENT_TYPE_NOT_IMPLEMENTED`.
+2. No `schedule` / `plan` body — else `400 PAYMENT_SCHEDULE_NOT_SUPPORTED` / `PAYMENT_PLAN_NOT_SUPPORTED`.
+3. `amountCents` is a positive integer ≤ 1e11 — else `400 PAYMENT_INVALID_AMOUNT` (sanity cap protects the `Int` column from overflow).
+4. `currency` ∈ [`CURRENCY_CODES`](../packages/shared/src/types/currency.types.ts:1) — else `400 PAYMENT_INVALID_CURRENCY`.
+5. `occurredAt` ≤ now + 1 day (grace for timezone edges) — else `400 PAYMENT_INVALID_DATE`.
+6. Category visibility via [`CategoryService.findById`](../apps/api/src/category/category.service.ts:87) — failure collapses into `404 PAYMENT_INVALID_CATEGORY`; direction must match (or category is `BOTH`) — else `400 PAYMENT_CATEGORY_DIRECTION_MISMATCH`.
+7. Attributions: non-empty (`PAYMENT_NO_ATTRIBUTIONS`), each well-formed (`PAYMENT_INVALID_ATTRIBUTION` — `personal` must not carry `groupId`, `group` must), de-duplicated on `(scope, groupId)` (`PAYMENT_DUPLICATE_ATTRIBUTION`), caller must be a `GroupMembership` member of every referenced group (`403 PAYMENT_ATTRIBUTION_OUT_OF_SCOPE`). Admin role is not required — any member can attribute.
 
-**Error codes** — centralised in [`apps/api/src/category/constants/category-errors.ts`](../apps/api/src/category/constants/category-errors.ts:1):
+**Persistence**: single `prisma.$transaction` inserts the `Payment` row (`status='POSTED'`, `createdById=caller`, `parentPaymentId=null`) plus one `PaymentAttribution` per DTO entry (`scopeType`, `userId=caller` for personal, `groupId` for group). Best-effort `AuditLog` write with `action='PAYMENT_CREATED'` (failures logged but swallowed).
+
+**Response shape** — [`PaymentSummaryDto`](../apps/api/src/payment/dto/payment-summary.dto.ts:1): `{ id, direction, type, amountCents, currency, occurredAt, status, category, attributions, note, commentCount: 0, starredByMe: false, hasDocuments: false, parentPaymentId, createdById, createdAt, updatedAt }`. Compact fields that require later iterations default to `0` / `false`. A separate [`PaymentResponseDto`](../apps/api/src/payment/dto/payment-response.dto.ts:1) is declared now (extends `PaymentSummaryDto`) so iteration 6.7 can extend it with `schedule` / `plan` / `documents` sub-objects without a rename.
+
+**DRY hooks for 6.6 / 6.7**: [`mapPaymentToSummary()`](../apps/api/src/payment/payment.service.ts:60) is exported as a named function so the list and detail services can reuse the same serialiser; the `PaymentWithRelations` shape is also exported for type-safe reuse.
+
+**Error codes introduced** ([`apps/api/src/payment/constants/payment-errors.ts`](../apps/api/src/payment/constants/payment-errors.ts:1)):
 
 ```
-CATEGORY_NOT_FOUND, CATEGORY_NOT_OWNER, CATEGORY_IN_USE,
-CATEGORY_SYSTEM_IMMUTABLE, CATEGORY_INVALID_DIRECTION,
-CATEGORY_INVALID_SCOPE, CATEGORY_SLUG_CONFLICT,
-CATEGORY_GROUP_NOT_MEMBER, CATEGORY_GROUP_NOT_ADMIN,
-CATEGORY_REPLACEMENT_INVALID
+PAYMENT_INVALID_AMOUNT, PAYMENT_INVALID_DATE, PAYMENT_INVALID_CURRENCY,
+PAYMENT_INVALID_CATEGORY, PAYMENT_CATEGORY_DIRECTION_MISMATCH,
+PAYMENT_NO_ATTRIBUTIONS, PAYMENT_INVALID_ATTRIBUTION,
+PAYMENT_ATTRIBUTION_OUT_OF_SCOPE, PAYMENT_DUPLICATE_ATTRIBUTION,
+PAYMENT_SCHEDULE_NOT_SUPPORTED, PAYMENT_PLAN_NOT_SUPPORTED,
+PAYMENT_TYPE_NOT_IMPLEMENTED
 ```
 
-**Visibility rules**: a category is visible to the caller iff it is system-owned, owned by the caller (`ownerType='user'`), or owned by a group the caller is a member of. `scope=group:<id>` returns `403 CATEGORY_GROUP_NOT_MEMBER` when the caller is not a member; unknown scope strings → `400 CATEGORY_INVALID_SCOPE`.
+**DTOs introduced**:
 
-**Create rules**: `scope=personal` → `ownerType='user'`; `scope=group` requires `groupId` + admin role (`GroupMembership.role='admin'`). Slug auto-generated from name when omitted; `(owner_type, owner_id, slug, direction)` uniqueness enforced at the DB layer; Prisma `P2002` translates to `409 CATEGORY_SLUG_CONFLICT`.
-
-**Mutation rules**: `isSystem=true` rows always reject with `403 CATEGORY_SYSTEM_IMMUTABLE`. Direction change rejected with `409 CATEGORY_IN_USE` if any `Payment` still references the category.
-
-**Delete rules**: a category with attached payments cannot be removed without `replaceWithCategoryId`; the replacement must be visible to the caller and its direction must match (or be `BOTH`). Reassignment + deletion happen in a single Prisma transaction; `reassigned` count returned in the response.
-
-**Audit log**: best-effort `prisma.auditLog.create({ action: 'CATEGORY_CREATED' | 'CATEGORY_UPDATED' | 'CATEGORY_DELETED' | 'CATEGORY_REASSIGNED', entity: 'Category', ... })`; all writes wrapped in try/catch so audit failures never fail the operation.
-
-**Design decision — ownership check location**: kept entirely inside [`CategoryService`](../apps/api/src/category/category.service.ts:1) (`requireOwner()` / `requireGroupAdmin()`), not in a per-entity guard. Rationale: minimises wiring (no extra DI provider, no guard registration, no dual read of the row) and mirrors how [`GroupService`](../apps/api/src/group/group.service.ts:1) handles last-admin checks inline. The optional `CategoryOwnerGuard` was explicitly **not** created; ownership is enforced by the service methods themselves before any mutation.
+- [`AttributionDto`](../apps/api/src/payment/dto/attribution.dto.ts:1) — `{ scope, groupId? }` with nested `@ValidateNested()` validation.
+- [`CreatePaymentDto`](../apps/api/src/payment/dto/create-payment.dto.ts:1) — full request body incl. `@ArrayMinSize(1) @ArrayMaxSize(20)` on attributions; keeps `type` open to all `PAYMENT_TYPES` so 6.17 / 6.19 need no DTO changes.
+- [`PaymentSummaryDto`](../apps/api/src/payment/dto/payment-summary.dto.ts:1), [`PaymentCategorySummary`](../apps/api/src/payment/dto/payment-summary.dto.ts:4), [`PaymentAttributionSummary`](../apps/api/src/payment/dto/payment-summary.dto.ts:13).
+- [`PaymentResponseDto`](../apps/api/src/payment/dto/payment-response.dto.ts:1).
 
 **Files created**:
 
 ```
-apps/api/src/category/
-  category.module.ts
-  category.service.ts
-  category.service.spec.ts        (30 unit tests)
-  category.controller.ts
-  category.controller.spec.ts     (8 unit tests)
-  constants/category-errors.ts
+apps/api/src/payment/
+  payment.service.ts               (+mapPaymentToSummary export)
+  payment.service.spec.ts          (31 unit tests)
+  payment.controller.ts
+  payment.controller.spec.ts       (5 unit tests)
+  constants/payment-errors.ts
   dto/
-    category-response.dto.ts
-    create-category.dto.ts
-    delete-category-query.dto.ts
-    list-categories-query.dto.ts
-    update-category.dto.ts
+    attribution.dto.ts
+    create-payment.dto.ts
+    payment-summary.dto.ts
+    payment-response.dto.ts
 apps/api/test/integration/
-  categories.integration.spec.ts  (8 integration tests)
+  payments-create.integration.spec.ts  (12 integration tests)
 ```
 
-Updated [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts:1) to register `CategoryModule` alongside `PaymentModule`.
+[`apps/api/src/payment/payment.module.ts`](../apps/api/src/payment/payment.module.ts:1) updated to import `CategoryModule` (which already exported `CategoryService` from 6.4) and register the new controller + service.
 
-**Tests**: **38 unit tests** (30 service + 8 controller) + **8 integration tests** (HTTP supertest against the real NestJS app, covering visibility, ownership, group admin enforcement, scope filters, reassignment deletion, and immutability of system rows). Full workspace unit test run green: **api 463 unit tests** (up from 425 → +38). Typecheck + lint + prettier all clean.
+**Test counts**: **36 unit tests** (31 service + 5 controller) + **12 integration tests** (HTTP via supertest — personal, group-member, mixed, direction mismatch, non-member group 403, duplicates, future date, non-ONE_TIME rejection, schedule body rejection, audit log written, unauthenticated 401). Full workspace unit run green: **api 499 unit tests** (up from 463 → +36). Lint + prettier + typecheck all clean.
 
-**Commit**: `c57bc04` (feat(phase-6.4): Categories API (CRUD with ownership + reassignment)).
-**CI run**: [`25226186851`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186851) ✓ (~1m).
-**Deploy Staging run**: [`25226186845`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186845) ✓.
+**Commit**: `918cd54` (feat(phase-6.5): create payment API (ONE_TIME only)).
+**CI run**: [`25230923377`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25230923377) ✓ (1m39s).
+**Deploy Staging run**: [`25230923376`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25230923376) ✓ (5m39s, blue-green).
 
-**Staging verification** — `curl` smoke test via Swagger host:
+**Staging smoke test** (run via `docker exec myfinpro-staging-api-blue` against the internal API):
 
 ```
-POST /api/v1/auth/register → 201 (fresh test user)
-GET  /api/v1/categories?scope=system → 200, length 22, each row ownerType='system'
-POST /api/v1/categories {"name":"Coffee","direction":"OUT","scope":"personal"} → 201
-  { id, slug: "coffee", ownerType: "user", direction: "OUT", isSystem: false }
-GET  /api/v1/categories?scope=personal → 200, ["Coffee"]
-DELETE /api/v1/categories/<id> → 200, { deleted: true, reassigned: 0 }
+(a) POST /api/v1/payments — valid ONE_TIME OUT 1250 USD, personal → HTTP 201
+
+{"id":"175314aa-b4ae-4d5a-ba8a-e4d2d3cf7e43","direction":"OUT","type":"ONE_TIME",
+ "amountCents":1250,"currency":"USD","occurredAt":"2026-04-25T00:00:00.000Z",
+ "status":"POSTED","category":{"id":"12ca488e-...","slug":"groceries","name":"Groceries",
+ "icon":"shopping-cart","color":null},
+ "attributions":[{"scope":"personal","userId":"385db090-...","groupId":null,"groupName":null}],
+ "note":"staging smoke","commentCount":0,"starredByMe":false,"hasDocuments":false,
+ "parentPaymentId":null,"createdById":"385db090-...",
+ "createdAt":"2026-05-01T20:47:47.981Z","updatedAt":"2026-05-01T20:47:47.981Z"}
+
+(b) POST /api/v1/payments — type=RECURRING → HTTP 400
+
+{"statusCode":400,"message":"Payment type 'RECURRING' is not implemented yet",
+ "error":"BadRequestException","timestamp":"2026-05-01T20:47:48.009Z",
+ "path":"/api/v1/payments","requestId":"e499fb31-...",
+ "errorCode":"PAYMENT_TYPE_NOT_IMPLEMENTED"}
 ```
 
-Swagger UI at `/api/docs#/Categories` shows all five endpoints with full schemas. **User confirmation**: pending smoke-test sign-off.
+**User confirmation**: "Staging API correctly creates ONE_TIME payments — proceed to 6.6."
 
-**Next step**: Iteration 6.5 — Create Payment API (POST `/api/v1/payments` with attribution, schedule, and plan support).
+**Next step**: Iteration 6.6 — List Payments API (`GET /api/v1/payments` with cursor pagination + scope / direction / category / date-range / starred / type / sort filters). Will reuse [`mapPaymentToSummary()`](../apps/api/src/payment/payment.service.ts:60) from this iteration.
