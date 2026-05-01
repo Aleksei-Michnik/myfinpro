@@ -2728,3 +2728,48 @@ Second implementation iteration of Phase 6. Adds the 8 new Prisma models backing
 **Staging verification**: user confirmed healthy.
 
 **Next step**: Iteration 6.3 — Seed default categories (system-owned, EN labels; i18n handled at UI layer).
+
+### Iteration 6.3 — Seed default categories (2026-04-25)
+
+Third implementation iteration of Phase 6. Guarantees the 22 system-owned default categories (15 OUT + 7 IN, defined in [`packages/shared/src/constants/default-categories.ts`](../packages/shared/src/constants/default-categories.ts)) are always present in every environment — locally via `prisma db seed` and on staging / production via a Nest `OnModuleInit` hook that runs on every API boot.
+
+**Files added**:
+
+- [`apps/api/src/payment/seed-system-categories.ts`](../apps/api/src/payment/seed-system-categories.ts) — reusable idempotent seed. Uses `findFirst` + `create` / `update` (rather than Prisma `upsert`) because the composite unique key `(owner_type, owner_id, slug, direction)` includes the nullable `owner_id`, which Prisma `upsert` handles unreliably on MySQL. Returns a `Map<'direction:slug', id>` for later iterations that need FK references (e.g. seed Payments). Sets `ownerType='system'`, `ownerId=null`, `isSystem=true`. Refreshes `name` / `icon` / `color` on re-run so display fields stay current if defaults are refined between deploys.
+- [`apps/api/src/payment/system-categories.bootstrap.ts`](../apps/api/src/payment/system-categories.bootstrap.ts) — Nest `@Injectable()` provider implementing `OnModuleInit`. Skips when `NODE_ENV=test` so unit / integration tests own their fixtures. Swallows any seed error (logs via `Logger.error`) to keep boot failures from taking the API down.
+- [`apps/api/src/payment/payment.module.ts`](../apps/api/src/payment/payment.module.ts) — minimal `PaymentModule` registering only the bootstrap provider for now; controllers and services for payments / categories come in iteration 6.4+.
+- [`apps/api/src/payment/__tests__/seed-system-categories.spec.ts`](../apps/api/src/payment/__tests__/seed-system-categories.spec.ts) — 5 unit tests: create-all-on-empty-DB, idempotency-via-update, system-owner flags on every row, display-field refresh on update, 15 OUT + 7 IN = 22 shape assertion.
+- [`apps/api/src/payment/__tests__/system-categories.bootstrap.spec.ts`](../apps/api/src/payment/__tests__/system-categories.bootstrap.spec.ts) — 4 unit tests: skip-in-test, run-in-production, run-when-NODE_ENV-unset, error-swallowing.
+- [`apps/api/test/integration/system-categories.integration.spec.ts`](../apps/api/test/integration/system-categories.integration.spec.ts) — 5 integration tests against a Testcontainers MySQL: first run seeds 22 rows, second run does not duplicate, stale display fields are refreshed on re-run, direction counts are 15 OUT + 7 IN, every seeded row has `is_system=true`.
+
+**Files modified**:
+
+- [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts) — calls the new helper after the existing dev-user upsert. Imports from `../src/payment/seed-system-categories` (ts-node resolves it at dev time; `nest build` ships the compiled `dist/payment/...` so the runtime bootstrap works too).
+- [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts) — register `PaymentModule`.
+
+**Build-path rationale**: `tsconfig.build.json` sets `"rootDir": "./src"`, so the seed helper must live under `src/` to compile into `dist/`. `prisma/seed.ts` runs under `ts-node` (see the `"prisma": { "seed": "ts-node prisma/seed.ts" }` entry in [`apps/api/package.json`](../apps/api/package.json)), so its relative import crossing into `../src/...` works fine without a separate build step.
+
+**DRY**: [`DEFAULT_CATEGORIES`](../packages/shared/src/constants/default-categories.ts) from `@myfinpro/shared` is the single source of truth — both the local seed and the runtime bootstrap iterate over the same readonly tuple. Per [`.kilocode/rules/dna.md`](../.kilocode/rules/dna.md).
+
+**Tests**: +14 tests (9 unit + 5 integration). Full workspace test run green: **api 425 unit** (from 415 → +9 new unit + adjustments), shared 73, web 379, bot/eslint-config cached. Typecheck + `nest build` both pass.
+
+**Bootstrap strategy**: deploy script ([`deploy.sh`](../scripts/deploy.sh)) is **intentionally unchanged** — it continues to run only `prisma migrate deploy`. The `SystemCategoriesBootstrap` `OnModuleInit` hook is the sole guarantee that defaults exist post-deploy; it runs on every API boot (including blue-green cutovers) and is fully idempotent. `NODE_ENV=test` explicitly disables it so tests can control their own fixtures.
+
+**Commit**: `482dec4` (feat(phase-6.3): seed system default categories idempotently).
+**CI run**: [`24941541701`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/24941541701) ✓ (1m35s).
+**Deploy Staging run**: [`24941541702`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/24941541702) ✓ (4m58s).
+
+**Staging verification** — queried `myfinpro-staging-mysql` via SSH + `docker exec`:
+
+```
+direction	cnt
+OUT	15
+IN	7
+
+total
+22
+```
+
+All 22 rows present with `is_system=1`: `bonus`, `clothing`, `education`, `entertainment`, `fees`, `freelance`, `gift_in`, `gifts`, `groceries`, `health`, `home`, `insurance`, `investment`, `other_in`, `other_out`, `refund`, `restaurants`, `salary`, `taxes`, `transport`, `travel`, `utilities`. **User confirmed staging healthy**.
+
+**Next step**: Iteration 6.4 — Categories API (list/create/update/delete endpoints with user / group / system ownership and permission checks).
