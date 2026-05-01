@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { DEFAULT_CATEGORIES } from '@myfinpro/shared';
+import { PrismaClient } from '@prisma/client';
 
 /**
  * Idempotently upsert all system-owned default categories.
