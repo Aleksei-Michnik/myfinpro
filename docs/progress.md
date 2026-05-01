@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-04-25
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — planning complete, starting implementation
+> **Last updated:** 2026-05-01
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 4/21 iterations complete
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 0/21       | 🔄 Planned — starting  | —               |
+| 6     | Payment Management (unified incomes + expenses) | 4/21       | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 51 | **Remaining:** 89
+**Total iterations:** 140 | **Completed:** 55 | **Remaining:** 85
 
 ---
 
@@ -2773,3 +2773,165 @@ total
 All 22 rows present with `is_system=1`: `bonus`, `clothing`, `education`, `entertainment`, `fees`, `freelance`, `gift_in`, `gifts`, `groceries`, `health`, `home`, `insurance`, `investment`, `other_in`, `other_out`, `refund`, `restaurants`, `salary`, `taxes`, `transport`, `travel`, `utilities`. **User confirmed staging healthy**.
 
 **Next step**: Iteration 6.4 — Categories API (list/create/update/delete endpoints with user / group / system ownership and permission checks).
+
+### Iteration 6.4 — Categories API (2026-05-01)
+
+**Scope delivered**: full CRUD for user- and group-owned categories, with system categories read-only for everyone. Ownership, direction filtering, in-use reassignment, and audit log.
+
+**Endpoints** (all under `/api/v1/categories`, `JwtAuthGuard` on every route):
+
+| Method | Path              | Rate limit | Purpose                                                                                          |
+| ------ | ----------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| GET    | `/categories`     | 120/min    | List visible categories (system + personal + member-groups), filterable by `direction` + `scope` |
+| GET    | `/categories/:id` | 120/min    | Fetch one — 404 if not visible                                                                   |
+| POST   | `/categories`     | 20/min     | Create personal (any user) or group (admin only); auto-generates slug                            |
+| PATCH  | `/categories/:id` | 20/min     | Edit name/icon/color/direction; direction change blocked when in use                             |
+| DELETE | `/categories/:id` | 20/min     | Delete, optionally reassigning payments via `?replaceWithCategoryId=<uuid>`                      |
+
+Rate limits match `docs/phase-6-payments-design.md` §5.8 exactly.
+
+**Error codes** — centralised in [`apps/api/src/category/constants/category-errors.ts`](../apps/api/src/category/constants/category-errors.ts:1):
+
+```
+CATEGORY_NOT_FOUND, CATEGORY_NOT_OWNER, CATEGORY_IN_USE,
+CATEGORY_SYSTEM_IMMUTABLE, CATEGORY_INVALID_DIRECTION,
+CATEGORY_INVALID_SCOPE, CATEGORY_SLUG_CONFLICT,
+CATEGORY_GROUP_NOT_MEMBER, CATEGORY_GROUP_NOT_ADMIN,
+CATEGORY_REPLACEMENT_INVALID
+```
+
+**Visibility rules**: a category is visible to the caller iff it is system-owned, owned by the caller (`ownerType='user'`), or owned by a group the caller is a member of. `scope=group:<id>` returns `403 CATEGORY_GROUP_NOT_MEMBER` when the caller is not a member; unknown scope strings → `400 CATEGORY_INVALID_SCOPE`.
+
+**Create rules**: `scope=personal` → `ownerType='user'`; `scope=group` requires `groupId` + admin role (`GroupMembership.role='admin'`). Slug auto-generated from name when omitted; `(owner_type, owner_id, slug, direction)` uniqueness enforced at the DB layer; Prisma `P2002` translates to `409 CATEGORY_SLUG_CONFLICT`.
+
+**Mutation rules**: `isSystem=true` rows always reject with `403 CATEGORY_SYSTEM_IMMUTABLE`. Direction change rejected with `409 CATEGORY_IN_USE` if any `Payment` still references the category.
+
+**Delete rules**: a category with attached payments cannot be removed without `replaceWithCategoryId`; the replacement must be visible to the caller and its direction must match (or be `BOTH`). Reassignment + deletion happen in a single Prisma transaction; `reassigned` count returned in the response.
+
+**Audit log**: best-effort `prisma.auditLog.create({ action: 'CATEGORY_CREATED' | 'CATEGORY_UPDATED' | 'CATEGORY_DELETED' | 'CATEGORY_REASSIGNED', entity: 'Category', ... })`; all writes wrapped in try/catch so audit failures never fail the operation.
+
+**Design decision — ownership check location**: kept entirely inside [`CategoryService`](../apps/api/src/category/category.service.ts:1) (`requireOwner()` / `requireGroupAdmin()`), not in a per-entity guard. Rationale: minimises wiring (no extra DI provider, no guard registration, no dual read of the row) and mirrors how [`GroupService`](../apps/api/src/group/group.service.ts:1) handles last-admin checks inline. The optional `CategoryOwnerGuard` was explicitly **not** created; ownership is enforced by the service methods themselves before any mutation.
+
+**Files created**:
+
+```
+apps/api/src/category/
+  category.module.ts
+  category.service.ts
+  category.service.spec.ts        (30 unit tests)
+  category.controller.ts
+  category.controller.spec.ts     (8 unit tests)
+  constants/category-errors.ts
+  dto/
+    category-response.dto.ts
+    create-category.dto.ts
+    delete-category-query.dto.ts
+    list-categories-query.dto.ts
+    update-category.dto.ts
+apps/api/test/integration/
+  categories.integration.spec.ts  (8 integration tests)
+```
+
+Updated [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts:1) to register `CategoryModule` alongside `PaymentModule`.
+
+**Tests**: **38 unit tests** (30 service + 8 controller) + **8 integration tests** (HTTP supertest against the real NestJS app, covering visibility, ownership, group admin enforcement, scope filters, reassignment deletion, and immutability of system rows). Full workspace unit test run green: **api 463 unit tests** (up from 425 → +38). Typecheck + lint + prettier all clean.
+
+**Commit**: `c57bc04` (feat(phase-6.4): Categories API (CRUD with ownership + reassignment)).
+**CI run**: [`25226186851`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186851) ✓ (~1m).
+**Deploy Staging run**: [`25226186845`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186845) ✓.
+
+**Staging verification** — `curl` smoke test via Swagger host:
+
+```
+POST /api/v1/auth/register → 201 (fresh test user)
+GET  /api/v1/categories?scope=system → 200, length 22, each row ownerType='system'
+POST /api/v1/categories {"name":"Coffee","direction":"OUT","scope":"personal"} → 201
+  { id, slug: "coffee", ownerType: "user", direction: "OUT", isSystem: false }
+GET  /api/v1/categories?scope=personal → 200, ["Coffee"]
+DELETE /api/v1/categories/<id> → 200, { deleted: true, reassigned: 0 }
+```
+
+Swagger UI at `/api/docs#/Categories` shows all five endpoints with full schemas. **User confirmation**: pending smoke-test sign-off.
+
+**Next step**: Iteration 6.5 — Create Payment API (POST `/api/v1/payments` with attribution, schedule, and plan support).
+
+### Iteration 6.4 — Categories API (2026-05-01)
+
+**Scope delivered**: full CRUD for user- and group-owned categories, with system categories read-only for everyone. Ownership, direction filtering, in-use reassignment, and audit log.
+
+**Endpoints** (all under `/api/v1/categories`, `JwtAuthGuard` on every route):
+
+| Method | Path              | Rate limit | Purpose                                                                                          |
+| ------ | ----------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| GET    | `/categories`     | 120/min    | List visible categories (system + personal + member-groups), filterable by `direction` + `scope` |
+| GET    | `/categories/:id` | 120/min    | Fetch one — 404 if not visible                                                                   |
+| POST   | `/categories`     | 20/min     | Create personal (any user) or group (admin only); auto-generates slug                            |
+| PATCH  | `/categories/:id` | 20/min     | Edit name/icon/color/direction; direction change blocked when in use                             |
+| DELETE | `/categories/:id` | 20/min     | Delete, optionally reassigning payments via `?replaceWithCategoryId=<uuid>`                      |
+
+Rate limits match `docs/phase-6-payments-design.md` §5.8 exactly.
+
+**Error codes** — centralised in [`apps/api/src/category/constants/category-errors.ts`](../apps/api/src/category/constants/category-errors.ts:1):
+
+```
+CATEGORY_NOT_FOUND, CATEGORY_NOT_OWNER, CATEGORY_IN_USE,
+CATEGORY_SYSTEM_IMMUTABLE, CATEGORY_INVALID_DIRECTION,
+CATEGORY_INVALID_SCOPE, CATEGORY_SLUG_CONFLICT,
+CATEGORY_GROUP_NOT_MEMBER, CATEGORY_GROUP_NOT_ADMIN,
+CATEGORY_REPLACEMENT_INVALID
+```
+
+**Visibility rules**: a category is visible to the caller iff it is system-owned, owned by the caller (`ownerType='user'`), or owned by a group the caller is a member of. `scope=group:<id>` returns `403 CATEGORY_GROUP_NOT_MEMBER` when the caller is not a member; unknown scope strings → `400 CATEGORY_INVALID_SCOPE`.
+
+**Create rules**: `scope=personal` → `ownerType='user'`; `scope=group` requires `groupId` + admin role (`GroupMembership.role='admin'`). Slug auto-generated from name when omitted; `(owner_type, owner_id, slug, direction)` uniqueness enforced at the DB layer; Prisma `P2002` translates to `409 CATEGORY_SLUG_CONFLICT`.
+
+**Mutation rules**: `isSystem=true` rows always reject with `403 CATEGORY_SYSTEM_IMMUTABLE`. Direction change rejected with `409 CATEGORY_IN_USE` if any `Payment` still references the category.
+
+**Delete rules**: a category with attached payments cannot be removed without `replaceWithCategoryId`; the replacement must be visible to the caller and its direction must match (or be `BOTH`). Reassignment + deletion happen in a single Prisma transaction; `reassigned` count returned in the response.
+
+**Audit log**: best-effort `prisma.auditLog.create({ action: 'CATEGORY_CREATED' | 'CATEGORY_UPDATED' | 'CATEGORY_DELETED' | 'CATEGORY_REASSIGNED', entity: 'Category', ... })`; all writes wrapped in try/catch so audit failures never fail the operation.
+
+**Design decision — ownership check location**: kept entirely inside [`CategoryService`](../apps/api/src/category/category.service.ts:1) (`requireOwner()` / `requireGroupAdmin()`), not in a per-entity guard. Rationale: minimises wiring (no extra DI provider, no guard registration, no dual read of the row) and mirrors how [`GroupService`](../apps/api/src/group/group.service.ts:1) handles last-admin checks inline. The optional `CategoryOwnerGuard` was explicitly **not** created; ownership is enforced by the service methods themselves before any mutation.
+
+**Files created**:
+
+```
+apps/api/src/category/
+  category.module.ts
+  category.service.ts
+  category.service.spec.ts        (30 unit tests)
+  category.controller.ts
+  category.controller.spec.ts     (8 unit tests)
+  constants/category-errors.ts
+  dto/
+    category-response.dto.ts
+    create-category.dto.ts
+    delete-category-query.dto.ts
+    list-categories-query.dto.ts
+    update-category.dto.ts
+apps/api/test/integration/
+  categories.integration.spec.ts  (8 integration tests)
+```
+
+Updated [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts:1) to register `CategoryModule` alongside `PaymentModule`.
+
+**Tests**: **38 unit tests** (30 service + 8 controller) + **8 integration tests** (HTTP supertest against the real NestJS app, covering visibility, ownership, group admin enforcement, scope filters, reassignment deletion, and immutability of system rows). Full workspace unit test run green: **api 463 unit tests** (up from 425 → +38). Typecheck + lint + prettier all clean.
+
+**Commit**: `c57bc04` (feat(phase-6.4): Categories API (CRUD with ownership + reassignment)).
+**CI run**: [`25226186851`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186851) ✓ (~1m).
+**Deploy Staging run**: [`25226186845`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25226186845) ✓.
+
+**Staging verification** — `curl` smoke test via Swagger host:
+
+```
+POST /api/v1/auth/register → 201 (fresh test user)
+GET  /api/v1/categories?scope=system → 200, length 22, each row ownerType='system'
+POST /api/v1/categories {"name":"Coffee","direction":"OUT","scope":"personal"} → 201
+  { id, slug: "coffee", ownerType: "user", direction: "OUT", isSystem: false }
+GET  /api/v1/categories?scope=personal → 200, ["Coffee"]
+DELETE /api/v1/categories/<id> → 200, { deleted: true, reassigned: 0 }
+```
+
+Swagger UI at `/api/docs#/Categories` shows all five endpoints with full schemas. **User confirmation**: pending smoke-test sign-off.
+
+**Next step**: Iteration 6.5 — Create Payment API (POST `/api/v1/payments` with attribution, schedule, and plan support).
