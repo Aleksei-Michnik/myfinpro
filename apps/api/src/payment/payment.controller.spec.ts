@@ -1,8 +1,10 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 
@@ -12,6 +14,8 @@ describe('PaymentController', () => {
   const serviceMock = {
     create: jest.fn(),
     list: jest.fn(),
+    findByIdForUser: jest.fn(),
+    update: jest.fn(),
   };
 
   const user: JwtPayload = { sub: 'user-1', email: 'a@b', name: 'A' };
@@ -112,6 +116,58 @@ describe('PaymentController', () => {
       const ttl = reflector.get<number>('THROTTLER:TTLdefault', listHandler);
       expect(limit).toBe(120);
       expect(ttl).toBe(60000);
+    });
+  });
+
+  // ── iteration 6.7: GET/:id + PATCH/:id ──
+
+  describe('findOne()', () => {
+    it('delegates to service.findByIdForUser with user.sub + id', async () => {
+      const payload = { id: 'pay-1' };
+      serviceMock.findByIdForUser.mockResolvedValue(payload);
+
+      const r = await controller.findOne(user, 'pay-1');
+
+      expect(serviceMock.findByIdForUser).toHaveBeenCalledWith('user-1', 'pay-1');
+      expect(r).toBe(payload);
+    });
+
+    it('propagates NotFoundException from the service', async () => {
+      serviceMock.findByIdForUser.mockRejectedValue(new NotFoundException('not found'));
+      await expect(controller.findOne(user, 'pay-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('applies 120/min rate limit metadata', () => {
+      const reflector = new Reflector();
+      const handler = Object.getPrototypeOf(controller).findOne as () => unknown;
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(120);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
+    });
+  });
+
+  describe('update()', () => {
+    const updateDto: UpdatePaymentDto = { note: 'updated' };
+
+    it('delegates to service.update with user.sub + id + dto', async () => {
+      const payload = { id: 'pay-1', note: 'updated' };
+      serviceMock.update.mockResolvedValue(payload);
+
+      const r = await controller.update(user, 'pay-1', updateDto);
+
+      expect(serviceMock.update).toHaveBeenCalledWith('user-1', 'pay-1', updateDto);
+      expect(r).toBe(payload);
+    });
+
+    it('propagates ForbiddenException from the service', async () => {
+      serviceMock.update.mockRejectedValue(new ForbiddenException('not owner'));
+      await expect(controller.update(user, 'pay-1', updateDto)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('applies 30/min rate limit metadata', () => {
+      const reflector = new Reflector();
+      const handler = Object.getPrototypeOf(controller).update as () => unknown;
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(30);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
     });
   });
 });

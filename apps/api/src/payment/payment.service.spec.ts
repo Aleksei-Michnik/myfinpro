@@ -31,6 +31,8 @@ describe('PaymentService', () => {
     payment: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
     },
     groupMembership: {
       findMany: jest.fn(),
@@ -904,6 +906,315 @@ describe('PaymentService', () => {
       expect(dto.starredByMe).toBe(true);
       expect(dto.commentCount).toBe(3);
       expect(dto.hasDocuments).toBe(true);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.7 — findByIdForUser() + update()
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Full-include shape returned by prisma for get/update paths. */
+  const makeFullRow = (over: Record<string, unknown> = {}) => ({
+    ...makePersistedPayment(),
+    categoryId: 'cat-1',
+    stars: [] as Array<{ id: string }>,
+    _count: { comments: 0, documents: 0 },
+    ...over,
+  });
+
+  describe('findByIdForUser()', () => {
+    it("returns summary for the creator's own personal payment", async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      const r = await service.findByIdForUser('user-1', 'pay-1');
+      expect(r.id).toBe('pay-1');
+      expect(r.starredByMe).toBe(false);
+      expect(r.commentCount).toBe(0);
+      expect(r.hasDocuments).toBe(false);
+      // Visibility predicate shape must be present on the where clause.
+      const arg = prismaMock.payment.findFirst.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND[0]).toEqual({ id: 'pay-1' });
+      expect(arg.where.AND[1]).toEqual({
+        attributions: {
+          some: {
+            OR: [
+              { scopeType: 'personal', userId: 'user-1' },
+              { scopeType: 'group', group: { memberships: { some: { userId: 'user-1' } } } },
+            ],
+          },
+        },
+      });
+    });
+
+    it('returns summary for a group member viewing a group payment', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(
+        makeFullRow({
+          createdById: 'user-other',
+          attributions: [
+            { scopeType: 'group', userId: null, groupId: 'g1', group: { name: 'Fam' } },
+          ],
+        }),
+      );
+      const r = await service.findByIdForUser('user-1', 'pay-1');
+      expect(r.attributions[0].groupId).toBe('g1');
+    });
+
+    it('throws PAYMENT_NOT_FOUND when prisma returns null (non-member on group payment)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      await expect(service.findByIdForUser('user-1', 'pay-1')).rejects.toThrow(NotFoundException);
+      try {
+        await service.findByIdForUser('user-1', 'pay-1');
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+    });
+
+    it('throws PAYMENT_NOT_FOUND for a completely unknown id', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      try {
+        await service.findByIdForUser('user-1', 'unknown-id');
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+    });
+
+    it('does not leak existence — 404 (not 403) when visibility fails', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      await expect(service.findByIdForUser('user-1', 'pay-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('maps stars.length/starredByMe and _count fields', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(
+        makeFullRow({ stars: [{ id: 's1' }], _count: { comments: 4, documents: 2 } }),
+      );
+      const r = await service.findByIdForUser('user-1', 'pay-1');
+      expect(r.starredByMe).toBe(true);
+      expect(r.commentCount).toBe(4);
+      expect(r.hasDocuments).toBe(true);
+    });
+  });
+
+  describe('update()', () => {
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => ({
+        ...makeFullRow(),
+        ...(data as Record<string, unknown>),
+      }));
+    });
+
+    it('edits note only → single-field prisma update + audit with changed=["note"]', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+
+      await service.update('user-1', 'pay-1', { note: 'updated' });
+
+      const updateArg = prismaMock.payment.update.mock.calls[0][0] as {
+        where: { id: string };
+        data: Record<string, unknown>;
+      };
+      expect(updateArg.where).toEqual({ id: 'pay-1' });
+      expect(Object.keys(updateArg.data)).toEqual(['note']);
+      expect(updateArg.data.note).toBe('updated');
+
+      await new Promise((res) => setImmediate(res));
+      const auditArg = prismaMock.auditLog.create.mock.calls.find(
+        (c) => (c[0] as { data: { action: string } }).data.action === 'PAYMENT_UPDATED',
+      )?.[0] as { data: { details: { changed: string[] } } };
+      expect(auditArg.data.details.changed).toEqual(['note']);
+    });
+
+    it('edits multiple scalars at once (amount, currency, occurredAt, categoryId)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      categoryServiceMock.findById.mockResolvedValue(okCategory({ id: 'cat-2', direction: 'OUT' }));
+
+      await service.update('user-1', 'pay-1', {
+        amountCents: 9999,
+        currency: 'EUR',
+        occurredAt: '2026-04-30',
+        categoryId: 'cat-2',
+      });
+
+      const updateArg = prismaMock.payment.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(updateArg.data.amountCents).toBe(9999);
+      expect(updateArg.data.currency).toBe('EUR');
+      expect(updateArg.data.occurredAt).toBeInstanceOf(Date);
+      expect(updateArg.data.category).toEqual({ connect: { id: 'cat-2' } });
+    });
+
+    it('empty body → no prisma.update, returns existing row', async () => {
+      const row = makeFullRow();
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+
+      const r = await service.update('user-1', 'pay-1', {});
+
+      expect(prismaMock.payment.update).not.toHaveBeenCalled();
+      expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+      expect(r.id).toBe('pay-1');
+    });
+
+    it('403 PAYMENT_NOT_OWNER when caller is not the creator', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ createdById: 'user-other' }));
+      await expect(service.update('user-1', 'pay-1', { note: 'x' })).rejects.toThrow(
+        ForbiddenException,
+      );
+      try {
+        await service.update('user-1', 'pay-1', { note: 'x' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_OWNER);
+      }
+    });
+
+    it('404 PAYMENT_NOT_FOUND when the row is not visible', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      await expect(service.update('user-1', 'pay-1', { note: 'x' })).rejects.toThrow(
+        NotFoundException,
+      );
+      try {
+        await service.update('user-1', 'pay-1', { note: 'x' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+    });
+
+    it('400 PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE when parentPaymentId is set', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ parentPaymentId: 'parent-1' }));
+      try {
+        await service.update('user-1', 'pay-1', { note: 'x' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE);
+      }
+    });
+
+    it('400 PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE for type=RECURRING', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ type: 'RECURRING' }));
+      try {
+        await service.update('user-1', 'pay-1', { note: 'x' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE);
+      }
+    });
+
+    it('direction change to IN with current OUT category → 400 PAYMENT_CATEGORY_DIRECTION_MISMATCH', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow()); // OUT category
+      categoryServiceMock.findById.mockResolvedValue(okCategory({ direction: 'OUT' }));
+
+      try {
+        await service.update('user-1', 'pay-1', { direction: 'IN' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_CATEGORY_DIRECTION_MISMATCH);
+      }
+    });
+
+    it('direction IN + categoryId switch to an IN category succeeds', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      categoryServiceMock.findById.mockResolvedValue(okCategory({ id: 'cat-in', direction: 'IN' }));
+
+      await expect(
+        service.update('user-1', 'pay-1', { direction: 'IN', categoryId: 'cat-in' }),
+      ).resolves.toBeDefined();
+
+      const updateArg = prismaMock.payment.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(updateArg.data.direction).toBe('IN');
+      expect(updateArg.data.category).toEqual({ connect: { id: 'cat-in' } });
+    });
+
+    it('category change to one not visible to user → 404 PAYMENT_INVALID_CATEGORY', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      categoryServiceMock.findById.mockRejectedValue(new NotFoundException('gone'));
+      try {
+        await service.update('user-1', 'pay-1', { categoryId: 'unknown-cat' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_CATEGORY);
+      }
+    });
+
+    it('category change to a BOTH-direction category succeeds regardless of direction', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ direction: 'IN' }));
+      categoryServiceMock.findById.mockResolvedValue(
+        okCategory({ id: 'cat-both', direction: 'BOTH' }),
+      );
+      await expect(
+        service.update('user-1', 'pay-1', { categoryId: 'cat-both' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('future occurredAt (>1 day) → 400 PAYMENT_INVALID_DATE', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      const far = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+      try {
+        await service.update('user-1', 'pay-1', { occurredAt: far });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_DATE);
+      }
+    });
+
+    it('amount > 1e11 cents → 400 PAYMENT_INVALID_AMOUNT', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      try {
+        await service.update('user-1', 'pay-1', { amountCents: 1e11 + 1 });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_AMOUNT);
+      }
+    });
+
+    it('note="" is coerced to null in the prisma data payload', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ note: 'before' }));
+      await service.update('user-1', 'pay-1', { note: '' });
+      const updateArg = prismaMock.payment.update.mock.calls[0][0] as {
+        data: { note: unknown };
+      };
+      expect(updateArg.data.note).toBeNull();
+    });
+
+    it('audit "changed" array is sorted alphabetically', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      await service.update('user-1', 'pay-1', {
+        note: 'n',
+        amountCents: 50,
+        currency: 'EUR',
+      });
+      await new Promise((res) => setImmediate(res));
+      const auditArg = prismaMock.auditLog.create.mock.calls.find(
+        (c) => (c[0] as { data: { action: string } }).data.action === 'PAYMENT_UPDATED',
+      )?.[0] as { data: { details: { changed: string[] } } };
+      expect(auditArg.data.details.changed).toEqual(['amountCents', 'currency', 'note']);
+    });
+
+    it('returned summary reflects the updated amountCents', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      const r = await service.update('user-1', 'pay-1', { amountCents: 4242 });
+      expect(r.amountCents).toBe(4242);
+    });
+
+    it('rejects unsupported currency on update', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      try {
+        await service.update('user-1', 'pay-1', { currency: 'ZZZ' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_CURRENCY);
+      }
+    });
+
+    it('does not fail when audit log throws', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      prismaMock.auditLog.create.mockRejectedValueOnce(new Error('audit down'));
+      await expect(service.update('user-1', 'pay-1', { note: 'x' })).resolves.toBeDefined();
+    });
+
+    it('direction change with no category change validates against existing category', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow()); // existing OUT category
+      categoryServiceMock.findById.mockResolvedValue(okCategory({ direction: 'BOTH' }));
+
+      await expect(service.update('user-1', 'pay-1', { direction: 'IN' })).resolves.toBeDefined();
+      // categoryService.findById was called with the payment's existing category id.
+      expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-1');
     });
   });
 });

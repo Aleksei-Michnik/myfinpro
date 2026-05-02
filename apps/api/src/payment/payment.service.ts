@@ -19,9 +19,35 @@ import {
   PaymentCategorySummary,
   PaymentSummaryDto,
 } from './dto/payment-summary.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 
 /** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
 const MAX_AMOUNT_CENTS = 1e11;
+
+/**
+ * Single source of truth for the relation load used by list(), findByIdForUser(),
+ * and update(). Keeps mapping code honest — every path feeds the same shape into
+ * `mapPaymentToSummary()`, so rendering diffs can only come from row values, not
+ * include drift.
+ */
+export const PAYMENT_DETAIL_INCLUDE = {
+  category: {
+    select: { id: true, slug: true, name: true, icon: true, color: true },
+  },
+  attributions: { include: { group: { select: { name: true } } } },
+  stars: { select: { id: true }, where: {} as { userId?: string } },
+  _count: { select: { comments: true, documents: true } },
+} as const;
+
+/** Build the include with the `stars.where.userId` set to the viewer. */
+function buildDetailInclude(userId: string) {
+  return {
+    category: PAYMENT_DETAIL_INCLUDE.category,
+    attributions: PAYMENT_DETAIL_INCLUDE.attributions,
+    stars: { where: { userId }, select: { id: true } },
+    _count: PAYMENT_DETAIL_INCLUDE._count,
+  } satisfies Prisma.PaymentInclude;
+}
 
 /** Minimal Payment+relations shape we need to produce a summary DTO. */
 export type PaymentWithRelations = {
@@ -54,10 +80,7 @@ export type PaymentWithRelations = {
 
 /**
  * Map a persisted Payment (with category + attributions + attribution.group loaded)
- * into the wire-level `PaymentSummaryDto`.
- *
- * Exported separately so forthcoming list/get endpoints (6.6 / 6.7) can reuse it
- * without a service rename (per design §5.2).
+ * into the wire-level `PaymentSummaryDto`. Shared by create / list / get / update.
  */
 export function mapPaymentToSummary(
   payment: PaymentWithRelations,
@@ -109,6 +132,28 @@ export class PaymentService {
   ) {}
 
   /**
+   * Visibility predicate (design §5.2): a payment is visible to `userId` iff at
+   * least one of its attributions is personal to them OR targets a group they
+   * are a member of. Shared between list() (scope=all), findByIdForUser(), and
+   * update() — one source of truth for access logic.
+   */
+  private buildVisibilityWhere(userId: string): Prisma.PaymentWhereInput {
+    return {
+      attributions: {
+        some: {
+          OR: [
+            { scopeType: 'personal', userId },
+            {
+              scopeType: 'group',
+              group: { memberships: { some: { userId } } },
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  /**
    * Create a ONE_TIME payment with N attributions in a single transaction.
    *
    * See design §5.2 "Payments" for validation rules and §5.7 for error codes.
@@ -137,18 +182,7 @@ export class PaymentService {
     }
 
     // 3. Amount sanity cap (DTO already enforces integer > 0).
-    if (!Number.isInteger(dto.amountCents) || dto.amountCents <= 0) {
-      throw new BadRequestException({
-        message: 'amountCents must be a positive integer',
-        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_AMOUNT,
-      });
-    }
-    if (dto.amountCents > MAX_AMOUNT_CENTS) {
-      throw new BadRequestException({
-        message: 'amountCents exceeds the maximum allowed value',
-        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_AMOUNT,
-      });
-    }
+    this.validateAmount(dto.amountCents);
 
     // 4. Currency — validated against the shared supported list; free-form is rejected.
     if (!(CURRENCY_CODES as readonly string[]).includes(dto.currency)) {
@@ -159,38 +193,11 @@ export class PaymentService {
     }
 
     // 5. Date — reject occurredAt more than 1 day in the future (timezone grace).
-    const occurredAt = new Date(dto.occurredAt);
-    if (Number.isNaN(occurredAt.getTime())) {
-      throw new BadRequestException({
-        message: 'occurredAt is not a valid ISO 8601 date',
-        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_DATE,
-      });
-    }
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    if (occurredAt.getTime() > Date.now() + oneDayMs) {
-      throw new BadRequestException({
-        message: 'occurredAt cannot be in the future',
-        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_DATE,
-      });
-    }
+    const occurredAt = this.parseAndValidateOccurredAt(dto.occurredAt);
 
     // 6. Category — reuse CategoryService.findById() for visibility; then check direction.
-    let category: Awaited<ReturnType<CategoryService['findById']>>;
-    try {
-      category = await this.categoryService.findById(userId, dto.categoryId);
-    } catch {
-      // Any failure (404, forbidden) collapses into PAYMENT_INVALID_CATEGORY for cleaner UX.
-      throw new NotFoundException({
-        message: 'Category not found or not visible to the user',
-        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CATEGORY,
-      });
-    }
-    if (category.direction !== 'BOTH' && category.direction !== dto.direction) {
-      throw new BadRequestException({
-        message: `Category direction '${category.direction}' does not accept payments of direction '${dto.direction}'`,
-        errorCode: PAYMENT_ERRORS.PAYMENT_CATEGORY_DIRECTION_MISMATCH,
-      });
-    }
+    const category = await this.loadCategoryOrThrow(userId, dto.categoryId);
+    this.ensureCategoryDirectionMatches(category, dto.direction);
 
     // 7. Attributions — non-empty, well-formed, de-duplicated, in-scope.
     await this.validateAttributions(userId, dto.attributions);
@@ -229,7 +236,7 @@ export class PaymentService {
     });
 
     // 9. Audit — fire-and-forget.
-    void this.writeAudit(userId, created.id, {
+    void this.writeAudit(userId, created.id, 'PAYMENT_CREATED', {
       direction: dto.direction,
       type: 'ONE_TIME',
       amountCents: dto.amountCents,
@@ -258,10 +265,12 @@ export class PaymentService {
 
     // ── 1. Visibility predicate + scope narrowing ──
     const scopeRaw = q.scope ?? 'all';
-    let attributionClause: Prisma.PaymentAttributionWhereInput;
+    let visibilityClause: Prisma.PaymentWhereInput;
 
     if (scopeRaw === 'personal') {
-      attributionClause = { scopeType: 'personal', userId };
+      visibilityClause = {
+        attributions: { some: { scopeType: 'personal', userId } },
+      };
     } else if (scopeRaw.startsWith('group:')) {
       const groupId = scopeRaw.slice('group:'.length);
       const membership = await this.prisma.groupMembership.findUnique({
@@ -273,21 +282,15 @@ export class PaymentService {
           errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ACCESSIBLE,
         });
       }
-      attributionClause = { scopeType: 'group', groupId };
-    } else {
-      // 'all' (default)
-      attributionClause = {
-        OR: [
-          { scopeType: 'personal', userId },
-          {
-            scopeType: 'group',
-            group: { memberships: { some: { userId } } },
-          },
-        ],
+      visibilityClause = {
+        attributions: { some: { scopeType: 'group', groupId } },
       };
+    } else {
+      // 'all' (default) — shared helper with findByIdForUser / update.
+      visibilityClause = this.buildVisibilityWhere(userId);
     }
 
-    const andClauses: Prisma.PaymentWhereInput[] = [{ attributions: { some: attributionClause } }];
+    const andClauses: Prisma.PaymentWhereInput[] = [visibilityClause];
 
     // ── 2. Simple column filters ──
     if (q.direction) andClauses.push({ direction: q.direction });
@@ -302,9 +305,7 @@ export class PaymentService {
     }
 
     if (q.search) {
-      // MySQL's default utf8mb4_unicode_ci is already case-insensitive on
-      // LIKE, so no `mode: 'insensitive'` is needed (Prisma's MySQL driver
-      // rejects it anyway).
+      // MySQL's default utf8mb4_unicode_ci is already case-insensitive on LIKE.
       andClauses.push({ note: { contains: q.search } });
     }
 
@@ -335,14 +336,7 @@ export class PaymentService {
       where: { AND: andClauses },
       orderBy,
       take: limit + 1,
-      include: {
-        category: {
-          select: { id: true, slug: true, name: true, icon: true, color: true },
-        },
-        attributions: { include: { group: { select: { name: true } } } },
-        stars: { where: { userId }, select: { id: true } },
-        _count: { select: { comments: true, documents: true } },
-      },
+      include: buildDetailInclude(userId),
     });
 
     const hasMore = rows.length > limit;
@@ -361,7 +355,217 @@ export class PaymentService {
     return { data, nextCursor, hasMore };
   }
 
+  /**
+   * Get a single payment visible to `userId`. Returns 404 when the row either
+   * does not exist OR the user lacks a visibility attribution — the design rule
+   * is "don't leak existence" (design §5.2, §5.7).
+   */
+  async findByIdForUser(userId: string, paymentId: string): Promise<PaymentSummaryDto> {
+    const row = await this.prisma.payment.findFirst({
+      where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
+      include: buildDetailInclude(userId),
+    });
+
+    if (!row) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    return mapPaymentToSummary(row as unknown as PaymentWithRelations, {
+      starredByMe: row.stars.length > 0,
+      commentCount: row._count.comments,
+      hasDocuments: row._count.documents > 0,
+    });
+  }
+
+  /**
+   * Update scalar fields on an existing payment. Creator only. Attribution
+   * array edits are handled by the delete-per-scope path (iteration 6.8).
+   */
+  async update(
+    userId: string,
+    paymentId: string,
+    dto: UpdatePaymentDto,
+  ): Promise<PaymentSummaryDto> {
+    // 1. Fetch with visibility guard — 404 when not visible or missing.
+    const existing = await this.prisma.payment.findFirst({
+      where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
+      include: buildDetailInclude(userId),
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    // 2. Creator check.
+    if (existing.createdById !== userId) {
+      throw new ForbiddenException({
+        message: 'Only the creator of a payment may edit it',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_OWNER,
+      });
+    }
+
+    // 3. Empty body → no-op.
+    const hasAnyField =
+      dto.direction !== undefined ||
+      dto.amountCents !== undefined ||
+      dto.currency !== undefined ||
+      dto.occurredAt !== undefined ||
+      dto.categoryId !== undefined ||
+      dto.note !== undefined;
+
+    if (!hasAnyField) {
+      return mapPaymentToSummary(existing as unknown as PaymentWithRelations, {
+        starredByMe: existing.stars.length > 0,
+        commentCount: existing._count.comments,
+        hasDocuments: existing._count.documents > 0,
+      });
+    }
+
+    // 4. Generated-occurrence guard (forward compat for 6.17 / 6.19).
+    if (existing.parentPaymentId !== null || existing.type !== 'ONE_TIME') {
+      throw new BadRequestException({
+        message:
+          'Generated occurrences / schedule-derived payments cannot be edited via this endpoint',
+        errorCode: PAYMENT_ERRORS.PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE,
+      });
+    }
+
+    // 5+6. Category + direction compatibility.
+    const effectiveDirection = dto.direction ?? (existing.direction as 'IN' | 'OUT');
+    const categoryChanging = dto.categoryId !== undefined && dto.categoryId !== existing.categoryId;
+
+    let nextCategoryId = existing.categoryId;
+    if (categoryChanging) {
+      const cat = await this.loadCategoryOrThrow(userId, dto.categoryId as string);
+      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+      nextCategoryId = dto.categoryId as string;
+    } else if (dto.direction !== undefined && dto.direction !== existing.direction) {
+      // Direction-only change — validate against the existing category.
+      const cat = await this.loadCategoryOrThrow(userId, existing.categoryId);
+      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+    }
+
+    // 7. Date.
+    let nextOccurredAt: Date | undefined;
+    if (dto.occurredAt !== undefined) {
+      nextOccurredAt = this.parseAndValidateOccurredAt(dto.occurredAt);
+    }
+
+    // 8. Amount.
+    if (dto.amountCents !== undefined) {
+      this.validateAmount(dto.amountCents);
+    }
+
+    // 9. Currency — DTO regex already enforces /^[A-Z]{3}$/; also reject unsupported codes.
+    if (dto.currency !== undefined) {
+      if (!(CURRENCY_CODES as readonly string[]).includes(dto.currency)) {
+        throw new BadRequestException({
+          message: `Unsupported currency '${dto.currency}'`,
+          errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CURRENCY,
+        });
+      }
+    }
+
+    // 10. Build update payload — include only fields present in dto.
+    const data: Prisma.PaymentUpdateInput = {};
+    if (dto.direction !== undefined) data.direction = dto.direction;
+    if (dto.amountCents !== undefined) data.amountCents = dto.amountCents;
+    if (dto.currency !== undefined) data.currency = dto.currency;
+    if (nextOccurredAt !== undefined) data.occurredAt = nextOccurredAt;
+    if (categoryChanging) data.category = { connect: { id: nextCategoryId } };
+    if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
+
+    // 11. Write.
+    const updated = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data,
+      include: buildDetailInclude(userId),
+    });
+
+    // 12. Audit — fire-and-forget; sorted keys for deterministic assertions.
+    const changed = Object.keys(dto)
+      .filter((k) => (dto as Record<string, unknown>)[k] !== undefined)
+      .sort();
+    void this.writeAudit(userId, paymentId, 'PAYMENT_UPDATED', { changed });
+
+    this.logger.log(
+      `Payment ${paymentId} updated by user ${userId} — fields: ${changed.join(',')}`,
+    );
+
+    // 13. Return.
+    return mapPaymentToSummary(updated as unknown as PaymentWithRelations, {
+      starredByMe: updated.stars.length > 0,
+      commentCount: updated._count.comments,
+      hasDocuments: updated._count.documents > 0,
+    });
+  }
+
   // ── helpers ──
+
+  private validateAmount(amountCents: number): void {
+    if (!Number.isInteger(amountCents) || amountCents <= 0) {
+      throw new BadRequestException({
+        message: 'amountCents must be a positive integer',
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_AMOUNT,
+      });
+    }
+    if (amountCents > MAX_AMOUNT_CENTS) {
+      throw new BadRequestException({
+        message: 'amountCents exceeds the maximum allowed value',
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_AMOUNT,
+      });
+    }
+  }
+
+  private parseAndValidateOccurredAt(iso: string): Date {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) {
+      throw new BadRequestException({
+        message: 'occurredAt is not a valid ISO 8601 date',
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_DATE,
+      });
+    }
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (d.getTime() > Date.now() + oneDayMs) {
+      throw new BadRequestException({
+        message: 'occurredAt cannot be in the future',
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_DATE,
+      });
+    }
+    return d;
+  }
+
+  private async loadCategoryOrThrow(
+    userId: string,
+    categoryId: string,
+  ): Promise<Awaited<ReturnType<CategoryService['findById']>>> {
+    try {
+      return await this.categoryService.findById(userId, categoryId);
+    } catch {
+      throw new NotFoundException({
+        message: 'Category not found or not visible to the user',
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CATEGORY,
+      });
+    }
+  }
+
+  private ensureCategoryDirectionMatches(
+    category: { direction: string },
+    direction: 'IN' | 'OUT',
+  ): void {
+    if (category.direction !== 'BOTH' && category.direction !== direction) {
+      throw new BadRequestException({
+        message: `Category direction '${category.direction}' does not accept payments of direction '${direction}'`,
+        errorCode: PAYMENT_ERRORS.PAYMENT_CATEGORY_DIRECTION_MISMATCH,
+      });
+    }
+  }
 
   private async validateAttributions(
     userId: string,
@@ -430,13 +634,14 @@ export class PaymentService {
   private async writeAudit(
     userId: string,
     paymentId: string,
+    action: 'PAYMENT_CREATED' | 'PAYMENT_UPDATED',
     details: Record<string, unknown>,
   ): Promise<void> {
     try {
       await this.prisma.auditLog.create({
         data: {
           userId,
-          action: 'PAYMENT_CREATED',
+          action,
           entity: 'Payment',
           entityId: paymentId,
           details: details as Prisma.InputJsonValue,
@@ -444,7 +649,7 @@ export class PaymentService {
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to write audit log for PAYMENT_CREATED ${paymentId}: ${(err as Error).message}`,
+        `Failed to write audit log for ${action} ${paymentId}: ${(err as Error).message}`,
       );
     }
   }

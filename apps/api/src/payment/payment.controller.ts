@@ -4,6 +4,9 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -14,6 +17,7 @@ import {
   ApiBody,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -28,6 +32,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import { PaymentSummaryDto } from './dto/payment-summary.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentService } from './payment.service';
 
 @ApiTags('Payments')
@@ -79,5 +84,52 @@ export class PaymentController {
     @Query() query: ListPaymentsQueryDto,
   ): Promise<PaymentListResponseDto> {
     return this.service.list(user.sub, query);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60000 }) // design §5.8 — 120/min read
+  @UseGuards(JwtAuthGuard)
+  @Get(':id')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get one payment (visibility-guarded)',
+    description:
+      'Returns the payment iff the caller has at least one visible attribution ' +
+      '(personal or via group membership). 404 otherwise — existence is not leaked.',
+  })
+  @ApiOkResponse({ description: 'Payment summary', type: PaymentSummaryDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Not found or not visible to the caller' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (120/min)' })
+  async findOne(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PaymentSummaryDto> {
+    return this.service.findByIdForUser(user.sub, id);
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60000 }) // design §5.8 — 30/min mutation
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update scalar fields of a payment (creator only)',
+    description:
+      'Editable fields: direction, amountCents, currency, occurredAt, categoryId, note. ' +
+      'Attribution array edits are handled by the delete-per-scope endpoint (iteration 6.8). ' +
+      'Empty body is a no-op.',
+  })
+  @ApiBody({ type: UpdatePaymentDto })
+  @ApiOkResponse({ description: 'Updated payment summary', type: PaymentSummaryDto })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiForbiddenResponse({ description: 'Caller is not the creator' })
+  @ApiNotFoundResponse({ description: 'Not found or not visible to the caller' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (30/min)' })
+  async update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePaymentDto,
+  ): Promise<PaymentSummaryDto> {
+    return this.service.update(user.sub, id, dto);
   }
 }
