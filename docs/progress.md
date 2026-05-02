@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-02
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 7/21 iterations complete
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 8/21 iterations complete
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 7/21       | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 8/21       | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 57 | **Remaining:** 83
+**Total iterations:** 140 | **Completed:** 58 | **Remaining:** 82
 
 ---
 
@@ -3110,63 +3110,76 @@ All status codes match expectations.
 
 **Next step**: Iteration 6.8 — Delete payment + attribution edits via scoped delete (`DELETE /api/v1/payments/:id` and per-attribution delete that may collapse the payment when the last attribution is removed).
 
-### Iteration 6.7 — Get-one + Edit Payment API (2026-05-02)
+---
+
+### Iteration 6.8 — Delete + Attribution Edits (2026-05-02)
 
 **Endpoints**
 
-| Method | Path                   | Rate limit | Notes                                                  |
-| ------ | ---------------------- | ---------- | ------------------------------------------------------ |
-| GET    | `/api/v1/payments/:id` | 120/min    | Visibility-guarded; 404 when not accessible (no leak). |
-| PATCH  | `/api/v1/payments/:id` | 30/min     | Creator-only scalar edits; empty body is a no-op.      |
+| Method | Path                   | Rate limit | Semantics                                                                                                                                                         |
+| ------ | ---------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DELETE | `/api/v1/payments/:id` | 30/min     | Scoped attribution delete. `?scope=personal \| group:<id> \| all`. Implicit scope resolves to the single accessible attribution or 409 `PAYMENT_SCOPE_AMBIGUOUS`. |
+| PATCH  | `/api/v1/payments/:id` | 30/min     | Now also accepts `attributions[]` to **replace** the caller-accessible subset. Empty array = scoped-delete of every accessible attribution.                       |
 
-**DRY wins**
+When a delete (DELETE or PATCH attributions) leaves the payment with **zero** attributions the Payment row is hard-deleted; schema cascade removes `PaymentStar`, `PaymentComment`, `PaymentDocument`, `PaymentSchedule`, `PaymentPlan`.
 
-- Extracted `PaymentService.buildVisibilityWhere(userId)` — single source of truth for the visibility predicate (`attributions.some` OR'd over personal + member-groups). Reused by `list()` (scope=all path), `findByIdForUser()`, and `update()`.
-- Introduced `PAYMENT_DETAIL_INCLUDE` + `buildDetailInclude(userId)` helper so list / get / update all feed the exact same relation shape into `mapPaymentToSummary()`. Include drift is now structurally impossible.
-- Split validation into `validateAmount()`, `parseAndValidateOccurredAt()`, `loadCategoryOrThrow()`, `ensureCategoryDirectionMatches()` helpers shared by `create()` and `update()`.
+**Decision — PATCH return shape**
+
+Going with **`PaymentSummaryDto | 204`**, not a wrapped change-result. PATCH remains the "edit this payment" endpoint and keeps returning a fresh summary on success; when the mutation hard-deletes the payment the controller emits **204 No Content**. DELETE is the only endpoint that surfaces `{ deletedAttributions, addedAttributions, paymentDeleted, payment }` via `AttributionChangeResultDto`. Rationale: the frontend (6.13) doesn't need attribution-diff counts for good UX, and keeping PATCH's success body stable avoids a breaking change.
+
+**DRY**
+
+- `resolveAccessibleAttributions(userId, attrs)` — new shared helper. One DB round-trip for the caller's group memberships (only those already on the payment). Returns `{ accessible, personal, memberGroups }`. Reused by `remove()` and by the attribution-diff branch of `update()`.
+- `validateAttributions(userId, attrs, memberGroupsCache?, { allowEmpty? })` — parameterised. `create()` calls with defaults (non-empty); `update()` calls with `allowEmpty: true` and lets the validator do its own membership fetch (desired entries may reference groups not on the payment yet).
+- `buildVisibilityWhere()`, `PAYMENT_DETAIL_INCLUDE`, `mapPaymentToSummary()` — unchanged from 6.7, still the single source of truth.
 
 **Error codes added** (docs/phase-6-payments-design.md §5.7)
 
-- `PAYMENT_NOT_FOUND`
-- `PAYMENT_NOT_OWNER`
-- `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`
+- `PAYMENT_SCOPE_AMBIGUOUS` — implicit scope with >1 accessible attributions; error body includes `details.accessibleScopes: ["personal", "group:<id>", ...]`.
+- `PAYMENT_SCOPE_NOT_ATTRIBUTED` — explicit scope the caller has no accessible attribution for.
+- `PAYMENT_NO_ACCESSIBLE_ATTRIBUTION` — defensive; only surfaced if `?scope=all` runs against a payment the caller shouldn't see.
 
-**Forward-compat guard**: `update()` rejects rows where `parentPaymentId !== null` or `type !== 'ONE_TIME'` with `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`. Belt-and-suspenders for iterations 6.17 (RECURRING) / 6.19 (INSTALLMENT) — can't trigger today because only ONE_TIME exists.
+**Security invariants (verified by integration tests)**
 
-**Semantics**
-
-- 404 (not 403) for rows the caller can't see — design rule "don't leak existence".
-- PATCH with empty body → no DB write, no audit row, returns current snapshot.
-- `note: ""` is coerced to `NULL`.
-- Direction-only change validates against existing category; direction + categoryId change validates against the new category.
-- Best-effort `PAYMENT_UPDATED` audit log with `details.changed = sorted(mutated-keys)`. Audit failure never fails the mutation.
+- Non-accessible attributions (other users' personal, non-member groups) are **never** touched by DELETE or PATCH (test 6).
+- Non-visible payments return 404 `PAYMENT_NOT_FOUND` — existence is never leaked (test 4).
+- Non-creator members get 403 `PAYMENT_NOT_OWNER` when trying to edit attributions (test 12).
+- Atomic: all DB mutations run in a single `prisma.$transaction`; a throw rolls everything back.
 
 **Tests**
 
-- Unit: 22 new (findByIdForUser + update) → 145 total payment unit tests.
-- Integration: 13 new scenarios in `payments-edit.integration.spec.ts` (visibility, creator-check, direction/category compat, date/amount sanity, empty-body no-op, note-clearing, audit contents).
-- Full workspace: **576/576** unit tests + **39/39** payment integration tests green.
+- Unit: 29 new (`remove()` × 13 + `update() attributions` × 11 + controller × 5) → **152** payment unit tests; **605** workspace unit tests green.
+- Integration: **14** new scenarios in `payments-delete.integration.spec.ts`, all green (includes cascade verification for stars + comments).
 
-**CI + Deploy Staging**: commit `ae7cab6` — both workflows green on first push.
+**CI + Deploy Staging**: commit `3a6b5fd` — both workflows green on first push.
 
-**Staging smoke** (`docker exec myfinpro-staging-api-blue node /tmp/smoke-6.7.mjs`)
+**Staging smoke** (`docker exec myfinpro-staging-api-green node /tmp/smoke.mjs`)
 
 ```
-=== payment id: 0f1fcccf-5632-4b3a-8e0d-c13305091cb3
---- (1) GET as creator (expect 200) ---
-  { status: 200, id: <pid>, note: "smoke", amountCents: 1250, direction: "OUT" }
---- (2) PATCH note (expect 200) ---
-  { status: 200, note: "updated", amountCents: 1250 }
---- (3) PATCH amountCents=9900 (expect 200) ---
-  { status: 200, note: "updated", amountCents: 9900 }
---- (4) PATCH direction=IN on OUT category (expect 400) ---
-  { status: 400, errorCode: "PAYMENT_CATEGORY_DIRECTION_MISMATCH" }
---- (5) GET as user B (expect 404) ---
+=== (i) DELETE ?scope=personal on mixed payment ---
+  { status: 200, deletedAttributions: 1, paymentDeleted: false }
+=== (i) GET after (group attribution remains) ---
+  { status: 200, attributions: [{ scope: "group", groupId: "<gid>" }] }
+
+=== (ii) DELETE ?scope=all ---
+  { status: 200, deletedAttributions: 1, paymentDeleted: true, payment: null }
+=== (ii) GET after ---
   { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
---- (6) PATCH as user B (expect 404 — masks 403) ---
+
+=== (iii) Bob (non-member) DELETE group payment ---
   { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+
+=== (iv) PATCH attributions=[] on personal-only ---
+  { status: 204, body: null }
+=== (iv) GET after ---
+  { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+
+=== (v) implicit DELETE on ambiguous (personal + group) ---
+  { status: 409, errorCode: "PAYMENT_SCOPE_AMBIGUOUS" }
 ```
 
-All status codes match expectations.
+All status codes match expectations. User confirmed: "Delete semantics correct — proceed to 6.9 (Star API)."
 
-**Next step**: Iteration 6.8 — Delete payment + attribution edits via scoped delete (`DELETE /api/v1/payments/:id` and per-attribution delete that may collapse the payment when the last attribution is removed).
+**Cascade test** (`payments-delete.integration.spec.ts` #14) — after `DELETE ?scope=all` that removes the payment, direct Prisma reads of `PaymentStar` and `PaymentComment` return zero rows for that `paymentId`. Schema cascade from iteration 6.2 works as designed.
+
+**Next step**: Iteration 6.9 — Star / Unstar API (`PUT /api/v1/payments/:id/star`, `DELETE /api/v1/payments/:id/star`) with per-user idempotency. `starredByMe` is already rendered by `mapPaymentToSummary()` from 6.6, so the endpoint only has to flip the row.
