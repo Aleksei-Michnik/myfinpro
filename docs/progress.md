@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-01
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 4/21 iterations complete
+> **Last updated:** 2026-05-02
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 6/21 iterations complete
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 5/21       | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 6/21       | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 55 | **Remaining:** 85
+**Total iterations:** 140 | **Completed:** 56 | **Remaining:** 84
 
 ---
 
@@ -2946,3 +2946,105 @@ apps/api/test/integration/
 **User confirmation**: "Staging API correctly creates ONE_TIME payments — proceed to 6.6."
 
 **Next step**: Iteration 6.6 — List Payments API (`GET /api/v1/payments` with cursor pagination + scope / direction / category / date-range / starred / type / sort filters). Will reuse [`mapPaymentToSummary()`](../apps/api/src/payment/payment.service.ts:60) from this iteration.
+
+### Iteration 6.6 — List Payments API (2026-05-02)
+
+Added `GET /api/v1/payments` — the read-side counterpart to the iteration 6.5 create endpoint. Cursor-paginated, filtered, and sorted; reuses [`mapPaymentToSummary()`](../apps/api/src/payment/payment.service.ts:60) with a back-compat-extended options shape (`commentCount`, `hasDocuments` default to 0/false).
+
+**Endpoint**: `GET /api/v1/payments` — rate limit **120/min per caller** (design §5.8). Authenticated via JWT; visibility is always scoped to the caller.
+
+**Filter matrix**:
+
+| Query param   | Type                                                 | Semantics                                                             |
+| ------------- | ---------------------------------------------------- | --------------------------------------------------------------------- |
+| `scope`       | `all` \| `personal` \| `group:<id>`                  | Visibility narrowing. `all` (default) = personal ∪ member-groups.     |
+| `direction`   | `IN` \| `OUT`                                        | `payment.direction = :direction`.                                     |
+| `categoryId`  | UUID                                                 | `payment.categoryId = :categoryId`.                                   |
+| `from` / `to` | ISO-8601                                             | `occurredAt >= from AND occurredAt < to` (either may be omitted).     |
+| `starred`     | `true` \| `false`                                    | `stars.some` / `stars.none` scoped to the caller.                     |
+| `type`        | `PaymentType`                                        | `payment.type = :type`.                                               |
+| `search`      | string (1–200)                                       | Case-insensitive `note LIKE "%search%"` (MySQL `utf8mb4_unicode_ci`). |
+| `sort`        | `date_desc`\|`date_asc`\|`amount_desc`\|`amount_asc` | Default `date_desc`. Always tie-broken on `id`.                       |
+| `limit`       | int 1–100                                            | Default 20. Clamped server-side.                                      |
+| `cursor`      | base64url string                                     | Opaque; echoed back by the server.                                    |
+
+**Visibility SQL** — single Prisma `findMany` with joins, no N+1:
+
+```ts
+attributions: {
+  some: {
+    OR: [
+      { scopeType: 'personal', userId },
+      { scopeType: 'group', group: { memberships: { some: { userId } } } },
+    ],
+  },
+}
+```
+
+Scope narrowing tightens this clause. `scope=group:<id>` first verifies membership via `prisma.groupMembership.findUnique({ where: { groupId_userId } })`; non-members get **403 `PAYMENT_SCOPE_NOT_ACCESSIBLE`** (new error code).
+
+**Cursor scheme** — opaque base64url JSON payload. Two shapes, matched to the sort family:
+
+- `date_*` sorts → `{ k: 'date', occurredAt: ISO, id: uuid }`
+- `amount_*` sorts → `{ k: 'amount', amountCents: int, id: uuid }`
+
+Pagination uses peek-one-more (`take: limit + 1`) to compute `hasMore`, then slices the extra row and encodes `nextCursor` from the last row of the returned page. Malformed or wrong-shape cursors return **400 `PAYMENT_INVALID_CURSOR`** (new error code).
+
+**Files**:
+
+```
+apps/api/src/payment/
+  payment.service.ts                     (+list() + encode/decode/isValid/buildOrderBy/buildCursorGuard/buildCursorFor helpers)
+  payment.service.spec.ts                (38 new tests)
+  payment.controller.ts                  (+GET / with 120/min throttle)
+  payment.controller.spec.ts             (+5 new tests)
+  constants/payment-errors.ts            (+PAYMENT_SCOPE_NOT_ACCESSIBLE, +PAYMENT_INVALID_CURSOR)
+  dto/
+    list-payments-query.dto.ts           (new)
+    payment-list-response.dto.ts         (new)
+apps/api/test/integration/
+  payments-list.integration.spec.ts      (14 integration tests)
+```
+
+**Test counts**: **43 new unit tests** (38 in `payment.service.spec.ts` covering scope/filter/sort/limit/cursor/mapping + 5 in `payment.controller.spec.ts` including a `@CustomThrottle` metadata assertion via `Reflector`) + **14 integration tests** (scope union + personal + group + non-member 403, each filter, cursor round-trip through 3 pages over 5 rows, malformed cursor 400, `sort=amount_desc`). Full api unit suite: **545 passing** (up from 499 → +46). Lint + prettier + typecheck all clean.
+
+**Commit**: [`fcf61b0`](https://github.com/Aleksei-Michnik/myfinpro/commit/fcf61b0).
+**CI run**: [`25258565917`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25258565917) ✓.
+**Deploy Staging run**: [`25258565908`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25258565908) ✓ (blue-green).
+
+**Staging smoke test** (Node 20 built-in `fetch` script, shipped into `myfinpro-staging-api-blue` via `docker cp`, run against internal `http://localhost:3001/api/v1`):
+
+```
+=== Registered user 2f891c4d-83fc-46ea-9b86-efd2f3fb5258
+=== groceries category: 12ca488e-7e25-489d-bc87-1e5094b03e5c
+
+--- (a) GET /payments (expect 2 rows, newest first) ---
+{ status: 200, count: 2, hasMore: false, nextCursor: null,
+  rows: [
+    { amountCents: 2500, occurredAt: "2026-04-20T00:00:00.000Z", note: "higher" },
+    { amountCents:  500, occurredAt: "2026-04-10T00:00:00.000Z", note: "lower"  },
+  ] }
+
+--- (b) GET /payments?limit=1 ---
+{ status: 200, count: 1, hasMore: true,
+  nextCursor: "eyJrIjoiZGF0...(len 128)",
+  rows: [ { amountCents: 2500, occurredAt: "2026-04-20T00:00:00.000Z", note: "higher" } ] }
+
+--- (c) GET /payments?limit=1&cursor=... (round-trip) ---
+{ status: 200, count: 1, hasMore: false, nextCursor: null,
+  rows: [ { amountCents: 500, occurredAt: "2026-04-10T00:00:00.000Z", note: "lower" } ] }
+
+--- (d) GET /payments?sort=amount_desc ---
+amountCents order: [ 2500, 500 ]
+
+--- (e) GET /payments?direction=IN (expect 0) ---
+count: 0
+
+--- (f) GET /payments?scope=group:00000000-0000-0000-0000-000000000000 ---
+{ status: 403, errorCode: "PAYMENT_SCOPE_NOT_ACCESSIBLE",
+  message: "Scope not accessible — user is not a member of the requested group" }
+```
+
+**User confirmation**: "List API works correctly — proceed to 6.7 (Edit + Get-one)."
+
+**Next step**: Iteration 6.7 — Edit + Get-one (`PATCH /api/v1/payments/:id` + `GET /api/v1/payments/:id`). Will extend the same visibility helper used here and introduce attribution-edit semantics.
