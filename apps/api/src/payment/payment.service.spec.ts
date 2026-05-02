@@ -4,7 +4,18 @@ import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { mapPaymentToSummary, PaymentService, PaymentWithRelations } from './payment.service';
+import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import {
+  buildCursorFor,
+  buildCursorGuard,
+  buildOrderBy,
+  decodeCursor,
+  encodeCursor,
+  isValidCursor,
+  mapPaymentToSummary,
+  PaymentService,
+  PaymentWithRelations,
+} from './payment.service';
 
 type ErrorResponse = { errorCode?: string };
 
@@ -19,9 +30,11 @@ describe('PaymentService', () => {
   const prismaMock = {
     payment: {
       create: jest.fn(),
+      findMany: jest.fn(),
     },
     groupMembership: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
     },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
@@ -449,6 +462,425 @@ describe('PaymentService', () => {
       prismaMock.payment.create.mockResolvedValue(makePersistedPayment({ note: 'lunch money' }));
       const r = await service.create('user-1', baseDto({ note: 'lunch money' }));
       expect(r.note).toBe('lunch money');
+    });
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Iteration 6.6 — list()
+    // ──────────────────────────────────────────────────────────────────────────
+
+    describe('list()', () => {
+      /** Build a row shaped like what Prisma returns with our include/_count. */
+      const makeRow = (over: Record<string, unknown> = {}) => ({
+        id: 'pay-1',
+        direction: 'OUT',
+        type: 'ONE_TIME',
+        amountCents: 1000,
+        currency: 'USD',
+        occurredAt: new Date('2026-04-25T00:00:00Z'),
+        status: 'POSTED',
+        note: null,
+        parentPaymentId: null,
+        createdById: 'user-1',
+        createdAt: now,
+        updatedAt: now,
+        category: { id: 'cat-1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+        attributions: [{ scopeType: 'personal', userId: 'user-1', groupId: null, group: null }],
+        stars: [] as Array<{ id: string }>,
+        _count: { comments: 0, documents: 0 },
+        ...over,
+      });
+
+      const baseQ = (over: Partial<ListPaymentsQueryDto> = {}): ListPaymentsQueryDto =>
+        ({ ...over }) as ListPaymentsQueryDto;
+
+      const lastFindManyArg = () => {
+        const calls = prismaMock.payment.findMany.mock.calls;
+        return calls[calls.length - 1]?.[0] as {
+          where: { AND: Array<Record<string, unknown>> };
+          orderBy: unknown;
+          take: number;
+          include: Record<string, unknown>;
+        };
+      };
+
+      beforeEach(() => {
+        prismaMock.payment.findMany.mockResolvedValue([]);
+      });
+
+      // ── scope/visibility ──
+
+      it('scope=all (default): builds OR of personal + member-group attributions', async () => {
+        await service.list('user-1', baseQ());
+        const { where } = lastFindManyArg();
+        const attrClause = (where.AND[0] as { attributions: { some: { OR: unknown[] } } })
+          .attributions.some;
+        expect(attrClause.OR).toEqual([
+          { scopeType: 'personal', userId: 'user-1' },
+          {
+            scopeType: 'group',
+            group: { memberships: { some: { userId: 'user-1' } } },
+          },
+        ]);
+      });
+
+      it('scope=personal: narrows to personal attributions only', async () => {
+        await service.list('user-1', baseQ({ scope: 'personal' }));
+        const attrClause = (
+          lastFindManyArg().where.AND[0] as {
+            attributions: { some: Record<string, unknown> };
+          }
+        ).attributions.some;
+        expect(attrClause).toEqual({ scopeType: 'personal', userId: 'user-1' });
+      });
+
+      it('scope=group:<id> as a member: narrows to that group', async () => {
+        prismaMock.groupMembership.findUnique.mockResolvedValue({
+          groupId: 'g1',
+          userId: 'user-1',
+        });
+        await service.list('user-1', baseQ({ scope: 'group:g1' }));
+        expect(prismaMock.groupMembership.findUnique).toHaveBeenCalledWith({
+          where: { groupId_userId: { groupId: 'g1', userId: 'user-1' } },
+        });
+        const attrClause = (
+          lastFindManyArg().where.AND[0] as {
+            attributions: { some: Record<string, unknown> };
+          }
+        ).attributions.some;
+        expect(attrClause).toEqual({ scopeType: 'group', groupId: 'g1' });
+      });
+
+      it('scope=group:<id> for a non-member: throws PAYMENT_SCOPE_NOT_ACCESSIBLE', async () => {
+        prismaMock.groupMembership.findUnique.mockResolvedValue(null);
+        await expect(service.list('user-1', baseQ({ scope: 'group:g1' }))).rejects.toThrow(
+          ForbiddenException,
+        );
+        try {
+          await service.list('user-1', baseQ({ scope: 'group:g1' }));
+        } catch (err) {
+          expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ACCESSIBLE);
+        }
+      });
+
+      // ── filters ──
+
+      it('direction filter adds WHERE', async () => {
+        await service.list('user-1', baseQ({ direction: 'IN' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ direction: 'IN' });
+      });
+
+      it('categoryId filter adds WHERE', async () => {
+        await service.list('user-1', baseQ({ categoryId: 'cat-1' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ categoryId: 'cat-1' });
+      });
+
+      it('type filter adds WHERE', async () => {
+        await service.list('user-1', baseQ({ type: 'ONE_TIME' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ type: 'ONE_TIME' });
+      });
+
+      it('from + to compose a single occurredAt range', async () => {
+        await service.list(
+          'user-1',
+          baseQ({ from: '2026-04-01T00:00:00Z', to: '2026-05-01T00:00:00Z' }),
+        );
+        const found = lastFindManyArg().where.AND.find(
+          (c) => (c as { occurredAt?: unknown }).occurredAt,
+        ) as { occurredAt: { gte: Date; lt: Date } };
+        expect(found.occurredAt.gte).toEqual(new Date('2026-04-01T00:00:00Z'));
+        expect(found.occurredAt.lt).toEqual(new Date('2026-05-01T00:00:00Z'));
+      });
+
+      it('only from is set: adds gte without lt', async () => {
+        await service.list('user-1', baseQ({ from: '2026-04-01T00:00:00Z' }));
+        const found = lastFindManyArg().where.AND.find(
+          (c) => (c as { occurredAt?: unknown }).occurredAt,
+        ) as { occurredAt: { gte?: Date; lt?: Date } };
+        expect(found.occurredAt.gte).toEqual(new Date('2026-04-01T00:00:00Z'));
+        expect(found.occurredAt.lt).toBeUndefined();
+      });
+
+      it('search adds a case-insensitive contains on note', async () => {
+        await service.list('user-1', baseQ({ search: 'lunch' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ note: { contains: 'lunch' } });
+      });
+
+      it('starred=true adds stars.some', async () => {
+        await service.list('user-1', baseQ({ starred: 'true' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({
+          stars: { some: { userId: 'user-1' } },
+        });
+      });
+
+      it('starred=false adds stars.none', async () => {
+        await service.list('user-1', baseQ({ starred: 'false' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({
+          stars: { none: { userId: 'user-1' } },
+        });
+      });
+
+      it('starred unset: no stars filter', async () => {
+        await service.list('user-1', baseQ());
+        const andClauses = lastFindManyArg().where.AND;
+        const starsClause = andClauses.find((c) => (c as { stars?: unknown }).stars);
+        expect(starsClause).toBeUndefined();
+      });
+
+      // ── sort / orderBy ──
+
+      it.each([
+        ['date_desc' as const, [{ occurredAt: 'desc' }, { id: 'desc' }]],
+        ['date_asc' as const, [{ occurredAt: 'asc' }, { id: 'asc' }]],
+        ['amount_desc' as const, [{ amountCents: 'desc' }, { id: 'desc' }]],
+        ['amount_asc' as const, [{ amountCents: 'asc' }, { id: 'asc' }]],
+      ])('sort=%s maps to the expected orderBy', async (sort, expected) => {
+        await service.list('user-1', baseQ({ sort }));
+        expect(lastFindManyArg().orderBy).toEqual(expected);
+      });
+
+      it('default sort is date_desc when omitted', async () => {
+        await service.list('user-1', baseQ());
+        expect(lastFindManyArg().orderBy).toEqual([{ occurredAt: 'desc' }, { id: 'desc' }]);
+      });
+
+      // ── limit & peek-one-more ──
+
+      it('limit is clamped to 100 maximum', async () => {
+        await service.list('user-1', baseQ({ limit: 500 }));
+        expect(lastFindManyArg().take).toBe(101);
+      });
+
+      it('default limit is 20 → take 21', async () => {
+        await service.list('user-1', baseQ());
+        expect(lastFindManyArg().take).toBe(21);
+      });
+
+      it('hasMore=true when rows exceed limit; slice trims the peek row', async () => {
+        const rows = [makeRow({ id: 'p1' }), makeRow({ id: 'p2' }), makeRow({ id: 'p3' })];
+        prismaMock.payment.findMany.mockResolvedValue(rows);
+        const r = await service.list('user-1', baseQ({ limit: 2 }));
+        expect(r.hasMore).toBe(true);
+        expect(r.data).toHaveLength(2);
+        expect(r.data.map((d) => d.id)).toEqual(['p1', 'p2']);
+        expect(r.nextCursor).not.toBeNull();
+      });
+
+      it('hasMore=false when rows equal limit exactly', async () => {
+        prismaMock.payment.findMany.mockResolvedValue([
+          makeRow({ id: 'p1' }),
+          makeRow({ id: 'p2' }),
+        ]);
+        const r = await service.list('user-1', baseQ({ limit: 2 }));
+        expect(r.hasMore).toBe(false);
+        expect(r.nextCursor).toBeNull();
+        expect(r.data).toHaveLength(2);
+      });
+
+      // ── cursor round-trip & guards ──
+
+      it('cursor: malformed base64url returns 400 PAYMENT_INVALID_CURSOR', async () => {
+        await expect(service.list('user-1', baseQ({ cursor: '!!not-valid!!' }))).rejects.toThrow(
+          BadRequestException,
+        );
+        try {
+          await service.list('user-1', baseQ({ cursor: '!!not-valid!!' }));
+        } catch (err) {
+          expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_CURSOR);
+        }
+      });
+
+      it('cursor: wrong shape for sort returns 400 PAYMENT_INVALID_CURSOR', async () => {
+        const badCursor = encodeCursor({ k: 'amount', amountCents: 100, id: 'p1' });
+        try {
+          await service.list('user-1', baseQ({ cursor: badCursor, sort: 'date_desc' }));
+        } catch (err) {
+          expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_CURSOR);
+        }
+      });
+
+      it('cursor date_desc applies lt/eq-and-lt guard', async () => {
+        const iso = '2026-04-25T00:00:00.000Z';
+        const cursor = encodeCursor({ k: 'date', occurredAt: iso, id: 'p1' });
+        await service.list('user-1', baseQ({ cursor, sort: 'date_desc' }));
+        const guard = lastFindManyArg().where.AND.find((c) => (c as { OR?: unknown }).OR) as {
+          OR: Array<Record<string, unknown>>;
+        };
+        expect(guard.OR).toEqual([
+          { occurredAt: { lt: new Date(iso) } },
+          { occurredAt: new Date(iso), id: { lt: 'p1' } },
+        ]);
+      });
+
+      it('cursor date_asc applies gt/eq-and-gt guard', async () => {
+        const iso = '2026-04-25T00:00:00.000Z';
+        const cursor = encodeCursor({ k: 'date', occurredAt: iso, id: 'p1' });
+        await service.list('user-1', baseQ({ cursor, sort: 'date_asc' }));
+        const guard = lastFindManyArg().where.AND.find((c) => (c as { OR?: unknown }).OR) as {
+          OR: Array<Record<string, unknown>>;
+        };
+        expect(guard.OR).toEqual([
+          { occurredAt: { gt: new Date(iso) } },
+          { occurredAt: new Date(iso), id: { gt: 'p1' } },
+        ]);
+      });
+
+      it('cursor amount_desc applies lt/eq-and-lt on amountCents', async () => {
+        const cursor = encodeCursor({ k: 'amount', amountCents: 1000, id: 'p1' });
+        await service.list('user-1', baseQ({ cursor, sort: 'amount_desc' }));
+        const guard = lastFindManyArg().where.AND.find((c) => (c as { OR?: unknown }).OR) as {
+          OR: Array<Record<string, unknown>>;
+        };
+        expect(guard.OR).toEqual([
+          { amountCents: { lt: 1000 } },
+          { amountCents: 1000, id: { lt: 'p1' } },
+        ]);
+      });
+
+      it('cursor amount_asc applies gt/eq-and-gt on amountCents', async () => {
+        const cursor = encodeCursor({ k: 'amount', amountCents: 1000, id: 'p1' });
+        await service.list('user-1', baseQ({ cursor, sort: 'amount_asc' }));
+        const guard = lastFindManyArg().where.AND.find((c) => (c as { OR?: unknown }).OR) as {
+          OR: Array<Record<string, unknown>>;
+        };
+        expect(guard.OR).toEqual([
+          { amountCents: { gt: 1000 } },
+          { amountCents: 1000, id: { gt: 'p1' } },
+        ]);
+      });
+
+      it('nextCursor encodes date cursor for date_* sort', async () => {
+        const rows = [makeRow({ id: 'p1' }), makeRow({ id: 'p2' }), makeRow({ id: 'p3' })];
+        prismaMock.payment.findMany.mockResolvedValue(rows);
+        const r = await service.list('user-1', baseQ({ limit: 2, sort: 'date_desc' }));
+        const payload = decodeCursor(r.nextCursor!);
+        expect(payload).toEqual({
+          k: 'date',
+          occurredAt: '2026-04-25T00:00:00.000Z',
+          id: 'p2',
+        });
+      });
+
+      it('nextCursor encodes amount cursor for amount_* sort', async () => {
+        const rows = [
+          makeRow({ id: 'p1', amountCents: 3000 }),
+          makeRow({ id: 'p2', amountCents: 2000 }),
+          makeRow({ id: 'p3', amountCents: 1000 }),
+        ];
+        prismaMock.payment.findMany.mockResolvedValue(rows);
+        const r = await service.list('user-1', baseQ({ limit: 2, sort: 'amount_desc' }));
+        const payload = decodeCursor(r.nextCursor!);
+        expect(payload).toEqual({ k: 'amount', amountCents: 2000, id: 'p2' });
+      });
+
+      // ── mapping correctness ──
+
+      it('maps starredByMe / commentCount / hasDocuments from includes', async () => {
+        prismaMock.payment.findMany.mockResolvedValue([
+          makeRow({
+            id: 'p1',
+            stars: [{ id: 's1' }],
+            _count: { comments: 5, documents: 2 },
+          }),
+        ]);
+        const r = await service.list('user-1', baseQ({ limit: 10 }));
+        expect(r.data[0]).toEqual(
+          expect.objectContaining({ starredByMe: true, commentCount: 5, hasDocuments: true }),
+        );
+      });
+
+      it('starredByMe=false when stars include is empty', async () => {
+        prismaMock.payment.findMany.mockResolvedValue([makeRow({ stars: [] })]);
+        const r = await service.list('user-1', baseQ({ limit: 10 }));
+        expect(r.data[0].starredByMe).toBe(false);
+      });
+
+      it('hasDocuments=false when _count.documents is 0', async () => {
+        prismaMock.payment.findMany.mockResolvedValue([
+          makeRow({ _count: { comments: 0, documents: 0 } }),
+        ]);
+        const r = await service.list('user-1', baseQ({ limit: 10 }));
+        expect(r.data[0].hasDocuments).toBe(false);
+      });
+
+      it('include uses stars scoped to current user (no N+1)', async () => {
+        await service.list('user-1', baseQ());
+        const include = lastFindManyArg().include as {
+          stars: { where: { userId: string } };
+          _count: { select: { comments: boolean; documents: boolean } };
+        };
+        expect(include.stars.where).toEqual({ userId: 'user-1' });
+        expect(include._count.select).toEqual({ comments: true, documents: true });
+      });
+
+      it('returns empty data + hasMore=false when no rows match', async () => {
+        prismaMock.payment.findMany.mockResolvedValue([]);
+        const r = await service.list('user-1', baseQ());
+        expect(r).toEqual({ data: [], nextCursor: null, hasMore: false });
+      });
+    });
+
+    // ── Cursor helper pure-function tests ──
+
+    describe('cursor helpers', () => {
+      it('encodeCursor / decodeCursor round-trip', () => {
+        const cur = { k: 'date' as const, occurredAt: '2026-04-25T00:00:00.000Z', id: 'p1' };
+        const enc = encodeCursor(cur);
+        expect(decodeCursor(enc)).toEqual(cur);
+      });
+
+      it('decodeCursor returns null for non-base64 garbage', () => {
+        // Buffer.from handles most inputs leniently; ensure bad JSON returns null.
+        const garbage = Buffer.from('not json', 'utf8').toString('base64url');
+        expect(decodeCursor(garbage)).toBeNull();
+      });
+
+      it('isValidCursor rejects wrong kind for the active sort', () => {
+        expect(isValidCursor({ k: 'amount', amountCents: 1, id: 'x' }, 'date_desc')).toBe(false);
+        expect(
+          isValidCursor({ k: 'date', occurredAt: '2026-01-01T00:00:00Z', id: 'x' }, 'amount_desc'),
+        ).toBe(false);
+      });
+
+      it('isValidCursor rejects malformed date string', () => {
+        expect(isValidCursor({ k: 'date', occurredAt: 'not-a-date', id: 'x' }, 'date_desc')).toBe(
+          false,
+        );
+      });
+
+      it('buildOrderBy covers all four sorts', () => {
+        expect(buildOrderBy('date_desc')).toEqual([{ occurredAt: 'desc' }, { id: 'desc' }]);
+        expect(buildOrderBy('date_asc')).toEqual([{ occurredAt: 'asc' }, { id: 'asc' }]);
+        expect(buildOrderBy('amount_desc')).toEqual([{ amountCents: 'desc' }, { id: 'desc' }]);
+        expect(buildOrderBy('amount_asc')).toEqual([{ amountCents: 'asc' }, { id: 'asc' }]);
+      });
+
+      it('buildCursorFor chooses date vs amount by sort', () => {
+        const row = { id: 'p1', occurredAt: new Date('2026-04-25T00:00:00Z'), amountCents: 999 };
+        expect(buildCursorFor(row, 'date_desc')).toEqual({
+          k: 'date',
+          occurredAt: '2026-04-25T00:00:00.000Z',
+          id: 'p1',
+        });
+        expect(buildCursorFor(row, 'amount_asc')).toEqual({
+          k: 'amount',
+          amountCents: 999,
+          id: 'p1',
+        });
+      });
+
+      it('buildCursorGuard builds correct OR for each sort direction', () => {
+        const date = { k: 'date' as const, occurredAt: '2026-04-25T00:00:00Z', id: 'p1' };
+        const amt = { k: 'amount' as const, amountCents: 500, id: 'p1' };
+        expect(buildCursorGuard(date, 'date_desc')).toEqual({
+          OR: [
+            { occurredAt: { lt: new Date('2026-04-25T00:00:00Z') } },
+            { occurredAt: new Date('2026-04-25T00:00:00Z'), id: { lt: 'p1' } },
+          ],
+        });
+        expect(buildCursorGuard(amt, 'amount_asc')).toEqual({
+          OR: [{ amountCents: { gt: 500 } }, { amountCents: 500, id: { gt: 'p1' } }],
+        });
+      });
     });
   });
 

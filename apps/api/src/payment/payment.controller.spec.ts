@@ -1,6 +1,8 @@
+import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 
@@ -9,6 +11,7 @@ describe('PaymentController', () => {
 
   const serviceMock = {
     create: jest.fn(),
+    list: jest.fn(),
   };
 
   const user: JwtPayload = { sub: 'user-1', email: 'a@b', name: 'A' };
@@ -66,5 +69,49 @@ describe('PaymentController', () => {
     await controller.create(other, dto);
 
     expect(serviceMock.create).toHaveBeenCalledWith('user-42', dto);
+  });
+
+  // ── iteration 6.6: GET /payments ──
+
+  describe('list()', () => {
+    const query: ListPaymentsQueryDto = { limit: 5, sort: 'date_desc' };
+
+    it('delegates to service.list with user.sub + query', async () => {
+      const payload = { data: [], nextCursor: null, hasMore: false };
+      serviceMock.list.mockResolvedValue(payload);
+
+      const r = await controller.list(user, query);
+
+      expect(serviceMock.list).toHaveBeenCalledWith('user-1', query);
+      expect(r).toBe(payload);
+    });
+
+    it('returns the service payload unchanged', async () => {
+      const payload = {
+        data: [{ id: 'p1' }],
+        nextCursor: 'abc',
+        hasMore: true,
+      };
+      serviceMock.list.mockResolvedValue(payload);
+
+      const r = await controller.list(user, query);
+      expect(r).toBe(payload);
+    });
+
+    it('propagates service errors upward', async () => {
+      serviceMock.list.mockRejectedValue(new Error('boom'));
+      await expect(controller.list(user, query)).rejects.toThrow('boom');
+    });
+
+    it('applies 120/min rate limit metadata via @CustomThrottle', () => {
+      const reflector = new Reflector();
+      const listHandler = Object.getPrototypeOf(controller).list as () => unknown;
+      // @nestjs/throttler defines a metadata key per (field, throttler name) — see
+      // throttler.decorator.js. Default throttler name is 'default'.
+      const limit = reflector.get<number>('THROTTLER:LIMITdefault', listHandler);
+      const ttl = reflector.get<number>('THROTTLER:TTLdefault', listHandler);
+      expect(limit).toBe(120);
+      expect(ttl).toBe(60000);
+    });
   });
 });

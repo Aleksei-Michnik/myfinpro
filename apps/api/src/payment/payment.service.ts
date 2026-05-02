@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { AttributionDto } from './dto/attribution.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import {
   PaymentAttributionSummary,
   PaymentCategorySummary,
@@ -242,6 +244,123 @@ export class PaymentService {
     return mapPaymentToSummary(created as PaymentWithRelations, { starredByMe: false });
   }
 
+  /**
+   * List payments visible to `userId`, honoring the scope / filter / sort / cursor query.
+   *
+   * Visibility (design §5.2): a payment is visible iff at least one of its
+   * attributions is personal to the caller OR targets a group the caller is a
+   * member of. Expressed as a single `attributions.some` OR in Prisma so the
+   * DB handles it in one query (no N+1).
+   */
+  async list(userId: string, q: ListPaymentsQueryDto): Promise<PaymentListResponseDto> {
+    const sort = q.sort ?? 'date_desc';
+    const limit = Math.min(Math.max(q.limit ?? 20, 1), 100);
+
+    // ── 1. Visibility predicate + scope narrowing ──
+    const scopeRaw = q.scope ?? 'all';
+    let attributionClause: Prisma.PaymentAttributionWhereInput;
+
+    if (scopeRaw === 'personal') {
+      attributionClause = { scopeType: 'personal', userId };
+    } else if (scopeRaw.startsWith('group:')) {
+      const groupId = scopeRaw.slice('group:'.length);
+      const membership = await this.prisma.groupMembership.findUnique({
+        where: { groupId_userId: { groupId, userId } },
+      });
+      if (!membership) {
+        throw new ForbiddenException({
+          message: 'Scope not accessible — user is not a member of the requested group',
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ACCESSIBLE,
+        });
+      }
+      attributionClause = { scopeType: 'group', groupId };
+    } else {
+      // 'all' (default)
+      attributionClause = {
+        OR: [
+          { scopeType: 'personal', userId },
+          {
+            scopeType: 'group',
+            group: { memberships: { some: { userId } } },
+          },
+        ],
+      };
+    }
+
+    const andClauses: Prisma.PaymentWhereInput[] = [{ attributions: { some: attributionClause } }];
+
+    // ── 2. Simple column filters ──
+    if (q.direction) andClauses.push({ direction: q.direction });
+    if (q.categoryId) andClauses.push({ categoryId: q.categoryId });
+    if (q.type) andClauses.push({ type: q.type });
+
+    if (q.from || q.to) {
+      const range: Prisma.DateTimeFilter = {};
+      if (q.from) range.gte = new Date(q.from);
+      if (q.to) range.lt = new Date(q.to);
+      andClauses.push({ occurredAt: range });
+    }
+
+    if (q.search) {
+      // MySQL's default utf8mb4_unicode_ci is already case-insensitive on
+      // LIKE, so no `mode: 'insensitive'` is needed (Prisma's MySQL driver
+      // rejects it anyway).
+      andClauses.push({ note: { contains: q.search } });
+    }
+
+    if (q.starred === 'true') {
+      andClauses.push({ stars: { some: { userId } } });
+    } else if (q.starred === 'false') {
+      andClauses.push({ stars: { none: { userId } } });
+    }
+
+    // ── 3. Cursor guard ──
+    let cursorPayload: ReturnType<typeof decodeCursor> = null;
+    if (q.cursor) {
+      cursorPayload = decodeCursor(q.cursor);
+      if (!cursorPayload || !isValidCursor(cursorPayload, sort)) {
+        throw new BadRequestException({
+          message: 'Malformed cursor',
+          errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CURSOR,
+        });
+      }
+      andClauses.push(buildCursorGuard(cursorPayload, sort));
+    }
+
+    // ── 4. Sort ──
+    const orderBy = buildOrderBy(sort);
+
+    // ── 5. Execute ──
+    const rows = await this.prisma.payment.findMany({
+      where: { AND: andClauses },
+      orderBy,
+      take: limit + 1,
+      include: {
+        category: {
+          select: { id: true, slug: true, name: true, icon: true, color: true },
+        },
+        attributions: { include: { group: { select: { name: true } } } },
+        stars: { where: { userId }, select: { id: true } },
+        _count: { select: { comments: true, documents: true } },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const slice = hasMore ? rows.slice(0, limit) : rows;
+
+    const data = slice.map((p) =>
+      mapPaymentToSummary(p as unknown as PaymentWithRelations, {
+        starredByMe: p.stars.length > 0,
+        commentCount: p._count.comments,
+        hasDocuments: p._count.documents > 0,
+      }),
+    );
+
+    const nextCursor = hasMore ? encodeCursor(buildCursorFor(slice[slice.length - 1], sort)) : null;
+
+    return { data, nextCursor, hasMore };
+  }
+
   // ── helpers ──
 
   private async validateAttributions(
@@ -333,3 +452,93 @@ export class PaymentService {
 
 /** Re-export for symmetry with other services that keep currency types local. */
 export type { CurrencyCode };
+
+// ── Cursor helpers (co-located per iteration 6.6 spec) ──
+
+type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
+
+type DateCursor = { k: 'date'; occurredAt: string; id: string };
+type AmountCursor = { k: 'amount'; amountCents: number; id: string };
+type Cursor = DateCursor | AmountCursor;
+
+export function encodeCursor(cursor: Cursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+export function decodeCursor(raw: string): Cursor | null {
+  try {
+    const decoded = Buffer.from(raw, 'base64url').toString('utf8');
+    const parsed = JSON.parse(decoded);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as Cursor;
+  } catch {
+    return null;
+  }
+}
+
+/** Runtime guard: the cursor shape must match the active sort. */
+export function isValidCursor(cursor: Cursor, sort: SortKey): boolean {
+  if (typeof cursor !== 'object' || cursor === null) return false;
+  if (sort === 'date_desc' || sort === 'date_asc') {
+    const c = cursor as DateCursor;
+    if (c.k !== 'date') return false;
+    if (typeof c.occurredAt !== 'string' || typeof c.id !== 'string') return false;
+    if (Number.isNaN(new Date(c.occurredAt).getTime())) return false;
+    return true;
+  }
+  const c = cursor as AmountCursor;
+  if (c.k !== 'amount') return false;
+  if (!Number.isFinite(c.amountCents) || typeof c.id !== 'string') return false;
+  return true;
+}
+
+export function buildOrderBy(sort: SortKey): Prisma.PaymentOrderByWithRelationInput[] {
+  switch (sort) {
+    case 'date_asc':
+      return [{ occurredAt: 'asc' }, { id: 'asc' }];
+    case 'amount_desc':
+      return [{ amountCents: 'desc' }, { id: 'desc' }];
+    case 'amount_asc':
+      return [{ amountCents: 'asc' }, { id: 'asc' }];
+    case 'date_desc':
+    default:
+      return [{ occurredAt: 'desc' }, { id: 'desc' }];
+  }
+}
+
+/** Build the WHERE guard that keeps pagination strictly forward. */
+export function buildCursorGuard(cursor: Cursor, sort: SortKey): Prisma.PaymentWhereInput {
+  if (cursor.k === 'date') {
+    const d = new Date(cursor.occurredAt);
+    if (sort === 'date_desc') {
+      return {
+        OR: [{ occurredAt: { lt: d } }, { occurredAt: d, id: { lt: cursor.id } }],
+      };
+    }
+    // date_asc
+    return {
+      OR: [{ occurredAt: { gt: d } }, { occurredAt: d, id: { gt: cursor.id } }],
+    };
+  }
+  const amt = cursor.amountCents;
+  if (sort === 'amount_desc') {
+    return {
+      OR: [{ amountCents: { lt: amt } }, { amountCents: amt, id: { lt: cursor.id } }],
+    };
+  }
+  // amount_asc
+  return {
+    OR: [{ amountCents: { gt: amt } }, { amountCents: amt, id: { gt: cursor.id } }],
+  };
+}
+
+/** Produce the cursor payload for the last row on a page, based on the active sort. */
+export function buildCursorFor(
+  row: { id: string; occurredAt: Date; amountCents: number },
+  sort: SortKey,
+): Cursor {
+  if (sort === 'amount_desc' || sort === 'amount_asc') {
+    return { k: 'amount', amountCents: row.amountCents, id: row.id };
+  }
+  return { k: 'date', occurredAt: row.occurredAt.toISOString(), id: row.id };
+}
