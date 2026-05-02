@@ -1,12 +1,30 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Response } from 'express';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
+
+function makeResMock(): Response & { statusCode: number } {
+  const res = {
+    statusCode: 0,
+    status(code: number) {
+      this.statusCode = code;
+      return this as unknown as Response;
+    },
+  };
+  return res as unknown as Response & { statusCode: number };
+}
 
 describe('PaymentController', () => {
   let controller: PaymentController;
@@ -16,6 +34,7 @@ describe('PaymentController', () => {
     list: jest.fn(),
     findByIdForUser: jest.fn(),
     update: jest.fn(),
+    remove: jest.fn(),
   };
 
   const user: JwtPayload = { sub: 'user-1', email: 'a@b', name: 'A' };
@@ -151,8 +170,9 @@ describe('PaymentController', () => {
     it('delegates to service.update with user.sub + id + dto', async () => {
       const payload = { id: 'pay-1', note: 'updated' };
       serviceMock.update.mockResolvedValue(payload);
+      const res = makeResMock();
 
-      const r = await controller.update(user, 'pay-1', updateDto);
+      const r = await controller.update(user, 'pay-1', updateDto, res);
 
       expect(serviceMock.update).toHaveBeenCalledWith('user-1', 'pay-1', updateDto);
       expect(r).toBe(payload);
@@ -160,12 +180,54 @@ describe('PaymentController', () => {
 
     it('propagates ForbiddenException from the service', async () => {
       serviceMock.update.mockRejectedValue(new ForbiddenException('not owner'));
-      await expect(controller.update(user, 'pay-1', updateDto)).rejects.toThrow(ForbiddenException);
+      const res = makeResMock();
+      await expect(controller.update(user, 'pay-1', updateDto, res)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('returns 204 when service returns null (paymentDeleted)', async () => {
+      serviceMock.update.mockResolvedValue(null);
+      const res = makeResMock();
+      const r = await controller.update(user, 'pay-1', { attributions: [] }, res);
+      expect(r).toBeUndefined();
+      expect(res.statusCode).toBe(HttpStatus.NO_CONTENT);
     });
 
     it('applies 30/min rate limit metadata', () => {
       const reflector = new Reflector();
       const handler = Object.getPrototypeOf(controller).update as () => unknown;
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(30);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
+    });
+  });
+
+  // ── iteration 6.8: DELETE /:id ──
+
+  describe('remove()', () => {
+    const q: DeletePaymentQueryDto = { scope: 'personal' };
+
+    it('delegates to service.remove with user.sub + id + query', async () => {
+      const payload = { deletedAttributions: 1, addedAttributions: 0, paymentDeleted: true };
+      serviceMock.remove.mockResolvedValue(payload);
+      const r = await controller.remove(user, 'pay-1', q);
+      expect(serviceMock.remove).toHaveBeenCalledWith('user-1', 'pay-1', q);
+      expect(r).toBe(payload);
+    });
+
+    it('propagates NotFoundException from the service', async () => {
+      serviceMock.remove.mockRejectedValue(new NotFoundException('not found'));
+      await expect(controller.remove(user, 'pay-1', q)).rejects.toThrow(NotFoundException);
+    });
+
+    it('propagates ConflictException from the service', async () => {
+      serviceMock.remove.mockRejectedValue(new ConflictException('ambiguous'));
+      await expect(controller.remove(user, 'pay-1', {})).rejects.toThrow(ConflictException);
+    });
+
+    it('applies 30/min rate limit metadata', () => {
+      const reflector = new Reflector();
+      const handler = Object.getPrototypeOf(controller).remove as () => unknown;
       expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(30);
       expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
     });

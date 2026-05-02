@@ -1,6 +1,7 @@
 import { CURRENCY_CODES, CurrencyCode } from '@myfinpro/shared';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -10,8 +11,10 @@ import { Prisma } from '@prisma/client';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
+import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
 import { AttributionDto } from './dto/attribution.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import {
@@ -48,6 +51,17 @@ function buildDetailInclude(userId: string) {
     _count: PAYMENT_DETAIL_INCLUDE._count,
   } satisfies Prisma.PaymentInclude;
 }
+
+/** One row shape we need from `paymentAttribution` when running the
+ *  iteration 6.8 scope resolver. Matches the raw Prisma row without the
+ *  `group` relation (we only need `id/scopeType/userId/groupId` to make
+ *  the accessibility + diff decisions). */
+export type AttributionRow = {
+  id: string;
+  scopeType: string;
+  userId: string | null;
+  groupId: string | null;
+};
 
 /** Minimal Payment+relations shape we need to produce a summary DTO. */
 export type PaymentWithRelations = {
@@ -381,14 +395,20 @@ export class PaymentService {
   }
 
   /**
-   * Update scalar fields on an existing payment. Creator only. Attribution
-   * array edits are handled by the delete-per-scope path (iteration 6.8).
+   * Update scalar fields and/or replace the caller-accessible attribution
+   * subset on an existing payment. Creator only.
+   *
+   * Returns the fresh summary, or `null` when the caller emptied the
+   * accessible attribution set and that left the payment with zero rows
+   * (hard-deleted → controller emits 204).
+   *
+   * Design §2.4 / §5.2 (iteration 6.8).
    */
   async update(
     userId: string,
     paymentId: string,
     dto: UpdatePaymentDto,
-  ): Promise<PaymentSummaryDto> {
+  ): Promise<PaymentSummaryDto | null> {
     // 1. Fetch with visibility guard — 404 when not visible or missing.
     const existing = await this.prisma.payment.findFirst({
       where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
@@ -411,15 +431,16 @@ export class PaymentService {
     }
 
     // 3. Empty body → no-op.
-    const hasAnyField =
+    const hasScalarField =
       dto.direction !== undefined ||
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
       dto.occurredAt !== undefined ||
       dto.categoryId !== undefined ||
       dto.note !== undefined;
+    const hasAttributionField = dto.attributions !== undefined;
 
-    if (!hasAnyField) {
+    if (!hasScalarField && !hasAttributionField) {
       return mapPaymentToSummary(existing as unknown as PaymentWithRelations, {
         starredByMe: existing.stars.length > 0,
         commentCount: existing._count.comments,
@@ -472,7 +493,83 @@ export class PaymentService {
       }
     }
 
-    // 10. Build update payload — include only fields present in dto.
+    // 10. Attribution diff (when dto.attributions present).
+    const existingAttrs = existing.attributions as unknown as AttributionRow[];
+    type Diff = {
+      toDelete: AttributionRow[];
+      toAdd: Array<{
+        scopeType: 'personal' | 'group';
+        userId: string | null;
+        groupId: string | null;
+      }>;
+      addedForAudit: AttributionDto[];
+      removedForAudit: AttributionDto[];
+    };
+    let attrDiff: Diff | null = null;
+
+    if (hasAttributionField) {
+      // Resolve accessible set. (`memberGroups` only covers groups already on
+      // the payment; we intentionally don't reuse it as the validator cache.)
+      const { accessible } = await this.resolveAccessibleAttributions(userId, existingAttrs);
+
+      // Validate desired (non-empty validation is skipped — empty means "clear").
+      // Note: we intentionally let `validateAttributions` fetch its own membership
+      // set, because `memberGroups` here only contains groups already on the
+      // payment; desired may reference a brand-new group the caller is a member
+      // of but which isn't yet attributed.
+      const desired = dto.attributions ?? [];
+      await this.validateAttributions(userId, desired, undefined, { allowEmpty: true });
+
+      // Index desired by (scope|groupId).
+      const key = (a: { scope: 'personal' | 'group'; groupId?: string | null }) =>
+        `${a.scope}|${a.groupId ?? ''}`;
+      const desiredKeys = new Set(desired.map((d) => key(d)));
+      const accessibleKeys = new Set(
+        accessible.map((a) =>
+          key({ scope: a.scopeType as 'personal' | 'group', groupId: a.groupId }),
+        ),
+      );
+
+      // Deletes: accessible rows not in desired.
+      const toDelete = accessible.filter(
+        (a) =>
+          !desiredKeys.has(key({ scope: a.scopeType as 'personal' | 'group', groupId: a.groupId })),
+      );
+
+      // Adds: desired entries not already on the payment (any attribution).
+      const allExistingKeys = new Set(
+        existingAttrs.map((a) =>
+          key({ scope: a.scopeType as 'personal' | 'group', groupId: a.groupId }),
+        ),
+      );
+      const toAdd: Diff['toAdd'] = [];
+      const addedForAudit: AttributionDto[] = [];
+      for (const d of desired) {
+        const k = key(d);
+        if (accessibleKeys.has(k)) continue; // already present + accessible: keep
+        if (allExistingKeys.has(k)) {
+          // Present on payment but NOT accessible (other user's personal).
+          // Caller cannot "add" something they couldn't also delete.
+          throw new ForbiddenException({
+            message: 'Desired attribution collides with a non-accessible existing attribution',
+            errorCode: PAYMENT_ERRORS.PAYMENT_ATTRIBUTION_OUT_OF_SCOPE,
+          });
+        }
+        toAdd.push({
+          scopeType: d.scope,
+          userId: d.scope === 'personal' ? userId : null,
+          groupId: d.scope === 'group' ? (d.groupId ?? null) : null,
+        });
+        addedForAudit.push(d);
+      }
+      const removedForAudit: AttributionDto[] = toDelete.map((a) => ({
+        scope: a.scopeType as 'personal' | 'group',
+        groupId: a.groupId ?? undefined,
+      }));
+      attrDiff = { toDelete, toAdd, addedForAudit, removedForAudit };
+    }
+
+    // 11. Build scalar update payload.
     const data: Prisma.PaymentUpdateInput = {};
     if (dto.direction !== undefined) data.direction = dto.direction;
     if (dto.amountCents !== undefined) data.amountCents = dto.amountCents;
@@ -481,29 +578,235 @@ export class PaymentService {
     if (categoryChanging) data.category = { connect: { id: nextCategoryId } };
     if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
 
-    // 11. Write.
-    const updated = await this.prisma.payment.update({
-      where: { id: paymentId },
-      data,
-      include: buildDetailInclude(userId),
+    // 12. Execute everything in one transaction.
+    const txResult = await this.prisma.$transaction(async (tx) => {
+      if (hasScalarField) {
+        await tx.payment.update({ where: { id: paymentId }, data });
+      }
+
+      let paymentDeleted = false;
+      if (attrDiff) {
+        if (attrDiff.toDelete.length > 0) {
+          await tx.paymentAttribution.deleteMany({
+            where: { id: { in: attrDiff.toDelete.map((a) => a.id) } },
+          });
+        }
+        if (attrDiff.toAdd.length > 0) {
+          await tx.paymentAttribution.createMany({
+            data: attrDiff.toAdd.map((a) => ({
+              paymentId,
+              scopeType: a.scopeType,
+              userId: a.userId,
+              groupId: a.groupId,
+            })),
+          });
+        }
+        const remaining = await tx.paymentAttribution.count({ where: { paymentId } });
+        if (remaining === 0) {
+          await tx.payment.delete({ where: { id: paymentId } });
+          paymentDeleted = true;
+        }
+      }
+
+      return { paymentDeleted };
     });
 
-    // 12. Audit — fire-and-forget; sorted keys for deterministic assertions.
-    const changed = Object.keys(dto)
-      .filter((k) => (dto as Record<string, unknown>)[k] !== undefined)
-      .sort();
-    void this.writeAudit(userId, paymentId, 'PAYMENT_UPDATED', { changed });
+    // 13. Audit — fire-and-forget.
+    if (hasScalarField) {
+      const changed = Object.keys(dto)
+        .filter((k) => k !== 'attributions' && (dto as Record<string, unknown>)[k] !== undefined)
+        .sort();
+      void this.writeAudit(userId, paymentId, 'PAYMENT_UPDATED', { changed });
+    }
+    if (attrDiff) {
+      for (const removed of attrDiff.removedForAudit) {
+        void this.writeAudit(userId, paymentId, 'PAYMENT_ATTRIBUTION_REMOVED', {
+          scope: removed.scope,
+          groupId: removed.groupId ?? null,
+        });
+      }
+      for (const added of attrDiff.addedForAudit) {
+        void this.writeAudit(userId, paymentId, 'PAYMENT_ATTRIBUTION_ADDED', {
+          scope: added.scope,
+          groupId: added.groupId ?? null,
+        });
+      }
+      if (txResult.paymentDeleted) {
+        void this.writeAudit(userId, paymentId, 'PAYMENT_DELETED', {
+          reason: 'attributions_empty',
+        });
+      }
+    }
 
     this.logger.log(
-      `Payment ${paymentId} updated by user ${userId} — fields: ${changed.join(',')}`,
+      `Payment ${paymentId} updated by user ${userId} — scalars=${hasScalarField}, attrDiff=${attrDiff ? `+${attrDiff.toAdd.length}/-${attrDiff.toDelete.length}` : 'none'}, deleted=${txResult.paymentDeleted}`,
     );
 
-    // 13. Return.
-    return mapPaymentToSummary(updated as unknown as PaymentWithRelations, {
-      starredByMe: updated.stars.length > 0,
-      commentCount: updated._count.comments,
-      hasDocuments: updated._count.documents > 0,
+    // 14. Return.
+    if (txResult.paymentDeleted) return null;
+
+    const fresh = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: buildDetailInclude(userId),
     });
+    if (!fresh) return null; // defensive; shouldn't happen
+    return mapPaymentToSummary(fresh as unknown as PaymentWithRelations, {
+      starredByMe: fresh.stars.length > 0,
+      commentCount: fresh._count.comments,
+      hasDocuments: fresh._count.documents > 0,
+    });
+  }
+
+  /**
+   * Scoped-delete (DELETE /payments/:id). See design §2.4 + §5.2.
+   *
+   * The `scope` query narrows what is removed. When the caller ends up with
+   * zero attributions on the payment, the Payment row is hard-deleted and
+   * cascades clean up stars / comments / documents / schedule / plan
+   * (onDelete: Cascade declared in the schema from iteration 6.2).
+   */
+  async remove(
+    userId: string,
+    paymentId: string,
+    query: DeletePaymentQueryDto,
+  ): Promise<AttributionChangeResultDto> {
+    // 1. Fetch the payment (raw — visibility is enforced via accessible set below).
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { attributions: true },
+    });
+    if (!payment) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    const existingAttrs = payment.attributions as unknown as AttributionRow[];
+
+    // 2. Resolve caller-accessible attributions.
+    const { accessible, personal, memberGroups } = await this.resolveAccessibleAttributions(
+      userId,
+      existingAttrs,
+    );
+    if (accessible.length === 0) {
+      // Caller can't see this payment → 404 (don't leak existence).
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    // 3. Scope resolution → target attribution ids.
+    const scope = query.scope;
+    let targets: AttributionRow[];
+    if (scope === undefined) {
+      if (accessible.length === 1) {
+        targets = [accessible[0]];
+      } else {
+        const accessibleScopes = this.describeAccessibleScopes(accessible);
+        throw new ConflictException({
+          message: 'Scope is ambiguous — pass ?scope=personal | group:<id> | all',
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_AMBIGUOUS,
+          details: { accessibleScopes },
+        });
+      }
+    } else if (scope === 'personal') {
+      if (!personal) {
+        throw new ConflictException({
+          message: 'Caller has no personal attribution on this payment',
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ATTRIBUTED,
+        });
+      }
+      targets = [personal];
+    } else if (scope === 'all') {
+      if (accessible.length === 0) {
+        throw new ConflictException({
+          message: 'No accessible attributions to remove',
+          errorCode: PAYMENT_ERRORS.PAYMENT_NO_ACCESSIBLE_ATTRIBUTION,
+        });
+      }
+      targets = accessible.slice();
+    } else if (scope.startsWith('group:')) {
+      const gid = scope.slice('group:'.length);
+      if (!memberGroups.has(gid)) {
+        // Non-member for that group → still 409 NOT_ATTRIBUTED (404-on-entity rule
+        // only applies when the *payment* is non-visible).
+        throw new ConflictException({
+          message: `Caller has no accessible attribution with scope group:${gid} on this payment`,
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ATTRIBUTED,
+        });
+      }
+      const match = accessible.find((a) => a.scopeType === 'group' && a.groupId === gid);
+      if (!match) {
+        throw new ConflictException({
+          message: `Caller has no accessible attribution with scope group:${gid} on this payment`,
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ATTRIBUTED,
+        });
+      }
+      targets = [match];
+    } else {
+      // DTO regex should have caught this; defensively treat as ambiguous.
+      throw new ConflictException({
+        message: `Invalid scope '${scope}'`,
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCOPE_AMBIGUOUS,
+      });
+    }
+
+    const targetIds = targets.map((t) => t.id);
+
+    // 4. Transactional delete.
+    const { paymentDeleted } = await this.prisma.$transaction(async (tx) => {
+      await tx.paymentAttribution.deleteMany({ where: { id: { in: targetIds } } });
+      const remaining = await tx.paymentAttribution.count({ where: { paymentId } });
+      let hardDeleted = false;
+      if (remaining === 0) {
+        await tx.payment.delete({ where: { id: paymentId } });
+        hardDeleted = true;
+      }
+      return { paymentDeleted: hardDeleted };
+    });
+
+    // 5. Audit (best-effort).
+    for (const t of targets) {
+      void this.writeAudit(userId, paymentId, 'PAYMENT_ATTRIBUTION_REMOVED', {
+        scope: t.scopeType,
+        groupId: t.groupId ?? null,
+      });
+    }
+    if (paymentDeleted) {
+      void this.writeAudit(userId, paymentId, 'PAYMENT_DELETED', {
+        reason: 'scope_delete',
+        scope: scope ?? 'implicit',
+      });
+    }
+
+    this.logger.log(
+      `Payment ${paymentId} scoped-delete by user ${userId} — targets=${targetIds.length}, paymentDeleted=${paymentDeleted}`,
+    );
+
+    // 6. Assemble response.
+    let summary: PaymentSummaryDto | null = null;
+    if (!paymentDeleted) {
+      const fresh = await this.prisma.payment.findUnique({
+        where: { id: paymentId },
+        include: buildDetailInclude(userId),
+      });
+      if (fresh) {
+        summary = mapPaymentToSummary(fresh as unknown as PaymentWithRelations, {
+          starredByMe: fresh.stars.length > 0,
+          commentCount: fresh._count.comments,
+          hasDocuments: fresh._count.documents > 0,
+        });
+      }
+    }
+
+    return {
+      deletedAttributions: targetIds.length,
+      addedAttributions: 0,
+      paymentDeleted,
+      payment: summary,
+    };
   }
 
   // ── helpers ──
@@ -567,11 +870,21 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Shared attribution validator — used by create() and update().
+   *
+   * When `allowEmpty=true`, an empty list is allowed (update() expresses
+   * "clear all accessible attributions" that way). When `memberGroupsCache`
+   * is supplied, group-membership checks reuse it without a DB round-trip.
+   */
   private async validateAttributions(
     userId: string,
     attributions: AttributionDto[],
+    memberGroupsCache?: Set<string>,
+    opts: { allowEmpty?: boolean } = {},
   ): Promise<void> {
     if (!attributions || attributions.length === 0) {
+      if (opts.allowEmpty) return;
       throw new BadRequestException({
         message: 'At least one attribution is required',
         errorCode: PAYMENT_ERRORS.PAYMENT_NO_ATTRIBUTIONS,
@@ -615,11 +928,16 @@ export class PaymentService {
     }
 
     if (groupIdsToCheck.size > 0) {
-      const memberships = await this.prisma.groupMembership.findMany({
-        where: { userId, groupId: { in: Array.from(groupIdsToCheck) } },
-        select: { groupId: true },
-      });
-      const memberGroupIds = new Set(memberships.map((m) => m.groupId));
+      let memberGroupIds: Set<string>;
+      if (memberGroupsCache) {
+        memberGroupIds = memberGroupsCache;
+      } else {
+        const memberships = await this.prisma.groupMembership.findMany({
+          where: { userId, groupId: { in: Array.from(groupIdsToCheck) } },
+          select: { groupId: true },
+        });
+        memberGroupIds = new Set(memberships.map((m) => m.groupId));
+      }
       for (const gid of groupIdsToCheck) {
         if (!memberGroupIds.has(gid)) {
           throw new ForbiddenException({
@@ -631,10 +949,63 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Partition a payment's attribution rows into the subset the caller can
+   * control (their personal + member groups) and preload their group-
+   * membership set in one query (no N+1). Iteration 6.8 helper, used by
+   * `remove()` and the attribution-diff branch of `update()`.
+   */
+  private async resolveAccessibleAttributions(
+    userId: string,
+    attributions: AttributionRow[],
+  ): Promise<{
+    accessible: AttributionRow[];
+    personal: AttributionRow | null;
+    memberGroups: Set<string>;
+  }> {
+    const groupIdsOnPayment = Array.from(
+      new Set(
+        attributions
+          .filter((a) => a.scopeType === 'group' && a.groupId)
+          .map((a) => a.groupId as string),
+      ),
+    );
+    let memberGroups = new Set<string>();
+    if (groupIdsOnPayment.length > 0) {
+      const memberships = await this.prisma.groupMembership.findMany({
+        where: { userId, groupId: { in: groupIdsOnPayment } },
+        select: { groupId: true },
+      });
+      memberGroups = new Set(memberships.map((m) => m.groupId));
+    }
+
+    const accessible: AttributionRow[] = [];
+    let personal: AttributionRow | null = null;
+    for (const a of attributions) {
+      if (a.scopeType === 'personal' && a.userId === userId) {
+        accessible.push(a);
+        personal = a;
+      } else if (a.scopeType === 'group' && a.groupId && memberGroups.has(a.groupId)) {
+        accessible.push(a);
+      }
+    }
+    return { accessible, personal, memberGroups };
+  }
+
+  /** Human-readable list of the caller's accessible scopes (for error details). */
+  private describeAccessibleScopes(accessible: AttributionRow[]): string[] {
+    return accessible.map((a) => (a.scopeType === 'personal' ? 'personal' : `group:${a.groupId}`));
+  }
+
   private async writeAudit(
     userId: string,
     paymentId: string,
-    action: 'PAYMENT_CREATED' | 'PAYMENT_UPDATED',
+    action:
+      | 'PAYMENT_CREATED'
+      | 'PAYMENT_UPDATED'
+      | 'PAYMENT_DELETED'
+      | 'PAYMENT_ATTRIBUTION_ADDED'
+      | 'PAYMENT_ATTRIBUTION_REMOVED',
     details: Record<string, unknown>,
   ): Promise<void> {
     try {

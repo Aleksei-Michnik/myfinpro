@@ -1,6 +1,10 @@
 import { PAYMENT_DIRECTIONS } from '@myfinpro/shared';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsIn,
   IsInt,
   IsISO8601,
@@ -10,15 +14,20 @@ import {
   IsUUID,
   Length,
   Matches,
+  ValidateNested,
 } from 'class-validator';
+import { AttributionDto } from './attribution.dto';
 
 /**
- * PATCH /payments/:id body. Phase 6, iteration 6.7.
- *
- * Only **scalar** fields are accepted. Attribution array edits and star/comment
- * toggles are handled by dedicated endpoints (iterations 6.8 / 6.9 / 6.10).
+ * PATCH /payments/:id body. Phase 6, iterations 6.7 + 6.8.
  *
  * All fields are optional; an empty body is a no-op (no DB write, no audit).
+ *
+ * Iteration 6.8 adds `attributions`: when present, the caller-accessible
+ * attribution subset is *replaced* by the given list. Other users' personal
+ * attributions and non-member groups are never touched. An empty array is
+ * equivalent to `DELETE ?scope=all` and hard-deletes the payment when it
+ * removes the last attribution (→ 204 No Content).
  */
 export class UpdatePaymentDto {
   @ApiPropertyOptional({ enum: [...PAYMENT_DIRECTIONS] })
@@ -53,4 +62,19 @@ export class UpdatePaymentDto {
   @IsString()
   @Length(0, 2000)
   note?: string;
+
+  @ApiPropertyOptional({
+    type: [AttributionDto],
+    description:
+      'Replaces the caller-accessible attributions. Non-accessible attributions are untouched. ' +
+      'Empty array deletes every accessible attribution (same as DELETE ?scope=all). ' +
+      'Creator-only.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(0)
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => AttributionDto)
+  attributions?: AttributionDto[];
 }

@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,7 +37,14 @@ describe('PaymentService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn().mockResolvedValue({}),
+    },
+    paymentAttribution: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      count: jest.fn().mockResolvedValue(1),
     },
     groupMembership: {
       findMany: jest.fn(),
@@ -116,8 +128,13 @@ describe('PaymentService', () => {
     prismaMock.auditLog.create.mockResolvedValue({});
     // Default: $transaction runs the callback with a tx that points at the same mocks.
     prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ payment: prismaMock.payment }),
+      cb({
+        payment: prismaMock.payment,
+        paymentAttribution: prismaMock.paymentAttribution,
+      }),
     );
+    // Remaining-count default: payment still has attributions after remove.
+    prismaMock.paymentAttribution.count.mockResolvedValue(1);
   });
 
   // ── type guard ──
@@ -1000,10 +1017,18 @@ describe('PaymentService', () => {
   describe('update()', () => {
     beforeEach(() => {
       categoryServiceMock.findById.mockResolvedValue(okCategory());
-      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => ({
-        ...makeFullRow(),
-        ...(data as Record<string, unknown>),
-      }));
+      // The update() flow writes via payment.update then reloads via findUnique.
+      // Mirror the write in the subsequent findUnique so the summary reflects the edit.
+      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => {
+        const merged = { ...makeFullRow(), ...(data as Record<string, unknown>) };
+        prismaMock.payment.findUnique.mockResolvedValue(merged);
+        return merged;
+      });
+      // Default reload mirrors the row from findFirst.
+      prismaMock.payment.findUnique.mockImplementation(async () => {
+        const last = prismaMock.payment.findFirst.mock.results.slice(-1)[0];
+        return last ? await last.value : makeFullRow();
+      });
     });
 
     it('edits note only → single-field prisma update + audit with changed=["note"]', async () => {
@@ -1054,7 +1079,8 @@ describe('PaymentService', () => {
 
       expect(prismaMock.payment.update).not.toHaveBeenCalled();
       expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
-      expect(r.id).toBe('pay-1');
+      expect(r).not.toBeNull();
+      expect(r!.id).toBe('pay-1');
     });
 
     it('403 PAYMENT_NOT_OWNER when caller is not the creator', async () => {
@@ -1190,7 +1216,8 @@ describe('PaymentService', () => {
     it('returned summary reflects the updated amountCents', async () => {
       prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
       const r = await service.update('user-1', 'pay-1', { amountCents: 4242 });
-      expect(r.amountCents).toBe(4242);
+      expect(r).not.toBeNull();
+      expect(r!.amountCents).toBe(4242);
     });
 
     it('rejects unsupported currency on update', async () => {
@@ -1215,6 +1242,545 @@ describe('PaymentService', () => {
       await expect(service.update('user-1', 'pay-1', { direction: 'IN' })).resolves.toBeDefined();
       // categoryService.findById was called with the payment's existing category id.
       expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-1');
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.8 — remove() + update() with attributions
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Build a row shaped like what prisma returns from findUnique + attributions include. */
+  const makeRawRow = (over: Record<string, unknown> = {}) => ({
+    id: 'pay-1',
+    direction: 'OUT',
+    type: 'ONE_TIME',
+    amountCents: 1250,
+    currency: 'USD',
+    occurredAt: new Date('2026-04-25T00:00:00Z'),
+    status: 'POSTED',
+    categoryId: 'cat-1',
+    note: null,
+    parentPaymentId: null,
+    createdById: 'user-1',
+    createdAt: now,
+    updatedAt: now,
+    attributions: [
+      { id: 'attr-p', paymentId: 'pay-1', scopeType: 'personal', userId: 'user-1', groupId: null },
+    ] as Array<{
+      id: string;
+      paymentId: string;
+      scopeType: string;
+      userId: string | null;
+      groupId: string | null;
+    }>,
+    ...over,
+  });
+
+  describe('remove()', () => {
+    it('explicit scope=personal: removes the personal attribution; payment survives', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1); // group remains
+      // Second findUnique: reload after remove.
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeFullRow());
+
+      const r = await service.remove('user-1', 'pay-1', { scope: 'personal' });
+      expect(r.deletedAttributions).toBe(1);
+      expect(r.paymentDeleted).toBe(false);
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['attr-p'] } },
+      });
+      expect(prismaMock.payment.delete).not.toHaveBeenCalled();
+    });
+
+    it('explicit scope=group:<id> as member: removes that group attribution', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeFullRow());
+
+      const r = await service.remove('user-1', 'pay-1', { scope: 'group:g1' });
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['attr-g'] } },
+      });
+      expect(r.paymentDeleted).toBe(false);
+    });
+
+    it('explicit scope=group:<id> as non-member: 404 PAYMENT_NOT_FOUND (no visible attribution)', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          createdById: 'user-other',
+          attributions: [
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([]); // user-1 not a member
+
+      await expect(service.remove('user-1', 'pay-1', { scope: 'group:g1' })).rejects.toThrow(
+        NotFoundException,
+      );
+      try {
+        prismaMock.payment.findUnique.mockResolvedValueOnce(
+          makeRawRow({
+            createdById: 'user-other',
+            attributions: [
+              { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+            ],
+          }),
+        );
+        await service.remove('user-1', 'pay-1', { scope: 'group:g1' });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+    });
+
+    it('explicit scope=all: removes every accessible attribution; deletes payment when none remain', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0); // nothing left
+
+      const r = await service.remove('user-1', 'pay-1', { scope: 'all' });
+      expect(r.deletedAttributions).toBe(2);
+      expect(r.paymentDeleted).toBe(true);
+      expect(r.payment).toBeNull();
+      expect(prismaMock.payment.delete).toHaveBeenCalledWith({ where: { id: 'pay-1' } });
+    });
+
+    it("scope=all preserves other users' personal attributions", async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            // another user's personal — NOT accessible to user-1
+            {
+              id: 'attr-other',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-other',
+              groupId: null,
+            },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1); // other remains
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeFullRow());
+
+      const r = await service.remove('user-1', 'pay-1', { scope: 'all' });
+      expect(r.deletedAttributions).toBe(1);
+      expect(r.paymentDeleted).toBe(false);
+      // Only caller's attribution was targeted.
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['attr-p'] } },
+      });
+    });
+
+    it('implicit scope: single accessible attribution → removes it', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+
+      const r = await service.remove('user-1', 'pay-1', {});
+      expect(r.paymentDeleted).toBe(true);
+      expect(r.deletedAttributions).toBe(1);
+    });
+
+    it('implicit scope: multiple accessible → 409 PAYMENT_SCOPE_AMBIGUOUS with accessibleScopes', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+
+      await expect(service.remove('user-1', 'pay-1', {})).rejects.toThrow(ConflictException);
+      try {
+        prismaMock.payment.findUnique.mockResolvedValueOnce(
+          makeRawRow({
+            attributions: [
+              {
+                id: 'attr-p',
+                paymentId: 'pay-1',
+                scopeType: 'personal',
+                userId: 'user-1',
+                groupId: null,
+              },
+              { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+            ],
+          }),
+        );
+        await service.remove('user-1', 'pay-1', {});
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_SCOPE_AMBIGUOUS);
+        const details = (
+          err as { getResponse?: () => { details?: { accessibleScopes?: string[] } } }
+        ).getResponse?.().details;
+        expect(details?.accessibleScopes).toEqual(['personal', 'group:g1']);
+      }
+    });
+
+    it('scope=personal when user never had personal → 409 PAYMENT_SCOPE_NOT_ATTRIBUTED', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      try {
+        await service.remove('user-1', 'pay-1', { scope: 'personal' });
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConflictException);
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_SCOPE_NOT_ATTRIBUTED);
+      }
+    });
+
+    it('non-visible payment (no id) → 404', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(null);
+      await expect(service.remove('user-1', 'pay-1', {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('fires PAYMENT_ATTRIBUTION_REMOVED once per deletion + PAYMENT_DELETED when payment is hard-deleted', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+
+      await service.remove('user-1', 'pay-1', { scope: 'all' });
+      await new Promise((res) => setImmediate(res));
+
+      const actions = prismaMock.auditLog.create.mock.calls.map(
+        (c) => (c[0] as { data: { action: string } }).data.action,
+      );
+      expect(actions.filter((a) => a === 'PAYMENT_ATTRIBUTION_REMOVED')).toHaveLength(2);
+      expect(actions).toContain('PAYMENT_DELETED');
+    });
+
+    it('does NOT fire PAYMENT_DELETED when attributions still remain', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeFullRow());
+
+      await service.remove('user-1', 'pay-1', { scope: 'personal' });
+      await new Promise((res) => setImmediate(res));
+
+      const actions = prismaMock.auditLog.create.mock.calls.map(
+        (c) => (c[0] as { data: { action: string } }).data.action,
+      );
+      expect(actions).not.toContain('PAYMENT_DELETED');
+    });
+
+    it('uses prisma.$transaction; throw inside it propagates', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.$transaction.mockRejectedValueOnce(new Error('db crash'));
+      await expect(service.remove('user-1', 'pay-1', { scope: 'personal' })).rejects.toThrow(
+        'db crash',
+      );
+    });
+
+    it('audit failure does not break the main operation', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+      prismaMock.auditLog.create.mockRejectedValueOnce(new Error('audit down'));
+      await expect(service.remove('user-1', 'pay-1', { scope: 'personal' })).resolves.toBeDefined();
+    });
+  });
+
+  describe('update() with attributions', () => {
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => {
+        const merged = { ...makeFullRow(), ...(data as Record<string, unknown>) };
+        prismaMock.payment.findUnique.mockResolvedValue(merged);
+        return merged;
+      });
+      prismaMock.payment.findUnique.mockImplementation(async () => {
+        const last = prismaMock.payment.findFirst.mock.results.slice(-1)[0];
+        return last ? await last.value : makeFullRow();
+      });
+    });
+
+    /** findFirst returns the full visibility-loaded row with raw attributions. */
+    const fullRowWithAttrs = (
+      attrs: Array<{
+        id: string;
+        scopeType: string;
+        userId: string | null;
+        groupId: string | null;
+        group?: { name: string } | null;
+      }>,
+    ) =>
+      makeFullRow({
+        attributions: attrs.map((a) => ({ ...a, group: a.group ?? null, paymentId: 'pay-1' })),
+      });
+
+    it('attributions identical to current accessible → no DB write, returns summary', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+
+      await service.update('user-1', 'pay-1', { attributions: [{ scope: 'personal' }] });
+      expect(prismaMock.paymentAttribution.deleteMany).not.toHaveBeenCalled();
+      expect(prismaMock.paymentAttribution.createMany).not.toHaveBeenCalled();
+    });
+
+    it('empty array removes all accessible → payment deleted → returns null', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+
+      const r = await service.update('user-1', 'pay-1', { attributions: [] });
+      expect(r).toBeNull();
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalled();
+      expect(prismaMock.payment.delete).toHaveBeenCalledWith({ where: { id: 'pay-1' } });
+    });
+
+    it('adds a new group attribution for a member group', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(2);
+
+      await service.update('user-1', 'pay-1', {
+        attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }],
+      });
+
+      expect(prismaMock.paymentAttribution.createMany).toHaveBeenCalledWith({
+        data: [{ paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' }],
+      });
+      expect(prismaMock.paymentAttribution.deleteMany).not.toHaveBeenCalled();
+      await new Promise((res) => setImmediate(res));
+      const actions = prismaMock.auditLog.create.mock.calls.map(
+        (c) => (c[0] as { data: { action: string } }).data.action,
+      );
+      expect(actions).toContain('PAYMENT_ATTRIBUTION_ADDED');
+    });
+
+    it('removes personal while keeping group', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+        { id: 'attr-g', scopeType: 'group', userId: null, groupId: 'g1' },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+
+      await service.update('user-1', 'pay-1', {
+        attributions: [{ scope: 'group', groupId: 'g1' }],
+      });
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['attr-p'] } },
+      });
+      expect(prismaMock.paymentAttribution.createMany).not.toHaveBeenCalled();
+    });
+
+    it('replaces group g1 with g2 when user is a member of both', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-g1', scopeType: 'group', userId: null, groupId: 'g1' },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }, { groupId: 'g2' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+
+      await service.update('user-1', 'pay-1', {
+        attributions: [{ scope: 'group', groupId: 'g2' }],
+      });
+      expect(prismaMock.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['attr-g1'] } },
+      });
+      expect(prismaMock.paymentAttribution.createMany).toHaveBeenCalledWith({
+        data: [{ paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g2' }],
+      });
+    });
+
+    it('desired group the user is not a member of → 403 PAYMENT_ATTRIBUTION_OUT_OF_SCOPE', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([]); // not a member of anything
+
+      try {
+        await service.update('user-1', 'pay-1', {
+          attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g-nope' }],
+        });
+      } catch (err) {
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_ATTRIBUTION_OUT_OF_SCOPE);
+      }
+    });
+
+    it("desired attribution collides with another user's personal → 403 PAYMENT_ATTRIBUTION_OUT_OF_SCOPE", async () => {
+      const row = fullRowWithAttrs([
+        // Caller's group is accessible, another user's personal is on the payment but not accessible.
+        { id: 'attr-g', scopeType: 'group', userId: null, groupId: 'g1' },
+        { id: 'attr-other', scopeType: 'personal', userId: 'user-other', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+
+      // Caller attempts to "add" personal — collides with user-other's personal row.
+      try {
+        await service.update('user-1', 'pay-1', {
+          attributions: [{ scope: 'group', groupId: 'g1' }, { scope: 'personal' }],
+        });
+      } catch (err) {
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_ATTRIBUTION_OUT_OF_SCOPE);
+      }
+    });
+
+    it('duplicate in desired → 400 PAYMENT_DUPLICATE_ATTRIBUTION', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      try {
+        await service.update('user-1', 'pay-1', {
+          attributions: [{ scope: 'personal' }, { scope: 'personal' }],
+        });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_DUPLICATE_ATTRIBUTION);
+      }
+    });
+
+    it('malformed attribution → 400 PAYMENT_INVALID_ATTRIBUTION', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      try {
+        await service.update('user-1', 'pay-1', {
+          attributions: [{ scope: 'group' }], // missing groupId
+        });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_INVALID_ATTRIBUTION);
+      }
+    });
+
+    it('non-creator with attributions in body → 403 PAYMENT_NOT_OWNER', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-g', scopeType: 'group', userId: null, groupId: 'g1' },
+      ]);
+      row.createdById = 'user-other';
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      try {
+        await service.update('user-1', 'pay-1', { attributions: [] });
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_OWNER);
+      }
+    });
+
+    it('attribution edit + scalar edit happen in one $transaction', async () => {
+      const row = fullRowWithAttrs([
+        { id: 'attr-p', scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(2);
+
+      await service.update('user-1', 'pay-1', {
+        note: 'combined',
+        attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }],
+      });
+
+      expect(prismaMock.$transaction).toHaveBeenCalled();
+      expect(prismaMock.payment.update).toHaveBeenCalled();
+      expect(prismaMock.paymentAttribution.createMany).toHaveBeenCalled();
+      await new Promise((res) => setImmediate(res));
+      const actions = prismaMock.auditLog.create.mock.calls.map(
+        (c) => (c[0] as { data: { action: string } }).data.action,
+      );
+      expect(actions).toContain('PAYMENT_UPDATED');
+      expect(actions).toContain('PAYMENT_ATTRIBUTION_ADDED');
     });
   });
 });

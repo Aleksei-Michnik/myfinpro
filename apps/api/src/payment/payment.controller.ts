@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -9,26 +10,33 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
+import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import { PaymentSummaryDto } from './dto/payment-summary.dto';
@@ -112,14 +120,19 @@ export class PaymentController {
   @Patch(':id')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Update scalar fields of a payment (creator only)',
+    summary: 'Update scalar fields and/or attribution subset of a payment (creator only)',
     description:
-      'Editable fields: direction, amountCents, currency, occurredAt, categoryId, note. ' +
-      'Attribution array edits are handled by the delete-per-scope endpoint (iteration 6.8). ' +
-      'Empty body is a no-op.',
+      'Editable scalars: direction, amountCents, currency, occurredAt, categoryId, note. ' +
+      'The optional `attributions` array replaces the caller-accessible subset; other users\u2019 ' +
+      'personal attributions and non-member groups are never touched. An empty array clears all ' +
+      'accessible attributions \u2014 if that leaves the payment with zero attributions, the ' +
+      'payment is hard-deleted and the response is 204 No Content. Empty body is a no-op.',
   })
   @ApiBody({ type: UpdatePaymentDto })
   @ApiOkResponse({ description: 'Updated payment summary', type: PaymentSummaryDto })
+  @ApiNoContentResponse({
+    description: 'Payment hard-deleted because the attribution edit left zero attributions.',
+  })
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   @ApiForbiddenResponse({ description: 'Caller is not the creator' })
@@ -129,7 +142,41 @@ export class PaymentController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePaymentDto,
-  ): Promise<PaymentSummaryDto> {
-    return this.service.update(user.sub, id, dto);
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PaymentSummaryDto | undefined> {
+    const result = await this.service.update(user.sub, id, dto);
+    if (result === null) {
+      res.status(HttpStatus.NO_CONTENT);
+      return undefined;
+    }
+    return result;
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60000 }) // design §5.8 — 30/min mutation
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Scoped-delete of attributions on a payment',
+    description:
+      'Removes the caller-accessible attribution(s) matching `scope`. When scope is omitted, the ' +
+      'service picks the only accessible attribution; if several exist, 409 PAYMENT_SCOPE_AMBIGUOUS ' +
+      'is returned with the list of accessible scopes. When the remove leaves the payment with ' +
+      'zero attributions, the payment row is hard-deleted (cascade on stars / comments / ' +
+      'documents / schedule / plan).',
+  })
+  @ApiQuery({ name: 'scope', required: false, example: 'personal' })
+  @ApiOkResponse({ description: 'Attribution change result', type: AttributionChangeResultDto })
+  @ApiNotFoundResponse({ description: 'Not found or not visible to the caller' })
+  @ApiConflictResponse({ description: 'Scope ambiguous or not attributed' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (30/min)' })
+  async remove(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: DeletePaymentQueryDto,
+  ): Promise<AttributionChangeResultDto> {
+    return this.service.remove(user.sub, id, query);
   }
 }
