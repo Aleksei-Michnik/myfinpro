@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-02
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 6/21 iterations complete
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 7/21 iterations complete
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 6/21       | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 7/21       | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 56 | **Remaining:** 84
+**Total iterations:** 140 | **Completed:** 57 | **Remaining:** 83
 
 ---
 
@@ -3048,3 +3048,125 @@ count: 0
 **User confirmation**: "List API works correctly — proceed to 6.7 (Edit + Get-one)."
 
 **Next step**: Iteration 6.7 — Edit + Get-one (`PATCH /api/v1/payments/:id` + `GET /api/v1/payments/:id`). Will extend the same visibility helper used here and introduce attribution-edit semantics.
+
+### Iteration 6.7 — Get-one + Edit Payment API (2026-05-02)
+
+**Endpoints**
+
+| Method | Path                   | Rate limit | Notes                                                  |
+| ------ | ---------------------- | ---------- | ------------------------------------------------------ |
+| GET    | `/api/v1/payments/:id` | 120/min    | Visibility-guarded; 404 when not accessible (no leak). |
+| PATCH  | `/api/v1/payments/:id` | 30/min     | Creator-only scalar edits; empty body is a no-op.      |
+
+**DRY wins**
+
+- Extracted `PaymentService.buildVisibilityWhere(userId)` — single source of truth for the visibility predicate (`attributions.some` OR'd over personal + member-groups). Reused by `list()` (scope=all path), `findByIdForUser()`, and `update()`.
+- Introduced `PAYMENT_DETAIL_INCLUDE` + `buildDetailInclude(userId)` helper so list / get / update all feed the exact same relation shape into `mapPaymentToSummary()`. Include drift is now structurally impossible.
+- Split validation into `validateAmount()`, `parseAndValidateOccurredAt()`, `loadCategoryOrThrow()`, `ensureCategoryDirectionMatches()` helpers shared by `create()` and `update()`.
+
+**Error codes added** (docs/phase-6-payments-design.md §5.7)
+
+- `PAYMENT_NOT_FOUND`
+- `PAYMENT_NOT_OWNER`
+- `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`
+
+**Forward-compat guard**: `update()` rejects rows where `parentPaymentId !== null` or `type !== 'ONE_TIME'` with `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`. Belt-and-suspenders for iterations 6.17 (RECURRING) / 6.19 (INSTALLMENT) — can't trigger today because only ONE_TIME exists.
+
+**Semantics**
+
+- 404 (not 403) for rows the caller can't see — design rule "don't leak existence".
+- PATCH with empty body → no DB write, no audit row, returns current snapshot.
+- `note: ""` is coerced to `NULL`.
+- Direction-only change validates against existing category; direction + categoryId change validates against the new category.
+- Best-effort `PAYMENT_UPDATED` audit log with `details.changed = sorted(mutated-keys)`. Audit failure never fails the mutation.
+
+**Tests**
+
+- Unit: 22 new (findByIdForUser + update) → 145 total payment unit tests.
+- Integration: 13 new scenarios in `payments-edit.integration.spec.ts` (visibility, creator-check, direction/category compat, date/amount sanity, empty-body no-op, note-clearing, audit contents).
+- Full workspace: **576/576** unit tests + **39/39** payment integration tests green.
+
+**CI + Deploy Staging**: commit `ae7cab6` — both workflows green on first push.
+
+**Staging smoke** (`docker exec myfinpro-staging-api-blue node /tmp/smoke-6.7.mjs`)
+
+```
+=== payment id: 0f1fcccf-5632-4b3a-8e0d-c13305091cb3
+--- (1) GET as creator (expect 200) ---
+  { status: 200, id: <pid>, note: "smoke", amountCents: 1250, direction: "OUT" }
+--- (2) PATCH note (expect 200) ---
+  { status: 200, note: "updated", amountCents: 1250 }
+--- (3) PATCH amountCents=9900 (expect 200) ---
+  { status: 200, note: "updated", amountCents: 9900 }
+--- (4) PATCH direction=IN on OUT category (expect 400) ---
+  { status: 400, errorCode: "PAYMENT_CATEGORY_DIRECTION_MISMATCH" }
+--- (5) GET as user B (expect 404) ---
+  { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+--- (6) PATCH as user B (expect 404 — masks 403) ---
+  { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+```
+
+All status codes match expectations.
+
+**Next step**: Iteration 6.8 — Delete payment + attribution edits via scoped delete (`DELETE /api/v1/payments/:id` and per-attribution delete that may collapse the payment when the last attribution is removed).
+
+### Iteration 6.7 — Get-one + Edit Payment API (2026-05-02)
+
+**Endpoints**
+
+| Method | Path                   | Rate limit | Notes                                                  |
+| ------ | ---------------------- | ---------- | ------------------------------------------------------ |
+| GET    | `/api/v1/payments/:id` | 120/min    | Visibility-guarded; 404 when not accessible (no leak). |
+| PATCH  | `/api/v1/payments/:id` | 30/min     | Creator-only scalar edits; empty body is a no-op.      |
+
+**DRY wins**
+
+- Extracted `PaymentService.buildVisibilityWhere(userId)` — single source of truth for the visibility predicate (`attributions.some` OR'd over personal + member-groups). Reused by `list()` (scope=all path), `findByIdForUser()`, and `update()`.
+- Introduced `PAYMENT_DETAIL_INCLUDE` + `buildDetailInclude(userId)` helper so list / get / update all feed the exact same relation shape into `mapPaymentToSummary()`. Include drift is now structurally impossible.
+- Split validation into `validateAmount()`, `parseAndValidateOccurredAt()`, `loadCategoryOrThrow()`, `ensureCategoryDirectionMatches()` helpers shared by `create()` and `update()`.
+
+**Error codes added** (docs/phase-6-payments-design.md §5.7)
+
+- `PAYMENT_NOT_FOUND`
+- `PAYMENT_NOT_OWNER`
+- `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`
+
+**Forward-compat guard**: `update()` rejects rows where `parentPaymentId !== null` or `type !== 'ONE_TIME'` with `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`. Belt-and-suspenders for iterations 6.17 (RECURRING) / 6.19 (INSTALLMENT) — can't trigger today because only ONE_TIME exists.
+
+**Semantics**
+
+- 404 (not 403) for rows the caller can't see — design rule "don't leak existence".
+- PATCH with empty body → no DB write, no audit row, returns current snapshot.
+- `note: ""` is coerced to `NULL`.
+- Direction-only change validates against existing category; direction + categoryId change validates against the new category.
+- Best-effort `PAYMENT_UPDATED` audit log with `details.changed = sorted(mutated-keys)`. Audit failure never fails the mutation.
+
+**Tests**
+
+- Unit: 22 new (findByIdForUser + update) → 145 total payment unit tests.
+- Integration: 13 new scenarios in `payments-edit.integration.spec.ts` (visibility, creator-check, direction/category compat, date/amount sanity, empty-body no-op, note-clearing, audit contents).
+- Full workspace: **576/576** unit tests + **39/39** payment integration tests green.
+
+**CI + Deploy Staging**: commit `ae7cab6` — both workflows green on first push.
+
+**Staging smoke** (`docker exec myfinpro-staging-api-blue node /tmp/smoke-6.7.mjs`)
+
+```
+=== payment id: 0f1fcccf-5632-4b3a-8e0d-c13305091cb3
+--- (1) GET as creator (expect 200) ---
+  { status: 200, id: <pid>, note: "smoke", amountCents: 1250, direction: "OUT" }
+--- (2) PATCH note (expect 200) ---
+  { status: 200, note: "updated", amountCents: 1250 }
+--- (3) PATCH amountCents=9900 (expect 200) ---
+  { status: 200, note: "updated", amountCents: 9900 }
+--- (4) PATCH direction=IN on OUT category (expect 400) ---
+  { status: 400, errorCode: "PAYMENT_CATEGORY_DIRECTION_MISMATCH" }
+--- (5) GET as user B (expect 404) ---
+  { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+--- (6) PATCH as user B (expect 404 — masks 403) ---
+  { status: 404, errorCode: "PAYMENT_NOT_FOUND" }
+```
+
+All status codes match expectations.
+
+**Next step**: Iteration 6.8 — Delete payment + attribution edits via scoped delete (`DELETE /api/v1/payments/:id` and per-attribution delete that may collapse the payment when the last attribution is removed).
