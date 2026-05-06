@@ -35,6 +35,7 @@ describe('PaymentController', () => {
     findByIdForUser: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
+    toggleStar: jest.fn(),
   };
 
   const user: JwtPayload = { sub: 'user-1', email: 'a@b', name: 'A' };
@@ -229,6 +230,32 @@ describe('PaymentController', () => {
       const reflector = new Reflector();
       const handler = Object.getPrototypeOf(controller).remove as () => unknown;
       expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(30);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
+    });
+  });
+
+  // ── iteration 6.9: POST /:id/star ──
+
+  describe('toggleStar()', () => {
+    it('delegates to service.toggleStar with user.sub + id', async () => {
+      const payload = { starred: true, starCount: 1 };
+      serviceMock.toggleStar.mockResolvedValue(payload);
+
+      const r = await controller.toggleStar(user, 'pay-1');
+
+      expect(serviceMock.toggleStar).toHaveBeenCalledWith('user-1', 'pay-1');
+      expect(r).toBe(payload);
+    });
+
+    it('propagates NotFoundException from the service', async () => {
+      serviceMock.toggleStar.mockRejectedValue(new NotFoundException('not found'));
+      await expect(controller.toggleStar(user, 'pay-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('applies 60/min rate limit metadata', () => {
+      const reflector = new Reflector();
+      const handler = Object.getPrototypeOf(controller).toggleStar as () => unknown;
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(60);
       expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
     });
   });

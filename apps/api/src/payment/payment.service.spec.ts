@@ -46,6 +46,12 @@ describe('PaymentService', () => {
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
       count: jest.fn().mockResolvedValue(1),
     },
+    paymentStar: {
+      findUnique: jest.fn(),
+      create: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(0),
+    },
     groupMembership: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
@@ -131,6 +137,7 @@ describe('PaymentService', () => {
       cb({
         payment: prismaMock.payment,
         paymentAttribution: prismaMock.paymentAttribution,
+        paymentStar: prismaMock.paymentStar,
       }),
     );
     // Remaining-count default: payment still has attributions after remove.
@@ -1781,6 +1788,200 @@ describe('PaymentService', () => {
       );
       expect(actions).toContain('PAYMENT_UPDATED');
       expect(actions).toContain('PAYMENT_ATTRIBUTION_ADDED');
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.9 — toggleStar()
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('toggleStar()', () => {
+    it('first toggle creates a PaymentStar row and returns starred=true', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+
+      const r = await service.toggleStar('user-1', 'pay-1');
+
+      expect(r).toEqual({ starred: true, starCount: 1 });
+      expect(prismaMock.paymentStar.create).toHaveBeenCalledWith({
+        data: { paymentId: 'pay-1', userId: 'user-1' },
+      });
+      expect(prismaMock.paymentStar.delete).not.toHaveBeenCalled();
+    });
+
+    it('second toggle removes the existing row and returns starred=false', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue({
+        id: 'star-1',
+        paymentId: 'pay-1',
+        userId: 'user-1',
+      });
+      prismaMock.paymentStar.count.mockResolvedValue(0);
+
+      const r = await service.toggleStar('user-1', 'pay-1');
+
+      expect(r).toEqual({ starred: false, starCount: 0 });
+      expect(prismaMock.paymentStar.delete).toHaveBeenCalledWith({ where: { id: 'star-1' } });
+      expect(prismaMock.paymentStar.create).not.toHaveBeenCalled();
+    });
+
+    it('non-visible payment returns 404 PAYMENT_NOT_FOUND', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+
+      await expect(service.toggleStar('user-1', 'pay-1')).rejects.toThrow(NotFoundException);
+      try {
+        await service.toggleStar('user-1', 'pay-1');
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+      // No star mutation should have happened.
+      expect(prismaMock.paymentStar.create).not.toHaveBeenCalled();
+      expect(prismaMock.paymentStar.delete).not.toHaveBeenCalled();
+    });
+
+    it('uses the shared visibility predicate (caller must be attributed)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+
+      await service.toggleStar('user-1', 'pay-1');
+
+      const arg = prismaMock.payment.findFirst.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+        select: Record<string, unknown>;
+      };
+      expect(arg.where.AND[0]).toEqual({ id: 'pay-1' });
+      expect(arg.where.AND[1]).toEqual({
+        attributions: {
+          some: {
+            OR: [
+              { scopeType: 'personal', userId: 'user-1' },
+              { scopeType: 'group', group: { memberships: { some: { userId: 'user-1' } } } },
+            ],
+          },
+        },
+      });
+      // Lightweight select — only `id` is loaded, not the full include shape.
+      expect(arg.select).toEqual({ id: true });
+    });
+
+    it('different users see their own starred state; aggregated count reflects all', async () => {
+      // Simulate user-2 starring a payment that user-1 already starred.
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null); // no row for user-2
+      prismaMock.paymentStar.count.mockResolvedValue(2); // user-1 + user-2
+
+      const r = await service.toggleStar('user-2', 'pay-1');
+
+      expect(r).toEqual({ starred: true, starCount: 2 });
+      expect(prismaMock.paymentStar.create).toHaveBeenCalledWith({
+        data: { paymentId: 'pay-1', userId: 'user-2' },
+      });
+    });
+
+    it('uses prisma.$transaction for the mutation', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+
+      await service.toggleStar('user-1', 'pay-1');
+
+      expect(prismaMock.$transaction).toHaveBeenCalled();
+    });
+
+    it('transaction throw propagates and no audit log is written', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.$transaction.mockRejectedValueOnce(new Error('db crash'));
+
+      await expect(service.toggleStar('user-1', 'pay-1')).rejects.toThrow('db crash');
+      await new Promise((res) => setImmediate(res));
+      const actions = prismaMock.auditLog.create.mock.calls.map(
+        (c) => (c[0] as { data: { action: string } }).data.action,
+      );
+      expect(actions).not.toContain('PAYMENT_STARRED');
+      expect(actions).not.toContain('PAYMENT_UNSTARRED');
+    });
+
+    it('writes a PAYMENT_STARRED audit log on the create-path', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+
+      await service.toggleStar('user-1', 'pay-1');
+      await new Promise((res) => setImmediate(res));
+
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'PAYMENT_STARRED',
+            entity: 'Payment',
+            entityId: 'pay-1',
+            userId: 'user-1',
+          }),
+        }),
+      );
+    });
+
+    it('writes a PAYMENT_UNSTARRED audit log on the delete-path', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue({
+        id: 'star-1',
+        paymentId: 'pay-1',
+        userId: 'user-1',
+      });
+      prismaMock.paymentStar.count.mockResolvedValue(0);
+
+      await service.toggleStar('user-1', 'pay-1');
+      await new Promise((res) => setImmediate(res));
+
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'PAYMENT_UNSTARRED',
+            entity: 'Payment',
+            entityId: 'pay-1',
+            userId: 'user-1',
+          }),
+        }),
+      );
+    });
+
+    it('does not propagate when the audit log write fails', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+      prismaMock.auditLog.create.mockRejectedValueOnce(new Error('audit down'));
+
+      await expect(service.toggleStar('user-1', 'pay-1')).resolves.toEqual({
+        starred: true,
+        starCount: 1,
+      });
+    });
+
+    it('starCount is read AFTER the transaction (separate paymentStar.count call)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(7);
+
+      const r = await service.toggleStar('user-1', 'pay-1');
+
+      expect(prismaMock.paymentStar.count).toHaveBeenCalledWith({
+        where: { paymentId: 'pay-1' },
+      });
+      expect(r.starCount).toBe(7);
+    });
+
+    it('looks up the existing star via the paymentId_userId compound unique', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1' });
+      prismaMock.paymentStar.findUnique.mockResolvedValue(null);
+      prismaMock.paymentStar.count.mockResolvedValue(1);
+
+      await service.toggleStar('user-1', 'pay-1');
+
+      expect(prismaMock.paymentStar.findUnique).toHaveBeenCalledWith({
+        where: { paymentId_userId: { paymentId: 'pay-1', userId: 'user-1' } },
+      });
     });
   });
 });

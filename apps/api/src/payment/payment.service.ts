@@ -22,6 +22,7 @@ import {
   PaymentCategorySummary,
   PaymentSummaryDto,
 } from './dto/payment-summary.dto';
+import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 
 /** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
@@ -997,6 +998,58 @@ export class PaymentService {
     return accessible.map((a) => (a.scopeType === 'personal' ? 'personal' : `group:${a.groupId}`));
   }
 
+  /**
+   * Toggle the caller's `PaymentStar` row for a payment (iteration 6.9).
+   *
+   * Gated by the shared visibility predicate — 404 when the caller cannot see
+   * the payment (no existence leak). Create vs. delete runs inside a single
+   * `$transaction` so concurrent double-taps can't duplicate rows or leave
+   * the row set inconsistent.
+   */
+  async toggleStar(userId: string, paymentId: string): Promise<ToggleStarResponseDto> {
+    // 1. Visibility check — lightweight, just need the id.
+    const visible = await this.prisma.payment.findFirst({
+      where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    // 2. Toggle atomically. Compound unique is `paymentId_userId`.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.paymentStar.findUnique({
+        where: { paymentId_userId: { paymentId, userId } },
+      });
+      if (existing) {
+        await tx.paymentStar.delete({ where: { id: existing.id } });
+        return { starred: false };
+      }
+      await tx.paymentStar.create({ data: { paymentId, userId } });
+      return { starred: true };
+    });
+
+    // 3. Cheap aggregate for the response.
+    const starCount = await this.prisma.paymentStar.count({ where: { paymentId } });
+
+    // 4. Audit — fire-and-forget, don't break the request on audit failure.
+    void this.writeAudit(
+      userId,
+      paymentId,
+      result.starred ? 'PAYMENT_STARRED' : 'PAYMENT_UNSTARRED',
+      {},
+    );
+
+    this.logger.log(
+      `Payment ${paymentId} star toggled by user ${userId} → starred=${result.starred}, total=${starCount}`,
+    );
+
+    return { starred: result.starred, starCount };
+  }
+
   private async writeAudit(
     userId: string,
     paymentId: string,
@@ -1005,7 +1058,9 @@ export class PaymentService {
       | 'PAYMENT_UPDATED'
       | 'PAYMENT_DELETED'
       | 'PAYMENT_ATTRIBUTION_ADDED'
-      | 'PAYMENT_ATTRIBUTION_REMOVED',
+      | 'PAYMENT_ATTRIBUTION_REMOVED'
+      | 'PAYMENT_STARRED'
+      | 'PAYMENT_UNSTARRED',
     details: Record<string, unknown>,
   ): Promise<void> {
     try {

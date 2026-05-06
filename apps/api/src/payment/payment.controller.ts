@@ -40,6 +40,7 @@ import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import { PaymentSummaryDto } from './dto/payment-summary.dto';
+import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { PaymentService } from './payment.service';
 
@@ -178,5 +179,28 @@ export class PaymentController {
     @Query() query: DeletePaymentQueryDto,
   ): Promise<AttributionChangeResultDto> {
     return this.service.remove(user.sub, id, query);
+  }
+
+  @CustomThrottle({ limit: 60, ttl: 60000 }) // design §5.8 — 60/min for star toggles
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/star')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Toggle starring for the current user',
+    description:
+      'Creates a PaymentStar row for the caller when absent, or removes it when present. ' +
+      'Idempotent in the sense that two calls end up in the starting state. Visibility is ' +
+      "gated by the shared predicate — 404 when the caller can't see the payment.",
+  })
+  @ApiOkResponse({ description: 'Post-toggle state + star count', type: ToggleStarResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found or not visible to the caller' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (60/min)' })
+  async toggleStar(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ToggleStarResponseDto> {
+    return this.service.toggleStar(user.sub, id);
   }
 }
