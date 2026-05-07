@@ -169,6 +169,31 @@ export class PaymentService {
   }
 
   /**
+   * Public, lightweight visibility guard — cross-service helper.
+   *
+   * Throws `NotFoundException` with `PAYMENT_NOT_FOUND` when `paymentId` does
+   * not exist OR when the caller has no qualifying attribution. Intended for
+   * sibling services (e.g. `PaymentCommentService`) that need to enforce
+   * "any user with payment access" without duplicating the predicate. The
+   * existing in-service call sites (`findByIdForUser`, `update`, `remove`,
+   * `toggleStar`) keep their inline fetch+check to avoid touching battle-
+   * tested code paths; see progress iteration 6.10 for the refactor-scope
+   * decision.
+   */
+  async assertVisible(userId: string, paymentId: string): Promise<void> {
+    const visible = await this.prisma.payment.findFirst({
+      where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
+      select: { id: true },
+    });
+    if (!visible) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+  }
+
+  /**
    * Create a ONE_TIME payment with N attributions in a single transaction.
    *
    * See design §5.2 "Payments" for validation rules and §5.7 for error codes.
