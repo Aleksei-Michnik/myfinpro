@@ -12,6 +12,7 @@ import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
 import { routing } from '@/i18n/routing';
 import { AuthProvider } from '@/lib/auth/auth-context';
 import { GroupProvider } from '@/lib/group/group-context';
+import { PaymentProvider } from '@/lib/payment/payment-context';
 
 import '../globals.css';
 
@@ -47,14 +48,16 @@ export default async function LocaleLayout({ children, params }: Props) {
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
             <GroupProvider>
-              <ToastProvider>
-                <Header />
-                <VerificationBanner />
-                <TimezoneDetector />
-                <ErrorBoundary>{children}</ErrorBoundary>
-                <Footer />
-                <ToastContainer />
-              </ToastProvider>
+              <PaymentProvider>
+                <ToastProvider>
+                  <Header />
+                  <VerificationBanner />
+                  <TimezoneDetector />
+                  <ErrorBoundary>{children}</ErrorBoundary>
+                  <Footer />
+                  <ToastContainer />
+                </ToastProvider>
+              </PaymentProvider>
             </GroupProvider>
           </AuthProvider>
         </NextIntlClientProvider>

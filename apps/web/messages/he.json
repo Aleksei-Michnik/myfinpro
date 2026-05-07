@@ -478,5 +478,11 @@
     "privacy": "מדיניות פרטיות",
     "help": "עזרה",
     "copyright": "© {year} MyFinPro. כל הזכויות שמורות."
+  },
+  "payments": {
+    "scope": {
+      "personal": "אישי",
+      "group": "קבוצה"
+    }
   }
 }
