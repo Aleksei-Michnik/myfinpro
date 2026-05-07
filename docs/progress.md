@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-02
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 8/21 iterations complete
+> **Last updated:** 2026-05-07
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 10/21 iterations complete (backend complete)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 8/21       | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 10/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 58 | **Remaining:** 82
+**Total iterations:** 140 | **Completed:** 60 | **Remaining:** 80
 
 ---
 
@@ -3232,3 +3232,85 @@ All status codes match expectations. User confirmed: "Star toggle works — proc
 **Cascade verified** — integration scenario #8 inserts two `PaymentStar` rows (one per user) on a group payment, then runs `DELETE ?scope=all` (which hard-deletes the `Payment`), then asserts `prisma.paymentStar.findMany({ where: { paymentId } })` returns zero. The `onDelete: Cascade` declared on `PaymentStar.payment` in iteration 6.2 works as designed.
 
 **Next step**: Iteration 6.10 — Comments API (`GET / POST / PATCH / DELETE /api/v1/payments/:id/comments`) with the same visibility predicate and per-user authorship rules.
+
+### Iteration 6.10 — Comments API (2026-05-07)
+
+**Last backend iteration of Phase 6.** Frontend work starts at 6.11 (`PaymentContext`).
+
+**Endpoints** — all under `/api/v1/payments/:paymentId/comments`, JWT-guarded:
+
+| Method | Path          | Rate limit | Semantics                                                                      |
+| ------ | ------------- | ---------- | ------------------------------------------------------------------------------ |
+| GET    | `/`           | 120/min    | Cursor-paginated, oldest-first (createdAt ASC, id ASC). Excludes soft-deleted. |
+| POST   | `/`           | 20/min     | Create comment. 201. Anyone with payment visibility can post.                  |
+| PATCH  | `/:commentId` | 20/min     | Edit own. 403 non-author, 404 unknown, 410 Gone if already soft-deleted.       |
+| DELETE | `/:commentId` | 20/min     | Soft-delete own. 204. Sets `deletedAt` + clears `content`.                     |
+
+Rate limits match design §5.8 (20/min for mutations, 120/min for reads — comments are chatty).
+
+**Error codes added** ([`payment-errors.ts`](../apps/api/src/payment/constants/payment-errors.ts:1)):
+`PAYMENT_COMMENT_NOT_FOUND`, `PAYMENT_COMMENT_NOT_AUTHOR`, `PAYMENT_COMMENT_DELETED`, `PAYMENT_COMMENT_INVALID_CURSOR`.
+
+**Soft-delete semantics** — `DELETE /:commentId` sets `deletedAt = now()` and clears `content = ''`, keeping the row for audit + cascade. Listing excludes soft-deleted rows (`where: { deletedAt: null }`). Hard-delete of the parent payment (via `DELETE /payments/:id?scope=all`) cascades and removes **all** comment rows including soft-deleted ones — verified by integration scenario #13.
+
+**Return-code decision — 410 Gone vs 404** for operations on already-soft-deleted comments: chose **410 Gone** (distinct from 404 "never existed") so the UI can distinguish "this comment used to exist and is now gone" from "wrong id / no access" and render the appropriate banner. NestJS has no `GoneException`; implemented via `throw new HttpException({...}, HttpStatus.GONE)`.
+
+**DRY — cross-service visibility**: extracted [`PaymentService.assertVisible(userId, paymentId)`](../apps/api/src/payment/payment.service.ts:170) as a lightweight public helper (selects `id` only). `PaymentCommentService` calls it at the top of every method. **Refactor scope decision**: existing in-service call sites (`findByIdForUser`, `update`, `remove`, `toggleStar`) were **left untouched** — they each do their own `findFirst` with the full relation include, and the duplication cost is low while the diff / regression risk of a refactor across battle-tested code is meaningful. Documented here for future reference; a single follow-up commit could consolidate if desired.
+
+**Cursor scheme** — base64url JSON `{ c: ISO, id: uuid }`, co-located in [`payment-comment.service.ts`](../apps/api/src/payment/payment-comment.service.ts:1) mirroring the style in `payment.service.ts`. Malformed / wrong-shape cursors → 400 `PAYMENT_COMMENT_INVALID_CURSOR`. Peek-one-more (`take: limit + 1`) for `hasMore` computation; last row of the returned slice becomes `nextCursor`.
+
+**Authorship** — only the original author can edit or soft-delete. Group admin override is **out of scope** per design §2.6 and explicitly deferred. The full comment existence _is_ surfaced to all viewers on a visible payment (by design — collaboration), but edit/delete rights are strictly per-author.
+
+**Audit** — best-effort `PAYMENT_COMMENT_CREATED` / `PAYMENT_COMMENT_UPDATED` / `PAYMENT_COMMENT_DELETED` rows. Audit failures are swallowed; the response status is unaffected.
+
+**Files created**:
+
+```
+apps/api/src/payment/
+  payment-comment.service.ts              (159 LOC + cursor helpers)
+  payment-comment.service.spec.ts         (29 unit tests)
+  payment-comment.controller.ts
+  payment-comment.controller.spec.ts      (11 controller tests)
+  dto/
+    create-comment.dto.ts
+    update-comment.dto.ts
+    list-comments-query.dto.ts
+    comment-response.dto.ts               (CommentAuthorDto, CommentResponseDto, CommentListResponseDto)
+apps/api/test/integration/
+  payments-comments.integration.spec.ts   (14 integration scenarios)
+```
+
+Updated [`payment.module.ts`](../apps/api/src/payment/payment.module.ts:1) to register `PaymentCommentService` + `PaymentCommentController` and export both services.
+
+**Tests** — 29 service unit + 11 controller unit + 14 integration = **54 new tests**. Full api workspace unit run: **660/660** green. Integration: all 14 pass including cursor pagination over 5 comments, cascade (2 live + 1 soft-deleted → 0 after payment hard-delete), and audit-trail ordering (CREATED → UPDATED → DELETED).
+
+**Commit**: [`aa2a8af`](https://github.com/Aleksei-Michnik/myfinpro/commit/aa2a8af) — `feat(phase-6.10): comments API on payments (CRUD + soft delete)`.
+**CI run**: [`25522598695`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25522598695) ✓ (1m41s).
+**Deploy Staging run**: [`25522598696`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25522598696) ✓ (6m0s, blue-green).
+
+**Staging smoke** (`docker exec myfinpro-staging-api-green node /tmp/smoke-6.10.mjs`):
+
+```
+payment id: c8da8fe4-0111-4072-b5e5-42a44a07f97a
+
+=== (1) A creates comment
+HTTP 201 { id, content: 'first', isMine: true }
+=== (2) A lists
+HTTP 200 count= 1 hasMore= false
+=== (3) B (no visibility) lists → 404
+HTTP 404 { errorCode: 'PAYMENT_NOT_FOUND', ... }
+=== (4) A edits own comment
+HTTP 200 { content: 'edited', updatedAt > createdAt: true }
+=== (5) A soft-deletes own comment
+HTTP 204
+=== (6) A lists after delete (should be empty)
+HTTP 200 count= 0
+=== (7) A tries to edit already-deleted comment (expect 410)
+HTTP 410 { errorCode: 'PAYMENT_COMMENT_DELETED', ... }
+```
+
+All 7/7 scenarios match expectations. **User confirmation**: "Comments API works — proceed to 6.11 (frontend PaymentContext)."
+
+**Phase 6 backend complete** — 10/10 backend iterations (6.1–6.10) shipped, tested, deployed. Frontend work begins at 6.11.
+
+**Next step**: Iteration 6.11 — `PaymentContext` + frontend types + money/date formatters + `remember.ts` (localStorage for last-used scopes/direction/type). First frontend iteration of Phase 6.
