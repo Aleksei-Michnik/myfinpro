@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-07
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 10/21 iterations complete (backend complete)
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 11/21 iterations complete (backend complete; 1/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 10/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 11/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 60 | **Remaining:** 80
+**Total iterations:** 140 | **Completed:** 61 | **Remaining:** 79
 
 ---
 
@@ -3314,3 +3314,73 @@ All 7/7 scenarios match expectations. **User confirmation**: "Comments API works
 **Phase 6 backend complete** — 10/10 backend iterations (6.1–6.10) shipped, tested, deployed. Frontend work begins at 6.11.
 
 **Next step**: Iteration 6.11 — `PaymentContext` + frontend types + money/date formatters + `remember.ts` (localStorage for last-used scopes/direction/type). First frontend iteration of Phase 6.
+
+### Iteration 6.11 — Frontend foundation: PaymentContext + helpers (2026-05-07)
+
+First frontend iteration of Phase 6. No visible UI added — this iteration lays down the shared primitives every subsequent UI iteration (6.12 – 6.20) will import.
+
+**Files added**:
+
+```
+apps/web/src/lib/payment/
+  types.ts                       (shared enum re-exports + wire DTO interfaces)
+  formatters.ts                  (formatAmount / formatSignedAmount / formatOccurredAt / formatScopeLabel)
+  remember.ts                    (SSR-safe localStorage helper for last-used scopes/direction/type)
+  payment-context.tsx            (PaymentProvider + usePayments(); 11 API methods)
+  __tests__/
+    formatters.test.ts           (14 tests)
+    remember.test.ts             (13 tests)
+    payment-context.test.tsx     (19 tests)
+```
+
+**Files modified**:
+
+- [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/%5Blocale%5D/layout.tsx:1) — wraps children with `<PaymentProvider>` inside `<GroupProvider>` so payment UI can still call `useGroups()`.
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json:1) + [`apps/web/messages/he.json`](../apps/web/messages/he.json:1) — new `payments.scope.personal` / `payments.scope.group` strings consumed by `formatScopeLabel`.
+
+**`PaymentContext` surface** — 11 methods grouped by resource:
+
+- Payments (6): `fetchList`, `getPayment`, `createPayment`, `updatePayment`, `removePayment`, `toggleStar`.
+- Comments (4): `listComments`, `postComment`, `editComment`, `deleteComment`.
+- Categories (1, read-only in 6.11): `listCategories` — CRUD comes in 6.16.
+
+Plus transient state: `isLoading`, `error`, `clearError()`. The provider does NOT cache list results — pages will own their pagination state.
+
+**DRY notes**:
+
+- All enums (`PAYMENT_DIRECTIONS`, `PAYMENT_TYPES`, `CATEGORY_DIRECTIONS`, `ATTRIBUTION_SCOPE_TYPES`, …) re-exported from `@myfinpro/shared` rather than duplicated; one source of truth shared with the API DTOs.
+- Formatters are pure functions accepting a locale string (+ a `t` callback for `formatScopeLabel`) — no `useTranslations()` coupling so they can be tested in isolation and reused in non-React contexts (e.g. CSV export later).
+- Bearer-token wiring follows [`group-context.tsx`](../apps/web/src/lib/group/group-context.tsx:1) verbatim: `useAuth().getAccessToken()` + per-method `fetch(...)` instead of `apiClient` (which has no auth-header wiring).
+
+**204 → `null` convention** — when a PATCH on `/payments/:id` flips all attributions to an owner the caller can no longer see, the API responds with **HTTP 204 No Content** (the payment was hard-deleted by the attribution change). The frontend `updatePayment()` signature returns `PaymentSummary | null` and detects 204 via `res.status`; this is the single documented convention for "the payment is gone after this call" across all future payment UIs.
+
+**SSR safety** — every `remember.ts` accessor guards against `typeof window === 'undefined'`, JSON parse errors, and localStorage quota errors. Invalid persisted values (e.g. a group-scope entry missing `groupId`, a bogus direction or type) are silently discarded and defaults are returned: `[{scope:'personal'}]`, `'OUT'`, `'ONE_TIME'`.
+
+**i18n keys added**:
+
+| Key                       | en         | he      |
+| ------------------------- | ---------- | ------- |
+| `payments.scope.personal` | `Personal` | `אישי`  |
+| `payments.scope.group`    | `Group`    | `קבוצה` |
+
+**Provider stacking order** (in [`[locale]/layout.tsx`](../apps/web/src/app/%5Blocale%5D/layout.tsx:1)):
+
+```
+<AuthProvider>
+  <GroupProvider>
+    <PaymentProvider>    ← new in 6.11
+      <ToastProvider>
+        …
+```
+
+**Tests** — 46 new Vitest tests (14 formatters / 13 remember / 19 payment-context). Full web workspace: **425/425** green. All 5 workspace test tasks pass via `pnpm run test`. Typecheck + lint clean.
+
+**Commit**: [`2a1eda5`](https://github.com/Aleksei-Michnik/myfinpro/commit/2a1eda5) — `feat(phase-6.11): payment-context, types, formatters, remember helpers`.
+**CI run**: [`25527729371`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25527729371) ✓.
+**Deploy Staging run**: [`25527729379`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25527729379) ✓ (blue-green).
+
+**User confirmation**: "Site loads, no console errors — proceed to 6.12 (PaymentsList component)."
+
+**Phase 6 frontend progress**: 1 / 11 frontend iterations complete (6.11 / 6.11 – 6.21).
+
+**Next step**: Iteration 6.12 — `<PaymentsList>` + `<PaymentRow>` components consuming `usePayments().fetchList()`, first visible UI on `/payments`.
