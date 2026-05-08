@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-08
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 12/21 iterations complete (backend complete; 2/11 frontend iterations done)
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 13/21 iterations complete (backend complete; 3/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 12/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 13/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 62 | **Remaining:** 78
+**Total iterations:** 140 | **Completed:** 63 | **Remaining:** 77
 
 ---
 
@@ -3565,3 +3565,71 @@ loads, tests pass", which CI + Deploy Staging both confirm.
 single payment) with category picker, scope multi-select, currency input,
 and the form-side wiring that turns `<PaymentRow>`'s `onEditClick(id)` into
 a real edit affordance.
+
+### Iteration 6.13 — PaymentFormDialog (2026-05-08)
+
+**Status**: ✅ Complete. Commit `90afd4a` on `develop`. CI + Deploy Staging green.
+
+**Components added** (`apps/web/src/components/payment/`):
+
+- [`PaymentFormDialog.tsx`](../apps/web/src/components/payment/PaymentFormDialog.tsx) — create + edit ONE_TIME payment modal.
+- [`PaymentScopeSelector.tsx`](../apps/web/src/components/payment/PaymentScopeSelector.tsx) — multi-select checkbox list (Personal + groups, admin badges).
+- [`PaymentCategoryPicker.tsx`](../apps/web/src/components/payment/PaymentCategoryPicker.tsx) — direction-filtered `<select>` with System / Personal / per-group optgroups, BOTH badge, tiny emoji map.
+- [`PaymentTypeSelector.tsx`](../apps/web/src/components/payment/PaymentTypeSelector.tsx) — disclosure radio set; ONE_TIME enabled, advanced types disabled with iteration-hint tooltip + "Coming soon" badges.
+- [`PaymentsList.tsx`](../apps/web/src/components/payment/PaymentsList.tsx) — now mounts `<PaymentFormDialog>`; toolbar gains "+ Add payment" button (hidden when `showControls=false`); row Edit opens the dialog in edit mode; refetches page on create, replaces row on edit.
+
+**Key decisions**:
+
+- **`computeDiff(original, draft, amountCents, occurredAtIso)`** — exported pure helper that builds an `UpdatePaymentInput` containing only fields whose normalised values differ from the original (direction, amountCents, currency, occurredAt, categoryId, note, attributions). Scopes are compared as sorted `personal | group:<id>` tokens for unordered equality. Keeps `audit_log.details.changed` minimal per design §2.5.
+- **Non-accessible attributions** — when editing a payment whose attributions include scopes the caller can't access (e.g. another user's personal or a non-member group), the dialog constrains `scopes` state to the accessible subset and renders a read-only footnote ("N other attribution(s) will be preserved."). The PATCH-with-attributions logic from iteration 6.8 keeps the others intact on the backend. The dialog never exposes them as editable.
+- **Generated-occurrence handling** — when `payment.parentPaymentId !== null` OR `payment.type !== 'ONE_TIME'`, the dialog renders an amber warning banner, disables every input, and disables the Save button. The API already rejects those with `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`; this is a defensive pre-guard.
+- **Currency source of truth** — reuses `CURRENCY_CODES` from [`packages/shared/src/types/currency.types.ts`](../packages/shared/src/types/currency.types.ts). User's `defaultCurrency` surfaces first in the dropdown, rest alphabetical.
+- **ESC with dirty state** shows an inline "Discard changes?" confirm block; clean state closes immediately.
+
+**Tests** (49 new Vitest cases; whole web suite 531/531 green):
+
+- [`PaymentScopeSelector.spec.tsx`](../apps/web/src/components/payment/PaymentScopeSelector.spec.tsx) — 9 tests.
+- [`PaymentCategoryPicker.spec.tsx`](../apps/web/src/components/payment/PaymentCategoryPicker.spec.tsx) — 11 tests (fetch on mount, direction refetch, optgroups, BOTH filtering).
+- [`PaymentTypeSelector.spec.tsx`](../apps/web/src/components/payment/PaymentTypeSelector.spec.tsx) — 7 tests.
+- [`PaymentFormDialog.spec.tsx`](../apps/web/src/components/payment/PaymentFormDialog.spec.tsx) — 22 tests (create + edit + validation + a11y + generated-occurrence guard).
+- [`PaymentsList.spec.tsx`](../apps/web/src/components/payment/PaymentsList.spec.tsx) — 4 new wiring tests (toolbar Add button, dialog open in create/edit modes).
+
+**i18n keys added** under `payments.*`: `form.*` (createTitle / editTitle / direction / directionIn / directionOut / amount / amountPlaceholder / currency / date / category / noteLabel / notePlaceholder / attributedTo / save / cancel / close / saving / discardChanges / discard / keepEditing / errorGeneric / validation._ / addAction / occurrenceNotEditable / othersPreserved / othersCount), `types._`(label / advanced / hideAdvanced / comingSoon / options.* / iterationHint.*),`scopeSelector._` (personal / groupRole._ / noGroups), `categoryPicker.*` (placeholder / groupSystem / groupPersonal / groupGroup / bothBadge / loading / errorLoading). Mirrored in [`he.json`](../apps/web/messages/he.json).
+
+**Phase 6 frontend status**: 3/11 frontend iterations complete (6.11 context + primitives, 6.12 list, 6.13 form dialog). Phase 6 overall: 13/21.
+
+**Next step**: Iteration 6.14 — `/payments/:id` detail page (full payment view, comments thread, per-scope actions, star toggle).
+
+### Iteration 6.13 — PaymentFormDialog (2026-05-08)
+
+**Status**: ✅ Complete. Commit `90afd4a` on `develop`. CI + Deploy Staging green.
+
+**Components added** (`apps/web/src/components/payment/`):
+
+- [`PaymentFormDialog.tsx`](../apps/web/src/components/payment/PaymentFormDialog.tsx) — create + edit ONE_TIME payment modal.
+- [`PaymentScopeSelector.tsx`](../apps/web/src/components/payment/PaymentScopeSelector.tsx) — multi-select checkbox list (Personal + groups, admin badges).
+- [`PaymentCategoryPicker.tsx`](../apps/web/src/components/payment/PaymentCategoryPicker.tsx) — direction-filtered `<select>` with System / Personal / per-group optgroups, BOTH badge, tiny emoji map.
+- [`PaymentTypeSelector.tsx`](../apps/web/src/components/payment/PaymentTypeSelector.tsx) — disclosure radio set; ONE_TIME enabled, advanced types disabled with iteration-hint tooltip + "Coming soon" badges.
+- [`PaymentsList.tsx`](../apps/web/src/components/payment/PaymentsList.tsx) — now mounts `<PaymentFormDialog>`; toolbar gains "+ Add payment" button (hidden when `showControls=false`); row Edit opens the dialog in edit mode; refetches page on create, replaces row on edit.
+
+**Key decisions**:
+
+- **`computeDiff(original, draft, amountCents, occurredAtIso)`** — exported pure helper that builds an `UpdatePaymentInput` containing only fields whose normalised values differ from the original (direction, amountCents, currency, occurredAt, categoryId, note, attributions). Scopes are compared as sorted `personal | group:<id>` tokens for unordered equality. Keeps `audit_log.details.changed` minimal per design §2.5.
+- **Non-accessible attributions** — when editing a payment whose attributions include scopes the caller can't access (e.g. another user's personal or a non-member group), the dialog constrains `scopes` state to the accessible subset and renders a read-only footnote ("N other attribution(s) will be preserved."). The PATCH-with-attributions logic from iteration 6.8 keeps the others intact on the backend. The dialog never exposes them as editable.
+- **Generated-occurrence handling** — when `payment.parentPaymentId !== null` OR `payment.type !== 'ONE_TIME'`, the dialog renders an amber warning banner, disables every input, and disables the Save button. The API already rejects those with `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE`; this is a defensive pre-guard.
+- **Currency source of truth** — reuses `CURRENCY_CODES` from [`packages/shared/src/types/currency.types.ts`](../packages/shared/src/types/currency.types.ts). User's `defaultCurrency` surfaces first in the dropdown, rest alphabetical.
+- **ESC with dirty state** shows an inline "Discard changes?" confirm block; clean state closes immediately.
+
+**Tests** (49 new Vitest cases; whole web suite 531/531 green):
+
+- [`PaymentScopeSelector.spec.tsx`](../apps/web/src/components/payment/PaymentScopeSelector.spec.tsx) — 9 tests.
+- [`PaymentCategoryPicker.spec.tsx`](../apps/web/src/components/payment/PaymentCategoryPicker.spec.tsx) — 11 tests (fetch on mount, direction refetch, optgroups, BOTH filtering).
+- [`PaymentTypeSelector.spec.tsx`](../apps/web/src/components/payment/PaymentTypeSelector.spec.tsx) — 7 tests.
+- [`PaymentFormDialog.spec.tsx`](../apps/web/src/components/payment/PaymentFormDialog.spec.tsx) — 22 tests (create + edit + validation + a11y + generated-occurrence guard).
+- [`PaymentsList.spec.tsx`](../apps/web/src/components/payment/PaymentsList.spec.tsx) — 4 new wiring tests (toolbar Add button, dialog open in create/edit modes).
+
+**i18n keys added** under `payments.*`: `form.*` (createTitle / editTitle / direction / directionIn / directionOut / amount / amountPlaceholder / currency / date / category / noteLabel / notePlaceholder / attributedTo / save / cancel / close / saving / discardChanges / discard / keepEditing / errorGeneric / validation._ / addAction / occurrenceNotEditable / othersPreserved / othersCount), `types._`(label / advanced / hideAdvanced / comingSoon / options.* / iterationHint.*),`scopeSelector._` (personal / groupRole._ / noGroups), `categoryPicker.*` (placeholder / groupSystem / groupPersonal / groupGroup / bothBadge / loading / errorLoading). Mirrored in [`he.json`](../apps/web/messages/he.json).
+
+**Phase 6 frontend status**: 3/11 frontend iterations complete (6.11 context + primitives, 6.12 list, 6.13 form dialog). Phase 6 overall: 13/21.
+
+**Next step**: Iteration 6.14 — `/payments/:id` detail page (full payment view, comments thread, per-scope actions, star toggle).
