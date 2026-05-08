@@ -19,6 +19,16 @@ const mockToggleStar = vi.fn();
 const mockListCategories = vi.fn();
 const mockCreatePayment = vi.fn();
 const mockUpdatePayment = vi.fn();
+const mockRouterPush = vi.fn();
+
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push: mockRouterPush, replace: vi.fn() }),
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
@@ -119,6 +129,7 @@ describe('PaymentsList', () => {
     mockListCategories.mockResolvedValue([]);
     mockCreatePayment.mockReset();
     mockUpdatePayment.mockReset();
+    mockRouterPush.mockReset();
   });
 
   afterEach(() => {
@@ -345,5 +356,35 @@ describe('PaymentsList', () => {
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
     fireEvent.click(inDesktop().getByTestId('row-edit-p-1'));
     expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
+  });
+
+  // ── Iteration 6.14 — default row-click handler ───────────────────────────
+
+  it('default onPaymentClick navigates to the detail page via router.push', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
+    render(<PaymentsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('payment-row-p-1'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/payments/p-1');
+  });
+
+  it('explicit onPaymentClick takes precedence over the default router.push', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
+    const handler = vi.fn();
+    render(<PaymentsList showFilters={false} onPaymentClick={handler} />);
+    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('payment-row-p-1'));
+    expect(handler).toHaveBeenCalledWith('p-1');
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('default router.push navigation path uses the /payments/:id shape (next-intl adds locale)', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makePayment({ id: 'abc-123' })]));
+    render(<PaymentsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('payment-row-abc-123')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('payment-row-abc-123'));
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    const arg = mockRouterPush.mock.calls[0][0];
+    expect(arg).toBe('/payments/abc-123');
   });
 });

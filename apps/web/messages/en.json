@@ -623,6 +623,62 @@
       "bothBadge": "(both)",
       "loading": "Loading categories…",
       "errorLoading": "Could not load categories. {message}"
+    },
+    "detail": {
+      "back": "Back",
+      "loading": "Loading payment…",
+      "notFound": "Payment not found or no longer accessible.",
+      "errorGeneric": "Could not load payment. {message}",
+      "tryAgain": "Try again",
+      "amountLabel": "Amount",
+      "dateLabel": "Date",
+      "categoryLabel": "Category",
+      "attributionsLabel": "Attributed to",
+      "noteLabel": "Note",
+      "noNote": "No note added.",
+      "starAdd": "Star",
+      "starRemove": "Unstar",
+      "edit": "Edit",
+      "delete": "Delete",
+      "editDisabledOccurrence": "Generated occurrences can't be edited yet.",
+      "editDisabledNotCreator": "Only the creator can edit this payment.",
+      "edited": "edited",
+      "deletedToast": "Payment removed."
+    },
+    "comments": {
+      "title": "Comments",
+      "loading": "Loading comments…",
+      "empty": "No comments yet.",
+      "loadEarlier": "Load earlier comments",
+      "loadingMore": "Loading…",
+      "errorLoading": "Could not load comments. {message}",
+      "post": "Post",
+      "posting": "Posting…",
+      "postPlaceholder": "Add a comment…",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete this comment?",
+      "deleteConfirm": "Delete",
+      "deleting": "Deleting…",
+      "errorPost": "Could not post comment. {message}",
+      "errorEdit": "Could not save comment. {message}",
+      "errorDelete": "Could not delete comment. {message}",
+      "validation": {
+        "tooShort": "Comment can't be empty.",
+        "tooLong": "Comment must be 2000 characters or fewer."
+      },
+      "edited": "edited",
+      "tooltipDeleted": "Comment deleted."
+    },
+    "documents": {
+      "title": "Documents",
+      "comingSoon": "Receipts, photos, and PDFs are coming in Phase 9."
+    },
+    "schedulePlan": {
+      "occurrenceTitle": "Schedule / Plan",
+      "comingSoon": "Recurring and plan management ship in iterations 6.18 and 6.20."
     }
   }
 }

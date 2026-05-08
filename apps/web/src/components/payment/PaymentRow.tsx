@@ -13,8 +13,8 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
-import { usePayments } from '@/lib/payment/payment-context';
 import type { PaymentSummary } from '@/lib/payment/types';
+import { useStarToggle } from '@/lib/payment/use-star-toggle';
 
 export type PaymentRowVariant = 'desktop' | 'card';
 
@@ -54,15 +54,13 @@ export function PaymentRow({
 }: PaymentRowProps) {
   const t = useTranslations('payments');
   const locale = useLocale();
-  const { toggleStar } = usePayments();
 
-  // Optimistic star state — diverges from `payment.starredByMe` while the
-  // network round-trip is in flight.
-  const [starred, setStarred] = useState(payment.starredByMe);
-  useEffect(() => {
-    setStarred(payment.starredByMe);
-  }, [payment.starredByMe]);
-  const [starError, setStarError] = useState<string | null>(null);
+  // Optimistic star state — shared hook provides flip + revert-on-error.
+  const {
+    starred,
+    error: starError,
+    toggle: runToggleStar,
+  } = useStarToggle(payment.id, payment.starredByMe, { onToggled: onStarToggled });
 
   // Controls dropdown open/close state — single per-row instance.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,18 +78,7 @@ export function PaymentRow({
 
   const handleStar = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const previous = starred;
-    const optimistic = !previous;
-    setStarred(optimistic);
-    setStarError(null);
-    try {
-      const r = await toggleStar(payment.id);
-      setStarred(r.starred);
-      onStarToggled?.(payment.id, r.starred);
-    } catch (err) {
-      setStarred(previous);
-      setStarError((err as Error).message || 'star failed');
-    }
+    await runToggleStar();
   };
 
   const handleRowClick = () => {

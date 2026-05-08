@@ -214,4 +214,28 @@ describe('PaymentRow', () => {
     expect(scopes.textContent).toMatch(/\+2/);
     expect(scopes.getAttribute('title')).toContain('D');
   });
+
+  // ── Iteration 6.14 additions ─────────────────────────────────────────────
+
+  it('row body click invokes onClick with the payment id', () => {
+    const onClick = vi.fn();
+    renderDesktop({ onClick });
+    fireEvent.click(screen.getByTestId('payment-row-p-1'));
+    expect(onClick).toHaveBeenCalledWith('p-1');
+  });
+
+  it('star click does not bubble up to the row onClick handler', () => {
+    mockToggleStar.mockResolvedValueOnce({ starred: true, starCount: 1 });
+    const onClick = vi.fn();
+    renderDesktop({ onClick });
+    fireEvent.click(screen.getByTestId('row-star-p-1'));
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('controls dropdown click does not bubble up to the row onClick handler', () => {
+    const onClick = vi.fn();
+    renderDesktop({ onClick });
+    fireEvent.click(screen.getByTestId('row-controls-p-1'));
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });

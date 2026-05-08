@@ -12,13 +12,14 @@
 //   - Page-level routing — `/payments`, `/payments/[id]`, `/payments/starred`.
 //   - Aggregated dashboard summary cards (6.15).
 
-import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DeletePaymentDialog } from './DeletePaymentDialog';
 import { PaymentFormDialog } from './PaymentFormDialog';
 import { PaymentRow } from './PaymentRow';
 import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
 import { Button } from '@/components/ui/Button';
+import { useRouter } from '@/i18n/navigation';
 import { usePayments } from '@/lib/payment/payment-context';
 import type {
   AttributionChangeResult,
@@ -84,7 +85,20 @@ export function PaymentsList({
   hideAddButton,
 }: PaymentsListProps) {
   const t = useTranslations('payments');
+  const locale = useLocale();
+  const router = useRouter();
   const { fetchList, getPayment } = usePayments();
+
+  // When the caller didn't wire a click handler, default to navigating to
+  // the detail page. Locale prefix is injected by next-intl's router.
+  const defaultClickHandler = useMemo(
+    () => (id: string) => router.push(`/payments/${id}`),
+    [router],
+  );
+  const effectiveClick = onPaymentClick ?? defaultClickHandler;
+  // Silence unused-locale warning in case the linter cares; the value is also
+  // referenced for RTL-aware Intl contexts in downstream iterations.
+  void locale;
 
   const [filters, setFilters] = useState<PaymentsFiltersValue>(() => ({
     sort: initialFilters?.sort ?? 'date_desc',
@@ -321,7 +335,7 @@ export function PaymentsList({
                     variant="desktop"
                     showStar={showStar}
                     showControls={showControls}
-                    onClick={onPaymentClick}
+                    onClick={effectiveClick}
                     onEditClick={handleEditClick}
                     onDeleteClick={(payment) => setPaymentToDelete(payment)}
                     onStarToggled={handleStarToggled}
@@ -340,7 +354,7 @@ export function PaymentsList({
                 variant="card"
                 showStar={showStar}
                 showControls={showControls}
-                onClick={onPaymentClick}
+                onClick={effectiveClick}
                 onEditClick={handleEditClick}
                 onDeleteClick={(payment) => setPaymentToDelete(payment)}
                 onStarToggled={handleStarToggled}

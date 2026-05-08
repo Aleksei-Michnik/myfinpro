@@ -1,0 +1,236 @@
+'use client';
+
+// Phase 6 · Iteration 6.14 — client orchestrator for the payment detail page.
+//
+// Handles:
+//   - initial fetch via usePayments().getPayment
+//   - loading / 404 / network-error / success states
+//   - edit (PaymentFormDialog) + delete (DeletePaymentDialog) mounts
+//   - star-toggle bubble-up + comment-append bridging
+
+import { useTranslations } from 'next-intl';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { DeletePaymentDialog } from '@/components/payment/DeletePaymentDialog';
+import { PaymentCommentInput } from '@/components/payment/PaymentCommentInput';
+import {
+  PaymentCommentList,
+  type PaymentCommentListHandle,
+} from '@/components/payment/PaymentCommentList';
+import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
+import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
+import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
+import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
+import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
+import { Link, useRouter } from '@/i18n/navigation';
+import { usePayments } from '@/lib/payment/payment-context';
+import type { AttributionChangeResult, PaymentSummary } from '@/lib/payment/types';
+
+interface PaymentDetailClientProps {
+  paymentId: string;
+}
+
+interface LoadError {
+  status?: number;
+  message: string;
+}
+
+export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
+  const t = useTranslations('payments');
+  const tDetail = useTranslations('payments.detail');
+  const tComments = useTranslations('payments.comments');
+  const { getPayment } = usePayments();
+  const { addToast } = useToast();
+  const router = useRouter();
+
+  const [payment, setPayment] = useState<PaymentSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<LoadError | null>(null);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
+
+  const commentListRef = useRef<PaymentCommentListHandle | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const p = await getPayment(paymentId);
+      setPayment(p);
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      setError({ status: err.status, message: err.message || 'Failed to load payment' });
+      setPayment(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [getPayment, paymentId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleStarToggled = useCallback((starred: boolean) => {
+    setPayment((prev) => (prev ? { ...prev, starredByMe: starred } : prev));
+  }, []);
+
+  const handleEditSaved = useCallback(
+    async (saved: PaymentSummary | null) => {
+      if (saved) {
+        setPayment(saved);
+      } else {
+        // Edit dropped all accessible attributions → payment gone for us.
+        addToast('success', tDetail('deletedToast'));
+        router.replace('/dashboard');
+      }
+    },
+    [addToast, router, tDetail],
+  );
+
+  const handleDeleted = useCallback(
+    async (result: AttributionChangeResult) => {
+      if (result.paymentDeleted) {
+        addToast('success', tDetail('deletedToast'));
+        router.replace('/dashboard');
+        return;
+      }
+      // Still visible for someone (we may still have access to another scope) —
+      // re-fetch to refresh attributions. If we lost access, treat as gone.
+      try {
+        const fresh = await getPayment(paymentId);
+        setPayment(fresh);
+      } catch {
+        addToast('success', tDetail('deletedToast'));
+        router.replace('/dashboard');
+      }
+    },
+    [addToast, getPayment, paymentId, router, tDetail],
+  );
+
+  // ── Render branches ──────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <main className="container mx-auto max-w-3xl px-4 py-8">
+        <div
+          className="flex items-center justify-center py-16"
+          data-testid="payment-detail-loading"
+          role="status"
+          aria-label={tDetail('loading')}
+        >
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <span className="sr-only">{tDetail('loading')}</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !payment) {
+    const notFound = !!error && (error.status === 404 || error.status === 403);
+    return (
+      <main className="container mx-auto max-w-lg px-4 py-8">
+        <div
+          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+          data-testid="payment-detail-error"
+          role="alert"
+        >
+          <h1
+            className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100"
+            data-testid="payment-detail-error-title"
+          >
+            {notFound
+              ? tDetail('notFound')
+              : tDetail('errorGeneric', { message: error?.message || '' })}
+          </h1>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              data-testid="payment-detail-back-dashboard"
+            >
+              {tDetail('back')}
+            </Link>
+            {!notFound && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={() => void load()}
+                data-testid="payment-detail-retry"
+              >
+                {tDetail('tryAgain')}
+              </Button>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const showSchedulePlan = payment.parentPaymentId !== null || payment.type !== 'ONE_TIME';
+
+  return (
+    <main className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
+      <div className="flex items-center gap-2">
+        <Link
+          href="/dashboard"
+          className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+          data-testid="payment-detail-back"
+        >
+          ← {tDetail('back')}
+        </Link>
+      </div>
+
+      <h1 className="sr-only">{t('detail.amountLabel')}</h1>
+
+      <PaymentDetailHeader
+        payment={payment}
+        onEditClick={() => setEditOpen(true)}
+        onDeleteClick={() => setPaymentToDelete(payment)}
+        onStarToggled={handleStarToggled}
+      />
+
+      <PaymentDocumentsPlaceholder />
+
+      <section
+        className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
+        aria-labelledby="comments-title"
+      >
+        <h2
+          id="comments-title"
+          className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        >
+          {tComments('title')}
+        </h2>
+        <PaymentCommentList paymentId={payment.id} ref={commentListRef} />
+        <div className="mt-4">
+          <PaymentCommentInput
+            paymentId={payment.id}
+            onPosted={(c) => commentListRef.current?.appendComment(c)}
+          />
+        </div>
+      </section>
+
+      {showSchedulePlan && <PaymentSchedulePlanPlaceholder />}
+
+      {editOpen && (
+        <PaymentFormDialog
+          open
+          mode="edit"
+          payment={payment}
+          onClose={() => setEditOpen(false)}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {paymentToDelete && (
+        <DeletePaymentDialog
+          payment={paymentToDelete}
+          onClose={() => setPaymentToDelete(null)}
+          onDeleted={handleDeleted}
+        />
+      )}
+    </main>
+  );
+}

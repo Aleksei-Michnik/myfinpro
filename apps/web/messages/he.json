@@ -623,6 +623,62 @@
       "bothBadge": "(שניהם)",
       "loading": "טוען קטגוריות…",
       "errorLoading": "טעינת הקטגוריות נכשלה. {message}"
+    },
+    "detail": {
+      "back": "חזרה",
+      "loading": "טוען תשלום…",
+      "notFound": "התשלום לא נמצא או שאינו זמין יותר.",
+      "errorGeneric": "טעינת התשלום נכשלה. {message}",
+      "tryAgain": "נסה שוב",
+      "amountLabel": "סכום",
+      "dateLabel": "תאריך",
+      "categoryLabel": "קטגוריה",
+      "attributionsLabel": "משויך ל-",
+      "noteLabel": "הערה",
+      "noNote": "לא נוספה הערה.",
+      "starAdd": "סמן",
+      "starRemove": "הסר סימון",
+      "edit": "ערוך",
+      "delete": "מחק",
+      "editDisabledOccurrence": "הופעות שנוצרו אוטומטית לא ניתנות לעריכה עדיין.",
+      "editDisabledNotCreator": "רק היוצר יכול לערוך את התשלום.",
+      "edited": "נערך",
+      "deletedToast": "התשלום נמחק."
+    },
+    "comments": {
+      "title": "תגובות",
+      "loading": "טוען תגובות…",
+      "empty": "אין תגובות עדיין.",
+      "loadEarlier": "טען תגובות קודמות",
+      "loadingMore": "טוען…",
+      "errorLoading": "טעינת התגובות נכשלה. {message}",
+      "post": "פרסם",
+      "posting": "מפרסם…",
+      "postPlaceholder": "הוסף תגובה…",
+      "edit": "ערוך",
+      "delete": "מחק",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "confirmDelete": "למחוק את התגובה הזו?",
+      "deleteConfirm": "מחק",
+      "deleting": "מוחק…",
+      "errorPost": "פרסום התגובה נכשל. {message}",
+      "errorEdit": "שמירת התגובה נכשלה. {message}",
+      "errorDelete": "מחיקת התגובה נכשלה. {message}",
+      "validation": {
+        "tooShort": "התגובה לא יכולה להיות ריקה.",
+        "tooLong": "התגובה יכולה להכיל עד 2000 תווים."
+      },
+      "edited": "נערך",
+      "tooltipDeleted": "התגובה נמחקה."
+    },
+    "documents": {
+      "title": "מסמכים",
+      "comingSoon": "קבלות, תמונות ו-PDFs בדרך בשלב 9."
+    },
+    "schedulePlan": {
+      "occurrenceTitle": "לוח זמנים / תכנית",
+      "comingSoon": "ניהול חוזר ותכניות תשלום יגיעו באיטרציות 6.18 ו-6.20."
     }
   }
 }
