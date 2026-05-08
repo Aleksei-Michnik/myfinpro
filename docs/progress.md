@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-07
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 11/21 iterations complete (backend complete; 1/11 frontend iterations done)
+> **Last updated:** 2026-05-08
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 12/21 iterations complete (backend complete; 2/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 11/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 12/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 61 | **Remaining:** 79
+**Total iterations:** 140 | **Completed:** 62 | **Remaining:** 78
 
 ---
 
@@ -3384,3 +3384,184 @@ Plus transient state: `isLoading`, `error`, `clearError()`. The provider does NO
 **Phase 6 frontend progress**: 1 / 11 frontend iterations complete (6.11 / 6.11 – 6.21).
 
 **Next step**: Iteration 6.12 — `<PaymentsList>` + `<PaymentRow>` components consuming `usePayments().fetchList()`, first visible UI on `/payments`.
+
+### Iteration 6.12 — PaymentsList + PaymentRow + filters + delete dialog (2026-05-08)
+
+First **rendered UI** of Phase 6. The four components shipped here are the
+reusable building blocks every later list surface (dashboard recent in 6.15,
+the dedicated `/payments` page in 6.16, the group-tab in 6.16) will mount.
+No new pages are introduced — staging is unchanged visually; this iteration
+is exercised only via Vitest. The visible payoff lands in 6.13 + 6.14.
+
+**Files added**:
+
+```
+apps/web/src/components/payment/
+  PaymentsFilters.tsx              (toolbar; debounced search; auto-fetched categories)
+  PaymentsFilters.spec.tsx         (13 tests)
+  PaymentRow.tsx                   (desktop <tr> + mobile <li> variants)
+  PaymentRow.spec.tsx              (15 tests)
+  DeletePaymentDialog.tsx          (scope-aware delete; design §2.4)
+  DeletePaymentDialog.spec.tsx     (11 tests)
+  PaymentsList.tsx                 (top-level list — filters + rows + delete dialog + cursor pagination)
+  PaymentsList.spec.tsx            (14 tests)
+```
+
+**Files modified**:
+
+- [`apps/web/messages/en.json`](../apps/web/messages/en.json:1) +
+  [`apps/web/messages/he.json`](../apps/web/messages/he.json:1) — extended the
+  existing `payments.*` namespace with `list`, `table`, `directions`,
+  `filters`, `controls`, `row`, and `delete` sub-trees (≈30 new keys per
+  locale).
+
+#### Component contracts (props summary)
+
+`<PaymentsList>` — top-level reusable list:
+
+| Prop             | Type                                  | Default     | Purpose                                                |
+| ---------------- | ------------------------------------- | ----------- | ------------------------------------------------------ |
+| `scope`          | `'all' \| 'personal' \| 'group:<id>'` | `undefined` | Locks the scope filter; hides the dropdown when set    |
+| `initialFilters` | `Partial<PaymentsFiltersValue>`       | `undefined` | Seed values for direction / starred / sort / etc.      |
+| `showFilters`    | `boolean`                             | `true`      | Toggle the filter toolbar                              |
+| `showControls`   | `boolean`                             | `true`      | Toggle the per-row edit/delete dropdown                |
+| `showStar`       | `boolean`                             | `true`      | Toggle the per-row star button                         |
+| `limit`          | `number`                              | `20`        | Page size passed to `fetchList`                        |
+| `emptyState`     | `ReactNode`                           | localized   | Custom empty-state node                                |
+| `onPaymentClick` | `(id: string) => void`                | `undefined` | Row body click → opens detail in 6.16                  |
+| `onPaymentEdit`  | `(id: string) => void`                | no-op       | Forwards to the row's edit menu — wired to 6.13 dialog |
+| `categories`     | `CategoryDto[] \| null`               | `null`      | Pre-fetched category list shared across multiple lists |
+
+`<PaymentRow>`:
+
+| Prop            | Type                    | Default | Purpose                                       |
+| --------------- | ----------------------- | ------- | --------------------------------------------- |
+| `payment`       | `PaymentSummary`        | —       | The row's data                                |
+| `variant`       | `'desktop' \| 'card'`   | —       | `<tr>` (desktop) or `<li>` (mobile) renderer  |
+| `showStar`      | `boolean`               | `true`  | Render star button                            |
+| `showControls`  | `boolean`               | `true`  | Render `…` controls dropdown                  |
+| `onClick`       | `(id) => void`          | —       | Row click → detail page (6.16)                |
+| `onEditClick`   | `(id) => void`          | —       | Open edit dialog (6.13). No-op until shipped. |
+| `onDeleteClick` | `(payment) => void`     | —       | Open `<DeletePaymentDialog>`                  |
+| `onStarToggled` | `(id, starred) => void` | —       | Lets the parent list update / drop the row    |
+
+`<PaymentsFilters>`:
+
+| Prop         | Type                    | Default      | Purpose                                                                                                             |
+| ------------ | ----------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `value`      | `PaymentsFiltersValue`  | —            | Controlled state from the parent                                                                                    |
+| `onChange`   | `(next) => void`        | —            | Receives a fresh immutable filters object on every change                                                           |
+| `hide`       | `{ scope?: boolean }`   | `undefined`  | Hide locked controls (e.g. when scope is forced by the page)                                                        |
+| `categories` | `CategoryDto[] \| null` | self-fetched | When omitted/`null`, fetches via `usePayments().listCategories({ direction })` and refetches when direction changes |
+
+`<DeletePaymentDialog>`:
+
+| Prop          | Type                                        | Purpose                                                                        |
+| ------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `payment`     | `PaymentSummary`                            | Target payment                                                                 |
+| `onClose`     | `() => void`                                | Closes the dialog (also bound to ESC + cancel button)                          |
+| `onDeleted`   | `(result: AttributionChangeResult) => void` | Fired on success after the API call resolves                                   |
+| `singleScope` | `string` (optional)                         | Forces "this scope" mode locked to the given key (used by detail page in 6.16) |
+
+#### Decision: dialog default mode (single vs all)
+
+Per design §2.4 the dialog is **scope-aware**: it inspects the payment's
+attributions and intersects them against the caller's `useAuth().user.id` +
+`useGroups().groups[]` to compute an _accessible_ subset. The behaviour is:
+
+- **0 accessible scopes** (defensive race condition): show
+  `errorNoAccess`, disable the Delete button.
+- **1 accessible scope**: only the "Delete from this scope" radio is
+  rendered; "all" mode is hidden because it would behave identically.
+  Defaults to it.
+- **>1 accessible scopes**: both modes render. The dialog **defaults to
+  "all"** because the most common multi-scope delete intent is "remove
+  this payment from every list I see it in". Switching to "this scope"
+  reveals an additional scope-picker radio group.
+
+`singleScope` lets the detail page (6.16) embed a per-scope delete inline
+without requiring the user to re-pick from a list. It must point to a key
+in the accessible list — otherwise the dialog falls back to the no-access
+error to preserve the security invariant.
+
+**Security invariant (test-enforced)**: the dialog NEVER renders
+non-accessible attributions. The
+"non-accessible attributions are NOT shown" spec in
+[`DeletePaymentDialog.spec.tsx`](../apps/web/src/components/payment/DeletePaymentDialog.spec.tsx:1)
+constructs a payment with two accessible + two non-accessible
+attributions (`personal` of another user; `group:g-secret` not in the
+caller's groups) and asserts the rendered list contains only two entries
+and the "all" count is 2 — proving the backend's silent-preservation of
+non-accessible rows is mirrored in the UI.
+
+#### DRY notes
+
+- **Formatters**: `<PaymentRow>` reuses
+  [`formatSignedAmount`](../apps/web/src/lib/payment/formatters.ts:32),
+  [`formatOccurredAt`](../apps/web/src/lib/payment/formatters.ts:47), and
+  [`formatScopeLabel`](../apps/web/src/lib/payment/formatters.ts:66) from
+  6.11 verbatim — zero duplication.
+- **API surface**: every API call (`fetchList`, `getPayment`,
+  `removePayment`, `toggleStar`, `listCategories`) goes through
+  [`usePayments()`](../apps/web/src/lib/payment/payment-context.tsx:323).
+- **Group lookup**: scope dropdown + accessible-scope check both consume
+  `useGroups().groups` — the GET `/api/v1/groups` response is the source
+  of truth for "which groups can the caller see". Membership =
+  presence-in-list (the API never returns groups the user isn't in).
+- **Filter mapping**: the API translation lives in a single helper
+  `mapFiltersToParams()` in `<PaymentsList>`; UI components don't know
+  the wire-format strings (`'all'` is the UI-only sentinel; it maps to
+  `undefined` for the API).
+
+#### Mobile / desktop responsive
+
+Both variants render side-by-side; Tailwind classes `hidden md:block` /
+`md:hidden` swap them visually based on viewport. jsdom doesn't apply
+responsive rules, so tests scope queries via
+`within(screen.getByTestId('payments-list-desktop'))` to pick a single
+variant — documented inline in
+[`PaymentsList.spec.tsx`](../apps/web/src/components/payment/PaymentsList.spec.tsx:1).
+
+#### Tests — 53 new Vitest tests
+
+| Suite                          | Tests | Coverage highlights                                                                                                                                                                                                                          |
+| ------------------------------ | :---: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PaymentsFilters.spec.tsx`     |  13   | direction tri-toggle; debounce timing (300 ms); category prop vs auto-fetch; refetch on direction change; scope dropdown; RTL smoke                                                                                                          |
+| `PaymentRow.spec.tsx`          |  15   | both variants; optimistic star + revert; controls dropdown; truncation classes; direction badge color tokens; >3 scope summary                                                                                                               |
+| `DeletePaymentDialog.spec.tsx` |  11   | single / multi accessible scopes; mode switch; scope picker; zero-access error; API error path; ESC; security check; `singleScope` prop                                                                                                      |
+| `PaymentsList.spec.tsx`        |  14   | first fetch + loading state; error+retry; empty; load-more cursor; filter-change reset; star-out-of-filter removes row; `paymentDeleted=true` removes / `false` re-fetches; show\* toggles; row click; locked scope; categories pass-through |
+
+Full web workspace: **478/478** green. All 5 workspace test tasks pass via
+`pnpm run test`. Typecheck + lint clean.
+
+**i18n keys added** (under `payments.*`, both `en.json` + `he.json`):
+
+- `list`: `empty`, `loadMore`, `loadingMore`, `retry`, `errorLoading`
+- `table`: `date`, `direction`, `amount`, `category`, `scopes`, `note`,
+  `starred`, `controls`
+- `directions`: `in`, `out`
+- `filters`: `all`, `in`, `out`, `scopeAll`, `scopePersonal`,
+  `scopeGroup`, `starred`, `search`, `from`, `to`, `category`,
+  `anyCategory`, `categoryGroupSystem`, `categoryGroupPersonal`,
+  `categoryGroupGroup`, `sort`, `sortDateDesc`, `sortDateAsc`,
+  `sortAmountDesc`, `sortAmountAsc`
+- `controls`: `edit`, `delete`, `open`
+- `row`: `starAdd`, `starRemove`, `moreScopes`
+- `delete`: `title`, `description`, `scopeOnly`, `scopeAll`,
+  `pickScope`, `confirm`, `cancel`, `errorNoAccess`, `deleted`,
+  `deletedFromScope`
+
+**Commit**: [`9097667`](https://github.com/Aleksei-Michnik/myfinpro/commit/9097667) — `feat(phase-6.12): PaymentsList, PaymentRow, filters, delete dialog`.
+**CI run**: [`25559907431`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25559907431) ✓ (1m41s).
+**Deploy Staging run**: [`25559907433`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/25559907433) ✓ (blue-green).
+
+**User confirmation**: Pending — staging is visually unchanged in this
+iteration (no page consumes the components yet); the smoke is "site still
+loads, tests pass", which CI + Deploy Staging both confirm.
+
+**Phase 6 frontend progress**: 2 / 11 frontend iterations complete (6.12 / 6.11 – 6.21).
+
+**Next step**: Iteration 6.13 — `<PaymentFormDialog>` (create + edit a
+single payment) with category picker, scope multi-select, currency input,
+and the form-side wiring that turns `<PaymentRow>`'s `onEditClick(id)` into
+a real edit affordance.
