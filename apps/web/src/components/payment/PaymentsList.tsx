@@ -15,6 +15,7 @@
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DeletePaymentDialog } from './DeletePaymentDialog';
+import { PaymentFormDialog } from './PaymentFormDialog';
 import { PaymentRow } from './PaymentRow';
 import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
 import { Button } from '@/components/ui/Button';
@@ -43,6 +44,8 @@ export interface PaymentsListProps {
   onPaymentEdit?(id: string): void;
   /** Pre-fetched categories shared across multiple lists. */
   categories?: CategoryDto[] | null;
+  /** When true, the toolbar doesn't render the "Add payment" button. */
+  hideAddButton?: boolean;
 }
 
 /** Translate a `PaymentsFiltersValue` into the `usePayments().fetchList` query. */
@@ -78,6 +81,7 @@ export function PaymentsList({
   onPaymentClick,
   onPaymentEdit,
   categories,
+  hideAddButton,
 }: PaymentsListProps) {
   const t = useTranslations('payments');
   const { fetchList, getPayment } = usePayments();
@@ -109,6 +113,8 @@ export function PaymentsList({
   const [firstLoad, setFirstLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
+  const [paymentToEdit, setPaymentToEdit] = useState<PaymentSummary | null>(null);
+  const [creating, setCreating] = useState(false);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   // We pin filters / cursor / limit via a ref so the callback identity stays
@@ -179,6 +185,32 @@ export function PaymentsList({
     [getPayment, paymentToDelete],
   );
 
+  const handleEditClick = useCallback(
+    (id: string) => {
+      onPaymentEdit?.(id);
+      const row = rows.find((r) => r.id === id);
+      if (row) setPaymentToEdit(row);
+    },
+    [onPaymentEdit, rows],
+  );
+
+  const handleDialogSaved = useCallback(
+    async (saved: PaymentSummary | null) => {
+      if (paymentToEdit && saved) {
+        setRows((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        return;
+      }
+      if (paymentToEdit && !saved) {
+        // Edit hard-deleted the payment (attributions=[] edge case).
+        setRows((prev) => prev.filter((r) => r.id !== paymentToEdit.id));
+        return;
+      }
+      // Create mode — refetch first page to get correct ordering + filtering.
+      await fetchPage(true);
+    },
+    [paymentToEdit, fetchPage],
+  );
+
   const handleRetry = () => {
     void fetchPage(true);
   };
@@ -193,15 +225,34 @@ export function PaymentsList({
   const showLoadingFirst = firstLoad && loading;
   const showEmpty = !loading && !error && rows.length === 0;
 
+  const showAddButton = showControls !== false && !hideAddButton;
+
   return (
     <div className="space-y-4" data-testid="payments-list">
-      {showFilters && (
-        <PaymentsFilters
-          value={filters}
-          onChange={setFilters}
-          hide={{ scope: scope !== undefined }}
-          categories={categories ?? null}
-        />
+      {(showFilters || showAddButton) && (
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          {showFilters ? (
+            <PaymentsFilters
+              value={filters}
+              onChange={setFilters}
+              hide={{ scope: scope !== undefined }}
+              categories={categories ?? null}
+            />
+          ) : (
+            <div />
+          )}
+          {showAddButton && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => setCreating(true)}
+              data-testid="payments-list-add"
+            >
+              {t('form.addAction')}
+            </Button>
+          )}
+        </div>
       )}
 
       {showLoadingFirst && (
@@ -271,7 +322,7 @@ export function PaymentsList({
                     showStar={showStar}
                     showControls={showControls}
                     onClick={onPaymentClick}
-                    onEditClick={onPaymentEdit}
+                    onEditClick={handleEditClick}
                     onDeleteClick={(payment) => setPaymentToDelete(payment)}
                     onStarToggled={handleStarToggled}
                   />
@@ -290,7 +341,7 @@ export function PaymentsList({
                 showStar={showStar}
                 showControls={showControls}
                 onClick={onPaymentClick}
-                onEditClick={onPaymentEdit}
+                onEditClick={handleEditClick}
                 onDeleteClick={(payment) => setPaymentToDelete(payment)}
                 onStarToggled={handleStarToggled}
               />
@@ -319,6 +370,20 @@ export function PaymentsList({
           payment={paymentToDelete}
           onClose={() => setPaymentToDelete(null)}
           onDeleted={handleDeleted}
+        />
+      )}
+
+      {(paymentToEdit || creating) && (
+        <PaymentFormDialog
+          open
+          mode={paymentToEdit ? 'edit' : 'create'}
+          payment={paymentToEdit ?? undefined}
+          onClose={() => {
+            setPaymentToEdit(null);
+            setCreating(false);
+          }}
+          onSaved={handleDialogSaved}
+          categories={categories}
         />
       )}
     </div>

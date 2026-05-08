@@ -17,6 +17,8 @@ const mockGetPayment = vi.fn();
 const mockRemovePayment = vi.fn();
 const mockToggleStar = vi.fn();
 const mockListCategories = vi.fn();
+const mockCreatePayment = vi.fn();
+const mockUpdatePayment = vi.fn();
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
@@ -59,6 +61,8 @@ vi.mock('@/lib/payment/payment-context', () => ({
     removePayment: mockRemovePayment,
     toggleStar: mockToggleStar,
     listCategories: mockListCategories,
+    createPayment: mockCreatePayment,
+    updatePayment: mockUpdatePayment,
   }),
 }));
 
@@ -113,6 +117,8 @@ describe('PaymentsList', () => {
     mockToggleStar.mockReset();
     mockListCategories.mockReset();
     mockListCategories.mockResolvedValue([]);
+    mockCreatePayment.mockReset();
+    mockUpdatePayment.mockReset();
   });
 
   afterEach(() => {
@@ -306,5 +312,38 @@ describe('PaymentsList', () => {
     render(<PaymentsList categories={[]} />);
     await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
     expect(mockListCategories).not.toHaveBeenCalled();
+  });
+
+  // ── Iteration 6.13 — dialog wiring ─────────────────────────────────────────
+
+  it('toolbar shows "Add payment" button when showControls !== false', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([]));
+    render(<PaymentsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    expect(screen.getByTestId('payments-list-add')).toBeInTheDocument();
+  });
+
+  it('Add payment button is hidden when showControls=false', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([]));
+    render(<PaymentsList showFilters={false} showControls={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('payments-list-add')).not.toBeInTheDocument();
+  });
+
+  it('clicking Add payment opens the form dialog in create mode', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([]));
+    render(<PaymentsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('payments-list-add'));
+    expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
+  });
+
+  it('clicking row Edit opens the form dialog in edit mode', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
+    render(<PaymentsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
+    fireEvent.click(inDesktop().getByTestId('row-edit-p-1'));
+    expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
   });
 });

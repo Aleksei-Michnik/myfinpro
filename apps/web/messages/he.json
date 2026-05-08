@@ -548,6 +548,81 @@
       "errorNoAccess": "אין לך עוד הרשאה למחוק תשלום זה.",
       "deleted": "התשלום נמחק.",
       "deletedFromScope": "נמחק מ-{scope}."
+    },
+    "form": {
+      "createTitle": "הוסף תשלום",
+      "editTitle": "ערוך תשלום",
+      "direction": "כיוון",
+      "directionIn": "הכנסה",
+      "directionOut": "הוצאה",
+      "amount": "סכום",
+      "amountPlaceholder": "0.00",
+      "currency": "מטבע",
+      "date": "תאריך",
+      "category": "קטגוריה",
+      "noteLabel": "הערה (לא חובה)",
+      "notePlaceholder": "תיאור קצר…",
+      "attributedTo": "משויך ל-",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "close": "סגור",
+      "saving": "שומר…",
+      "discardChanges": "לבטל את השינויים?",
+      "discard": "בטל",
+      "keepEditing": "המשך עריכה",
+      "errorGeneric": "שמירת התשלום נכשלה. {message}",
+      "validation": {
+        "amountRequired": "הסכום חייב להיות גדול מאפס.",
+        "currencyInvalid": "בחר מטבע.",
+        "dateInvalid": "הזן תאריך תקין.",
+        "dateFuture": "התאריך לא יכול להיות יותר מיום אחד בעתיד.",
+        "categoryRequired": "בחר קטגוריה.",
+        "categoryDirectionMismatch": "הקטגוריה הזו לא תואמת לכיוון שנבחר.",
+        "scopesRequired": "בחר לפחות היקף אחד.",
+        "noteTooLong": "ההערה יכולה להכיל עד 2000 תווים."
+      },
+      "addAction": "+ הוסף תשלום",
+      "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
+      "othersPreserved": "השיוכים של משתמשים אחרים לתשלום זה לא ישונו.",
+      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו."
+    },
+    "types": {
+      "label": "סוג",
+      "advanced": "הצג סוגים מתקדמים",
+      "hideAdvanced": "הסתר סוגים מתקדמים",
+      "comingSoon": "בקרוב",
+      "options": {
+        "ONE_TIME": "חד-פעמי",
+        "RECURRING": "חוזר",
+        "LIMITED_PERIOD": "חוזר עם תאריך סיום",
+        "INSTALLMENT": "תכנית תשלומים",
+        "LOAN": "הלוואה",
+        "MORTGAGE": "משכנתא"
+      },
+      "iterationHint": {
+        "RECURRING": "זמין מאיטרציה 6.18.",
+        "LIMITED_PERIOD": "זמין מאיטרציה 6.18.",
+        "INSTALLMENT": "זמין מאיטרציה 6.20.",
+        "LOAN": "זמין מאיטרציה 6.20.",
+        "MORTGAGE": "זמין מאיטרציה 6.20."
+      }
+    },
+    "scopeSelector": {
+      "personal": "אישי",
+      "groupRole": {
+        "admin": "מנהל",
+        "member": "חבר"
+      },
+      "noGroups": "אינך חבר באף קבוצה עדיין."
+    },
+    "categoryPicker": {
+      "placeholder": "בחר קטגוריה…",
+      "groupSystem": "מערכת",
+      "groupPersonal": "הקטגוריות שלי",
+      "groupGroup": "קבוצה: {name}",
+      "bothBadge": "(שניהם)",
+      "loading": "טוען קטגוריות…",
+      "errorLoading": "טעינת הקטגוריות נכשלה. {message}"
     }
   }
 }

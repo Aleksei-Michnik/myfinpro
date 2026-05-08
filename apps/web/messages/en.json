@@ -548,6 +548,81 @@
       "errorNoAccess": "You no longer have access to delete this payment.",
       "deleted": "Payment removed.",
       "deletedFromScope": "Removed from {scope}."
+    },
+    "form": {
+      "createTitle": "Add payment",
+      "editTitle": "Edit payment",
+      "direction": "Direction",
+      "directionIn": "Income",
+      "directionOut": "Expense",
+      "amount": "Amount",
+      "amountPlaceholder": "0.00",
+      "currency": "Currency",
+      "date": "Date",
+      "category": "Category",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Brief description…",
+      "attributedTo": "Attributed to",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "saving": "Saving…",
+      "discardChanges": "Discard changes?",
+      "discard": "Discard",
+      "keepEditing": "Keep editing",
+      "errorGeneric": "Could not save the payment. {message}",
+      "validation": {
+        "amountRequired": "Amount must be greater than zero.",
+        "currencyInvalid": "Pick a currency.",
+        "dateInvalid": "Enter a valid date.",
+        "dateFuture": "Date can't be more than 1 day in the future.",
+        "categoryRequired": "Pick a category.",
+        "categoryDirectionMismatch": "This category doesn't match the selected direction.",
+        "scopesRequired": "Pick at least one scope.",
+        "noteTooLong": "Note must be 2000 characters or fewer."
+      },
+      "addAction": "+ Add payment",
+      "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
+      "othersPreserved": "Other users' attributions on this payment will not be touched.",
+      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved."
+    },
+    "types": {
+      "label": "Type",
+      "advanced": "Show advanced types",
+      "hideAdvanced": "Hide advanced types",
+      "comingSoon": "Coming soon",
+      "options": {
+        "ONE_TIME": "One-time",
+        "RECURRING": "Recurring",
+        "LIMITED_PERIOD": "Recurring with end date",
+        "INSTALLMENT": "Installment plan",
+        "LOAN": "Loan",
+        "MORTGAGE": "Mortgage"
+      },
+      "iterationHint": {
+        "RECURRING": "Available from iteration 6.18.",
+        "LIMITED_PERIOD": "Available from iteration 6.18.",
+        "INSTALLMENT": "Available from iteration 6.20.",
+        "LOAN": "Available from iteration 6.20.",
+        "MORTGAGE": "Available from iteration 6.20."
+      }
+    },
+    "scopeSelector": {
+      "personal": "Personal",
+      "groupRole": {
+        "admin": "admin",
+        "member": "member"
+      },
+      "noGroups": "You're not a member of any group yet."
+    },
+    "categoryPicker": {
+      "placeholder": "Pick a category…",
+      "groupSystem": "System",
+      "groupPersonal": "My categories",
+      "groupGroup": "Group: {name}",
+      "bothBadge": "(both)",
+      "loading": "Loading categories…",
+      "errorLoading": "Could not load categories. {message}"
     }
   }
 }
