@@ -483,6 +483,71 @@
     "scope": {
       "personal": "אישי",
       "group": "קבוצה"
+    },
+    "list": {
+      "empty": "אין תשלומים עדיין.",
+      "loadMore": "טען עוד",
+      "loadingMore": "טוען…",
+      "retry": "נסה שוב",
+      "errorLoading": "טעינת התשלומים נכשלה. {message}"
+    },
+    "table": {
+      "date": "תאריך",
+      "direction": "כיוון",
+      "amount": "סכום",
+      "category": "קטגוריה",
+      "scopes": "היקף",
+      "note": "הערה",
+      "starred": "★",
+      "controls": "פעולות"
+    },
+    "directions": {
+      "in": "הכנסה",
+      "out": "הוצאה"
+    },
+    "filters": {
+      "all": "הכול",
+      "in": "הכנסה",
+      "out": "הוצאה",
+      "scopeAll": "כל ההיקפים",
+      "scopePersonal": "אישי",
+      "scopeGroup": "{name}",
+      "starred": "מסומנים בלבד",
+      "search": "חפש בהערה…",
+      "from": "מתאריך",
+      "to": "עד תאריך",
+      "category": "קטגוריה",
+      "anyCategory": "כל קטגוריה",
+      "categoryGroupSystem": "מערכת",
+      "categoryGroupPersonal": "אישי",
+      "categoryGroupGroup": "קבוצה",
+      "sort": "מיון",
+      "sortDateDesc": "החדש ביותר",
+      "sortDateAsc": "הישן ביותר",
+      "sortAmountDesc": "סכום: גבוה → נמוך",
+      "sortAmountAsc": "סכום: נמוך → גבוה"
+    },
+    "controls": {
+      "edit": "ערוך",
+      "delete": "מחק",
+      "open": "פתח"
+    },
+    "row": {
+      "starAdd": "הוסף למסומנים",
+      "starRemove": "הסר מהמסומנים",
+      "moreScopes": "+{count} נוספים"
+    },
+    "delete": {
+      "title": "מחיקת תשלום",
+      "description": "תשלום זה משויך למספר היקפים. בחר מה למחוק.",
+      "scopeOnly": "מחק מההיקף הזה",
+      "scopeAll": "מחק מכל ההיקפים שלי ({count})",
+      "pickScope": "מאיזה היקף?",
+      "confirm": "מחק",
+      "cancel": "ביטול",
+      "errorNoAccess": "אין לך עוד הרשאה למחוק תשלום זה.",
+      "deleted": "התשלום נמחק.",
+      "deletedFromScope": "נמחק מ-{scope}."
     }
   }
 }

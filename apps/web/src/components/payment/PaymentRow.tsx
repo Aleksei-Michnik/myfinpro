@@ -1,0 +1,309 @@
+'use client';
+
+// Phase 6 · Iteration 6.12 — single payment row.
+// Two render variants:
+//   - "desktop": a `<tr>` with 8 cells. Used inside a `<table>` body.
+//   - "card":    a stacked `<li>` block, mobile-friendly.
+//
+// Both variants share identical click semantics (row click, star toggle,
+// edit / delete callbacks). Star toggling is optimistic with revert on
+// error, surfacing through `onStarToggled` so the parent list can update
+// or remove the row depending on the active filter (e.g. starred=true).
+
+import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
+import { usePayments } from '@/lib/payment/payment-context';
+import type { PaymentSummary } from '@/lib/payment/types';
+
+export type PaymentRowVariant = 'desktop' | 'card';
+
+export interface PaymentRowProps {
+  payment: PaymentSummary;
+  variant: PaymentRowVariant;
+  /** Hide the star icon (e.g. on the starred-only page). Default true. */
+  showStar?: boolean;
+  /** Hide the edit/delete controls (e.g. read-only view). Default true. */
+  showControls?: boolean;
+  /** Click handler for the row body — opens detail page in 6.16. */
+  onClick?(id: string): void;
+  /** Open the edit dialog (6.13). In 6.12 we wire to a no-op pass-through. */
+  onEditClick?(id: string): void;
+  onDeleteClick?(payment: PaymentSummary): void;
+  /** Reports the new starred state so the parent list can update / remove. */
+  onStarToggled?(id: string, starred: boolean): void;
+}
+
+/** Truncate a comma-separated list of scope labels and provide title fallback. */
+function truncateScopeList(labels: string[]): { display: string; full: string } {
+  const full = labels.join(', ');
+  if (labels.length <= 3) return { display: full, full };
+  const display = labels.slice(0, 3).join(', ') + ` +${labels.length - 3}`;
+  return { display, full };
+}
+
+export function PaymentRow({
+  payment,
+  variant,
+  showStar = true,
+  showControls = true,
+  onClick,
+  onEditClick,
+  onDeleteClick,
+  onStarToggled,
+}: PaymentRowProps) {
+  const t = useTranslations('payments');
+  const locale = useLocale();
+  const { toggleStar } = usePayments();
+
+  // Optimistic star state — diverges from `payment.starredByMe` while the
+  // network round-trip is in flight.
+  const [starred, setStarred] = useState(payment.starredByMe);
+  useEffect(() => {
+    setStarred(payment.starredByMe);
+  }, [payment.starredByMe]);
+  const [starError, setStarError] = useState<string | null>(null);
+
+  // Controls dropdown open/close state — single per-row instance.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleDoc = (ev: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(ev.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDoc);
+    return () => document.removeEventListener('mousedown', handleDoc);
+  }, [menuOpen]);
+
+  const handleStar = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const previous = starred;
+    const optimistic = !previous;
+    setStarred(optimistic);
+    setStarError(null);
+    try {
+      const r = await toggleStar(payment.id);
+      setStarred(r.starred);
+      onStarToggled?.(payment.id, r.starred);
+    } catch (err) {
+      setStarred(previous);
+      setStarError((err as Error).message || 'star failed');
+    }
+  };
+
+  const handleRowClick = () => {
+    if (!onClick) return;
+    onClick(payment.id);
+  };
+
+  const handleRowKeyDown = (e: KeyboardEvent) => {
+    if (!onClick) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick(payment.id);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onEditClick?.(payment.id);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onDeleteClick?.(payment);
+  };
+
+  // Prepare derived values shared between variants.
+  const dateText = formatOccurredAt(payment.occurredAt, locale);
+  const amountText = formatSignedAmount(payment, locale);
+  const directionClass =
+    payment.direction === 'IN'
+      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
+      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
+  const directionLabel = payment.direction === 'IN' ? t('directions.in') : t('directions.out');
+  const tFn = (key: string) => t(key);
+  const scopeLabels = payment.attributions.map((a) => formatScopeLabel(a, tFn));
+  const scopes = truncateScopeList(scopeLabels);
+  const note = payment.note ?? '';
+  const starGlyph = starred ? '★' : '☆';
+  const starAria = starred ? t('row.starRemove') : t('row.starAdd');
+  const starColor = starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500';
+
+  // ── Reusable inner blocks ─────────────────────────────────────────────────
+
+  const starButton = showStar ? (
+    <button
+      type="button"
+      onClick={handleStar}
+      data-testid={`row-star-${payment.id}`}
+      aria-label={starAria}
+      aria-pressed={starred}
+      title={starError ?? undefined}
+      className={`text-lg leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${starColor}`}
+    >
+      {starGlyph}
+    </button>
+  ) : null;
+
+  const controlsMenu = showControls ? (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((o) => !o);
+        }}
+        data-testid={`row-controls-${payment.id}`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={t('table.controls')}
+        className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 5v.01M12 12v.01M12 19v.01"
+          />
+        </svg>
+      </button>
+      {menuOpen && (
+        <div
+          role="menu"
+          data-testid={`row-menu-${payment.id}`}
+          className="absolute end-0 z-10 mt-1 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg dark:border-gray-700 dark:bg-gray-800"
+        >
+          <button
+            type="button"
+            onClick={handleEdit}
+            data-testid={`row-edit-${payment.id}`}
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-start text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            {t('controls.edit')}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            data-testid={`row-delete-${payment.id}`}
+            role="menuitem"
+            className="block w-full px-3 py-1.5 text-start text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+          >
+            {t('controls.delete')}
+          </button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const directionPill = (
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${directionClass}`}
+      data-testid={`row-direction-${payment.id}`}
+      data-direction={payment.direction}
+    >
+      {directionLabel}
+    </span>
+  );
+
+  // ── Desktop variant (table row) ───────────────────────────────────────────
+  if (variant === 'desktop') {
+    return (
+      <tr
+        data-testid={`payment-row-${payment.id}`}
+        onClick={onClick ? handleRowClick : undefined}
+        onKeyDown={onClick ? handleRowKeyDown : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        className={`border-b border-gray-100 dark:border-gray-700 ${
+          onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40' : ''
+        }`}
+      >
+        <td className="px-2 py-2 align-middle">{starButton}</td>
+        <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
+          {dateText}
+        </td>
+        <td className="px-2 py-2 align-middle">{directionPill}</td>
+        <td
+          className="px-2 py-2 text-end align-middle font-mono text-sm text-gray-900 dark:text-gray-100"
+          data-testid={`row-amount-${payment.id}`}
+        >
+          {amountText}
+        </td>
+        <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
+          {payment.category.name}
+        </td>
+        <td
+          className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300"
+          data-testid={`row-scopes-${payment.id}`}
+          title={scopes.full}
+        >
+          {scopes.display}
+        </td>
+        <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
+          <span
+            className="block max-w-[24ch] truncate"
+            data-testid={`row-note-${payment.id}`}
+            title={note}
+          >
+            {note}
+          </span>
+        </td>
+        <td className="px-2 py-2 align-middle">{controlsMenu}</td>
+      </tr>
+    );
+  }
+
+  // ── Card variant (mobile list item) ───────────────────────────────────────
+  return (
+    <li
+      data-testid={`payment-row-${payment.id}`}
+      onClick={onClick ? handleRowClick : undefined}
+      onKeyDown={onClick ? handleRowKeyDown : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      className={`flex flex-col gap-1 rounded-md border border-gray-200 p-3 dark:border-gray-700 ${
+        onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        {directionPill}
+        <span
+          className="ms-auto font-mono text-sm text-gray-900 dark:text-gray-100"
+          data-testid={`row-amount-${payment.id}`}
+        >
+          {amountText}
+        </span>
+        {starButton}
+        {controlsMenu}
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">
+        {dateText} · {payment.category.name}
+      </div>
+      <div
+        className="text-xs text-gray-700 dark:text-gray-300"
+        data-testid={`row-scopes-${payment.id}`}
+        title={scopes.full}
+      >
+        {scopes.display}
+        {note && (
+          <span className="ms-1 text-gray-500 dark:text-gray-400">
+            · <span title={note}>{note}</span>
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}

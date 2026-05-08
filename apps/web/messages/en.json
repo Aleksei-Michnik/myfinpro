@@ -483,6 +483,71 @@
     "scope": {
       "personal": "Personal",
       "group": "Group"
+    },
+    "list": {
+      "empty": "No payments yet.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…",
+      "retry": "Retry",
+      "errorLoading": "Could not load payments. {message}"
+    },
+    "table": {
+      "date": "Date",
+      "direction": "Direction",
+      "amount": "Amount",
+      "category": "Category",
+      "scopes": "Scope",
+      "note": "Note",
+      "starred": "★",
+      "controls": "Actions"
+    },
+    "directions": {
+      "in": "Income",
+      "out": "Expense"
+    },
+    "filters": {
+      "all": "All",
+      "in": "Income",
+      "out": "Expense",
+      "scopeAll": "All scopes",
+      "scopePersonal": "Personal",
+      "scopeGroup": "{name}",
+      "starred": "Starred only",
+      "search": "Search note…",
+      "from": "From",
+      "to": "To",
+      "category": "Category",
+      "anyCategory": "Any category",
+      "categoryGroupSystem": "System",
+      "categoryGroupPersonal": "Personal",
+      "categoryGroupGroup": "Group",
+      "sort": "Sort",
+      "sortDateDesc": "Newest first",
+      "sortDateAsc": "Oldest first",
+      "sortAmountDesc": "Amount: high → low",
+      "sortAmountAsc": "Amount: low → high"
+    },
+    "controls": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "open": "Open"
+    },
+    "row": {
+      "starAdd": "Add to starred",
+      "starRemove": "Remove from starred",
+      "moreScopes": "+{count} more"
+    },
+    "delete": {
+      "title": "Delete payment",
+      "description": "This payment is shared across multiple scopes. Choose what to remove.",
+      "scopeOnly": "Delete from this scope",
+      "scopeAll": "Delete from all my accessible scopes ({count})",
+      "pickScope": "Which scope?",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "errorNoAccess": "You no longer have access to delete this payment.",
+      "deleted": "Payment removed.",
+      "deletedFromScope": "Removed from {scope}."
     }
   }
 }
