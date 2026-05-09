@@ -56,17 +56,19 @@ export function formatOccurredAt(iso: string, locale: string): string {
 
 /**
  * Resolve a human-readable scope label for a single attribution row.
- * `t` is the next-intl `useTranslations()` function (passed in so this
- * helper stays pure and testable).
+ * `t` is the next-intl `useTranslations('payments')` function (passed in so
+ * this helper stays pure and testable). Keys are *relative* to the
+ * `payments` namespace — matching the project convention for any helper
+ * receiving a `t` function from a `payments.*` component.
  *
- *   personal                                    → t('payments.scope.personal')
+ *   personal                                    → t('scope.personal')
  *   group with name                             → the group name verbatim
- *   group with null name (defensive fallback)   → t('payments.scope.group')
+ *   group with null name (defensive fallback)   → t('scope.group')
  */
 export function formatScopeLabel(
   attribution: Pick<PaymentSummary['attributions'][number], 'scope' | 'groupName'>,
   t: (key: string) => string,
 ): string {
-  if (attribution.scope === 'personal') return t('payments.scope.personal');
-  return attribution.groupName ?? t('payments.scope.group');
+  if (attribution.scope === 'personal') return t('scope.personal');
+  return attribution.groupName ?? t('scope.group');
 }

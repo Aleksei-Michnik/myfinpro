@@ -81,17 +81,24 @@ describe('formatOccurredAt', () => {
 describe('formatScopeLabel', () => {
   const t = vi.fn((key: string) => `t:${key}`);
 
-  it('personal scope calls t(payments.scope.personal)', () => {
-    expect(formatScopeLabel({ scope: 'personal', groupName: null }, t)).toBe(
-      't:payments.scope.personal',
-    );
+  it('personal scope calls t(scope.personal) — relative key, namespaced t', () => {
+    expect(formatScopeLabel({ scope: 'personal', groupName: null }, t)).toBe('t:scope.personal');
   });
 
   it('group scope with a name returns the name verbatim', () => {
     expect(formatScopeLabel({ scope: 'group', groupName: 'Family' }, t)).toBe('Family');
   });
 
-  it('group scope with null name falls back to t(payments.scope.group)', () => {
-    expect(formatScopeLabel({ scope: 'group', groupName: null }, t)).toBe('t:payments.scope.group');
+  it('group scope with null name falls back to t(scope.group)', () => {
+    expect(formatScopeLabel({ scope: 'group', groupName: null }, t)).toBe('t:scope.group');
+  });
+
+  it('never invokes `t` with a doubled `payments.` prefix (regression for 6.15.2)', () => {
+    const spy = vi.fn((key: string) => key);
+    formatScopeLabel({ scope: 'personal', groupName: null }, spy);
+    formatScopeLabel({ scope: 'group', groupName: null }, spy);
+    for (const call of spy.mock.calls) {
+      expect(call[0]).not.toMatch(/^payments\./);
+    }
   });
 });
