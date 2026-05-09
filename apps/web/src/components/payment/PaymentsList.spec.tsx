@@ -244,7 +244,7 @@ describe('PaymentsList', () => {
     render(<PaymentsList showFilters={false} />);
     await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
-    fireEvent.click(inDesktop().getByTestId('row-delete-p-1'));
+    fireEvent.click(screen.getByTestId('row-delete-p-1'));
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
     await waitFor(() => expect(screen.queryAllByTestId('payment-row-p-1')).toHaveLength(0));
   });
@@ -278,7 +278,7 @@ describe('PaymentsList', () => {
     render(<PaymentsList showFilters={false} />);
     await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
-    fireEvent.click(inDesktop().getByTestId('row-delete-p-1'));
+    fireEvent.click(screen.getByTestId('row-delete-p-1'));
     fireEvent.click(screen.getByTestId('delete-mode-this'));
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
     await waitFor(() => expect(mockGetPayment).toHaveBeenCalledWith('p-1'));
@@ -361,7 +361,7 @@ describe('PaymentsList', () => {
     render(<PaymentsList showFilters={false} categories={[]} />);
     await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
-    fireEvent.click(inDesktop().getByTestId('row-edit-p-1'));
+    fireEvent.click(screen.getByTestId('row-edit-p-1'));
     expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
   });
 

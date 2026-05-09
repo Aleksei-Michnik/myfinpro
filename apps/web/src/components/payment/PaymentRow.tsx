@@ -11,7 +11,8 @@
 // or remove the row depending on the active filter (e.g. starred=true).
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { type KeyboardEvent } from 'react';
+import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
 import type { PaymentSummary } from '@/lib/payment/types';
 import { useStarToggle } from '@/lib/payment/use-star-toggle';
@@ -62,20 +63,6 @@ export function PaymentRow({
     toggle: runToggleStar,
   } = useStarToggle(payment.id, payment.starredByMe, { onToggled: onStarToggled });
 
-  // Controls dropdown open/close state — single per-row instance.
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleDoc = (ev: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(ev.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleDoc);
-    return () => document.removeEventListener('mousedown', handleDoc);
-  }, [menuOpen]);
-
   const handleStar = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await runToggleStar();
@@ -94,15 +81,11 @@ export function PaymentRow({
     }
   };
 
-  const handleEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setMenuOpen(false);
+  const handleEdit = () => {
     onEditClick?.(payment.id);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setMenuOpen(false);
+  const handleDelete = () => {
     onDeleteClick?.(payment);
   };
 
@@ -139,62 +122,25 @@ export function PaymentRow({
   ) : null;
 
   const controlsMenu = showControls ? (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setMenuOpen((o) => !o);
-        }}
-        data-testid={`row-controls-${payment.id}`}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        aria-label={t('table.controls')}
-        className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 5v.01M12 12v.01M12 19v.01"
-          />
-        </svg>
-      </button>
-      {menuOpen && (
-        <div
-          role="menu"
-          data-testid={`row-menu-${payment.id}`}
-          className="absolute end-0 z-10 mt-1 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg dark:border-gray-700 dark:bg-gray-800"
-        >
-          <button
-            type="button"
-            onClick={handleEdit}
-            data-testid={`row-edit-${payment.id}`}
-            role="menuitem"
-            className="block w-full px-3 py-1.5 text-start text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            {t('controls.edit')}
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            data-testid={`row-delete-${payment.id}`}
-            role="menuitem"
-            className="block w-full px-3 py-1.5 text-start text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
-          >
-            {t('controls.delete')}
-          </button>
-        </div>
-      )}
-    </div>
+    <RowActionsMenu
+      triggerLabel={t('table.controls')}
+      testId={`row-controls-${payment.id}`}
+      items={[
+        {
+          key: 'edit',
+          label: t('controls.edit'),
+          onClick: handleEdit,
+          testId: `row-edit-${payment.id}`,
+        },
+        {
+          key: 'delete',
+          label: t('controls.delete'),
+          destructive: true,
+          onClick: handleDelete,
+          testId: `row-delete-${payment.id}`,
+        },
+      ]}
+    />
   ) : null;
 
   const directionPill = (
