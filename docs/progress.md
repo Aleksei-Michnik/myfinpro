@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-08
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 13/21 iterations complete (backend complete; 3/11 frontend iterations done)
+> **Last updated:** 2026-05-09
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 14/21 iterations complete (backend complete; 4/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 13/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 14/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 63 | **Remaining:** 77
+**Total iterations:** 140 | **Completed:** 64 | **Remaining:** 76
 
 ---
 
@@ -3633,3 +3633,121 @@ a real edit affordance.
 **Phase 6 frontend status**: 3/11 frontend iterations complete (6.11 context + primitives, 6.12 list, 6.13 form dialog). Phase 6 overall: 13/21.
 
 **Next step**: Iteration 6.14 — `/payments/:id` detail page (full payment view, comments thread, per-scope actions, star toggle).
+
+### Iteration 6.14 — Payment Detail Page (2026-05-09)
+
+**Status**: ✅ Complete. Commit `e93e380` on `develop`. CI + Deploy Staging green.
+
+First navigable Phase 6 page. The `/[locale]/payments/[paymentId]` route now
+hosts a server-component shell that defers to a `'use client'` orchestrator
+for data loading, edit/delete dialog mounts, and the comments thread.
+
+**Files added:**
+
+- [`apps/web/src/app/[locale]/payments/[paymentId]/page.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/page.tsx) — server shell wrapped in `<ProtectedRoute>`.
+- [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx) — client orchestrator (load / loading / 404 / generic-error / success).
+- [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx) — 12 client tests.
+- [`PaymentDetailHeader.tsx`](../apps/web/src/components/payment/PaymentDetailHeader.tsx) + spec (13 tests).
+- [`PaymentCommentList.tsx`](../apps/web/src/components/payment/PaymentCommentList.tsx) + spec (12 tests).
+- [`PaymentCommentInput.tsx`](../apps/web/src/components/payment/PaymentCommentInput.tsx) + spec (7 tests).
+- [`PaymentDocumentsPlaceholder.tsx`](../apps/web/src/components/payment/PaymentDocumentsPlaceholder.tsx) (Phase 9 placeholder).
+- [`PaymentSchedulePlanPlaceholder.tsx`](../apps/web/src/components/payment/PaymentSchedulePlanPlaceholder.tsx) (6.18/6.20 placeholder).
+- [`use-star-toggle.ts`](../apps/web/src/lib/payment/use-star-toggle.ts) — extracted hook.
+
+**DRY refactor:** the optimistic-flip-with-revert star logic that lived inside
+`PaymentRow.tsx` was extracted into `useStarToggle()`. Both `<PaymentRow>` and
+the new `<PaymentDetailHeader>` consume the hook, preventing duplicated
+optimistic-state logic. `PaymentsList.tsx` now defaults `onPaymentClick` to a
+`useRouter().push('/payments/:id')` so any list surface becomes navigable for
+free.
+
+**Tests added (~45 new, total now 584 web cases):** 13 + 12 + 7 + 12 = 44
+fresh suites plus +3 `PaymentRow.spec.tsx` and +3 `PaymentsList.spec.tsx`
+cases for the new click bubbling / default-router-push behaviour.
+
+**i18n keys added** (en + he): `payments.detail.*`, `payments.comments.*`,
+`payments.documents.*`, `payments.schedulePlan.*`.
+
+**Behaviour highlights:**
+
+- Edit button gated to creator-AND-`ONE_TIME`-AND-no-`parentPaymentId`;
+  tooltip surfaces the disable reason. Delete is always visible because the
+  dialog filters to accessible scopes (per design §2.4).
+- After edit success → header rerenders with the new summary. After delete
+  with `paymentDeleted=true` → toast + `router.replace('/dashboard')`. After
+  delete with `paymentDeleted=false` → re-fetch in place; on visibility
+  loss, fall through to dashboard with toast.
+- Comments thread is `aria-live="polite"`; new comments posted via the input
+  are appended via an imperative ref so the list never refetches just to
+  show what we already know about.
+- `<PaymentSchedulePlanPlaceholder>` is mounted only for non-`ONE_TIME`
+  types or generated occurrences; for now in 6.14 this is dormant (only
+  one-time payments exist) but the component is wired so 6.18 / 6.20 can
+  swap it in.
+
+**Phase 6 frontend status**: 4/11 frontend iterations complete (6.11 context
+
+- primitives, 6.12 list, 6.13 form dialog, 6.14 detail page). Phase 6
+  overall: 14/21.
+
+**Next step**: Iteration 6.15 — aggregated dashboard (per-scope KPIs, recent
+payments, starred shortcut).
+
+### Iteration 6.14 — Payment Detail Page (2026-05-09)
+
+**Status**: ✅ Complete. Commit `e93e380` on `develop`. CI + Deploy Staging green.
+
+First navigable Phase 6 page. The `/[locale]/payments/[paymentId]` route now
+hosts a server-component shell that defers to a `'use client'` orchestrator
+for data loading, edit/delete dialog mounts, and the comments thread.
+
+**Files added:**
+
+- [`apps/web/src/app/[locale]/payments/[paymentId]/page.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/page.tsx) — server shell wrapped in `<ProtectedRoute>`.
+- [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx) — client orchestrator (load / loading / 404 / generic-error / success).
+- [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx) — 12 client tests.
+- [`PaymentDetailHeader.tsx`](../apps/web/src/components/payment/PaymentDetailHeader.tsx) + spec (13 tests).
+- [`PaymentCommentList.tsx`](../apps/web/src/components/payment/PaymentCommentList.tsx) + spec (12 tests).
+- [`PaymentCommentInput.tsx`](../apps/web/src/components/payment/PaymentCommentInput.tsx) + spec (7 tests).
+- [`PaymentDocumentsPlaceholder.tsx`](../apps/web/src/components/payment/PaymentDocumentsPlaceholder.tsx) (Phase 9 placeholder).
+- [`PaymentSchedulePlanPlaceholder.tsx`](../apps/web/src/components/payment/PaymentSchedulePlanPlaceholder.tsx) (6.18/6.20 placeholder).
+- [`use-star-toggle.ts`](../apps/web/src/lib/payment/use-star-toggle.ts) — extracted hook.
+
+**DRY refactor:** the optimistic-flip-with-revert star logic that lived inside
+`PaymentRow.tsx` was extracted into `useStarToggle()`. Both `<PaymentRow>` and
+the new `<PaymentDetailHeader>` consume the hook, preventing duplicated
+optimistic-state logic. `PaymentsList.tsx` now defaults `onPaymentClick` to a
+`useRouter().push('/payments/:id')` so any list surface becomes navigable for
+free.
+
+**Tests added (~45 new, total now 584 web cases):** 13 + 12 + 7 + 12 = 44
+fresh suites plus +3 `PaymentRow.spec.tsx` and +3 `PaymentsList.spec.tsx`
+cases for the new click bubbling / default-router-push behaviour.
+
+**i18n keys added** (en + he): `payments.detail.*`, `payments.comments.*`,
+`payments.documents.*`, `payments.schedulePlan.*`.
+
+**Behaviour highlights:**
+
+- Edit button gated to creator-AND-`ONE_TIME`-AND-no-`parentPaymentId`;
+  tooltip surfaces the disable reason. Delete is always visible because the
+  dialog filters to accessible scopes (per design §2.4).
+- After edit success → header rerenders with the new summary. After delete
+  with `paymentDeleted=true` → toast + `router.replace('/dashboard')`. After
+  delete with `paymentDeleted=false` → re-fetch in place; on visibility
+  loss, fall through to dashboard with toast.
+- Comments thread is `aria-live="polite"`; new comments posted via the input
+  are appended via an imperative ref so the list never refetches just to
+  show what we already know about.
+- `<PaymentSchedulePlanPlaceholder>` is mounted only for non-`ONE_TIME`
+  types or generated occurrences; for now in 6.14 this is dormant (only
+  one-time payments exist) but the component is wired so 6.18 / 6.20 can
+  swap it in.
+
+**Phase 6 frontend status**: 4/11 frontend iterations complete (6.11 context
+
+- primitives, 6.12 list, 6.13 form dialog, 6.14 detail page). Phase 6
+  overall: 14/21.
+
+**Next step**: Iteration 6.15 — aggregated dashboard (per-scope KPIs, recent
+payments, starred shortcut).
