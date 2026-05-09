@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-09
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 14/21 iterations complete (backend complete; 4/11 frontend iterations done)
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 15/21 iterations complete (backend complete; 5/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 14/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 15/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 64 | **Remaining:** 76
+**Total iterations:** 140 | **Completed:** 65 | **Remaining:** 75
 
 ---
 
@@ -3751,3 +3751,141 @@ cases for the new click bubbling / default-router-push behaviour.
 
 **Next step**: Iteration 6.15 — aggregated dashboard (per-scope KPIs, recent
 payments, starred shortcut).
+
+### Iteration 6.15 — Aggregated Dashboard (2026-05-09)
+
+**Status**: ✅ Complete. Commit `a982b92` on `develop`. CI + Deploy Staging green.
+
+First high-value visible page after login: post-auth users land on a 4-section
+dashboard with current-month totals, per-scope shortcuts, recent activity,
+and starred payments — without leaving the page.
+
+**Files added (all under `apps/web/src/components/dashboard/`):**
+
+| Component                                                                                     | Lines | Purpose                                                   |
+| --------------------------------------------------------------------------------------------- | ----: | --------------------------------------------------------- |
+| [`date-range.ts`](../apps/web/src/components/dashboard/date-range.ts)                         |    19 | UTC `computeMonthRange()` helper.                         |
+| [`TotalsCard.tsx`](../apps/web/src/components/dashboard/TotalsCard.tsx)                       |   220 | This-month In/Out/Net per currency, partial badge, retry. |
+| [`ScopeEntryCards.tsx`](../apps/web/src/components/dashboard/ScopeEntryCards.tsx)             |   240 | Personal + per-group cards w/ quick totals + view links.  |
+| [`RecentActivity.tsx`](../apps/web/src/components/dashboard/RecentActivity.tsx)               |    50 | `<PaymentsList limit=10 disableInternalAdd>` wrapper.     |
+| [`StarredPayments.tsx`](../apps/web/src/components/dashboard/StarredPayments.tsx)             |    50 | `<PaymentsList starred=true limit=5>` wrapper.            |
+| [`QuickAddPaymentButton.tsx`](../apps/web/src/components/dashboard/QuickAddPaymentButton.tsx) |    50 | Primary `+ Add payment` w/ embedded dialog state.         |
+| [`dashboard-client.tsx`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)         |    55 | Top-level orchestrator with `refreshKey` re-mount.        |
+| [`page.tsx`](../apps/web/src/app/[locale]/dashboard/page.tsx)                                 |    14 | Server shell (replaced placeholder).                      |
+
+**Aggregation strategy** (client-side, will move server-side in Phase 10):
+each section issues its own `usePayments().fetchList({ from, to, limit: 100,
+sort: 'date_desc' })` — `<TotalsCard>` and `<ScopeEntryCards>` reduce locally
+by currency / scope. Recommendation in the iteration spec was to keep each
+section self-fetching to keep code simpler; trade-off accepted (3 small
+fetches vs 1 shared cache). When the API reports `hasMore=true` the totals
+card surfaces a `partial` badge so users know their numbers are incomplete.
+
+**Refresh strategy**: `<DashboardClient>` holds a `refreshKey` integer. The
+`<QuickAddPaymentButton>` calls `setRefreshKey(k => k + 1)` on save. Every
+section is rendered with `key={`section-${refreshKey}`}` so a new key forces
+React to unmount + remount, triggering a fresh `fetchList`. Acceptable
+trade-off for an MVP — future iterations can swap this for granular cache
+invalidation.
+
+**`<PaymentsList>` change**: renamed the previous `hideAddButton` prop to
+`disableInternalAdd` (per design §6.2) so the dashboard's Recent + Starred
+sections suppress their own toolbar add buttons in favour of the page-level
+primary `<QuickAddPaymentButton>`.
+
+**Tests added (~50 new, total now 630 web cases — all green):**
+
+| Suite                            |                     Cases |
+| -------------------------------- | ------------------------: |
+| `date-range.test.ts`             |                         5 |
+| `TotalsCard.spec.tsx`            |                        11 |
+| `ScopeEntryCards.spec.tsx`       |                         9 |
+| `RecentActivity.spec.tsx`        |                         5 |
+| `StarredPayments.spec.tsx`       |                         4 |
+| `QuickAddPaymentButton.spec.tsx` |                         6 |
+| `dashboard.spec.tsx` (replaced)  |                         8 |
+| `PaymentsList.spec.tsx`          | +1 (`disableInternalAdd`) |
+
+**i18n keys added** (en + he): `dashboard.subtitle`, `dashboard.actions.add`,
+`dashboard.totals.{title,in,out,net,noActivity,loading,error,retry,partial}`,
+`dashboard.scopes.{title,personal,personalSubtitle,groupSubtitle,view,noActivity,empty,createGroup}`,
+`dashboard.recent.{title,viewAll,empty}`,
+`dashboard.starred.{title,viewAll,empty}`.
+
+**Phase 6 frontend status**: 5/11 frontend iterations complete (6.11 context
+
+- primitives, 6.12 list, 6.13 form dialog, 6.14 detail page, 6.15 dashboard).
+  Phase 6 overall: 15/21.
+
+**Next step**: Iteration 6.16 — `/payments` per-scope page + group tab +
+categories UI. Will activate the `View` and `View all` links rendered by
+this iteration (currently they 404).
+
+### Iteration 6.15 — Aggregated Dashboard (2026-05-09)
+
+**Status**: ✅ Complete. Commit `a982b92` on `develop`. CI + Deploy Staging green.
+
+First high-value visible page after login: post-auth users land on a 4-section
+dashboard with current-month totals, per-scope shortcuts, recent activity,
+and starred payments — without leaving the page.
+
+**Files added (all under `apps/web/src/components/dashboard/`):**
+
+| Component                                                                                     | Lines | Purpose                                                   |
+| --------------------------------------------------------------------------------------------- | ----: | --------------------------------------------------------- |
+| [`date-range.ts`](../apps/web/src/components/dashboard/date-range.ts)                         |    19 | UTC `computeMonthRange()` helper.                         |
+| [`TotalsCard.tsx`](../apps/web/src/components/dashboard/TotalsCard.tsx)                       |   220 | This-month In/Out/Net per currency, partial badge, retry. |
+| [`ScopeEntryCards.tsx`](../apps/web/src/components/dashboard/ScopeEntryCards.tsx)             |   240 | Personal + per-group cards w/ quick totals + view links.  |
+| [`RecentActivity.tsx`](../apps/web/src/components/dashboard/RecentActivity.tsx)               |    50 | `<PaymentsList limit=10 disableInternalAdd>` wrapper.     |
+| [`StarredPayments.tsx`](../apps/web/src/components/dashboard/StarredPayments.tsx)             |    50 | `<PaymentsList starred=true limit=5>` wrapper.            |
+| [`QuickAddPaymentButton.tsx`](../apps/web/src/components/dashboard/QuickAddPaymentButton.tsx) |    50 | Primary `+ Add payment` w/ embedded dialog state.         |
+| [`dashboard-client.tsx`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)         |    55 | Top-level orchestrator with `refreshKey` re-mount.        |
+| [`page.tsx`](../apps/web/src/app/[locale]/dashboard/page.tsx)                                 |    14 | Server shell (replaced placeholder).                      |
+
+**Aggregation strategy** (client-side, will move server-side in Phase 10):
+each section issues its own `usePayments().fetchList({ from, to, limit: 100,
+sort: 'date_desc' })` — `<TotalsCard>` and `<ScopeEntryCards>` reduce locally
+by currency / scope. Recommendation in the iteration spec was to keep each
+section self-fetching to keep code simpler; trade-off accepted (3 small
+fetches vs 1 shared cache). When the API reports `hasMore=true` the totals
+card surfaces a `partial` badge so users know their numbers are incomplete.
+
+**Refresh strategy**: `<DashboardClient>` holds a `refreshKey` integer. The
+`<QuickAddPaymentButton>` calls `setRefreshKey(k => k + 1)` on save. Every
+section is rendered with `key={`section-${refreshKey}`}` so a new key forces
+React to unmount + remount, triggering a fresh `fetchList`. Acceptable
+trade-off for an MVP — future iterations can swap this for granular cache
+invalidation.
+
+**`<PaymentsList>` change**: renamed the previous `hideAddButton` prop to
+`disableInternalAdd` (per design §6.2) so the dashboard's Recent + Starred
+sections suppress their own toolbar add buttons in favour of the page-level
+primary `<QuickAddPaymentButton>`.
+
+**Tests added (~50 new, total now 630 web cases — all green):**
+
+| Suite                            |                     Cases |
+| -------------------------------- | ------------------------: |
+| `date-range.test.ts`             |                         5 |
+| `TotalsCard.spec.tsx`            |                        11 |
+| `ScopeEntryCards.spec.tsx`       |                         9 |
+| `RecentActivity.spec.tsx`        |                         5 |
+| `StarredPayments.spec.tsx`       |                         4 |
+| `QuickAddPaymentButton.spec.tsx` |                         6 |
+| `dashboard.spec.tsx` (replaced)  |                         8 |
+| `PaymentsList.spec.tsx`          | +1 (`disableInternalAdd`) |
+
+**i18n keys added** (en + he): `dashboard.subtitle`, `dashboard.actions.add`,
+`dashboard.totals.{title,in,out,net,noActivity,loading,error,retry,partial}`,
+`dashboard.scopes.{title,personal,personalSubtitle,groupSubtitle,view,noActivity,empty,createGroup}`,
+`dashboard.recent.{title,viewAll,empty}`,
+`dashboard.starred.{title,viewAll,empty}`.
+
+**Phase 6 frontend status**: 5/11 frontend iterations complete (6.11 context
+
+- primitives, 6.12 list, 6.13 form dialog, 6.14 detail page, 6.15 dashboard).
+  Phase 6 overall: 15/21.
+
+**Next step**: Iteration 6.16 — `/payments` per-scope page + group tab +
+categories UI. Will activate the `View` and `View all` links rendered by
+this iteration (currently they 404).
