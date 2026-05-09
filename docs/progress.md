@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-05-09
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 15/21 iterations complete (backend complete; 5/11 frontend iterations done)
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 16/21 iterations complete (backend complete; 6/11 frontend iterations done)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -48,7 +48,7 @@
 | 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
 | 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
 | 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 15/21      | 🔄 In progress         | —               |
+| 6     | Payment Management (unified incomes + expenses) | 16/21      | 🔄 In progress         | —               |
 | 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
 | 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
 | 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
@@ -59,7 +59,7 @@
 | 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
 | 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
 
-**Total iterations:** 140 | **Completed:** 65 | **Remaining:** 75
+**Total iterations:** 140 | **Completed:** 66 | **Remaining:** 74
 
 ---
 
@@ -4212,3 +4212,289 @@ a hotfix on top of 6.15, not a new iteration slot).
 **Staging smoke** — Skipped. The fix is single-file, deterministic, and covered
 by the new + updated unit tests; user verification on staging will
 close the loop on the visual outcome.
+
+### Iteration 6.16 — Per-scope /payments page + group payments tab + categories UI (2026-05-09)
+
+**Three coupled deliverables shipped in a single iteration** because they
+share enough primitives (PaymentsList, RowActionsMenu, the
+useGroups/usePayments contexts) that splitting would have meant churning
+the same files three times.
+
+**1. `/payments` page**
+
+- New server shell + client orchestrator under
+  [`apps/web/src/app/[locale]/payments/`](apps/web/src/app/[locale]/payments/page.tsx:1).
+- New
+  [`<PaymentsScopeTabs>`](apps/web/src/components/payment/PaymentsScopeTabs.tsx:1)
+  rendering `All | Personal | <each group>` with `role="tablist"`/`tab`
+  - `aria-current="page"` on the active tab.
+- New
+  [`<StarredFilterToggle>`](apps/web/src/components/payment/StarredFilterToggle.tsx:1)
+  (`★`/`☆` button with `aria-pressed`) wired to `?starred=1`.
+- URL-driven scope (`?scope=personal | group:<id>`) + starred parsed
+  via `useSearchParams()`; client-side membership guard for group
+  scopes shows a "no access" banner with a link back to the dashboard
+  instead of issuing useless 403s to the API.
+- Reuses [`<PaymentsFilters>`](apps/web/src/components/payment/PaymentsFilters.tsx:1)
+  - [`<PaymentsList>`](apps/web/src/components/payment/PaymentsList.tsx:1)
+    unchanged — `<PaymentsList>` already accepted `scope` and
+    `initialFilters.starred`, so no extension was needed.
+- The dashboard's "View / View all" links now resolve (no more 404).
+  [`<StarredPayments>`](apps/web/src/components/dashboard/StarredPayments.tsx:34)
+  was updated from the placeholder `/payments/starred` route to
+  `/payments?starred=1`.
+
+**2. Group dashboard payments section**
+
+- New
+  [`<GroupPaymentsTab>`](apps/web/src/components/group/GroupPaymentsTab.tsx:1)
+  reuses `<PaymentsList>` scoped to the current group.
+- Mounted into
+  [`/groups/[groupId]/page.tsx`](apps/web/src/app/[locale]/groups/[groupId]/page.tsx:252)
+  between the existing overview and members sections (the group
+  dashboard didn't have a tab system; adding one wasn't worth the
+  scope creep — a labelled section is consistent with the existing
+  layout).
+- [`dashboard.spec.tsx`](apps/web/src/app/[locale]/groups/[groupId]/dashboard.spec.tsx:1)
+  gained a test asserting the new section renders + receives the
+  current `groupId`.
+
+**3. Categories management UI — `/settings/categories`**
+
+- New [`<CategoryProvider>`](apps/web/src/lib/category/category-context.tsx:1)
+  mirrors PaymentContext shape (auth-headers, normalised
+  `CategoryApiError` with `errorCode`, in-memory cache that mutations
+  update so downstream pickers re-render without refetch). Wired into
+  the locale layout.
+- New
+  [`<CategoryRow>`](apps/web/src/components/category/CategoryRow.tsx:1) /
+  [`<CategoryListSection>`](apps/web/src/components/category/CategoryListSection.tsx:1) /
+  [`<CategoryFormDialog>`](apps/web/src/components/category/CategoryFormDialog.tsx:1) /
+  [`<DeleteCategoryDialog>`](apps/web/src/components/category/DeleteCategoryDialog.tsx:1).
+  System categories show a `Default` badge and have no actions; custom
+  categories expose Edit / Delete via the shared `<RowActionsMenu>`
+  (reused from 6.15.1).
+- Form supports name + emoji icon + hex color (8-color preset chips +
+  free text, no third-party color picker) + IN/OUT/BOTH direction
+  radios.
+- Validation: name non-empty/≤60, color regex `^#[0-9a-fA-F]{6}$`.
+- API error mapping: `CATEGORY_SLUG_CONFLICT` → field error on name;
+  `CATEGORY_IN_USE` → switches the delete dialog into a two-step flow
+  with a replacement-category select (filtered to compatible
+  directions). The API does NOT support cascade-to-uncategorized
+  (option A in the design); it requires `replaceWithCategoryId` for
+  in-use deletes (option B).
+- Settings page is a new shell at
+  [`/settings/categories`](apps/web/src/app/[locale]/settings/categories/page.tsx:1)
+  with one section per scope (Personal + each group the user belongs
+  to).
+
+**API gap discoveries** —
+
+- ✓ `GET /api/v1/categories?scope=personal | group:<id> | system | all`
+  is supported by [`CategoryService.list`](apps/api/src/category/category.service.ts:38).
+- ✓ `GET /api/v1/payments?scope=...` already supported (verified in
+  6.12); no client-side fallback needed for the /payments page.
+- ⚠ Delete semantics differ from the design's option-A
+  (cascade-set-null): the API's option-B (require replacement) is what
+  shipped in 6.4. Surfaced in the dialog as a two-step flow.
+
+**DRY wins** —
+
+- `<PaymentsList>` is now reused in 4 places: `<RecentActivity>`,
+  `<StarredPayments>`, `/payments`, and `<GroupPaymentsTab>`. Zero
+  copy-paste; each surface passes its own `initialFilters`.
+- `<RowActionsMenu>` reused for category rows (same ⋮ popover the
+  payment rows use since 6.15.1).
+- `<CategoryProvider>` mirrors `<PaymentProvider>` shape exactly so
+  any future pickers can swap providers without changing call sites.
+
+**Tests** — ~50 new Vitest cases:
+
+- [`category-context.test.tsx`](apps/web/src/lib/category/__tests__/category-context.test.tsx:1)
+  — 9 cases (CRUD + scope split + error code/details + clearError).
+- [`CategoryRow.spec.tsx`](apps/web/src/components/category/CategoryRow.spec.tsx:1)
+  — 5 cases.
+- [`CategoryListSection.spec.tsx`](apps/web/src/components/category/CategoryListSection.spec.tsx:1)
+  — 6 cases.
+- [`CategoryFormDialog.spec.tsx`](apps/web/src/components/category/CategoryFormDialog.spec.tsx:1)
+  — 9 cases (validation, preset chip, create/edit, slug-conflict
+  mapping, cancel).
+- [`DeleteCategoryDialog.spec.tsx`](apps/web/src/components/category/DeleteCategoryDialog.spec.tsx:1)
+  — 4 cases (incl. CATEGORY_IN_USE → replacement select flow).
+- [`categories-page.spec.tsx`](apps/web/src/app/[locale]/settings/categories/categories-page.spec.tsx:1)
+  — 5 cases.
+- [`PaymentsScopeTabs.spec.tsx`](apps/web/src/components/payment/PaymentsScopeTabs.spec.tsx:1)
+  — 7 cases.
+- [`StarredFilterToggle.spec.tsx`](apps/web/src/components/payment/StarredFilterToggle.spec.tsx:1)
+  — 4 cases.
+- [`payments-list.spec.tsx`](apps/web/src/app/[locale]/payments/payments-list.spec.tsx:1)
+  — 8 cases (URL → scope/starred mapping, no-access banner, replace
+  on toggle).
+- [`GroupPaymentsTab.spec.tsx`](apps/web/src/components/group/GroupPaymentsTab.spec.tsx:1)
+  — 4 cases.
+- +1 assertion in
+  [`dashboard.spec.tsx`](apps/web/src/app/[locale]/groups/[groupId]/dashboard.spec.tsx:1).
+
+**Totals** — 710/710 web Vitest cases pass (was 660 before this
+iteration; +50 net). Typecheck + lint clean. CI + Deploy Staging
+green.
+
+**i18n keys added** —
+
+- `payments.page.title`, `payments.page.subtitle`,
+  `payments.page.scopeTabs.{all,personal,noAccess,backToDashboard}`,
+  `payments.page.starredToggle.{label,ariaPressed}`,
+  `payments.page.groupTabTitle`.
+- New top-level `categories.*` namespace
+  (`page`, `scope`, `system`, `actions`, `form.*`, `delete.*`, `empty`,
+  `loading`) in both `en.json` and `he.json`.
+
+**Phase 6 status** — 16 / 21.
+
+**Next** — 6.17 (BullMQ schedules + worker — must consult context7
+for BullMQ v5 docs and verify npm latest before adding the
+dependency, per the iteration plan).
+
+### Iteration 6.16 — Per-scope /payments page + group payments tab + categories UI (2026-05-09)
+
+**Three coupled deliverables shipped in a single iteration** because they
+share enough primitives (PaymentsList, RowActionsMenu, the
+useGroups/usePayments contexts) that splitting would have meant churning
+the same files three times.
+
+**1. `/payments` page**
+
+- New server shell + client orchestrator under
+  [`apps/web/src/app/[locale]/payments/`](apps/web/src/app/[locale]/payments/page.tsx:1).
+- New
+  [`<PaymentsScopeTabs>`](apps/web/src/components/payment/PaymentsScopeTabs.tsx:1)
+  rendering `All | Personal | <each group>` with `role="tablist"`/`tab`
+  - `aria-current="page"` on the active tab.
+- New
+  [`<StarredFilterToggle>`](apps/web/src/components/payment/StarredFilterToggle.tsx:1)
+  (`★`/`☆` button with `aria-pressed`) wired to `?starred=1`.
+- URL-driven scope (`?scope=personal | group:<id>`) + starred parsed
+  via `useSearchParams()`; client-side membership guard for group
+  scopes shows a "no access" banner with a link back to the dashboard
+  instead of issuing useless 403s to the API.
+- Reuses [`<PaymentsFilters>`](apps/web/src/components/payment/PaymentsFilters.tsx:1)
+  - [`<PaymentsList>`](apps/web/src/components/payment/PaymentsList.tsx:1)
+    unchanged — `<PaymentsList>` already accepted `scope` and
+    `initialFilters.starred`, so no extension was needed.
+- The dashboard's "View / View all" links now resolve (no more 404).
+  [`<StarredPayments>`](apps/web/src/components/dashboard/StarredPayments.tsx:34)
+  was updated from the placeholder `/payments/starred` route to
+  `/payments?starred=1`.
+
+**2. Group dashboard payments section**
+
+- New
+  [`<GroupPaymentsTab>`](apps/web/src/components/group/GroupPaymentsTab.tsx:1)
+  reuses `<PaymentsList>` scoped to the current group.
+- Mounted into
+  [`/groups/[groupId]/page.tsx`](apps/web/src/app/[locale]/groups/[groupId]/page.tsx:252)
+  between the existing overview and members sections (the group
+  dashboard didn't have a tab system; adding one wasn't worth the
+  scope creep — a labelled section is consistent with the existing
+  layout).
+- [`dashboard.spec.tsx`](apps/web/src/app/[locale]/groups/[groupId]/dashboard.spec.tsx:1)
+  gained a test asserting the new section renders + receives the
+  current `groupId`.
+
+**3. Categories management UI — `/settings/categories`**
+
+- New [`<CategoryProvider>`](apps/web/src/lib/category/category-context.tsx:1)
+  mirrors PaymentContext shape (auth-headers, normalised
+  `CategoryApiError` with `errorCode`, in-memory cache that mutations
+  update so downstream pickers re-render without refetch). Wired into
+  the locale layout.
+- New
+  [`<CategoryRow>`](apps/web/src/components/category/CategoryRow.tsx:1) /
+  [`<CategoryListSection>`](apps/web/src/components/category/CategoryListSection.tsx:1) /
+  [`<CategoryFormDialog>`](apps/web/src/components/category/CategoryFormDialog.tsx:1) /
+  [`<DeleteCategoryDialog>`](apps/web/src/components/category/DeleteCategoryDialog.tsx:1).
+  System categories show a `Default` badge and have no actions; custom
+  categories expose Edit / Delete via the shared `<RowActionsMenu>`
+  (reused from 6.15.1).
+- Form supports name + emoji icon + hex color (8-color preset chips +
+  free text, no third-party color picker) + IN/OUT/BOTH direction
+  radios.
+- Validation: name non-empty/≤60, color regex `^#[0-9a-fA-F]{6}$`.
+- API error mapping: `CATEGORY_SLUG_CONFLICT` → field error on name;
+  `CATEGORY_IN_USE` → switches the delete dialog into a two-step flow
+  with a replacement-category select (filtered to compatible
+  directions). The API does NOT support cascade-to-uncategorized
+  (option A in the design); it requires `replaceWithCategoryId` for
+  in-use deletes (option B).
+- Settings page is a new shell at
+  [`/settings/categories`](apps/web/src/app/[locale]/settings/categories/page.tsx:1)
+  with one section per scope (Personal + each group the user belongs
+  to).
+
+**API gap discoveries** —
+
+- ✓ `GET /api/v1/categories?scope=personal | group:<id> | system | all`
+  is supported by [`CategoryService.list`](apps/api/src/category/category.service.ts:38).
+- ✓ `GET /api/v1/payments?scope=...` already supported (verified in
+  6.12); no client-side fallback needed for the /payments page.
+- ⚠ Delete semantics differ from the design's option-A
+  (cascade-set-null): the API's option-B (require replacement) is what
+  shipped in 6.4. Surfaced in the dialog as a two-step flow.
+
+**DRY wins** —
+
+- `<PaymentsList>` is now reused in 4 places: `<RecentActivity>`,
+  `<StarredPayments>`, `/payments`, and `<GroupPaymentsTab>`. Zero
+  copy-paste; each surface passes its own `initialFilters`.
+- `<RowActionsMenu>` reused for category rows (same ⋮ popover the
+  payment rows use since 6.15.1).
+- `<CategoryProvider>` mirrors `<PaymentProvider>` shape exactly so
+  any future pickers can swap providers without changing call sites.
+
+**Tests** — ~50 new Vitest cases:
+
+- [`category-context.test.tsx`](apps/web/src/lib/category/__tests__/category-context.test.tsx:1)
+  — 9 cases (CRUD + scope split + error code/details + clearError).
+- [`CategoryRow.spec.tsx`](apps/web/src/components/category/CategoryRow.spec.tsx:1)
+  — 5 cases.
+- [`CategoryListSection.spec.tsx`](apps/web/src/components/category/CategoryListSection.spec.tsx:1)
+  — 6 cases.
+- [`CategoryFormDialog.spec.tsx`](apps/web/src/components/category/CategoryFormDialog.spec.tsx:1)
+  — 9 cases (validation, preset chip, create/edit, slug-conflict
+  mapping, cancel).
+- [`DeleteCategoryDialog.spec.tsx`](apps/web/src/components/category/DeleteCategoryDialog.spec.tsx:1)
+  — 4 cases (incl. CATEGORY_IN_USE → replacement select flow).
+- [`categories-page.spec.tsx`](apps/web/src/app/[locale]/settings/categories/categories-page.spec.tsx:1)
+  — 5 cases.
+- [`PaymentsScopeTabs.spec.tsx`](apps/web/src/components/payment/PaymentsScopeTabs.spec.tsx:1)
+  — 7 cases.
+- [`StarredFilterToggle.spec.tsx`](apps/web/src/components/payment/StarredFilterToggle.spec.tsx:1)
+  — 4 cases.
+- [`payments-list.spec.tsx`](apps/web/src/app/[locale]/payments/payments-list.spec.tsx:1)
+  — 8 cases (URL → scope/starred mapping, no-access banner, replace
+  on toggle).
+- [`GroupPaymentsTab.spec.tsx`](apps/web/src/components/group/GroupPaymentsTab.spec.tsx:1)
+  — 4 cases.
+- +1 assertion in
+  [`dashboard.spec.tsx`](apps/web/src/app/[locale]/groups/[groupId]/dashboard.spec.tsx:1).
+
+**Totals** — 710/710 web Vitest cases pass (was 660 before this
+iteration; +50 net). Typecheck + lint clean. CI + Deploy Staging
+green.
+
+**i18n keys added** —
+
+- `payments.page.title`, `payments.page.subtitle`,
+  `payments.page.scopeTabs.{all,personal,noAccess,backToDashboard}`,
+  `payments.page.starredToggle.{label,ariaPressed}`,
+  `payments.page.groupTabTitle`.
+- New top-level `categories.*` namespace
+  (`page`, `scope`, `system`, `actions`, `form.*`, `delete.*`, `empty`,
+  `loading`) in both `en.json` and `he.json`.
+
+**Phase 6 status** — 16 / 21.
+
+**Next** — 6.17 (BullMQ schedules + worker — must consult context7
+for BullMQ v5 docs and verify npm latest before adding the
+dependency, per the iteration plan).
