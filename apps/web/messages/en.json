@@ -114,7 +114,42 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here."
+    "subtitle": "Your finances at a glance.",
+    "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here.",
+    "actions": {
+      "add": "+ Add payment"
+    },
+    "totals": {
+      "title": "This month",
+      "in": "Income",
+      "out": "Expense",
+      "net": "Net",
+      "noActivity": "No activity this month yet.",
+      "loading": "Loading totals…",
+      "error": "Couldn't load totals. {message}",
+      "retry": "Retry",
+      "partial": "Showing first {count} payments — totals are partial."
+    },
+    "scopes": {
+      "title": "Your scopes",
+      "personal": "Personal",
+      "personalSubtitle": "Your individual payments",
+      "groupSubtitle": "{role}",
+      "view": "View",
+      "noActivity": "No activity yet",
+      "empty": "Join or create a group to share payments.",
+      "createGroup": "Create a group"
+    },
+    "recent": {
+      "title": "Recent activity",
+      "viewAll": "View all",
+      "empty": "No payments yet. Add one to get started."
+    },
+    "starred": {
+      "title": "Starred",
+      "viewAll": "All starred",
+      "empty": "Star a payment to find it here."
+    }
   },
   "groups": {
     "title": "My Groups",

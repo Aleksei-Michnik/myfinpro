@@ -341,6 +341,13 @@ describe('PaymentsList', () => {
     expect(screen.queryByTestId('payments-list-add')).not.toBeInTheDocument();
   });
 
+  it('disableInternalAdd hides the toolbar Add payment button', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([]));
+    render(<PaymentsList showFilters={false} disableInternalAdd categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('payments-list-add')).not.toBeInTheDocument();
+  });
+
   it('clicking Add payment opens the form dialog in create mode', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
     render(<PaymentsList showFilters={false} categories={[]} />);

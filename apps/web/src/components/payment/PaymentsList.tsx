@@ -45,8 +45,12 @@ export interface PaymentsListProps {
   onPaymentEdit?(id: string): void;
   /** Pre-fetched categories shared across multiple lists. */
   categories?: CategoryDto[] | null;
-  /** When true, the toolbar doesn't render the "Add payment" button. */
-  hideAddButton?: boolean;
+  /**
+   * When true, the toolbar doesn't render the inline "Add payment" button.
+   * The dashboard sets this on its embedded RecentActivity / StarredPayments
+   * because it has its own primary `<QuickAddPaymentButton>` at the top.
+   */
+  disableInternalAdd?: boolean;
 }
 
 /** Translate a `PaymentsFiltersValue` into the `usePayments().fetchList` query. */
@@ -82,7 +86,7 @@ export function PaymentsList({
   onPaymentClick,
   onPaymentEdit,
   categories,
-  hideAddButton,
+  disableInternalAdd,
 }: PaymentsListProps) {
   const t = useTranslations('payments');
   const locale = useLocale();
@@ -239,7 +243,7 @@ export function PaymentsList({
   const showLoadingFirst = firstLoad && loading;
   const showEmpty = !loading && !error && rows.length === 0;
 
-  const showAddButton = showControls !== false && !hideAddButton;
+  const showAddButton = showControls !== false && !disableInternalAdd;
 
   return (
     <div className="space-y-4" data-testid="payments-list">
