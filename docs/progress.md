@@ -4051,3 +4051,164 @@ a hotfix on top of 6.15, not a new iteration slot).
 before/after screenshot was captured). The fix is mechanical (portal +
 fixed positioning) and covered by unit tests; user verification on
 staging will close the loop on the visual outcome.
+
+### Iteration 6.15.2 — Fix personal-scope label i18n key (2026-05-09)
+
+**Bug** — User reported on staging that the SCOPE column in dashboard
+RecentActivity rendered the literal i18n key `payments.payments.scope.personal`
+(or `payments.payments.scope.personal, Family`) instead of the resolved
+human label `Personal` / `Personal, Family`.
+
+**Root cause** — In [`apps/web/src/lib/payment/formatters.ts`](apps/web/src/lib/payment/formatters.ts:1),
+`formatScopeLabel(attribution, t)` was calling
+`t('payments.scope.personal')` and `t('payments.scope.group')` (full
+paths). Every caller of that helper — `PaymentRow`,
+`PaymentDetailHeader`, `DeletePaymentDialog`, `PaymentsList`,
+`payment-detail-client` — supplies a `t` from `useTranslations('payments')`.
+next-intl prepends the namespace, so the resolved key was
+`payments.payments.scope.personal`, which doesn't exist in either
+`en.json` or `he.json`. Fallback: render the literal key. The
+`scope.group` variant only appears with `groupName === null` and was
+masked in the wild by every group having a name.
+
+**Fix (single file, 2 lines + JSDoc)** —
+[`formatScopeLabel`](apps/web/src/lib/payment/formatters.ts:66) now
+calls `t('scope.personal')` / `t('scope.group')` (relative to the
+`payments` namespace), matching the convention of every caller.
+
+**Convention picked (project-wide, documented for future iterations)** —
+Components inside the `payments.*` i18n namespace use
+`useTranslations('payments')` (relative keys); helpers receiving a `t`
+parameter from such a component must also use relative keys. Camp A
+(`useTranslations()` + full paths) was considered but rejected for
+this hotfix — converting all 5 callers and their 57 `t(...)` call
+sites would have violated the "minimum-diff" task constraint without
+any user-facing benefit. Future iterations adding new payments-namespace
+components should continue Camp B for consistency.
+
+**Anti-pattern audit** — A project-wide grep
+(`rg "t\(['\"]payments\." apps/web/src`) returned **only** the two
+sites in `formatters.ts`. No other component in the payments namespace
+mistakenly prefixes its keys. Other top-level namespaces (`auth`,
+`groups`, `dashboard`, etc.) likewise show no doubled-prefix calls.
+The codebase was already internally consistent everywhere except
+this one helper.
+
+**Tests** —
+
+- [`formatters.test.ts`](apps/web/src/lib/payment/__tests__/formatters.test.ts:81)
+  scope-label assertions updated to expect relative keys; new test
+  asserts `t` is **never** invoked with a `payments.` prefix
+  (regression guard).
+- [`PaymentRow.spec.tsx`](apps/web/src/components/payment/PaymentRow.spec.tsx:1)
+  next-intl mock upgraded to resolve keys against the real `en.json`
+  bundle (previously returned the literal key, masking this exact
+  bug). The card-variant test now asserts the rendered scope cell
+  text is `Personal` and contains neither `payments.payments.` nor
+  the literal `scope.personal` key.
+- New
+  [`i18n-key-shape.test.ts`](apps/web/src/lib/payment/__tests__/i18n-key-shape.test.ts:1)
+  walks both message bundles and asserts:
+  - no key starts with `<ns>.<ns>.` for any top-level namespace
+    (catches the bug class project-wide, including future
+    regressions in any namespace);
+  - `payments.scope.personal` / `payments.scope.group` exist in
+    both `en.json` and `he.json`;
+  - the bug-trigger path `payments.payments.scope.personal` is
+    absent in both bundles.
+
+**Why no ESLint rule** — A custom rule that flags
+`useTranslations('payments')` followed by `t('payments.…)` would catch
+the same class of bug at lint time, but is too speculative for a
+hotfix and would also need to recognize all 9+ namespaces. The
+runtime test at the messages-bundle level achieves the same coverage
+with zero project-tooling churn.
+
+**Status** — All 648 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green. Phase 6 status: 15/21 (unchanged — this is
+a hotfix on top of 6.15, not a new iteration slot).
+
+**Staging smoke** — Skipped by the executor (deferred to user
+verification). The fix is single-file, deterministic, and covered
+by the new + updated unit tests; user verification on staging will
+close the loop on the visual outcome.
+
+### Iteration 6.15.2 — Fix personal-scope label i18n key (2026-05-09)
+
+**Bug** — User reported on staging that the SCOPE column in dashboard
+RecentActivity rendered the literal i18n key `payments.payments.scope.personal`
+(or `payments.payments.scope.personal, Family`) instead of the resolved
+human label `Personal` / `Personal, Family`.
+
+**Root cause** — In [`apps/web/src/lib/payment/formatters.ts`](apps/web/src/lib/payment/formatters.ts:1),
+`formatScopeLabel(attribution, t)` was calling
+`t('payments.scope.personal')` and `t('payments.scope.group')` (full
+paths). Every caller of that helper — `PaymentRow`,
+`PaymentDetailHeader`, `DeletePaymentDialog`, `PaymentsList`,
+`payment-detail-client` — supplies a `t` from `useTranslations('payments')`.
+next-intl prepends the namespace, so the resolved key was
+`payments.payments.scope.personal`, which doesn't exist in either
+`en.json` or `he.json`. Fallback: render the literal key. The
+`scope.group` variant only appears with `groupName === null` and was
+masked in the wild by every group having a name.
+
+**Fix (single file, 2 lines + JSDoc)** —
+[`formatScopeLabel`](apps/web/src/lib/payment/formatters.ts:66) now
+calls `t('scope.personal')` / `t('scope.group')` (relative to the
+`payments` namespace), matching the convention of every caller.
+
+**Convention picked (project-wide, documented for future iterations)** —
+Components inside the `payments.*` i18n namespace use
+`useTranslations('payments')` (relative keys); helpers receiving a `t`
+parameter from such a component must also use relative keys. Camp A
+(`useTranslations()` + full paths) was considered but rejected for
+this hotfix — converting all 5 callers and their 57 `t(...)` call
+sites would have violated the "minimum-diff" task constraint without
+any user-facing benefit. Future iterations adding new payments-namespace
+components should continue Camp B for consistency.
+
+**Anti-pattern audit** — A project-wide grep
+(`rg "t\(['\"]payments\." apps/web/src`) returned **only** the two
+sites in `formatters.ts`. No other component in the payments namespace
+mistakenly prefixes its keys. Other top-level namespaces (`auth`,
+`groups`, `dashboard`, etc.) likewise show no doubled-prefix calls.
+The codebase was already internally consistent everywhere except
+this one helper.
+
+**Tests** —
+
+- [`formatters.test.ts`](apps/web/src/lib/payment/__tests__/formatters.test.ts:81)
+  scope-label assertions updated to expect relative keys; new test
+  asserts `t` is **never** invoked with a `payments.` prefix
+  (regression guard).
+- [`PaymentRow.spec.tsx`](apps/web/src/components/payment/PaymentRow.spec.tsx:1)
+  next-intl mock upgraded to resolve keys against the real `en.json`
+  bundle (previously returned the literal key, masking this exact
+  bug). The card-variant test now asserts the rendered scope cell
+  text is `Personal` and contains neither `payments.payments.` nor
+  the literal `scope.personal` key.
+- New
+  [`i18n-key-shape.test.ts`](apps/web/src/lib/payment/__tests__/i18n-key-shape.test.ts:1)
+  walks both message bundles and asserts:
+  - no key starts with `<ns>.<ns>.` for any top-level namespace
+    (catches the bug class project-wide, including future
+    regressions in any namespace);
+  - `payments.scope.personal` / `payments.scope.group` exist in
+    both `en.json` and `he.json`;
+  - the bug-trigger path `payments.payments.scope.personal` is
+    absent in both bundles.
+
+**Why no ESLint rule** — A custom rule that flags
+`useTranslations('payments')` followed by `t('payments.…)` would catch
+the same class of bug at lint time, but is too speculative for a
+hotfix and would also need to recognize all 9+ namespaces. The
+runtime test at the messages-bundle level achieves the same coverage
+with zero project-tooling churn.
+
+**Status** — All 648 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green. Phase 6 status: 15/21 (unchanged — this is
+a hotfix on top of 6.15, not a new iteration slot).
+
+**Staging smoke** — Skipped. The fix is single-file, deterministic, and covered
+by the new + updated unit tests; user verification on staging will
+close the loop on the visual outcome.
