@@ -3889,3 +3889,165 @@ primary `<QuickAddPaymentButton>`.
 **Next step**: Iteration 6.16 — `/payments` per-scope page + group tab +
 categories UI. Will activate the `View` and `View all` links rendered by
 this iteration (currently they 404).
+
+### Iteration 6.15.1 — Fix row-actions popover clipping (2026-05-09)
+
+**Bug** — User reported on staging that the `⋮` quick-action submenu in
+the payments table was visually cut off on desktop: `Edit` / `Delete`
+ended at the right edge of the table with the table's vertical scroll
+bar overlapping them. Mobile (card layout) was unaffected.
+
+**Root cause** — In `PaymentRow.tsx` the `⋮` popover was an
+`absolute end-0` `<div>` inside a `<td>`. The desktop list wraps the
+`<table>` in `<div class="hidden overflow-x-auto md:block">`, so the
+popover got clipped by the scroller. The dashboard widgets
+(`RecentActivity`, `StarredPayments`) made it worse because they live
+in narrow columns where the trigger sits very close to the wrapper's
+right edge.
+
+**Fix approach** — Extract a reusable `<RowActionsMenu>` primitive at
+`apps/web/src/components/ui/RowActionsMenu.tsx`. The popover now
+portal-renders to `document.body` with `position: fixed` and
+viewport-aware coordinates:
+
+- Right-edge alignment to the trigger by default, with horizontal
+  viewport clamping.
+- Vertical flip when there is no room below.
+- Coordinates recompute on `scroll` (capture phase, so inner
+  `overflow:auto` scrollers are caught — bubble-phase listeners on
+  `window` would miss them) and on `resize`.
+- Click-outside / `Escape` close.
+- `stopPropagation` on the trigger so the row's `onClick` (which
+  navigates to `/payments/:id` since 6.14) does not fire.
+
+Because the popover lives on `document.body`, no ancestor's
+`overflow: hidden` / `overflow-x: auto` can ever clip it again — this
+bulletproofs not just the dashboard widgets but the future per-scope
+`/payments` page (6.16) and any other table that adopts the primitive.
+
+**Why no new dependency** — The codebase has so far hand-rolled all
+popovers (`PaymentCategoryPicker`, `PaymentScopeSelector`, etc.). A
+50-80 KB Floating-UI / Radix popover would dwarf the ~3 KB primitive
+this needs. `react-dom`'s `createPortal` is already in the bundle.
+Right-aligned trigger + simple flip + clamp covers every reported case.
+
+**Why not simpler alternatives** — `right-0` doesn't help when the
+parent itself has `overflow:hidden`. Removing `overflow-x-auto` from
+the desktop table breaks responsive horizontal scrolling on medium
+viewports.
+
+**Refactor** — `PaymentRow` now delegates the menu to
+`<RowActionsMenu>`. The inline open-state, the document-level
+click-outside `useEffect`, and the inline popover JSX were removed.
+Test ids (`row-controls-${id}`, `row-edit-${id}`, `row-delete-${id}`)
+were preserved so the existing `PaymentRow.spec.tsx` and
+`PaymentsList.spec.tsx` selectors keep working — the only adjustment
+in `PaymentsList.spec.tsx` was to query the portalled `row-edit` /
+`row-delete` items via `screen.getByTestId(...)` rather than scoping
+them to the desktop wrapper.
+
+**Reusability note** — `<RowActionsMenu>` is a candidate for migrating
+the other hand-rolled popovers (`PaymentCategoryPicker`,
+`PaymentScopeSelector`, `PaymentTypeSelector`) in a future iteration,
+or for being generalized into a shared `Popover` primitive. None of
+those popovers are currently reported as broken, so no migration was
+done in this hotfix to keep the diff focused.
+
+**Tests** — 11 new unit tests in `RowActionsMenu.spec.tsx` covering:
+trigger a11y, open / close, item rendering, item click + auto-close,
+destructive styling, disabled item, click-outside, Escape, trigger
+non-bubbling, portal target = `document.body`, popover testId
+derivation, item non-bubbling. `PaymentsList.spec.tsx` selectors
+adjusted (3 lines). Coordinate math (`getBoundingClientRect()` returns
+zeros under JSDOM) is intentionally not asserted; visual smoke covers
+it.
+
+**Status** — All 643 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green. Phase 6 status: 15/21 (unchanged — this is
+a hotfix on top of 6.15, not a new iteration slot).
+
+**Staging smoke** — Skipped by the executor (no convenient
+before/after screenshot was captured). The fix is mechanical (portal +
+fixed positioning) and covered by unit tests; user verification on
+staging will close the loop on the visual outcome.
+
+### Iteration 6.15.1 — Fix row-actions popover clipping (2026-05-09)
+
+**Bug** — User reported on staging that the `⋮` quick-action submenu in
+the payments table was visually cut off on desktop: `Edit` / `Delete`
+ended at the right edge of the table with the table's vertical scroll
+bar overlapping them. Mobile (card layout) was unaffected.
+
+**Root cause** — In `PaymentRow.tsx` the `⋮` popover was an
+`absolute end-0` `<div>` inside a `<td>`. The desktop list wraps the
+`<table>` in `<div class="hidden overflow-x-auto md:block">`, so the
+popover got clipped by the scroller. The dashboard widgets
+(`RecentActivity`, `StarredPayments`) made it worse because they live
+in narrow columns where the trigger sits very close to the wrapper's
+right edge.
+
+**Fix approach** — Extract a reusable `<RowActionsMenu>` primitive at
+`apps/web/src/components/ui/RowActionsMenu.tsx`. The popover now
+portal-renders to `document.body` with `position: fixed` and
+viewport-aware coordinates:
+
+- Right-edge alignment to the trigger by default, with horizontal
+  viewport clamping.
+- Vertical flip when there is no room below.
+- Coordinates recompute on `scroll` (capture phase, so inner
+  `overflow:auto` scrollers are caught — bubble-phase listeners on
+  `window` would miss them) and on `resize`.
+- Click-outside / `Escape` close.
+- `stopPropagation` on the trigger so the row's `onClick` (which
+  navigates to `/payments/:id` since 6.14) does not fire.
+
+Because the popover lives on `document.body`, no ancestor's
+`overflow: hidden` / `overflow-x: auto` can ever clip it again — this
+bulletproofs not just the dashboard widgets but the future per-scope
+`/payments` page (6.16) and any other table that adopts the primitive.
+
+**Why no new dependency** — The codebase has so far hand-rolled all
+popovers (`PaymentCategoryPicker`, `PaymentScopeSelector`, etc.). A
+50-80 KB Floating-UI / Radix popover would dwarf the ~3 KB primitive
+this needs. `react-dom`'s `createPortal` is already in the bundle.
+Right-aligned trigger + simple flip + clamp covers every reported case.
+
+**Why not simpler alternatives** — `right-0` doesn't help when the
+parent itself has `overflow:hidden`. Removing `overflow-x-auto` from
+the desktop table breaks responsive horizontal scrolling on medium
+viewports.
+
+**Refactor** — `PaymentRow` now delegates the menu to
+`<RowActionsMenu>`. The inline open-state, the document-level
+click-outside `useEffect`, and the inline popover JSX were removed.
+Test ids (`row-controls-${id}`, `row-edit-${id}`, `row-delete-${id}`)
+were preserved so the existing `PaymentRow.spec.tsx` and
+`PaymentsList.spec.tsx` selectors keep working — the only adjustment
+in `PaymentsList.spec.tsx` was to query the portalled `row-edit` /
+`row-delete` items via `screen.getByTestId(...)` rather than scoping
+them to the desktop wrapper.
+
+**Reusability note** — `<RowActionsMenu>` is a candidate for migrating
+the other hand-rolled popovers (`PaymentCategoryPicker`,
+`PaymentScopeSelector`, `PaymentTypeSelector`) in a future iteration,
+or for being generalized into a shared `Popover` primitive. None of
+those popovers are currently reported as broken, so no migration was
+done in this hotfix to keep the diff focused.
+
+**Tests** — 11 new unit tests in `RowActionsMenu.spec.tsx` covering:
+trigger a11y, open / close, item rendering, item click + auto-close,
+destructive styling, disabled item, click-outside, Escape, trigger
+non-bubbling, portal target = `document.body`, popover testId
+derivation, item non-bubbling. `PaymentsList.spec.tsx` selectors
+adjusted (3 lines). Coordinate math (`getBoundingClientRect()` returns
+zeros under JSDOM) is intentionally not asserted; visual smoke covers
+it.
+
+**Status** — All 643 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green. Phase 6 status: 15/21 (unchanged — this is
+a hotfix on top of 6.15, not a new iteration slot).
+
+**Staging smoke** — Skipped by the executor (no convenient
+before/after screenshot was captured). The fix is mechanical (portal +
+fixed positioning) and covered by unit tests; user verification on
+staging will close the loop on the visual outcome.
