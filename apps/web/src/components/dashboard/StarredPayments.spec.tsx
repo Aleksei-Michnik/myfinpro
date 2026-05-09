@@ -36,7 +36,7 @@ describe('StarredPayments', () => {
   it('header includes the "All starred" link', () => {
     render(<StarredPayments />);
     const link = screen.getByTestId('starred-payments-view-all');
-    expect(link.getAttribute('href')).toBe('/payments/starred');
+    expect(link.getAttribute('href')).toBe('/payments?starred=1');
   });
 
   it('passes a custom emptyState node to <PaymentsList>', () => {

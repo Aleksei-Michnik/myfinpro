@@ -714,6 +714,87 @@
     "schedulePlan": {
       "occurrenceTitle": "לוח זמנים / תכנית",
       "comingSoon": "ניהול חוזר ותכניות תשלום יגיעו באיטרציות 6.18 ו-6.20."
+    },
+    "page": {
+      "title": "תשלומים",
+      "subtitle": "נהל את כל התשלומים שאתה רואה.",
+      "scopeTabs": {
+        "all": "הכל",
+        "personal": "אישי",
+        "noAccess": "אין לך גישה להיקף הזה.",
+        "backToDashboard": "חזרה ללוח הבקרה"
+      },
+      "starredToggle": {
+        "label": "מסומנים בלבד",
+        "ariaPressed": "הצג מסומנים בלבד"
+      },
+      "groupTabTitle": "תשלומים"
     }
+  },
+  "categories": {
+    "page": {
+      "title": "קטגוריות",
+      "subtitle": "נהל את קטגוריות התשלום שלך."
+    },
+    "scope": {
+      "personal": "אישי",
+      "groupHeading": "{group}"
+    },
+    "system": {
+      "badge": "ברירת מחדל",
+      "hint": "לא ניתן לערוך קטגוריות ברירת מחדל."
+    },
+    "actions": {
+      "create": "+ קטגוריה חדשה",
+      "edit": "עריכה",
+      "delete": "מחיקה"
+    },
+    "form": {
+      "title": {
+        "create": "קטגוריה חדשה",
+        "edit": "עריכת קטגוריה"
+      },
+      "name": {
+        "label": "שם",
+        "placeholder": "מצרכים"
+      },
+      "icon": {
+        "label": "אייקון (אימוג'י)",
+        "placeholder": "🛒"
+      },
+      "color": {
+        "label": "צבע",
+        "placeholder": "#7c3aed",
+        "presetsLabel": "בחירה מהירה"
+      },
+      "direction": {
+        "label": "כיוון",
+        "in": "הכנסה",
+        "out": "הוצאה",
+        "both": "שניהם"
+      },
+      "errors": {
+        "nameRequired": "שם נדרש.",
+        "nameTooLong": "מקסימום 60 תווים.",
+        "colorInvalid": "השתמש בצבע הקס כמו #7c3aed.",
+        "duplicate": "קטגוריה בשם זה כבר קיימת.",
+        "generic": "לא ניתן לשמור קטגוריה. {message}"
+      },
+      "save": "שמור",
+      "saving": "שומר…",
+      "cancel": "ביטול"
+    },
+    "delete": {
+      "title": "מחיקת קטגוריה",
+      "warning": "האם אתה בטוח שברצונך למחוק את \"{name}\"? לא ניתן לבטל פעולה זו.",
+      "inUse": "{count} תשלומים עדיין משתמשים בקטגוריה זו. בחר קטגוריה חלופית לפני המחיקה.",
+      "replaceLabel": "קטגוריה חלופית",
+      "cancel": "ביטול",
+      "confirm": "מחיקה",
+      "deleting": "מוחק…",
+      "errorGeneric": "לא ניתן למחוק את הקטגוריה. {message}"
+    },
+    "empty": "אין קטגוריות מותאמות אישית עדיין.",
+    "loading": "טוען קטגוריות…"
   }
 }

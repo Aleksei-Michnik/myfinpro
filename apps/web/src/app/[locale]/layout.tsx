@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
 import { routing } from '@/i18n/routing';
 import { AuthProvider } from '@/lib/auth/auth-context';
+import { CategoryProvider } from '@/lib/category/category-context';
 import { GroupProvider } from '@/lib/group/group-context';
 import { PaymentProvider } from '@/lib/payment/payment-context';
 
@@ -49,14 +50,16 @@ export default async function LocaleLayout({ children, params }: Props) {
           <AuthProvider>
             <GroupProvider>
               <PaymentProvider>
-                <ToastProvider>
-                  <Header />
-                  <VerificationBanner />
-                  <TimezoneDetector />
-                  <ErrorBoundary>{children}</ErrorBoundary>
-                  <Footer />
-                  <ToastContainer />
-                </ToastProvider>
+                <CategoryProvider>
+                  <ToastProvider>
+                    <Header />
+                    <VerificationBanner />
+                    <TimezoneDetector />
+                    <ErrorBoundary>{children}</ErrorBoundary>
+                    <Footer />
+                    <ToastContainer />
+                  </ToastProvider>
+                </CategoryProvider>
               </PaymentProvider>
             </GroupProvider>
           </AuthProvider>

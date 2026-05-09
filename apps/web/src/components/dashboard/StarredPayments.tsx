@@ -31,7 +31,7 @@ export function StarredPayments({ limit = 5 }: StarredPaymentsProps) {
           {t('title')}
         </h2>
         <Link
-          href="/payments/starred"
+          href="/payments?starred=1"
           className="text-sm text-primary-600 hover:underline"
           data-testid="starred-payments-view-all"
         >

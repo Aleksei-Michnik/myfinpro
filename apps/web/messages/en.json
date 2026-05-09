@@ -714,6 +714,87 @@
     "schedulePlan": {
       "occurrenceTitle": "Schedule / Plan",
       "comingSoon": "Recurring and plan management ship in iterations 6.18 and 6.20."
+    },
+    "page": {
+      "title": "Payments",
+      "subtitle": "Manage all payments you can see.",
+      "scopeTabs": {
+        "all": "All",
+        "personal": "Personal",
+        "noAccess": "You don't have access to this scope.",
+        "backToDashboard": "Back to dashboard"
+      },
+      "starredToggle": {
+        "label": "Starred only",
+        "ariaPressed": "Show starred only"
+      },
+      "groupTabTitle": "Payments"
     }
+  },
+  "categories": {
+    "page": {
+      "title": "Categories",
+      "subtitle": "Manage your payment categories."
+    },
+    "scope": {
+      "personal": "Personal",
+      "groupHeading": "{group}"
+    },
+    "system": {
+      "badge": "Default",
+      "hint": "Default categories can't be edited."
+    },
+    "actions": {
+      "create": "+ New category",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "title": {
+        "create": "New category",
+        "edit": "Edit category"
+      },
+      "name": {
+        "label": "Name",
+        "placeholder": "Groceries"
+      },
+      "icon": {
+        "label": "Icon (emoji)",
+        "placeholder": "🛒"
+      },
+      "color": {
+        "label": "Color",
+        "placeholder": "#7c3aed",
+        "presetsLabel": "Quick picks"
+      },
+      "direction": {
+        "label": "Direction",
+        "in": "Income",
+        "out": "Expense",
+        "both": "Both"
+      },
+      "errors": {
+        "nameRequired": "Name is required.",
+        "nameTooLong": "Max 60 characters.",
+        "colorInvalid": "Use a hex color like #7c3aed.",
+        "duplicate": "A category with this name already exists.",
+        "generic": "Could not save category. {message}"
+      },
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel"
+    },
+    "delete": {
+      "title": "Delete category",
+      "warning": "Are you sure you want to delete \"{name}\"? This can't be undone.",
+      "inUse": "{count} payment(s) still use this category. Choose a replacement category before deleting.",
+      "replaceLabel": "Replacement category",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleting": "Deleting…",
+      "errorGeneric": "Could not delete category. {message}"
+    },
+    "empty": "No custom categories yet.",
+    "loading": "Loading categories…"
   }
 }
