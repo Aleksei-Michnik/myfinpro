@@ -1,17 +1,28 @@
 'use client';
 
-// Phase 6 · Iteration 6.14 — Shared star-toggle hook with optimistic
-// flip + revert-on-error semantics. Extracted from `<PaymentRow>` so that
+// Phase 6 · Iteration 6.14 — shared star-toggle hook with optimistic flip +
+// revert-on-error semantics. Extracted from `<PaymentRow>` so that
 // `<PaymentDetailHeader>` can share the exact same behaviour (DRY).
 //
+// Phase 6 · Iteration 6.16.2 — internally rebuilt on top of
+// `useAsyncOperation({ scope: 'control' })`. The control-scope hook gives
+// us AbortController-managed cancellation on unmount, a 10 s default
+// timeout, and a 30 s retry timeout — without any per-component bookkeeping.
+// Public API is unchanged plus a new `pending` flag (already exposed) and
+// the `error` is now a structured object (rendered as a string by the
+// existing consumers via `error.message`).
+//
 // Usage:
-//   const { starred, error, toggle } = useStarToggle(payment.id, payment.starredByMe, {
+//   const { starred, error, pending, toggle } = useStarToggle(payment.id, payment.starredByMe, {
 //     onToggled: (id, starred) => { /* bubble-up */ },
 //   });
-//   <button onClick={toggle}>{starred ? '★' : '☆'}</button>
+//   <button disabled={pending} aria-busy={pending} onClick={toggle}>
+//     {pending ? <ButtonSpinner /> : (starred ? '★' : '☆')}
+//   </button>
 
 import { useCallback, useEffect, useState } from 'react';
 import { usePayments } from './payment-context';
+import { useAsyncOperation } from '@/lib/ui';
 
 export interface UseStarToggleOptions {
   /** Called with the authoritative `starred` value returned by the server. */
@@ -25,7 +36,7 @@ export interface UseStarToggleResult {
   error: string | null;
   /** Whether a network round-trip is currently in flight. */
   pending: boolean;
-  /** Fires the toggle. Safe to call from a click handler (stops propagation is the caller's job). */
+  /** Fires the toggle. Safe to call from a click handler. */
   toggle: () => Promise<void>;
 }
 
@@ -36,8 +47,10 @@ export function useStarToggle(
 ): UseStarToggleResult {
   const { toggleStar } = usePayments();
   const [starred, setStarred] = useState(initialStarred);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const op = useAsyncOperation<{ starred: boolean }>({
+    scope: 'control',
+    id: `star:${paymentId}`,
+  });
 
   // Keep in sync when the parent-prop changes (e.g. re-fetched payment).
   useEffect(() => {
@@ -46,20 +59,30 @@ export function useStarToggle(
 
   const toggle = useCallback(async () => {
     const previous = starred;
+    // Optimistic flip — visible immediately.
     setStarred(!previous);
-    setError(null);
-    setPending(true);
-    try {
-      const r = await toggleStar(paymentId);
-      setStarred(r.starred);
-      options.onToggled?.(paymentId, r.starred);
-    } catch (err) {
+    const result = await op.run((signal) => toggleStar(paymentId, signal));
+    if (result === undefined) {
+      // Failure path — revert and surface the error message.
       setStarred(previous);
-      setError((err as Error).message || 'star failed');
-    } finally {
-      setPending(false);
+      return;
     }
-  }, [paymentId, starred, toggleStar, options]);
+    setStarred(result.starred);
+    options.onToggled?.(paymentId, result.starred);
+  }, [paymentId, starred, toggleStar, op, options]);
 
-  return { starred, error, pending, toggle };
+  // Surface the structured error as a string for backward compatibility with
+  // existing consumers that show `error` in a `title=` attribute.
+  const errorMessage = op.error?.message
+    ? op.error.message
+    : op.error
+      ? `Star ${op.error.reason} error`
+      : null;
+
+  return {
+    starred,
+    error: errorMessage,
+    pending: op.isLoading,
+    toggle,
+  };
 }

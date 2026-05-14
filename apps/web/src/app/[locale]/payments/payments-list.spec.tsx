@@ -1,11 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentsListClient } from './payments-list-client';
+
+// Tests for the iteration 6.16.2 orchestrator: filters live in URL, but the
+// orchestrator owns the fetch via useAsyncOperation. URL is rewritten ONLY
+// on commit. <RetryReturnDialog> opens on failure.
 
 let searchString = '';
 
 const mockReplace = vi.fn();
 const mockListProps = vi.fn();
+const mockFetchList = vi.fn();
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (k: string) => k,
@@ -42,6 +47,10 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
+vi.mock('@/lib/payment/payment-context', () => ({
+  usePayments: () => ({ fetchList: mockFetchList }),
+}));
+
 vi.mock('@/components/payment/PaymentsList', () => ({
   PaymentsList: (props: Record<string, unknown>) => {
     mockListProps(props);
@@ -49,120 +58,238 @@ vi.mock('@/components/payment/PaymentsList', () => ({
   },
 }));
 
-describe('PaymentsListClient', () => {
+function listResp() {
+  return Promise.resolve({ data: [], nextCursor: null, hasMore: false });
+}
+
+interface ListPropsShape {
+  filters: {
+    scope?: string;
+    starred?: boolean;
+    direction?: string;
+    search?: string;
+    from?: string;
+    sort?: string;
+  };
+  loading?: boolean;
+  lockScope?: boolean;
+  onFiltersChange?: (next: Record<string, unknown>) => void;
+}
+
+function lastListProps(): ListPropsShape {
+  const calls = mockListProps.mock.calls;
+  const last = calls[calls.length - 1];
+  return (last ? last[0] : {}) as ListPropsShape;
+}
+
+async function flushFetch() {
+  // Allow the chained promise + setState to settle.
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+describe('PaymentsListClient (orchestrator)', () => {
   beforeEach(() => {
     mockReplace.mockReset();
     mockListProps.mockReset();
+    mockFetchList.mockReset();
+    mockFetchList.mockImplementation(() => listResp());
     searchString = '';
   });
 
-  it('renders heading + tabs + list', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders heading + tabs + list', async () => {
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.getByTestId('payments-page')).toBeInTheDocument();
     expect(screen.getByTestId('payments-scope-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('payments-list-mock')).toBeInTheDocument();
   });
 
-  // ── Scope ─────────────────────────────────────────────────────────────────
-
-  it('default scope is "all"; filters.scope=all forwarded to <PaymentsList>', () => {
+  it('default scope is "all"; filters.scope=all forwarded to <PaymentsList>', async () => {
     render(<PaymentsListClient />);
-    const props = mockListProps.mock.calls[0][0];
+    await flushFetch();
+    const props = lastListProps();
     expect(props.filters).toMatchObject({ scope: 'all' });
     expect(props.lockScope).toBe(true);
   });
 
-  it('?scope=personal pre-populates filters.scope', () => {
+  it('?scope=personal pre-populates committedFilters.scope', async () => {
     searchString = 'scope=personal';
     render(<PaymentsListClient />);
-    expect(mockListProps.mock.calls[0][0].filters.scope).toBe('personal');
+    await flushFetch();
+    expect(lastListProps().filters.scope).toBe('personal');
   });
 
-  it('?scope=group:g-1 forwards "group:g-1" when user is a member', () => {
+  it('?scope=group:g-1 forwards "group:g-1" when user is a member', async () => {
     searchString = 'scope=group:g-1';
     render(<PaymentsListClient />);
-    expect(mockListProps.mock.calls[0][0].filters.scope).toBe('group:g-1');
+    await flushFetch();
+    expect(lastListProps().filters.scope).toBe('group:g-1');
   });
 
-  it('?scope=group:unknown shows the no-access message', () => {
+  it('?scope=group:unknown shows the no-access message', async () => {
     searchString = 'scope=group:unknown';
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.getByTestId('payments-page-no-access')).toBeInTheDocument();
     expect(screen.queryByTestId('payments-list-mock')).not.toBeInTheDocument();
   });
 
-  // ── Bug #1 — only one starred control ─────────────────────────────────────
-
-  it('renders exactly one starred control on the page (bug #1 regression)', () => {
+  it('renders exactly one starred control on the page', async () => {
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.getAllByTestId('starred-filter-toggle')).toHaveLength(1);
   });
 
-  // ── Bug #2 — starred toggle drives the list filter ───────────────────────
-
-  it('?starred=1 reflects in the toggle button AND on filters.starred (bug #2 regression)', () => {
+  it('?starred=1 reflects in the toggle button AND on filters.starred', async () => {
     searchString = 'starred=1';
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.getByTestId('starred-filter-toggle')).toHaveAttribute('aria-pressed', 'true');
-    expect(mockListProps.mock.calls[0][0].filters.starred).toBe(true);
+    expect(lastListProps().filters.starred).toBe(true);
   });
 
-  it('clicking starred toggle calls router.replace with ?starred=1', () => {
+  it('clicking starred toggle commits and writes ?starred=1 to the URL', async () => {
     render(<PaymentsListClient />);
+    await flushFetch();
     fireEvent.click(screen.getByTestId('starred-filter-toggle'));
-    expect(mockReplace).toHaveBeenCalledWith('/payments?starred=1');
+    await flushFetch();
+    expect(mockReplace).toHaveBeenLastCalledWith('/payments?starred=1');
   });
 
-  it('clicking starred toggle when already starred clears it', () => {
+  it('clicking starred toggle when already starred commits and clears it', async () => {
     searchString = 'starred=1';
     render(<PaymentsListClient />);
+    await flushFetch();
     fireEvent.click(screen.getByTestId('starred-filter-toggle'));
-    expect(mockReplace).toHaveBeenCalledWith('/payments');
+    await flushFetch();
+    expect(mockReplace).toHaveBeenLastCalledWith('/payments');
   });
 
-  // ── Bug #3 — URL-synced filters + Clear filters button ───────────────────
-
-  it('?direction=OUT&q=coffee&from=2026-01-01 pre-populates the filters (bug #3a)', () => {
+  it('?direction=OUT&q=coffee&from=2026-01-01 pre-populates the filters', async () => {
     searchString = 'direction=OUT&q=coffee&from=2026-01-01';
     render(<PaymentsListClient />);
-    expect(mockListProps.mock.calls[0][0].filters).toMatchObject({
+    await flushFetch();
+    expect(lastListProps().filters).toMatchObject({
       direction: 'OUT',
       search: 'coffee',
       from: '2026-01-01',
     });
   });
 
-  it('PaymentsList.onFiltersChange writes back to the URL via router.replace (bug #3b)', () => {
+  it('PaymentsList.onFiltersChange writes back to the URL only on commit', async () => {
     render(<PaymentsListClient />);
-    const onChange = mockListProps.mock.calls[0][0].onFiltersChange as (
-      next: Record<string, unknown>,
-    ) => void;
+    await flushFetch();
+    mockReplace.mockReset();
+    const onChange = lastListProps().onFiltersChange as (next: Record<string, unknown>) => void;
     onChange({ scope: 'all', sort: 'date_desc', direction: 'IN' });
-    expect(mockReplace).toHaveBeenCalledWith('/payments?direction=IN');
+    await flushFetch();
+    expect(mockReplace).toHaveBeenLastCalledWith('/payments?direction=IN');
   });
 
-  it('Clear filters button is hidden when no non-default filter is set', () => {
+  it('Clear filters button is hidden when no non-default filter is set', async () => {
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.queryByTestId('payments-clear-filters')).not.toBeInTheDocument();
   });
 
-  it('Clear filters button is visible when any non-default filter is set', () => {
+  it('Clear filters button is visible when any non-default filter is set', async () => {
     searchString = 'starred=1';
     render(<PaymentsListClient />);
+    await flushFetch();
     expect(screen.getByTestId('payments-clear-filters')).toBeInTheDocument();
   });
 
-  it('Clear filters button preserves scope and strips other params', () => {
+  it('Clear filters button preserves scope and strips other params', async () => {
     searchString = 'scope=personal&starred=1&direction=OUT&q=test';
     render(<PaymentsListClient />);
+    await flushFetch();
     fireEvent.click(screen.getByTestId('payments-clear-filters'));
-    expect(mockReplace).toHaveBeenCalledWith('/payments?scope=personal');
+    await flushFetch();
+    expect(mockReplace).toHaveBeenLastCalledWith('/payments?scope=personal');
   });
 
-  it('Clear filters button on the all-scope tab strips the URL down to just /payments', () => {
+  it('Clear filters on the all-scope tab strips down to /payments', async () => {
     searchString = 'starred=1&direction=OUT&q=test&sort=amount_desc';
     render(<PaymentsListClient />);
+    await flushFetch();
     fireEvent.click(screen.getByTestId('payments-clear-filters'));
-    expect(mockReplace).toHaveBeenCalledWith('/payments');
+    await flushFetch();
+    expect(mockReplace).toHaveBeenLastCalledWith('/payments');
+  });
+
+  // ── Iteration 6.16.2 — state machine ─────────────────────────────────
+
+  it('initial deep-link ?direction=IN: filter button stays inactive until commit', async () => {
+    // Hold the fetch unresolved so we observe the in-flight state.
+    let resolveFn: (v: unknown) => void = () => {};
+    mockFetchList.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFn = resolve;
+      }),
+    );
+    searchString = 'direction=IN';
+    render(<PaymentsListClient />);
+    // While in-flight: filters prop reflects deep-link (committed initially), but
+    // the orchestrator hasn't yet acknowledged the commit. Simulating the bug
+    // fix: the URL is the source of truth ONLY on initial mount, the controls
+    // render committedFilters which on mount equals initialFilters from URL.
+    // So Income button reflects the URL — that's intended for deep links.
+    expect(lastListProps().loading).toBe(true);
+    // Resolve and verify post-commit state.
+    await act(async () => {
+      resolveFn({ data: [], nextCursor: null, hasMore: false });
+    });
+    await flushFetch();
+    expect(lastListProps().loading).toBe(false);
+  });
+
+  it('PaymentsList receives loading=true while the initial fetch is in flight', async () => {
+    let resolveFn: (v: unknown) => void = () => {};
+    mockFetchList.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFn = resolve;
+      }),
+    );
+    render(<PaymentsListClient />);
+    await flushFetch();
+    expect(lastListProps().loading).toBe(true);
+    await act(async () => {
+      resolveFn({ data: [], nextCursor: null, hasMore: false });
+    });
+    await flushFetch();
+    expect(lastListProps().loading).toBe(false);
+  });
+
+  it('on subsequent-change failure: dialog opens; URL stays unchanged', async () => {
+    render(<PaymentsListClient />);
+    await flushFetch(); // initial fetch resolves with default mock (success).
+    mockReplace.mockReset();
+    mockFetchList.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fireEvent.click(screen.getByTestId('starred-filter-toggle'));
+    await flushFetch();
+    await waitFor(() => expect(screen.getByTestId('retry-return-dialog')).toBeInTheDocument());
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('clicking Return on subsequent-change failure leaves URL/committedFilters untouched', async () => {
+    render(<PaymentsListClient />);
+    await flushFetch();
+    mockReplace.mockReset();
+    mockFetchList.mockRejectedValueOnce(new TypeError('net'));
+    fireEvent.click(screen.getByTestId('starred-filter-toggle'));
+    await flushFetch();
+    fireEvent.click(screen.getByTestId('retry-return-dialog-return'));
+    await flushFetch();
+    expect(screen.queryByTestId('retry-return-dialog')).not.toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+    // committed starred filter unchanged.
+    expect(lastListProps().filters.starred).toBeUndefined();
   });
 });

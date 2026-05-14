@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PaymentsScopeTabs } from './PaymentsScopeTabs';
 
@@ -6,17 +6,9 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (k: string) => k,
 }));
 
-vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
-
 describe('PaymentsScopeTabs', () => {
   it('renders All + Personal tabs when no groups', () => {
-    render(<PaymentsScopeTabs current="all" groups={[]} />);
+    render(<PaymentsScopeTabs current="all" groups={[]} onChange={vi.fn()} />);
     expect(screen.getByTestId('scope-tab-all')).toBeInTheDocument();
     expect(screen.getByTestId('scope-tab-personal')).toBeInTheDocument();
     expect(screen.queryAllByRole('tab')).toHaveLength(2);
@@ -30,42 +22,70 @@ describe('PaymentsScopeTabs', () => {
           { id: 'g-1', name: 'Family' },
           { id: 'g-2', name: 'Roommates' },
         ]}
+        onChange={vi.fn()}
       />,
     );
     expect(screen.getByTestId('scope-tab-group:g-1')).toHaveTextContent('Family');
     expect(screen.getByTestId('scope-tab-group:g-2')).toHaveTextContent('Roommates');
   });
 
-  it('All tab → /payments href', () => {
-    render(<PaymentsScopeTabs current="all" groups={[]} />);
-    expect(screen.getByTestId('scope-tab-all')).toHaveAttribute('href', '/payments');
+  it('clicking a non-active tab calls onChange with the new key', () => {
+    const onChange = vi.fn();
+    render(<PaymentsScopeTabs current="all" groups={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByTestId('scope-tab-personal'));
+    expect(onChange).toHaveBeenCalledWith('personal');
   });
 
-  it('Personal tab → /payments?scope=personal href', () => {
-    render(<PaymentsScopeTabs current="all" groups={[]} />);
-    expect(screen.getByTestId('scope-tab-personal')).toHaveAttribute(
-      'href',
-      '/payments?scope=personal',
-    );
+  it('clicking the active tab is a no-op', () => {
+    const onChange = vi.fn();
+    render(<PaymentsScopeTabs current="all" groups={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByTestId('scope-tab-all'));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('Group tab → /payments?scope=group:<id> href', () => {
-    render(<PaymentsScopeTabs current="all" groups={[{ id: 'g-1', name: 'Family' }]} />);
-    expect(screen.getByTestId('scope-tab-group:g-1')).toHaveAttribute(
-      'href',
-      '/payments?scope=group:g-1',
+  it('Group tab calls onChange with "group:<id>"', () => {
+    const onChange = vi.fn();
+    render(
+      <PaymentsScopeTabs
+        current="all"
+        groups={[{ id: 'g-1', name: 'Family' }]}
+        onChange={onChange}
+      />,
     );
+    fireEvent.click(screen.getByTestId('scope-tab-group:g-1'));
+    expect(onChange).toHaveBeenCalledWith('group:g-1');
   });
 
   it('active tab has aria-current="page"', () => {
-    render(<PaymentsScopeTabs current="personal" groups={[]} />);
+    render(<PaymentsScopeTabs current="personal" groups={[]} onChange={vi.fn()} />);
     expect(screen.getByTestId('scope-tab-personal')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('scope-tab-all')).not.toHaveAttribute('aria-current', 'page');
   });
 
   it('container has role="tablist" and tabs have role="tab"', () => {
-    render(<PaymentsScopeTabs current="all" groups={[{ id: 'g-1', name: 'Family' }]} />);
+    render(
+      <PaymentsScopeTabs
+        current="all"
+        groups={[{ id: 'g-1', name: 'Family' }]}
+        onChange={vi.fn()}
+      />,
+    );
     expect(screen.getByRole('tablist')).toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(3);
+  });
+
+  it('disabled=true blocks click handlers and sets aria-disabled', () => {
+    const onChange = vi.fn();
+    render(<PaymentsScopeTabs current="all" groups={[]} onChange={onChange} disabled />);
+    expect(screen.getByTestId('scope-tab-personal')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('scope-tab-personal')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('scope-tab-personal'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('tabs are <button> elements (not anchors) — orchestrator owns URL writes', () => {
+    render(<PaymentsScopeTabs current="all" groups={[]} onChange={vi.fn()} />);
+    expect(screen.getByTestId('scope-tab-all').tagName).toBe('BUTTON');
+    expect(screen.getByTestId('scope-tab-personal').tagName).toBe('BUTTON');
   });
 });

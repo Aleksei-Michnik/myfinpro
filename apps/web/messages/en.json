@@ -9,6 +9,27 @@
     "edit": "Edit",
     "back": "Back"
   },
+  "ui": {
+    "loading": {
+      "pageProgressLabel": "Loading",
+      "overlayDefault": "Loading…",
+      "buttonBusy": "Saving…",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…"
+    },
+    "errors": {
+      "title": "Something went wrong",
+      "messages": {
+        "timeout": "The request took too long. Check your connection and try again.",
+        "network": "Network error. Check your connection.",
+        "http": "Server error ({status}). Try again.",
+        "aborted": "The operation was cancelled.",
+        "unknown": "Something went wrong. Try again."
+      },
+      "retry": "Retry",
+      "return": "Cancel"
+    }
+  },
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",

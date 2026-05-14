@@ -9,6 +9,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
@@ -38,6 +39,7 @@ export function PaymentDetailHeader({
   const {
     starred,
     error: starError,
+    pending: starPending,
     toggle: runToggleStar,
   } = useStarToggle(payment.id, payment.starredByMe, {
     onToggled: (_id, s) => onStarToggled?.(s),
@@ -169,11 +171,17 @@ export function PaymentDetailHeader({
           onClick={() => void runToggleStar()}
           aria-label={starLabel}
           aria-pressed={starred}
+          aria-busy={starPending}
+          disabled={starPending}
           title={starError ?? undefined}
           data-testid="detail-star"
-          className={`inline-flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${starColor}`}
+          className={`inline-flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 dark:border-gray-600 ${starColor}`}
         >
-          <span className="text-lg leading-none">{starGlyph}</span>
+          {starPending ? (
+            <ButtonSpinner size="sm" data-testid="detail-star-spinner" />
+          ) : (
+            <span className="text-lg leading-none">{starGlyph}</span>
+          )}
           {starLabel}
         </button>
         <Button

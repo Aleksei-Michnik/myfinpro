@@ -9,6 +9,27 @@
     "edit": "ערוך",
     "back": "חזרה"
   },
+  "ui": {
+    "loading": {
+      "pageProgressLabel": "טוען",
+      "overlayDefault": "טוען…",
+      "buttonBusy": "שומר…",
+      "loadMore": "טען עוד",
+      "loadingMore": "טוען…"
+    },
+    "errors": {
+      "title": "משהו השתבש",
+      "messages": {
+        "timeout": "הבקשה ארכה זמן רב מדי. בדוק את החיבור ונסה שוב.",
+        "network": "שגיאת רשת. בדוק את החיבור.",
+        "http": "שגיאת שרת ({status}). נסה שוב.",
+        "aborted": "הפעולה בוטלה.",
+        "unknown": "משהו השתבש. נסה שוב."
+      },
+      "retry": "נסה שוב",
+      "return": "ביטול"
+    }
+  },
   "nav": {
     "home": "דף הבית",
     "dashboard": "לוח בקרה",

@@ -43,6 +43,12 @@ export interface PaymentsFiltersProps {
    * its own and re-fetches whenever `value.direction` changes.
    */
   categories?: CategoryDto[] | null;
+  /**
+   * Phase 6 · Iteration 6.16.2 — when true, every control is disabled.
+   * The orchestrator sets this while a container-scope op is in flight so
+   * the user can't change filters faster than the data commits.
+   */
+  disabled?: boolean;
 }
 
 /** Group categories by ownership: System → Personal → per-group. */
@@ -72,6 +78,7 @@ export function PaymentsFilters({
   onChange,
   hide,
   categories: categoriesProp,
+  disabled,
 }: PaymentsFiltersProps) {
   const t = useTranslations('payments.filters');
   const { groups } = useGroups();
@@ -170,9 +177,11 @@ export function PaymentsFilters({
         <button
           type="button"
           onClick={() => setDirection(undefined)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-direction-all"
           aria-pressed={direction === undefined}
-          className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             direction === undefined
               ? 'bg-primary-600 text-white'
               : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
@@ -183,9 +192,11 @@ export function PaymentsFilters({
         <button
           type="button"
           onClick={() => setDirection('IN')}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-direction-in"
           aria-pressed={direction === 'IN'}
-          className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
+          className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 ${
             direction === 'IN'
               ? 'bg-green-600 text-white'
               : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
@@ -196,9 +207,11 @@ export function PaymentsFilters({
         <button
           type="button"
           onClick={() => setDirection('OUT')}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-direction-out"
           aria-pressed={direction === 'OUT'}
-          className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
+          className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 ${
             direction === 'OUT'
               ? 'bg-red-600 text-white'
               : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
@@ -215,8 +228,10 @@ export function PaymentsFilters({
           <select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
+            disabled={disabled}
+            aria-disabled={disabled || undefined}
             data-testid="filter-scope"
-            className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="all">{t('scopeAll')}</option>
             <option value="personal">{t('scopePersonal')}</option>
@@ -236,9 +251,11 @@ export function PaymentsFilters({
           type="search"
           value={searchLocal}
           onChange={(e) => setSearchLocal(e.target.value)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           placeholder={t('search')}
           data-testid="filter-search"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         />
       </label>
 
@@ -249,8 +266,10 @@ export function PaymentsFilters({
           type="date"
           value={value.from ?? ''}
           onChange={(e) => setFrom(e.target.value)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-from"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         />
       </label>
       <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
@@ -259,8 +278,10 @@ export function PaymentsFilters({
           type="date"
           value={value.to ?? ''}
           onChange={(e) => setTo(e.target.value)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-to"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         />
       </label>
 
@@ -270,8 +291,10 @@ export function PaymentsFilters({
         <select
           value={value.categoryId ?? ''}
           onChange={(e) => setCategoryId(e.target.value)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-category"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         >
           <option value="">{t('anyCategory')}</option>
           {grouped && grouped.system.length > 0 && (
@@ -315,8 +338,10 @@ export function PaymentsFilters({
         <select
           value={value.sort}
           onChange={(e) => setSort(e.target.value as PaymentsFiltersSort)}
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
           data-testid="filter-sort"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         >
           <option value="date_desc">{t('sortDateDesc')}</option>
           <option value="date_asc">{t('sortDateAsc')}</option>

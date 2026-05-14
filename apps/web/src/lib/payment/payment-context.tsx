@@ -1,10 +1,10 @@
 'use client';
 
 // Phase 6 · Iteration 6.11 — PaymentProvider.
-// Mirrors the structure of [`group-context.tsx`](apps/web/src/lib/group/group-context.tsx)
-// — bearer-token auth via `useAuth().getAccessToken()`, per-method fetch,
-// normalised `ApiError` with `errorCode`. No list caching at this iteration;
-// page-level components will own their pagination state.
+// Phase 6 · Iteration 6.16.2 — every public method now accepts an optional
+// `AbortSignal` so callers wired through `useAsyncOperation()` can cancel
+// in-flight requests on filter change, retry, or component unmount. The
+// signal is forwarded to the underlying `fetch` call.
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {
@@ -30,22 +30,35 @@ export interface PaymentApiError extends Error {
 
 interface PaymentContextValue {
   // Payments
-  fetchList(params?: ListPaymentsParams): Promise<PaymentListResponse>;
-  getPayment(id: string): Promise<PaymentSummary>;
-  createPayment(input: CreatePaymentInput): Promise<PaymentSummary>;
+  fetchList(params?: ListPaymentsParams, signal?: AbortSignal): Promise<PaymentListResponse>;
+  getPayment(id: string, signal?: AbortSignal): Promise<PaymentSummary>;
+  createPayment(input: CreatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary>;
   /** Returns null when the API responds 204 — signals payment hard-deletion. */
-  updatePayment(id: string, input: UpdatePaymentInput): Promise<PaymentSummary | null>;
-  removePayment(id: string, scope?: string): Promise<AttributionChangeResult>;
-  toggleStar(id: string): Promise<ToggleStarResult>;
+  updatePayment(
+    id: string,
+    input: UpdatePaymentInput,
+    signal?: AbortSignal,
+  ): Promise<PaymentSummary | null>;
+  removePayment(id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult>;
+  toggleStar(id: string, signal?: AbortSignal): Promise<ToggleStarResult>;
 
   // Comments
-  listComments(paymentId: string, opts?: ListCommentsParams): Promise<CommentListResponse>;
-  postComment(paymentId: string, content: string): Promise<Comment>;
-  editComment(paymentId: string, commentId: string, content: string): Promise<Comment>;
-  deleteComment(paymentId: string, commentId: string): Promise<void>;
+  listComments(
+    paymentId: string,
+    opts?: ListCommentsParams,
+    signal?: AbortSignal,
+  ): Promise<CommentListResponse>;
+  postComment(paymentId: string, content: string, signal?: AbortSignal): Promise<Comment>;
+  editComment(
+    paymentId: string,
+    commentId: string,
+    content: string,
+    signal?: AbortSignal,
+  ): Promise<Comment>;
+  deleteComment(paymentId: string, commentId: string, signal?: AbortSignal): Promise<void>;
 
   // Categories (read-only in 6.11; CRUD comes in 6.16)
-  listCategories(query?: ListCategoriesParams): Promise<CategoryDto[]>;
+  listCategories(query?: ListCategoriesParams, signal?: AbortSignal): Promise<CategoryDto[]>;
 
   // Transient state
   isLoading: boolean;
@@ -90,6 +103,20 @@ function extractMessage(err: unknown): string {
   return 'Unexpected error';
 }
 
+/** Aborts are user-initiated and shouldn't surface as a top-level error. */
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (
+    err &&
+    typeof err === 'object' &&
+    'name' in err &&
+    (err as { name: string }).name === 'AbortError'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function PaymentProvider({ children }: { children: ReactNode }) {
   const { getAccessToken } = useAuth();
   const [isLoading, setLoading] = useState(false);
@@ -111,7 +138,12 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     try {
       return await fn();
     } catch (e) {
-      setError(extractMessage(e));
+      // Aborts are silent — they're user-initiated cancellations from
+      // useAsyncOperation. Re-throw so callers can react, but don't surface
+      // the abort as a context-level error message.
+      if (!isAbortError(e)) {
+        setError(extractMessage(e));
+      }
       throw e;
     } finally {
       setLoading(false);
@@ -121,12 +153,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // ── Payments ───────────────────────────────────────────────────────────
 
   const fetchList = useCallback(
-    (params?: ListPaymentsParams): Promise<PaymentListResponse> =>
+    (params?: ListPaymentsParams, signal?: AbortSignal): Promise<PaymentListResponse> =>
       run(async () => {
         const qs = buildQuery(params as Record<string, unknown> | undefined);
         const res = await fetch(`${API_BASE}/payments${qs}`, {
           method: 'GET',
           headers: authHeaders(),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to load payments');
         return (await res.json()) as PaymentListResponse;
@@ -135,11 +168,12 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const getPayment = useCallback(
-    (id: string): Promise<PaymentSummary> =>
+    (id: string, signal?: AbortSignal): Promise<PaymentSummary> =>
       run(async () => {
         const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}`, {
           method: 'GET',
           headers: authHeaders(),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to load payment');
         return (await res.json()) as PaymentSummary;
@@ -148,12 +182,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const createPayment = useCallback(
-    (input: CreatePaymentInput): Promise<PaymentSummary> =>
+    (input: CreatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary> =>
       run(async () => {
         const res = await fetch(`${API_BASE}/payments`, {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify(input),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to create payment');
         return (await res.json()) as PaymentSummary;
@@ -162,12 +197,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const updatePayment = useCallback(
-    (id: string, input: UpdatePaymentInput): Promise<PaymentSummary | null> =>
+    (id: string, input: UpdatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary | null> =>
       run(async () => {
         const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}`, {
           method: 'PATCH',
           headers: authHeaders(),
           body: JSON.stringify(input),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to update payment');
         // 204 No Content → payment was hard-deleted by the attribution change.
@@ -178,12 +214,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const removePayment = useCallback(
-    (id: string, scope?: string): Promise<AttributionChangeResult> =>
+    (id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult> =>
       run(async () => {
         const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
         const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}${qs}`, {
           method: 'DELETE',
           headers: authHeaders(),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to delete payment');
         return (await res.json()) as AttributionChangeResult;
@@ -192,11 +229,12 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const toggleStar = useCallback(
-    (id: string): Promise<ToggleStarResult> =>
+    (id: string, signal?: AbortSignal): Promise<ToggleStarResult> =>
       run(async () => {
         const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}/star`, {
           method: 'POST',
           headers: authHeaders(),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to toggle star');
         return (await res.json()) as ToggleStarResult;
@@ -207,12 +245,16 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // ── Comments ───────────────────────────────────────────────────────────
 
   const listComments = useCallback(
-    (paymentId: string, opts?: ListCommentsParams): Promise<CommentListResponse> =>
+    (
+      paymentId: string,
+      opts?: ListCommentsParams,
+      signal?: AbortSignal,
+    ): Promise<CommentListResponse> =>
       run(async () => {
         const qs = buildQuery(opts as Record<string, unknown> | undefined);
         const res = await fetch(
           `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments${qs}`,
-          { method: 'GET', headers: authHeaders() },
+          { method: 'GET', headers: authHeaders(), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to load comments');
         return (await res.json()) as CommentListResponse;
@@ -221,12 +263,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const postComment = useCallback(
-    (paymentId: string, content: string): Promise<Comment> =>
+    (paymentId: string, content: string, signal?: AbortSignal): Promise<Comment> =>
       run(async () => {
         const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments`, {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify({ content }),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to post comment');
         return (await res.json()) as Comment;
@@ -235,7 +278,12 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const editComment = useCallback(
-    (paymentId: string, commentId: string, content: string): Promise<Comment> =>
+    (
+      paymentId: string,
+      commentId: string,
+      content: string,
+      signal?: AbortSignal,
+    ): Promise<Comment> =>
       run(async () => {
         const res = await fetch(
           `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments/${encodeURIComponent(commentId)}`,
@@ -243,6 +291,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
             method: 'PATCH',
             headers: authHeaders(),
             body: JSON.stringify({ content }),
+            signal,
           },
         );
         if (!res.ok) await throwApiError(res, 'Failed to edit comment');
@@ -252,11 +301,11 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteComment = useCallback(
-    (paymentId: string, commentId: string): Promise<void> =>
+    (paymentId: string, commentId: string, signal?: AbortSignal): Promise<void> =>
       run(async () => {
         const res = await fetch(
           `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments/${encodeURIComponent(commentId)}`,
-          { method: 'DELETE', headers: authHeaders() },
+          { method: 'DELETE', headers: authHeaders(), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to delete comment');
         // 204 → nothing to read.
@@ -267,12 +316,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // ── Categories (read-only in 6.11) ─────────────────────────────────────
 
   const listCategories = useCallback(
-    (query?: ListCategoriesParams): Promise<CategoryDto[]> =>
+    (query?: ListCategoriesParams, signal?: AbortSignal): Promise<CategoryDto[]> =>
       run(async () => {
         const qs = buildQuery(query as Record<string, unknown> | undefined);
         const res = await fetch(`${API_BASE}/categories${qs}`, {
           method: 'GET',
           headers: authHeaders(),
+          signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to load categories');
         return (await res.json()) as CategoryDto[];

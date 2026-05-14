@@ -188,9 +188,10 @@ describe('PaymentDetailHeader', () => {
     );
     const btn = screen.getByTestId('detail-star');
     fireEvent.click(btn);
-    // optimistic star text flips immediately
-    expect(btn.textContent).toMatch(/★/);
     await waitFor(() => expect(onStar).toHaveBeenCalledWith(true));
+    // After settle, the button shows the filled glyph (no spinner).
+    expect(btn.textContent).toMatch(/★/);
+    expect(mockToggleStar).toHaveBeenCalledWith('p-1', expect.any(AbortSignal));
   });
 
   it('star toggle reverts on error', async () => {
@@ -198,7 +199,6 @@ describe('PaymentDetailHeader', () => {
     render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
     const btn = screen.getByTestId('detail-star');
     fireEvent.click(btn);
-    expect(btn.textContent).toMatch(/★/); // optimistic
     await waitFor(() => expect(btn.textContent).toMatch(/☆/));
   });
 

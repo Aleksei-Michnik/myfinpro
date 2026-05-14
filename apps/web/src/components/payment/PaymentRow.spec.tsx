@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentRow } from './PaymentRow';
 import enMessages from '@/../messages/en.json';
@@ -128,9 +128,11 @@ describe('PaymentRow', () => {
     const btn = screen.getByTestId('row-star-p-1');
     expect(btn.textContent).toBe('☆');
     fireEvent.click(btn);
-    // Optimistic: immediately filled.
-    expect(btn.textContent).toBe('★');
     await waitFor(() => expect(onStar).toHaveBeenCalledWith('p-1', true));
+    // After settle, button reflects the server state (no spinner).
+    expect(btn.textContent).toBe('★');
+    // Iteration 6.16.2 — toggleStar now receives an AbortSignal as 2nd arg.
+    expect(mockToggleStar).toHaveBeenCalledWith('p-1', expect.any(AbortSignal));
   });
 
   it('star toggle: revert on error', async () => {
@@ -139,8 +141,28 @@ describe('PaymentRow', () => {
     const btn = screen.getByTestId('row-star-p-1');
     expect(btn.textContent).toBe('☆');
     fireEvent.click(btn);
-    expect(btn.textContent).toBe('★'); // optimistic
     await waitFor(() => expect(btn.textContent).toBe('☆'));
+  });
+
+  it('star toggle: button shows ButtonSpinner while in-flight (iteration 6.16.2)', async () => {
+    let resolveFn: (v: { starred: boolean; starCount: number }) => void;
+    mockToggleStar.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFn = resolve;
+      }),
+    );
+    renderDesktop();
+    const btn = screen.getByTestId('row-star-p-1');
+    fireEvent.click(btn);
+    expect(screen.getByTestId('row-star-spinner-p-1')).toBeInTheDocument();
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      resolveFn!({ starred: true, starCount: 1 });
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('row-star-spinner-p-1')).not.toBeInTheDocument(),
+    );
   });
 
   it('onEditClick fires with the payment id', () => {

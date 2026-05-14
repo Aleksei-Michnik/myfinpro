@@ -12,6 +12,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { type KeyboardEvent } from 'react';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
 import type { PaymentSummary } from '@/lib/payment/types';
@@ -60,6 +61,7 @@ export function PaymentRow({
   const {
     starred,
     error: starError,
+    pending: starPending,
     toggle: runToggleStar,
   } = useStarToggle(payment.id, payment.starredByMe, { onToggled: onStarToggled });
 
@@ -114,10 +116,16 @@ export function PaymentRow({
       data-testid={`row-star-${payment.id}`}
       aria-label={starAria}
       aria-pressed={starred}
+      aria-busy={starPending}
+      disabled={starPending}
       title={starError ?? undefined}
-      className={`text-lg leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${starColor}`}
+      className={`text-lg leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 ${starColor}`}
     >
-      {starGlyph}
+      {starPending ? (
+        <ButtonSpinner size="sm" data-testid={`row-star-spinner-${payment.id}`} />
+      ) : (
+        starGlyph
+      )}
     </button>
   ) : null;
 

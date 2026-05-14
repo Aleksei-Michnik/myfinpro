@@ -202,7 +202,9 @@ describe('PaymentDetailClient', () => {
     await waitFor(() => expect(screen.getByTestId('detail-star')).toBeInTheDocument());
     const btn = screen.getByTestId('detail-star');
     fireEvent.click(btn);
-    await waitFor(() => expect(mockToggleStar).toHaveBeenCalledWith('p-1'));
+    await waitFor(() =>
+      expect(mockToggleStar).toHaveBeenCalledWith('p-1', expect.any(AbortSignal)),
+    );
   });
 
   it('new comment posted via input appears at the bottom of the list', async () => {

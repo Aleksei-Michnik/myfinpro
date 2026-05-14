@@ -8,12 +8,14 @@ import { VerificationBanner } from '@/components/auth/VerificationBanner';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { PageProgressBar } from '@/components/ui/PageProgressBar';
 import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
 import { routing } from '@/i18n/routing';
 import { AuthProvider } from '@/lib/auth/auth-context';
 import { CategoryProvider } from '@/lib/category/category-context';
 import { GroupProvider } from '@/lib/group/group-context';
 import { PaymentProvider } from '@/lib/payment/payment-context';
+import { UIStatusProvider } from '@/lib/ui';
 
 import '../globals.css';
 
@@ -47,22 +49,25 @@ export default async function LocaleLayout({ children, params }: Props) {
     <html lang={locale} dir={dir}>
       <body>
         <NextIntlClientProvider messages={messages}>
-          <AuthProvider>
-            <GroupProvider>
-              <PaymentProvider>
-                <CategoryProvider>
-                  <ToastProvider>
-                    <Header />
-                    <VerificationBanner />
-                    <TimezoneDetector />
-                    <ErrorBoundary>{children}</ErrorBoundary>
-                    <Footer />
-                    <ToastContainer />
-                  </ToastProvider>
-                </CategoryProvider>
-              </PaymentProvider>
-            </GroupProvider>
-          </AuthProvider>
+          <UIStatusProvider>
+            <PageProgressBar />
+            <AuthProvider>
+              <GroupProvider>
+                <PaymentProvider>
+                  <CategoryProvider>
+                    <ToastProvider>
+                      <Header />
+                      <VerificationBanner />
+                      <TimezoneDetector />
+                      <ErrorBoundary>{children}</ErrorBoundary>
+                      <Footer />
+                      <ToastContainer />
+                    </ToastProvider>
+                  </CategoryProvider>
+                </PaymentProvider>
+              </GroupProvider>
+            </AuthProvider>
+          </UIStatusProvider>
         </NextIntlClientProvider>
       </body>
     </html>
