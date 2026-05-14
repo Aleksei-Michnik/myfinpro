@@ -547,7 +547,6 @@
       "scopeAll": "All scopes",
       "scopePersonal": "Personal",
       "scopeGroup": "{name}",
-      "starred": "Starred only",
       "search": "Search note…",
       "from": "From",
       "to": "To",
@@ -728,6 +727,7 @@
         "label": "Starred only",
         "ariaPressed": "Show starred only"
       },
+      "clearFilters": "Clear filters",
       "groupTabTitle": "Payments"
     }
   },

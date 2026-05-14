@@ -30,7 +30,7 @@ describe('StarredPayments', () => {
     const props = paymentsListProps.mock.calls[0]![0] as Record<string, unknown>;
     expect(props.limit).toBe(5);
     expect(props.disableInternalAdd).toBe(true);
-    expect(props.initialFilters).toMatchObject({ starred: true, sort: 'date_desc' });
+    expect(props.filters).toMatchObject({ scope: 'all', starred: true, sort: 'date_desc' });
   });
 
   it('header includes the "All starred" link', () => {

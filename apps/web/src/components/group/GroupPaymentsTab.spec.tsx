@@ -25,17 +25,22 @@ describe('GroupPaymentsTab', () => {
     expect(screen.getByTestId('payments-list-mock')).toBeInTheDocument();
   });
 
-  it('forwards scope=group:<id> to PaymentsList', () => {
+  it('forwards filters with scope=group:<id> + lockScope to PaymentsList', () => {
     mockPaymentsList.mockClear();
     render(<GroupPaymentsTab groupId="g-1" />);
-    expect(mockPaymentsList).toHaveBeenCalledWith(expect.objectContaining({ scope: 'group:g-1' }));
+    expect(mockPaymentsList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ scope: 'group:g-1' }),
+        lockScope: true,
+      }),
+    );
   });
 
-  it('passes initialFilters with scope+sort', () => {
+  it('passes filters with scope+sort + UI flags', () => {
     mockPaymentsList.mockClear();
     render(<GroupPaymentsTab groupId="g-7" />);
     const props = mockPaymentsList.mock.calls[0][0];
-    expect(props.initialFilters).toEqual({ scope: 'group:g-7', sort: 'date_desc' });
+    expect(props.filters).toEqual({ scope: 'group:g-7', sort: 'date_desc' });
     expect(props.showFilters).toBe(true);
     expect(props.showStar).toBe(true);
   });

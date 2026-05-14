@@ -1,9 +1,12 @@
 'use client';
 
 // Phase 6 · Iteration 6.16 — orchestrator for /payments.
-// Reads URL search params (`?scope=...`, `?starred=1`), renders the
-// PaymentsScopeTabs + StarredFilterToggle + PaymentsList. Validates group
-// scope membership client-side to avoid 403 noise.
+// Phase 6 · Iteration 6.16.1 — filter state lives in the URL. We parse
+// `?scope=...&starred=...&direction=...&from=...&to=...&q=...&categoryId=...&sort=...`
+// on every render via `filtersFromQuery()`, feed `<PaymentsList>` and
+// `<PaymentsFilters>` controlled, and write back via `router.replace` on
+// every change. A "Clear filters" button shows when any non-default,
+// non-scope filter is set.
 
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -13,8 +16,13 @@ import { PaymentsScopeTabs } from '@/components/payment/PaymentsScopeTabs';
 import { StarredFilterToggle } from '@/components/payment/StarredFilterToggle';
 import { Link, useRouter, usePathname } from '@/i18n/navigation';
 import { useGroups } from '@/lib/group/group-context';
-
-type ScopeFilter = 'all' | 'personal' | string;
+import {
+  clearFilters,
+  filtersFromQuery,
+  filtersToQuery,
+  isFiltersDirty,
+  type PaymentFilters,
+} from '@/lib/payment/filters';
 
 export function PaymentsListClient() {
   const t = useTranslations('payments.page');
@@ -23,36 +31,35 @@ export function PaymentsListClient() {
   const searchParams = useSearchParams();
   const { groups } = useGroups();
 
-  const rawScope = searchParams.get('scope');
-  const starred = searchParams.get('starred') === '1';
-
-  const scope: ScopeFilter = useMemo(() => {
-    if (!rawScope || rawScope === 'all') return 'all';
-    if (rawScope === 'personal') return 'personal';
-    if (rawScope.startsWith('group:')) return rawScope;
-    return 'all';
-  }, [rawScope]);
+  // Parse the URL on every render — single source of truth.
+  const filters = useMemo(() => filtersFromQuery(searchParams), [searchParams]);
+  const dirty = isFiltersDirty(filters);
+  const scope = filters.scope ?? 'all';
 
   // Validate group scope membership before issuing API calls.
   const noAccess = useMemo(() => {
-    if (!scope.startsWith('group:')) return false;
+    if (typeof scope !== 'string' || !scope.startsWith('group:')) return false;
     const groupId = scope.slice('group:'.length);
     return !groups.some((g) => g.id === groupId);
   }, [scope, groups]);
 
-  const setStarred = useCallback(
-    (next: boolean) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next) params.set('starred', '1');
-      else params.delete('starred');
-      const qs = params.toString();
+  const writeFilters = useCallback(
+    (next: PaymentFilters) => {
+      const qs = filtersToQuery(next).toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname);
     },
-    [pathname, router, searchParams],
+    [pathname, router],
   );
 
-  // Map UI scope → PaymentsList prop.
-  const listScope = scope === 'all' ? 'all' : scope;
+  const setStarred = useCallback(
+    (starred: boolean) => writeFilters({ ...filters, starred: starred || undefined }),
+    [filters, writeFilters],
+  );
+
+  const handleClear = useCallback(
+    () => writeFilters(clearFilters(filters.scope)),
+    [filters.scope, writeFilters],
+  );
 
   return (
     <main className="container mx-auto space-y-4 px-4 py-6" data-testid="payments-page">
@@ -80,12 +87,23 @@ export function PaymentsListClient() {
         </div>
       ) : (
         <>
-          <div className="flex justify-end">
-            <StarredFilterToggle starred={starred} onChange={setStarred} />
+          <div className="flex items-center justify-end gap-2">
+            <StarredFilterToggle starred={!!filters.starred} onChange={setStarred} />
+            {dirty && (
+              <button
+                type="button"
+                onClick={handleClear}
+                data-testid="payments-clear-filters"
+                className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                {t('clearFilters')}
+              </button>
+            )}
           </div>
           <PaymentsList
-            scope={listScope}
-            initialFilters={{ scope: listScope, starred, sort: 'date_desc' }}
+            filters={filters}
+            onFiltersChange={writeFilters}
+            lockScope
             showFilters
             showControls
             showStar

@@ -6,8 +6,10 @@
 // visible set (see PaymentsList.handleStarToggled).
 
 import { useTranslations } from 'next-intl';
+import { useMemo } from 'react';
 import { PaymentsList } from '@/components/payment/PaymentsList';
 import { Link } from '@/i18n/navigation';
+import { defaultFilters } from '@/lib/payment/filters';
 
 export interface StarredPaymentsProps {
   /** Optional cap. Defaults to 5. */
@@ -16,6 +18,7 @@ export interface StarredPaymentsProps {
 
 export function StarredPayments({ limit = 5 }: StarredPaymentsProps) {
   const t = useTranslations('dashboard.starred');
+  const filters = useMemo(() => ({ ...defaultFilters('all'), starred: true }), []);
 
   return (
     <section
@@ -44,7 +47,7 @@ export function StarredPayments({ limit = 5 }: StarredPaymentsProps) {
         showStar={true}
         limit={limit}
         disableInternalAdd
-        initialFilters={{ starred: true, sort: 'date_desc' }}
+        filters={filters}
         emptyState={<p>{t('empty')}</p>}
       />
     </section>

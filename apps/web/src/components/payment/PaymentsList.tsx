@@ -1,16 +1,15 @@
 'use client';
 
 // Phase 6 · Iteration 6.12 — top-level reusable payments list.
+// Phase 6 · Iteration 6.16.1 — fully controlled (or uncontrolled) by the
+// parent via the `filters` / `onFiltersChange` props. The `/payments` page
+// drives these from the URL; dashboard widgets pass a memoised constant.
 //
 // Drives every Phase 6 list surface: dashboard recent (6.15), the dedicated
 // /payments page (6.16), and the group-tab (6.16). The component owns its
-// own filter state, cursor pagination, error handling, and delete dialog.
-//
-// Responsibilities deliberately *not* included here:
-//   - Edit dialog (6.13). The row exposes onEditClick(id) and we forward
-//     it to the parent if provided; otherwise it's a no-op.
-//   - Page-level routing — `/payments`, `/payments/[id]`, `/payments/starred`.
-//   - Aggregated dashboard summary cards (6.15).
+// own pagination, error handling, and delete dialog. Filter state is owned
+// by the caller (when `filters` is provided) — there's no internal copy to
+// keep in sync, so the URL always wins on /payments.
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -20,6 +19,7 @@ import { PaymentRow } from './PaymentRow';
 import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from '@/i18n/navigation';
+import { defaultFilters } from '@/lib/payment/filters';
 import { usePayments } from '@/lib/payment/payment-context';
 import type {
   AttributionChangeResult,
@@ -29,9 +29,21 @@ import type {
 } from '@/lib/payment/types';
 
 export interface PaymentsListProps {
-  /** Locks the scope filter (and hides its dropdown). */
-  scope?: 'all' | 'personal' | string;
-  initialFilters?: Partial<PaymentsFiltersValue>;
+  /**
+   * Filter state owned by the caller. When omitted, the list uses
+   * `defaultFilters()` as a static initial state and no filter changes
+   * are propagated upwards — this is the "uncontrolled" mode used by
+   * unit tests that don't care about filters.
+   */
+  filters?: PaymentsFiltersValue;
+  /**
+   * Called whenever the toolbar emits a new filter value. Required if
+   * the caller wants to react to filter changes (the /payments page).
+   * Dashboard widgets that pass static filters can omit it.
+   */
+  onFiltersChange?(next: PaymentsFiltersValue): void;
+  /** Hide the scope dropdown — used by /payments where a tab strip owns scope. */
+  lockScope?: boolean;
   /** Toggle the filter toolbar entirely. Default true. */
   showFilters?: boolean;
   /** Per-row controls (edit / delete). Default true. */
@@ -76,8 +88,9 @@ function mapFiltersToParams(
 const DEFAULT_LIMIT = 20;
 
 export function PaymentsList({
-  scope,
-  initialFilters,
+  filters: controlledFilters,
+  onFiltersChange,
+  lockScope,
   showFilters = true,
   showControls = true,
   showStar = true,
@@ -104,25 +117,23 @@ export function PaymentsList({
   // referenced for RTL-aware Intl contexts in downstream iterations.
   void locale;
 
-  const [filters, setFilters] = useState<PaymentsFiltersValue>(() => ({
-    sort: initialFilters?.sort ?? 'date_desc',
-    scope: scope ?? initialFilters?.scope ?? 'all',
-    direction: initialFilters?.direction,
-    starred: initialFilters?.starred,
-    categoryId: initialFilters?.categoryId,
-    search: initialFilters?.search,
-    from: initialFilters?.from,
-    to: initialFilters?.to,
-  }));
+  // Uncontrolled fallback so consumers that don't care about filters (unit
+  // tests, future ad-hoc lists) can mount without ceremony.
+  const [internalFilters, setInternalFilters] = useState<PaymentsFiltersValue>(() =>
+    defaultFilters(),
+  );
+  const filters = controlledFilters ?? internalFilters;
 
-  // Keep filters in sync when parent forces a new locked scope.
-  const lastScopeRef = useRef(scope);
-  useEffect(() => {
-    if (scope !== undefined && lastScopeRef.current !== scope) {
-      lastScopeRef.current = scope;
-      setFilters((prev) => ({ ...prev, scope }));
-    }
-  }, [scope]);
+  const setFilters = useCallback(
+    (next: PaymentsFiltersValue) => {
+      if (controlledFilters !== undefined) {
+        onFiltersChange?.(next);
+      } else {
+        setInternalFilters(next);
+      }
+    },
+    [controlledFilters, onFiltersChange],
+  );
 
   const [rows, setRows] = useState<PaymentSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -161,10 +172,11 @@ export function PaymentsList({
     [fetchList],
   );
 
-  // Re-fetch when filters change (full reset).
+  // Re-fetch on every filter change. Object identity is the trigger, so
+  // callers must produce a new object whenever any field changes (which
+  // both `filtersFromQuery` and `<PaymentsFilters>` already do).
   useEffect(() => {
     void fetchPage(true);
-    // We deliberately depend on `filters` only — fetchPage is stable.
   }, [filters, fetchPage]);
 
   // ── Row interactions ──────────────────────────────────────────────────────
@@ -253,7 +265,7 @@ export function PaymentsList({
             <PaymentsFilters
               value={filters}
               onChange={setFilters}
-              hide={{ scope: scope !== undefined }}
+              hide={{ scope: lockScope }}
               categories={categories ?? null}
             />
           ) : (

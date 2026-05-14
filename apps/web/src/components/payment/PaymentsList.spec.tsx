@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentsList } from './PaymentsList';
+import { defaultFilters } from '@/lib/payment/filters';
 import type { PaymentSummary } from '@/lib/payment/types';
 
 // jsdom does not apply Tailwind's `hidden md:block` / `md:hidden` responsive
@@ -227,10 +228,35 @@ describe('PaymentsList', () => {
   it('with filters.starred=true, unstarring a row optimistically removes it', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([makePayment({ starredByMe: true })]));
     mockToggleStar.mockResolvedValueOnce({ starred: false, starCount: 0 });
-    render(<PaymentsList showFilters={false} initialFilters={{ starred: true }} />);
+    render(<PaymentsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />);
     await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-star-p-1'));
     await waitFor(() => expect(screen.queryAllByTestId('payment-row-p-1')).toHaveLength(0));
+  });
+
+  // ── Iteration 6.16.1 — controlled-mode regressions ────────────────────────
+
+  it('changing the controlled `filters` prop triggers a re-fetch with the new params (bug #2 regression)', async () => {
+    mockFetchList.mockResolvedValue(listResp([]));
+    const { rerender } = render(<PaymentsList showFilters={false} filters={defaultFilters()} />);
+    await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(1));
+    expect(mockFetchList.mock.calls[0][0].starred).toBeUndefined();
+
+    rerender(<PaymentsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />);
+    await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(2));
+    expect(mockFetchList.mock.calls[1][0].starred).toBe(true);
+  });
+
+  it('controlled mode bubbles toolbar changes via onFiltersChange (no internal mutation)', async () => {
+    mockFetchList.mockResolvedValue(listResp([]));
+    const onFiltersChange = vi.fn();
+    render(
+      <PaymentsList filters={defaultFilters()} onFiltersChange={onFiltersChange} categories={[]} />,
+    );
+    await waitFor(() => expect(mockFetchList).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('filter-direction-out'));
+    expect(onFiltersChange).toHaveBeenCalledTimes(1);
+    expect(onFiltersChange.mock.calls[0][0]).toMatchObject({ direction: 'OUT' });
   });
 
   it('delete with paymentDeleted=true removes the row from the list', async () => {
@@ -310,9 +336,9 @@ describe('PaymentsList', () => {
     expect(onClick).toHaveBeenCalledWith('p-1');
   });
 
-  it('a forced scope locks the scope dropdown (hide.scope=true) and applies to fetch', async () => {
+  it('lockScope hides the scope dropdown; filters.scope flows to the fetch', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList scope="group:g-1" />);
+    render(<PaymentsList lockScope filters={{ ...defaultFilters(), scope: 'group:g-1' }} />);
     await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
     expect(screen.queryByTestId('filter-scope')).not.toBeInTheDocument();
     expect(mockFetchList.mock.calls[0][0].scope).toBe('group:g-1');

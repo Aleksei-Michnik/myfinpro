@@ -5,8 +5,10 @@
 // (the dashboard provides its own primary `<QuickAddPaymentButton>`).
 
 import { useTranslations } from 'next-intl';
+import { useMemo } from 'react';
 import { PaymentsList } from '@/components/payment/PaymentsList';
 import { Link } from '@/i18n/navigation';
+import { defaultFilters } from '@/lib/payment/filters';
 
 export interface RecentActivityProps {
   /** Optional cap. Defaults to 10. */
@@ -15,6 +17,7 @@ export interface RecentActivityProps {
 
 export function RecentActivity({ limit = 10 }: RecentActivityProps) {
   const t = useTranslations('dashboard.recent');
+  const filters = useMemo(() => defaultFilters('all'), []);
 
   return (
     <section
@@ -43,7 +46,7 @@ export function RecentActivity({ limit = 10 }: RecentActivityProps) {
         showStar={true}
         limit={limit}
         disableInternalAdd
-        initialFilters={{ sort: 'date_desc' }}
+        filters={filters}
         emptyState={<p>{t('empty')}</p>}
       />
     </section>

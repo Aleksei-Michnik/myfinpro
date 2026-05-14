@@ -32,7 +32,7 @@ describe('RecentActivity', () => {
     expect(props.showFilters).toBe(false);
     expect(props.disableInternalAdd).toBe(true);
     expect(props.showStar).toBe(true);
-    expect(props.initialFilters).toMatchObject({ sort: 'date_desc' });
+    expect(props.filters).toMatchObject({ scope: 'all', sort: 'date_desc' });
   });
 
   it('header includes a "View all" link to /payments', () => {

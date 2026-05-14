@@ -87,12 +87,16 @@ describe('PaymentsFilters', () => {
     expect(screen.getByTestId('filter-direction-in')).toBeInTheDocument();
     expect(screen.getByTestId('filter-direction-out')).toBeInTheDocument();
     expect(screen.getByTestId('filter-scope')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-starred')).toBeInTheDocument();
     expect(screen.getByTestId('filter-search')).toBeInTheDocument();
     expect(screen.getByTestId('filter-from')).toBeInTheDocument();
     expect(screen.getByTestId('filter-to')).toBeInTheDocument();
     expect(screen.getByTestId('filter-category')).toBeInTheDocument();
     expect(screen.getByTestId('filter-sort')).toBeInTheDocument();
+  });
+
+  it('does NOT render an internal starred control (deduped in 6.16.1)', () => {
+    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
+    expect(screen.queryByTestId('filter-starred')).not.toBeInTheDocument();
   });
 
   it('clicking IN sets direction to "IN"; clicking All clears it', () => {
@@ -119,14 +123,6 @@ describe('PaymentsFilters', () => {
     render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
     fireEvent.click(screen.getByTestId('filter-direction-out'));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ direction: 'OUT' }));
-  });
-
-  it('starred checkbox flips the boolean', () => {
-    const onChange = vi.fn();
-    render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
-    const cb = screen.getByTestId('filter-starred') as HTMLInputElement;
-    fireEvent.click(cb);
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ starred: true }));
   });
 
   it('search debounce: emits onChange exactly once after 300 ms', async () => {

@@ -136,7 +136,8 @@ export function PaymentsFilters({
 
   const setScope = (scope: 'all' | 'personal' | string) => onChange({ ...value, scope });
 
-  const setStarred = (starred: boolean) => onChange({ ...value, starred });
+  // Note: starred is intentionally not handled here — it lives in the page-
+  // level <StarredFilterToggle> on /payments. See iteration 6.16.1 notes.
 
   const setCategoryId = (categoryId: string) =>
     onChange({ ...value, categoryId: categoryId || undefined });
@@ -150,7 +151,6 @@ export function PaymentsFilters({
 
   const direction = value.direction;
   const scope = value.scope ?? 'all';
-  const starred = !!value.starred;
 
   const grouped = categories ? groupCategories(categories) : null;
 
@@ -228,18 +228,6 @@ export function PaymentsFilters({
           </select>
         </label>
       )}
-
-      {/* Starred */}
-      <label className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
-        <input
-          type="checkbox"
-          checked={starred}
-          onChange={(e) => setStarred(e.target.checked)}
-          data-testid="filter-starred"
-          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-        />
-        <span>{t('starred')}</span>
-      </label>
 
       {/* Search */}
       <label className="flex flex-col text-xs">

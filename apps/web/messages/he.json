@@ -547,7 +547,6 @@
       "scopeAll": "כל ההיקפים",
       "scopePersonal": "אישי",
       "scopeGroup": "{name}",
-      "starred": "מסומנים בלבד",
       "search": "חפש בהערה…",
       "from": "מתאריך",
       "to": "עד תאריך",
@@ -728,6 +727,7 @@
         "label": "מסומנים בלבד",
         "ariaPressed": "הצג מסומנים בלבד"
       },
+      "clearFilters": "נקה סינון",
       "groupTabTitle": "תשלומים"
     }
   },
