@@ -98,26 +98,29 @@ body {
   transform-origin: center;
 }
 
-/* Indeterminate top progress bar (<PageProgressBar>). */
-@keyframes mfp-progress {
-  0% {
-    transform: translateX(-100%) scaleX(0.4);
-  }
-  50% {
-    transform: translateX(0%) scaleX(0.6);
-  }
-  100% {
-    transform: translateX(100%) scaleX(0.4);
-  }
-}
-
+/* Determinate nprogress-style top page progress bar (<PageProgressBar>).
+   Width is driven inline via `transform: scaleX(progress / 100)` from the
+   React state machine in ui-status-context.tsx. The transition smooths
+   per-frame updates so motion stays fluid without re-rendering on every
+   RAF tick. RTL: the origin flips so the bar fills from the right edge in
+   Hebrew. Iteration 6.16.3. */
 .mfp-progress-bar {
-  animation: mfp-progress 1.4s ease-in-out infinite;
   transform-origin: left center;
+  transition:
+    transform 80ms linear,
+    opacity 200ms ease-out;
+  will-change: transform, opacity;
 }
 
 [dir='rtl'] .mfp-progress-bar {
-  animation-direction: reverse;
+  transform-origin: right center;
+}
+
+.mfp-progress-bar.is-fading {
+  /* When the bar reaches 100 %, the React state machine briefly retains
+     the element so the CSS transition fades the opacity to 0 before the
+     element unmounts. */
+  opacity: 0;
 }
 
 /* Auto-retry countdown bar inside the Retry button on <RetryReturnDialog>.
@@ -147,9 +150,14 @@ body {
     animation: none;
   }
   .mfp-progress-bar {
-    animation: none;
-    transform: scaleX(1);
-    opacity: 0.4;
+    /* No animated movement — show a steady half-width bar while in flight
+       so the user still gets visible loading feedback. The inline
+       `transform: scaleX(...)` is overridden via !important. */
+    transition: opacity 200ms ease-out;
+    transform: scaleX(0.5) !important;
+  }
+  [dir='rtl'] .mfp-progress-bar {
+    transform: scaleX(0.5) !important;
   }
   .mfp-countdown {
     animation: none;

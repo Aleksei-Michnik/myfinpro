@@ -6,9 +6,13 @@ import type { PaymentSummary } from '@/lib/payment/types';
 const mockFetchList = vi.fn();
 const mockUseGroups = vi.fn();
 
+// Mock useTranslations so each namespace prefixes its keys; this lets us
+// regression-test that the component DOES NOT reference a phantom
+// `dashboard.scopes.in/out/net` namespace (only `dashboard.totals.*` is real).
 vi.mock('next-intl', () => ({
   useLocale: () => 'en-US',
-  useTranslations: () => (key: string) => key,
+  useTranslations: (namespace?: string) => (key: string) =>
+    namespace ? `${namespace}.${key}` : key,
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -118,6 +122,59 @@ describe('ScopeEntryCards', () => {
     expect(personal.textContent).toContain('50.00');
     const group = screen.getByTestId('scope-card-group-g1-totals');
     expect(group.textContent).toContain('80.00');
+  });
+
+  it('uses `dashboard.totals.in/out/net` for amount labels (DRY: same as <TotalsCard>)', async () => {
+    render(
+      <ScopeEntryCards
+        payments={[
+          makePayment({
+            id: 'a',
+            direction: 'IN',
+            amountCents: 1000,
+            attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
+          }),
+          makePayment({
+            id: 'b',
+            direction: 'OUT',
+            amountCents: 823,
+            attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
+          }),
+        ]}
+        groups={[]}
+      />,
+    );
+    const totals = await screen.findByTestId('scope-card-personal-totals');
+    expect(totals.textContent).toContain('dashboard.totals.in');
+    expect(totals.textContent).toContain('dashboard.totals.out');
+    expect(totals.textContent).toContain('dashboard.totals.net');
+  });
+
+  it('regression: never references `dashboard.scopes.in/out/net` (the phantom keys)', async () => {
+    const { container } = render(
+      <ScopeEntryCards
+        payments={[
+          makePayment({
+            id: 'a',
+            direction: 'IN',
+            amountCents: 1000,
+            attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
+          }),
+          makePayment({
+            id: 'b',
+            direction: 'OUT',
+            amountCents: 823,
+            attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
+          }),
+        ]}
+        groups={[]}
+      />,
+    );
+    await screen.findByTestId('scope-card-personal-totals');
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('dashboard.scopes.in');
+    expect(text).not.toContain('dashboard.scopes.out');
+    expect(text).not.toContain('dashboard.scopes.net');
   });
 
   it('"View" links use the correct scope query param', async () => {

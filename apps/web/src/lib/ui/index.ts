@@ -15,7 +15,14 @@ export {
   type UseAsyncOperationOptions,
 } from './async-operation';
 export {
+  NAV_FADE_OUT_MS,
+  NAV_PROGRESS_ASYMPTOTE,
+  NAV_PROGRESS_EASE,
+  NAV_SAFETY_TIMEOUT_MS,
+  NAV_VISIBILITY_DEBOUNCE_MS,
+  shouldInterceptAnchorClick,
   UIStatusProvider,
+  useNavProgress,
   useOptionalUIStatus,
   useUIStatus,
   type UIStatusContextValue,

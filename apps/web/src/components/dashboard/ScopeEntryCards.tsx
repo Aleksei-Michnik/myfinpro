@@ -74,6 +74,10 @@ function bucketsFromPayments(
 
 export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntryCardsProps) {
   const t = useTranslations('dashboard.scopes');
+  // Iteration 6.16.3 — reuse `dashboard.totals.in/out/net` for the per-card
+  // amount labels (DRY: same labels as <TotalsCard>; no `dashboard.scopes.in`
+  // namespace exists). Phantom keys would render as raw "dashboard.scopes.in".
+  const tTotals = useTranslations('dashboard.totals');
   const tRole = useTranslations('groups.role');
   const locale = useLocale();
   const { user } = useAuth();
@@ -142,6 +146,7 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
             fallbackCurrency={fallbackCurrency}
             locale={locale}
             t={t}
+            tTotals={tTotals}
             loading={loading}
           />
         </li>
@@ -160,6 +165,7 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
                 fallbackCurrency={fallbackCurrency}
                 locale={locale}
                 t={t}
+                tTotals={tTotals}
                 loading={loading}
               />
             </li>
@@ -192,6 +198,7 @@ interface ScopeCardProps {
   fallbackCurrency: string;
   locale: string;
   t: (key: string) => string;
+  tTotals: (key: string) => string;
   loading: boolean;
 }
 
@@ -205,6 +212,7 @@ function ScopeCard({
   fallbackCurrency,
   locale,
   t,
+  tTotals,
   loading,
 }: ScopeCardProps) {
   const currency = bucket?.currency ?? fallbackCurrency;
@@ -243,11 +251,11 @@ function ScopeCard({
       {!loading && hasActivity && bucket && (
         <p className="text-sm" data-testid={`${testId}-totals`}>
           <span className="text-green-700 dark:text-green-400">
-            {t('in')} {formatAmount(bucket.inCents, currency, locale)}
+            {tTotals('in')} {formatAmount(bucket.inCents, currency, locale)}
           </span>{' '}
           ·{' '}
           <span className="text-red-700 dark:text-red-400">
-            {t('out')} {formatAmount(bucket.outCents, currency, locale)}
+            {tTotals('out')} {formatAmount(bucket.outCents, currency, locale)}
           </span>{' '}
           ·{' '}
           <span
@@ -257,7 +265,7 @@ function ScopeCard({
                 : 'font-medium text-red-700 dark:text-red-400'
             }
           >
-            {t('net')} {formatAmount(net, currency, locale)}
+            {tTotals('net')} {formatAmount(net, currency, locale)}
           </span>
         </p>
       )}
