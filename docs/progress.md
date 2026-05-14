@@ -4948,3 +4948,125 @@ Total project tests: **804 passing** (full suite green).
 hotfix on top of 6.16.1).
 
 **Next** — 6.17 (BullMQ schedules + worker).
+
+### Iteration 6.16.3 — Dashboard scope labels + nprogress-style page bar (2026-05-14)
+
+Two staging UX bugs surfaced after 6.16.2 went live (screenshot from
+the report shows the dashboard scope cards with raw key strings, and a
+report that no progress bar appears during page transitions):
+
+1. **`<ScopeEntryCards>` rendered raw i18n keys** —
+   `dashboard.scopes.in ₪1,000.00 · dashboard.scopes.out ₪823.00 ·
+dashboard.scopes.net ₪177.00`. The `dashboard.scopes.in/out/net`
+   keys were never added to either the `en.json` or `he.json` bundle;
+   only the parallel `dashboard.totals.in/out/net` keys exist (added
+   in 6.15 for `<TotalsCard>`).
+2. **`<PageProgressBar>` provided no feedback during navigation.** The
+   6.16.2 implementation registered a 250 ms page-scope flash _after_
+   `usePathname()` reported a change. In Next.js App Router that
+   happens _after_ the new page is rendered, so the bar appeared
+   briefly on the destination page; on slow connections nothing was
+   visible during the actual wait.
+
+#### Decision A vs B for Bug #1
+
+- **A** — Add the missing `dashboard.scopes.in/out/net` keys, mirroring
+  `dashboard.totals.*`. Rejected: violates DRY (`.kilocode/rules/dna.md`)
+  — two namespaces with identical values.
+- **B** — Reuse `dashboard.totals.in/out/net` from `<ScopeEntryCards>`.
+  Picked. Added a second `useTranslations('dashboard.totals')` hook
+  alongside the existing `useTranslations('dashboard.scopes')`. Three
+  call sites (`tTotals('in') / ('out') / ('net')`). No new translation
+  keys; en + he bundles unchanged.
+
+#### Bug #2 — Click interception + asymptotic state machine
+
+Rebuilt as **nprogress-style without the nprogress dependency**. Why
+no library: `.kilocode/rules/dna.md` (no copy-paste, minimal deps) +
+the implementation is only ~150 LOC.
+
+The detection model:
+
+- **Navigation start** is observed by a document-level `click` listener
+  installed in capture phase from `<UIStatusProvider>`. The handler
+  walks `event.target.closest('a[href]')` and calls
+  `shouldInterceptAnchorClick(event, anchor)` which returns true only
+  for plain left-clicks on same-origin anchors that don't carry
+  modifier keys, `target="_blank"`, `download`, `mailto:`/`tel:`,
+  pure `#hash` fragments, or destinations identical to the current
+  URL. Programmatic `router.push` callers can call `startNavigation()`
+  directly — exposed on `useUIStatus()`.
+- **Navigation end** is observed by a `usePathname()` effect inside
+  `<PathnameNavigationEnd>` — when the pathname changes, it calls
+  `endNavigation()`. Search-params-only changes do NOT end navigation
+  (the `/payments` filter URL writes already commit through
+  `useAsyncOperation({ scope: 'container' })` and shouldn't drive the
+  page bar).
+
+The state machine (in `apps/web/src/lib/ui/ui-status-context.tsx`):
+
+```
+idle ── start ──▶ pending (100 ms debounce)
+                    │
+                    ├── end before debounce ──▶ idle (no flash)
+                    │
+                    └── 100 ms elapsed ──▶ progressing (RAF, 0 → 90)
+                                              │
+                                              ├── end ──▶ completing (snap 100)
+                                              │              │
+                                              │              └── 200 ms fade ──▶ idle
+                                              │
+                                              └── 30 s safety timeout ──▶ completing
+```
+
+`wantsBar = navInFlight || activePageOps > 0`. Page-scope
+`useAsyncOperation` ops bump `activePageOps`; the bar therefore
+extends past the route change until the deep-link initial fetch
+resolves. A 30 s safety timeout closes the bar even if `endNavigation`
+never fires (offline, aborted, etc.) so a stuck bar never persists.
+
+The asymptotic ease (`next = current + (90 − current) × 0.05` per
+animation frame) gives the same "growing fast at first, slowing as it
+nears 90 %" feel as `nprogress`.
+
+#### `<PageProgressBar>` rendering
+
+- Sticky to viewport top: `position: fixed; inset-inline: 0; top: 0;
+z-index: 9999; height: 3px`.
+- Blue: `bg-blue-500` (Tailwind).
+- Width: inline `transform: scaleX(progress / 100)` on the inner fill.
+- A11y: `role="progressbar" aria-valuemin=0 aria-valuemax=100
+aria-valuenow={Math.round(progress)}`.
+- RTL: `[dir='rtl'] .mfp-progress-bar { transform-origin: right
+center; }` so the bar fills from the right edge in Hebrew.
+- `prefers-reduced-motion`: `transform: scaleX(0.5) !important` (steady
+  half-bar instead of an animated growth).
+
+#### Tests (829 total, all green)
+
+- `<ScopeEntryCards>.spec.tsx` — 2 new cases: (a) asserts the totals
+  span contains `dashboard.totals.in/out/net` (correct namespace);
+  (b) regression — the rendered DOM never contains
+  `dashboard.scopes.in`/`.out`/`.net`.
+- `<PageProgressBar>.spec.tsx` — rewritten for determinate semantics:
+  hidden when idle, debounced 100 ms before becoming visible,
+  determinate `aria-valuenow`, `bg-blue-500`, sticky positioning,
+  inline `scaleX(...)` transform.
+- `ui-status-context.test.tsx` — kept the existing 6.16.2 cases
+  (registerPageOp counter, multi-op accumulation, observability,
+  disablePathnameTracking) and added:
+  - State-machine: pending → progressing transitions, end-before-100 ms
+    skips the bar entirely, end-mid-progress snaps to 100 + fades,
+    pathname change auto-ends, search-params-only does not, 30 s
+    safety timeout, page-op extends `endNavigation`, lone page-op
+    drives the bar, disablePathnameTracking suppresses auto-end.
+  - `shouldInterceptAnchorClick` edge cases — internal href intercepted;
+    external https / mailto / tel / `#hash` / Cmd / Ctrl / Shift /
+    middle-click / `target="_blank"` / `defaultPrevented` /
+    `download` / same exact URL all NOT intercepted; nested element
+    inside an anchor is detected via `closest('a[href]')`.
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.3 is a hotfix on top of
+6.16.2).
+
+**Next** — 6.17 (BullMQ schedules + worker).
