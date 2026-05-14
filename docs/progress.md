@@ -4498,3 +4498,147 @@ green.
 **Next** — 6.17 (BullMQ schedules + worker — must consult context7
 for BullMQ v5 docs and verify npm latest before adding the
 dependency, per the iteration plan).
+
+### Iteration 6.16.1 — Filters URL-sync + dedupe Starred + Clear filters (2026-05-14)
+
+User-reported staging UX hotfix on `/payments` after 6.16. Three
+coupled bugs:
+
+1. **Duplicated Starred filter.** Both `<PaymentsFilters>` and the new
+   `<StarredFilterToggle>` rendered a starred control (checkbox +
+   prominent ★ button) side by side.
+2. **Starred toggle was cosmetic.** Clicking it updated the URL to
+   `?starred=1` but the list never re-fetched. Root cause: the list's
+   filter state was a one-time snapshot from `initialFilters` on mount
+   via `useState(() => …)`; the URL-sourced `initialFilters` changed
+   on subsequent renders but the initialiser never ran again.
+3. **No URL-sync for the rest of the filters and no Clear button.**
+   Direct URL access like `?direction=OUT&q=coffee` was ignored.
+   Changing filters fetched but didn't push to URL — refresh / share
+   was broken. No reset affordance.
+
+**Fix shape**
+
+- New `apps/web/src/lib/payment/filters.ts` — single source of truth
+  for the URL ↔ filter mapping: `PaymentFilters` (alias of
+  `PaymentsFiltersValue`), `defaultFilters`, `filtersToQuery`,
+  `filtersFromQuery`, `isFiltersDirty`, `clearFilters`. Drops invalid
+  `direction` / `sort` values, ignores unknown scopes.
+- `<PaymentsList>` API simplified: removed legacy `scope` and
+  `initialFilters` props. New `filters?` + `onFiltersChange?` +
+  `lockScope?` controlled API. Uncontrolled fallback uses
+  `defaultFilters()` for unit-test ergonomics.
+- `<PaymentsFilters>` no longer renders an internal starred checkbox
+  (option **A** from the plan — the prominent ★ icon stays as the
+  single source of truth via `<StarredFilterToggle>`).
+- `payments-list-client.tsx` reads the URL on every render via
+  `filtersFromQuery(useSearchParams())` and writes back via
+  `router.replace(filtersToQuery(...))`. New "Clear filters" button
+  (`payments.page.clearFilters`) visible only when
+  `isFiltersDirty(filters)` — preserves the active scope, strips
+  every other param.
+- `<RecentActivity>`, `<StarredPayments>`, and `<GroupPaymentsTab>`
+  migrated to the new `filters` prop with a memoised constant — no
+  behaviour change, no URL coupling at the widget level (per design,
+  widgets are not pages).
+
+**i18n** — `payments.page.clearFilters` added (en + he); the dead
+`payments.filters.starred` key removed.
+
+**Tests** — ~20 new Vitest cases:
+
+- `apps/web/src/lib/payment/__tests__/filters.test.ts` — round-trip,
+  defaults, invalid values, `isFiltersDirty`, `clearFilters` (16 cases).
+- `apps/web/src/components/payment/PaymentsList.spec.tsx` —
+  controlled-prop change triggers re-fetch (bug #2 regression);
+  toolbar changes bubble via `onFiltersChange`; existing tests
+  migrated to the new prop shape.
+- `apps/web/src/app/[locale]/payments/payments-list.spec.tsx` —
+  exactly one starred control rendered (bug #1); `?starred=1`
+  pre-populates `filters.starred` AND the toggle (bug #2);
+  `?direction=OUT&q=coffee&from=…` pre-populates filters (bug #3a);
+  `onFiltersChange` writes back to URL (bug #3b); Clear filters
+  hidden by default, visible after dirty, click resets to scope-only.
+- `apps/web/src/components/payment/PaymentsFilters.spec.tsx` —
+  dropped the starred-checkbox tests; added a regression check that
+  `filter-starred` is **not** rendered.
+
+**Totals** — 738 / 738 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green (commit `dc8303a`).
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.1 is a hotfix on top of
+6.16).
+
+**Next** — 6.17 (BullMQ schedules + worker).
+
+### Iteration 6.16.1 — Filters URL-sync + dedupe Starred + Clear filters (2026-05-14)
+
+User-reported staging UX hotfix on `/payments` after 6.16. Three
+coupled bugs:
+
+1. **Duplicated Starred filter.** Both `<PaymentsFilters>` and the new
+   `<StarredFilterToggle>` rendered a starred control (checkbox +
+   prominent ★ button) side by side.
+2. **Starred toggle was cosmetic.** Clicking it updated the URL to
+   `?starred=1` but the list never re-fetched. Root cause: the list's
+   filter state was a one-time snapshot from `initialFilters` on mount
+   via `useState(() => …)`; the URL-sourced `initialFilters` changed
+   on subsequent renders but the initialiser never ran again.
+3. **No URL-sync for the rest of the filters and no Clear button.**
+   Direct URL access like `?direction=OUT&q=coffee` was ignored.
+   Changing filters fetched but didn't push to URL — refresh / share
+   was broken. No reset affordance.
+
+**Fix shape**
+
+- New `apps/web/src/lib/payment/filters.ts` — single source of truth
+  for the URL ↔ filter mapping: `PaymentFilters` (alias of
+  `PaymentsFiltersValue`), `defaultFilters`, `filtersToQuery`,
+  `filtersFromQuery`, `isFiltersDirty`, `clearFilters`. Drops invalid
+  `direction` / `sort` values, ignores unknown scopes.
+- `<PaymentsList>` API simplified: removed legacy `scope` and
+  `initialFilters` props. New `filters?` + `onFiltersChange?` +
+  `lockScope?` controlled API. Uncontrolled fallback uses
+  `defaultFilters()` for unit-test ergonomics.
+- `<PaymentsFilters>` no longer renders an internal starred checkbox
+  (option **A** from the plan — the prominent ★ icon stays as the
+  single source of truth via `<StarredFilterToggle>`).
+- `payments-list-client.tsx` reads the URL on every render via
+  `filtersFromQuery(useSearchParams())` and writes back via
+  `router.replace(filtersToQuery(...))`. New "Clear filters" button
+  (`payments.page.clearFilters`) visible only when
+  `isFiltersDirty(filters)` — preserves the active scope, strips
+  every other param.
+- `<RecentActivity>`, `<StarredPayments>`, and `<GroupPaymentsTab>`
+  migrated to the new `filters` prop with a memoised constant — no
+  behaviour change, no URL coupling at the widget level (per design,
+  widgets are not pages).
+
+**i18n** — `payments.page.clearFilters` added (en + he); the dead
+`payments.filters.starred` key removed.
+
+**Tests** — ~20 new Vitest cases:
+
+- `apps/web/src/lib/payment/__tests__/filters.test.ts` — round-trip,
+  defaults, invalid values, `isFiltersDirty`, `clearFilters` (16 cases).
+- `apps/web/src/components/payment/PaymentsList.spec.tsx` —
+  controlled-prop change triggers re-fetch (bug #2 regression);
+  toolbar changes bubble via `onFiltersChange`; existing tests
+  migrated to the new prop shape.
+- `apps/web/src/app/[locale]/payments/payments-list.spec.tsx` —
+  exactly one starred control rendered (bug #1); `?starred=1`
+  pre-populates `filters.starred` AND the toggle (bug #2);
+  `?direction=OUT&q=coffee&from=…` pre-populates filters (bug #3a);
+  `onFiltersChange` writes back to URL (bug #3b); Clear filters
+  hidden by default, visible after dirty, click resets to scope-only.
+- `apps/web/src/components/payment/PaymentsFilters.spec.tsx` —
+  dropped the starred-checkbox tests; added a regression check that
+  `filter-starred` is **not** rendered.
+
+**Totals** — 738 / 738 web Vitest cases pass. Typecheck + lint clean.
+CI + Deploy Staging green (commit `dc8303a`).
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.1 is a hotfix on top of
+6.16).
+
+**Next** — 6.17 (BullMQ schedules + worker).
