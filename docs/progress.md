@@ -4642,3 +4642,309 @@ CI + Deploy Staging green (commit `dc8303a`).
 6.16).
 
 **Next** — 6.17 (BullMQ schedules + worker).
+
+---
+
+## Iteration 6.16.2 — Global async-operation infrastructure (hotfix)
+
+**User-reported staging UX bug.** On `/en/payments?direction=IN` the
+`Income` button rendered green/active while the rows were still expense
+rows because the URL was written before the fetch resolved. No loading
+indication on a slow connection; no recovery from a stalled fetch.
+
+User feedback (verbatim): "This state machine should be not only for
+filters but for everything. Globally whole UI. Progress bars for pages
+navigation, overlays for filters, rotating indicators for filters and
+load more, etc. From the page, down to any component which updates."
+
+We built the loading-state primitives ONCE for the whole app, applied
+them to the bug source plus three representative cases, and recorded
+the convention so all future feature work follows the same pattern from
+day 1.
+
+### Three-scope architecture
+
+| Scope       | When                         | Visualization                              | Primary timeout | Retry timeout |
+| ----------- | ---------------------------- | ------------------------------------------ | --------------: | ------------: |
+| `page`      | route change, page load      | `<PageProgressBar>`                        |             8 s |          30 s |
+| `container` | section refresh, list/filter | `<LoadingOverlay>` + `<RetryReturnDialog>` |             5 s |          30 s |
+| `control`   | button mutation              | `<ButtonSpinner>` inside button            |            10 s |          30 s |
+
+All three share one primitive: [`useAsyncOperation<T>()`](../apps/web/src/lib/ui/use-async-operation.ts).
+
+### Files added
+
+| Path                                                        | Purpose                                                     |
+| ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `apps/web/src/lib/ui/async-operation.ts`                    | Types, `AsyncHttpError`, `classifyError`                    |
+| `apps/web/src/lib/ui/use-async-operation.ts`                | The hook                                                    |
+| `apps/web/src/lib/ui/use-async-operation.test.tsx`          | 20 cases                                                    |
+| `apps/web/src/lib/ui/ui-status-context.tsx`                 | `<UIStatusProvider>` + page-op bus + pathname auto-register |
+| `apps/web/src/lib/ui/ui-status-context.test.tsx`            | 7 cases                                                     |
+| `apps/web/src/lib/ui/index.ts`                              | Single import surface                                       |
+| `apps/web/src/components/ui/Spinner.tsx` (+ spec)           | Shared SVG primitive                                        |
+| `apps/web/src/components/ui/ButtonSpinner.tsx` (+ spec)     | Inline button spinner                                       |
+| `apps/web/src/components/ui/InlineLoader.tsx` (+ spec)      | Spinner + label (Load more, etc.)                           |
+| `apps/web/src/components/ui/PageProgressBar.tsx` (+ spec)   | Singleton top bar                                           |
+| `apps/web/src/components/ui/LoadingOverlay.tsx` (+ spec)    | Dimmed overlay + 150 ms debounce                            |
+| `apps/web/src/components/ui/RetryReturnDialog.tsx` (+ spec) | Portal + focus trap + 5 s auto-retry countdown              |
+| `docs/ui-async-conventions.md`                              | ADR-style convention doc                                    |
+
+### Files modified
+
+| Path                                                          | Change                                                                                                                                       |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/lib/payment/payment-context.tsx`                | Threaded `AbortSignal` through every fetch method                                                                                            |
+| `apps/web/src/lib/payment/use-star-toggle.ts`                 | Rebuilt on `useAsyncOperation({ scope: 'control' })`                                                                                         |
+| `apps/web/src/components/payment/PaymentRow.tsx`              | Star button shows `<ButtonSpinner>`; `aria-busy` + `disabled` while in flight                                                                |
+| `apps/web/src/components/payment/PaymentDetailHeader.tsx`     | Same treatment as `<PaymentRow>`                                                                                                             |
+| `apps/web/src/components/payment/PaymentsScopeTabs.tsx`       | `<Link>` → `<button>` + `onChange(scope)` + `disabled`                                                                                       |
+| `apps/web/src/components/payment/PaymentsFilters.tsx`         | `disabled` prop cascades to every input/select/button                                                                                        |
+| `apps/web/src/components/payment/StarredFilterToggle.tsx`     | Accept `disabled`                                                                                                                            |
+| `apps/web/src/components/payment/PaymentsList.tsx`            | Orchestrator-owned mode (data/loading/error props); Load more on `useAsyncOperation` with `<InlineLoader>` + inline retry                    |
+| `apps/web/src/app/[locale]/payments/payments-list-client.tsx` | Full state machine — `committedFilters` separate from pending intent; URL written ONLY on commit; `<LoadingOverlay>` + `<RetryReturnDialog>` |
+| `apps/web/src/app/[locale]/layout.tsx`                        | Wrap tree in `<UIStatusProvider>`; mount singleton `<PageProgressBar>`                                                                       |
+| `apps/web/src/app/globals.css`                                | `mfp-spin`, `mfp-progress`, `mfp-countdown` keyframes; `prefers-reduced-motion` overrides                                                    |
+| `apps/web/messages/{en,he}.json`                              | New `ui.loading.*` and `ui.errors.*` namespaces                                                                                              |
+
+### URL handling — the bug fix
+
+The bug was that the URL got rewritten before the fetch resolved.
+Fix: a `commit()` pipeline that runs the fetch and **only on success**
+atomically updates `committedFilters`, `data`, and the URL. On failure
+the dialog opens; URL stays untouched. The visual controls bind to
+`committedFilters` only — pending intent is never visible until commit.
+
+### Auto-retry countdown
+
+`<RetryReturnDialog>` has an animated 5 s countdown bar inside the Retry
+button. When it fills, retry fires automatically — heals transient
+connectivity blips without user effort. User feedback during build:
+"The dialog should have animated timer (progress bar) inside the
+button set to 5 sec and activate retry when 5s passed."
+
+### 150 ms flicker prevention
+
+`<LoadingOverlay>` only renders after `active` has been true for ≥ 150
+ms. Sub-second cached responses no longer flash.
+
+### Migrations applied
+
+- `/payments` filter loading — full state machine, dialog + auto-retry.
+- Page navigation flash — `<UIStatusProvider>` + `<PageProgressBar>`.
+- Star toggle — `<ButtonSpinner>` mid-flight.
+- `<PaymentsList>` "Load more" — `<InlineLoader>` + inline retry.
+
+### Migrations deferred
+
+Comment input/list, payment form dialog, delete payment confirm,
+categories CRUD, dashboard widgets — covered in future iterations
+following the same pattern. Recorded in
+[`docs/ui-async-conventions.md`](ui-async-conventions.md).
+
+### A11y compliance
+
+- `role="status"` + `aria-live="polite"` + `aria-busy="true"` on
+  loading affordances.
+- `<RetryReturnDialog>` is `role="alertdialog" aria-modal="true"` with
+  Tab focus trap, focus restoration to the previously-focused element
+  on close, and ESC = Cancel.
+- `<PageProgressBar>` is `role="progressbar"` with indeterminate
+  semantics (no `aria-valuenow`).
+- All animations honour `prefers-reduced-motion`.
+
+### Tests
+
+| Suite                          |  New cases |
+| ------------------------------ | ---------: |
+| `use-async-operation.test.tsx` |         20 |
+| `ui-status-context.test.tsx`   |          7 |
+| `Spinner.spec.tsx`             |          3 |
+| `ButtonSpinner.spec.tsx`       |          4 |
+| `InlineLoader.spec.tsx`        |          3 |
+| `PageProgressBar.spec.tsx`     |          5 |
+| `LoadingOverlay.spec.tsx`      |          6 |
+| `RetryReturnDialog.spec.tsx`   |         11 |
+| **Total**                      | **59 new** |
+
+Plus updates to `<PaymentRow>`, `<PaymentDetailHeader>`,
+`<PaymentsScopeTabs>`, and the orchestrator spec.
+
+Total project tests: **804 passing** (full suite green).
+
+### Rule recorded
+
+`.kilocode/rules/dna.md` (local rules, gitignored):
+
+> UI async operations: use `useAsyncOperation()` per
+> [`docs/ui-async-conventions.md`](ui-async-conventions.md). No ad-hoc
+> `useState<boolean>(loading)` / inline spinners.
+
+### Constraints honoured
+
+- **No new npm dependency.** No `nprogress`, `@radix-ui/*`,
+  `framer-motion`, or anything else added.
+- Dashboard widgets unaffected — they continue self-fetching via the
+  same `useAsyncOperation` primitive (no orchestrator hijack).
+- DRY: every loading/error indicator in the migrated code comes from
+  these primitives. No `setLoading(true)` or `useState<boolean>(loading)`
+  remains in `apps/web/src/lib/ui/`, the migrated payment components,
+  or the `/payments` orchestrator.
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.2 is infrastructure +
+hotfix on top of 6.16.1).
+
+**Next** — 6.17 (BullMQ schedules + worker).
+
+---
+
+## Iteration 6.16.2 — Global async-operation infrastructure (hotfix)
+
+**User-reported staging UX bug.** On `/en/payments?direction=IN` the
+`Income` button rendered green/active while the rows were still expense
+rows because the URL was written before the fetch resolved. No loading
+indication on a slow connection; no recovery from a stalled fetch.
+
+User feedback (verbatim): "This state machine should be not only for
+filters but for everything. Globally whole UI. Progress bars for pages
+navigation, overlays for filters, rotating indicators for filters and
+load more, etc. From the page, down to any component which updates."
+
+We built the loading-state primitives ONCE for the whole app, applied
+them to the bug source plus three representative cases, and recorded
+the convention so all future feature work follows the same pattern from
+day 1.
+
+### Three-scope architecture
+
+| Scope       | When                         | Visualization                              | Primary timeout | Retry timeout |
+| ----------- | ---------------------------- | ------------------------------------------ | --------------: | ------------: |
+| `page`      | route change, page load      | `<PageProgressBar>`                        |             8 s |          30 s |
+| `container` | section refresh, list/filter | `<LoadingOverlay>` + `<RetryReturnDialog>` |             5 s |          30 s |
+| `control`   | button mutation              | `<ButtonSpinner>` inside button            |            10 s |          30 s |
+
+All three share one primitive: [`useAsyncOperation<T>()`](../apps/web/src/lib/ui/use-async-operation.ts).
+
+### Files added
+
+| Path                                                        | Purpose                                                     |
+| ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `apps/web/src/lib/ui/async-operation.ts`                    | Types, `AsyncHttpError`, `classifyError`                    |
+| `apps/web/src/lib/ui/use-async-operation.ts`                | The hook                                                    |
+| `apps/web/src/lib/ui/use-async-operation.test.tsx`          | 20 cases                                                    |
+| `apps/web/src/lib/ui/ui-status-context.tsx`                 | `<UIStatusProvider>` + page-op bus + pathname auto-register |
+| `apps/web/src/lib/ui/ui-status-context.test.tsx`            | 7 cases                                                     |
+| `apps/web/src/lib/ui/index.ts`                              | Single import surface                                       |
+| `apps/web/src/components/ui/Spinner.tsx` (+ spec)           | Shared SVG primitive                                        |
+| `apps/web/src/components/ui/ButtonSpinner.tsx` (+ spec)     | Inline button spinner                                       |
+| `apps/web/src/components/ui/InlineLoader.tsx` (+ spec)      | Spinner + label (Load more, etc.)                           |
+| `apps/web/src/components/ui/PageProgressBar.tsx` (+ spec)   | Singleton top bar                                           |
+| `apps/web/src/components/ui/LoadingOverlay.tsx` (+ spec)    | Dimmed overlay + 150 ms debounce                            |
+| `apps/web/src/components/ui/RetryReturnDialog.tsx` (+ spec) | Portal + focus trap + 5 s auto-retry countdown              |
+| `docs/ui-async-conventions.md`                              | ADR-style convention doc                                    |
+
+### Files modified
+
+| Path                                                          | Change                                                                                                                                       |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/lib/payment/payment-context.tsx`                | Threaded `AbortSignal` through every fetch method                                                                                            |
+| `apps/web/src/lib/payment/use-star-toggle.ts`                 | Rebuilt on `useAsyncOperation({ scope: 'control' })`                                                                                         |
+| `apps/web/src/components/payment/PaymentRow.tsx`              | Star button shows `<ButtonSpinner>`; `aria-busy` + `disabled` while in flight                                                                |
+| `apps/web/src/components/payment/PaymentDetailHeader.tsx`     | Same treatment as `<PaymentRow>`                                                                                                             |
+| `apps/web/src/components/payment/PaymentsScopeTabs.tsx`       | `<Link>` → `<button>` + `onChange(scope)` + `disabled`                                                                                       |
+| `apps/web/src/components/payment/PaymentsFilters.tsx`         | `disabled` prop cascades to every input/select/button                                                                                        |
+| `apps/web/src/components/payment/StarredFilterToggle.tsx`     | Accept `disabled`                                                                                                                            |
+| `apps/web/src/components/payment/PaymentsList.tsx`            | Orchestrator-owned mode (data/loading/error props); Load more on `useAsyncOperation` with `<InlineLoader>` + inline retry                    |
+| `apps/web/src/app/[locale]/payments/payments-list-client.tsx` | Full state machine — `committedFilters` separate from pending intent; URL written ONLY on commit; `<LoadingOverlay>` + `<RetryReturnDialog>` |
+| `apps/web/src/app/[locale]/layout.tsx`                        | Wrap tree in `<UIStatusProvider>`; mount singleton `<PageProgressBar>`                                                                       |
+| `apps/web/src/app/globals.css`                                | `mfp-spin`, `mfp-progress`, `mfp-countdown` keyframes; `prefers-reduced-motion` overrides                                                    |
+| `apps/web/messages/{en,he}.json`                              | New `ui.loading.*` and `ui.errors.*` namespaces                                                                                              |
+
+### URL handling — the bug fix
+
+The bug was that the URL got rewritten before the fetch resolved.
+Fix: a `commit()` pipeline that runs the fetch and **only on success**
+atomically updates `committedFilters`, `data`, and the URL. On failure
+the dialog opens; URL stays untouched. The visual controls bind to
+`committedFilters` only — pending intent is never visible until commit.
+
+### Auto-retry countdown
+
+`<RetryReturnDialog>` has an animated 5 s countdown bar inside the Retry
+button. When it fills, retry fires automatically — heals transient
+connectivity blips without user effort. User feedback during build:
+"The dialog should have animated timer (progress bar) inside the
+button set to 5 sec and activate retry when 5s passed."
+
+### 150 ms flicker prevention
+
+`<LoadingOverlay>` only renders after `active` has been true for ≥ 150
+ms. Sub-second cached responses no longer flash.
+
+### Migrations applied
+
+- `/payments` filter loading — full state machine, dialog + auto-retry.
+- Page navigation flash — `<UIStatusProvider>` + `<PageProgressBar>`.
+- Star toggle — `<ButtonSpinner>` mid-flight.
+- `<PaymentsList>` "Load more" — `<InlineLoader>` + inline retry.
+
+### Migrations deferred
+
+Comment input/list, payment form dialog, delete payment confirm,
+categories CRUD, dashboard widgets — covered in future iterations
+following the same pattern. Recorded in
+[`docs/ui-async-conventions.md`](ui-async-conventions.md).
+
+### A11y compliance
+
+- `role="status"` + `aria-live="polite"` + `aria-busy="true"` on
+  loading affordances.
+- `<RetryReturnDialog>` is `role="alertdialog" aria-modal="true"` with
+  Tab focus trap, focus restoration to the previously-focused element
+  on close, and ESC = Cancel.
+- `<PageProgressBar>` is `role="progressbar"` with indeterminate
+  semantics (no `aria-valuenow`).
+- All animations honour `prefers-reduced-motion`.
+
+### Tests
+
+| Suite                          |  New cases |
+| ------------------------------ | ---------: |
+| `use-async-operation.test.tsx` |         20 |
+| `ui-status-context.test.tsx`   |          7 |
+| `Spinner.spec.tsx`             |          3 |
+| `ButtonSpinner.spec.tsx`       |          4 |
+| `InlineLoader.spec.tsx`        |          3 |
+| `PageProgressBar.spec.tsx`     |          5 |
+| `LoadingOverlay.spec.tsx`      |          6 |
+| `RetryReturnDialog.spec.tsx`   |         11 |
+| **Total**                      | **59 new** |
+
+Plus updates to `<PaymentRow>`, `<PaymentDetailHeader>`,
+`<PaymentsScopeTabs>`, and the orchestrator spec.
+
+Total project tests: **804 passing** (full suite green).
+
+### Rule recorded
+
+`.kilocode/rules/dna.md` (local rules, gitignored):
+
+> UI async operations: use `useAsyncOperation()` per
+> [`docs/ui-async-conventions.md`](ui-async-conventions.md). No ad-hoc
+> `useState<boolean>(loading)` / inline spinners.
+
+### Constraints honoured
+
+- **No new npm dependency.** No `nprogress`, `@radix-ui/*`,
+  `framer-motion`, or anything else added.
+- Dashboard widgets unaffected — they continue self-fetching via the
+  same `useAsyncOperation` primitive (no orchestrator hijack).
+- DRY: every loading/error indicator in the migrated code comes from
+  these primitives. No `setLoading(true)` or `useState<boolean>(loading)`
+  remains in `apps/web/src/lib/ui/`, the migrated payment components,
+  or the `/payments` orchestrator.
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.2 is infrastructure +
+hotfix on top of 6.16.1).
+
+**Next** — 6.17 (BullMQ schedules + worker).
