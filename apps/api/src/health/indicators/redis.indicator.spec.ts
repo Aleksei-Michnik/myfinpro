@@ -60,4 +60,31 @@ describe('RedisHealthIndicator', () => {
       });
     }
   });
+
+  it('throws HealthCheckError with reason=ping_timeout when ping hangs longer than 2 s', async () => {
+    jest.useFakeTimers();
+    try {
+      // A ping that never resolves — emulates ioredis stuck reconnecting.
+      const hanging = new Promise<string>(() => {
+        /* never resolves */
+      });
+      pingMock.mockReturnValue(hanging);
+      await build({ ping: pingMock });
+
+      const promise = indicator.isHealthy('redis');
+      // Attach a catch handler synchronously so the rejection is observed.
+      const settled = promise.catch((err) => err);
+
+      // Advance past the 2 s threshold; tick again to flush the rejection.
+      await jest.advanceTimersByTimeAsync(2500);
+
+      const error = await settled;
+      expect(error).toBeInstanceOf(HealthCheckError);
+      expect((error as HealthCheckError).causes).toEqual({
+        redis: { status: 'down', reason: 'ping_timeout' },
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

@@ -1236,6 +1236,53 @@ The Redis ping reuses the BullMQ-managed ioredis connection rather than opening 
 
 **Graceful shutdown.** `@nestjs/bullmq` registers `OnApplicationShutdown` hooks on every queue/worker provider it creates. With shutdown hooks enabled in [`main.ts`](../apps/api/src/main.ts:1) (already the case for Prisma's `$disconnect`), `app.close()` — fired automatically on `SIGTERM` from Docker — closes the underlying ioredis client cleanly. No bespoke lifecycle hook is needed at the Queue or QueueModule level.
 
+### §8 PaymentSchedule CRUD (landed in iteration 6.17.2)
+
+The recurring-payment surface is a 1:1 sub-resource of a parent `RECURRING` payment. Every write to the DB is mirrored into BullMQ via [`Queue.upsertJobScheduler`](https://docs.bullmq.io/) under a deterministic, never-reused key.
+
+**Schema.** [`PaymentSchedule`](../apps/api/prisma/schema.prisma:1) (post-6.17.2 migration `20260515230000_phase6_172_payment_schedule_cron_every`):
+
+| Column         | Type                  | Notes                                                                 |
+| -------------- | --------------------- | --------------------------------------------------------------------- |
+| `id`           | `varchar(36)` PK      | UUID.                                                                 |
+| `payment_id`   | `varchar(36)` FK uniq | `→ payments.id ON DELETE CASCADE`. 1:1 with the parent.               |
+| `cron`         | `varchar(120)` null   | Standard 5- or 6-field cron. **Service invariant:** exactly one of    |
+| `every_ms`     | `int` null            | `cron` / `every_ms` is non-null. MySQL CHECK omitted (Prisma limit).  |
+| `starts_at`    | `datetime(3)`         | Defaults to `CURRENT_TIMESTAMP(3)`.                                   |
+| `ends_at`      | `datetime(3)` null    | Translates to BullMQ `endDate`. Service rejects `<= starts_at` (400). |
+| `limit`        | `int` null            | Translates to BullMQ `limit`.                                         |
+| `next_run_at`  | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
+| `last_run_at`  | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
+| `paused_at`    | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
+| `cancelled_at` | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
+| `created_at`   | `datetime(3)`         | `CURRENT_TIMESTAMP(3)`.                                               |
+| `updated_at`   | `datetime(3)`         | Prisma `@updatedAt`.                                                  |
+
+Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, supports the 6.17.3 catch-up scan.
+
+**Scheduler id.** [`buildSchedulerId(scheduleId)`](../apps/api/src/payment/payment-schedule.service.ts:1) returns `` `payment-schedule:${schedule.id}` ``. This id is stable for the schedule's lifetime and is never reused — re-upserting under the same id replaces the existing repeat entry atomically (BullMQ idempotency contract).
+
+**REST contract** (under `/api/v1/payments/:paymentId/schedule` — singular path because of the 1:1 cardinality):
+
+| Verb     | Status | Behavior                                                                                                                                               |
+| -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST`   | 201    | Create. Parent must be visible + `type=RECURRING`. `409 PAYMENT_SCHEDULE_ALREADY_EXISTS` if one exists. Audit `PAYMENT_SCHEDULE_CREATED`.              |
+| `GET`    | 200    | Read. `404 PAYMENT_SCHEDULE_NOT_FOUND` if no row. Existence is not leaked — invisible parent → also 404.                                               |
+| `PUT`    | 200    | Replace (idempotent upsert). Re-upserts BullMQ under the same key. Audit `PAYMENT_SCHEDULE_UPDATED`.                                                   |
+| `DELETE` | 204    | Hard-delete the row + `removeJobScheduler`. Already-fired children stay (history immutable). `404` when no schedule. Audit `PAYMENT_SCHEDULE_DELETED`. |
+
+**Idempotency / consistency.**
+
+- POST writes the DB row first, then `upsertJobScheduler`. On queue failure: retry once (deterministic id makes this safe); if still failing, the DB row is rolled back.
+- PUT writes the DB row first (Prisma `upsert`), then `upsertJobScheduler`. On queue failure we propagate the error and leave the DB row — the caller can retry the PUT (idempotent) and operator alerting surfaces the divergence.
+- DELETE deletes the DB row first, then attempts `removeJobScheduler`. Queue removal failures are swallowed (DB row is the source of truth; an orphan scheduler entry will be acked by the no-op processor).
+
+**Worker.** [`PaymentOccurrenceProcessor`](../apps/api/src/payment/payment-occurrence.processor.ts:1) is registered in 6.17.2 as a **no-op** that logs `[no-op] would create occurrence for schedule X (payment Y) at Z` and returns `{ acknowledged: true }`. Real occurrence creation lands in 6.17.3. Job options use `attempts: 1` during this transition iteration to avoid retry loops.
+
+**Error codes.** Added in 6.17.2 — `PAYMENT_SCHEDULE_PARENT_NOT_RECURRING` (409), `PAYMENT_SCHEDULE_ALREADY_EXISTS` (409), `PAYMENT_SCHEDULE_NOT_FOUND` (404), `PAYMENT_SCHEDULE_INVALID_CRON` (400), `PAYMENT_SCHEDULE_INVALID_INTERVAL` (400, when `everyMs < 60_000`), `PAYMENT_SCHEDULE_INVALID_END_DATE` (400, when `endsAt ≤ startsAt`), `PAYMENT_SCHEDULE_INVALID_SPEC` (400, when neither/both of `cron`/`everyMs` are present).
+
+**Health-ping polish.** [`RedisHealthIndicator`](../apps/api/src/health/indicators/redis.indicator.ts:1) now wraps `client.ping()` in `Promise.race([ping(), timeout(2000)])`. A hung Redis surfaces as `503` + `redis: { status: 'down', reason: 'ping_timeout' }` within ~2 s, instead of the upstream proxy's 504 after 30+ s.
+
 ---
 
 ## 12. Extendability & Out-of-Scope

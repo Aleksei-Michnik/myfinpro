@@ -268,21 +268,29 @@ model Category {
 }
 
 model PaymentSchedule {
-  id               String    @id @default(uuid()) @db.VarChar(36)
-  paymentId        String    @unique @map("payment_id") @db.VarChar(36)
-  payment          Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  frequency        String    @db.VarChar(20)
-  interval         Int       @default(1)
-  startsAt         DateTime  @map("starts_at")
-  nextOccurrenceAt DateTime  @map("next_occurrence_at")
-  endsAt           DateTime? @map("ends_at")
-  maxOccurrences   Int?      @map("max_occurrences")
-  generatedCount   Int       @default(0) @map("generated_count")
-  isActive         Boolean   @default(true) @map("is_active")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  paymentId   String    @unique @map("payment_id") @db.VarChar(36)
+  payment     Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  // Exactly one of cron / everyMs is non-null (service-level invariant — see
+  // PaymentScheduleService.dtoToRepeatOpts). MySQL CHECK is omitted because
+  // Prisma does not generate raw CHECK constraints for MySQL.
+  cron        String?   @db.VarChar(120)
+  everyMs     Int?      @map("every_ms")
+  startsAt    DateTime  @default(now()) @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  limit       Int?
+  // Denormalized scheduler bookkeeping — written by the worker (lands in
+  // 6.17.3). 6.17.2 only writes the row + mirrors into BullMQ.
+  nextRunAt   DateTime? @map("next_run_at")
+  lastRunAt   DateTime? @map("last_run_at")
+  // Soft-pause / soft-cancel flags. Behavior lands in 6.17.4; columns ship
+  // forward-compat in 6.17.2.
+  pausedAt    DateTime? @map("paused_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  @@index([isActive, nextOccurrenceAt])
+  @@index([nextRunAt])
   @@map("payment_schedules")
 }
 
