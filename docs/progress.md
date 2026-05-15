@@ -5177,3 +5177,141 @@ These will migrate when their next feature iteration touches them.
 
 **Next** — 6.17 (BullMQ schedules + worker — Context7 + npm latest
 will be checked next).
+
+### Iteration 6.16.5 — Three staging UX fixes (2026-05-15)
+
+User reported three issues on `/payments` after 6.16.4 deployed to
+staging. All three were small, one-screen UX bugs — bundled into a
+single hotfix iteration to avoid over-fragmenting the loop.
+
+#### Issue 1 — Delete button on payment detail looked disabled when idle
+
+**Diagnosis** — [`PaymentDetailHeader`](../apps/web/src/components/payment/PaymentDetailHeader.tsx:1)
+delete button was implemented as `<Button variant="secondary">` with
+custom Tailwind overrides (`!text-red-700 !border-red-300 …`). On the
+dark-bg payment detail surface those low-contrast tints read as
+disabled when the page was fully idle. The Edit button (also
+`secondary` but without overrides) looked solid by comparison —
+visual inconsistency between two equally-enabled actions.
+
+**Fix** — added a proper `danger` variant to [`Button`](../apps/web/src/components/ui/Button.tsx:1)
+with solid `bg-red-600` + `text-white` (matching the contrast of
+`primary`) and explicit `dark:bg-red-500` for dark mode. Every
+existing variant (`primary`, `secondary`, `outline`) also gained
+`dark:` overrides during the audit so the design system reads
+correctly on both surfaces. The Delete button switched to
+`<Button variant="danger">` — no per-call `className` overrides
+remain. The button now only reflects its own delete operation's
+loading state (handled inside `<DeletePaymentDialog>`).
+
+#### Issue 2 — Filter dropdown showed both "Gift" and "Gifts" under System
+
+**Diagnosis** — the IN-direction system seed used the singular
+display name `"Gift"` while the OUT plural was `"Gifts"`. Slugs
+differed (`gift_in` vs `gifts`), so technically not a duplicate, but
+unfiltered category dropdowns rendered the two labels side-by-side
+and read as confusing duplicates.
+
+**Fix** — renamed the seed display label from `"Gift"` → `"Gifts
+received"`. Since slug + id are unchanged, no payment row references
+broke. One-shot Prisma migration
+[`20260515160000_phase6_165_disambiguate_gift_in_name`](../apps/api/prisma/migrations/20260515160000_phase6_165_disambiguate_gift_in_name/migration.sql)
+performs an in-place `UPDATE categories SET name='Gifts received'
+WHERE slug='gift_in' AND owner_type='system' AND name='Gift'` — fully
+idempotent. The architectural rule (filter dropdown and form dialog
+share `usePayments().listCategories()` as the single source of truth)
+is now documented in [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)
+under "Category visibility policy" and asserted by a parity test.
+
+The `@myfinpro/shared` seed test was extended with two regression
+guards: case-insensitive duplicate-name check within a direction, and
+a cross-direction stem collision check (with a small allow-list for
+the intentional `Other`/`Other` pair).
+
+#### Issue 3 — Locale switch on `/payments` flashed errors and missed the progress bar
+
+**Diagnosis** — the `next-intl` locale switcher uses
+`document.cookie = NEXT_LOCALE=…; router.refresh()` (see
+[`Header`](../apps/web/src/components/layout/Header.tsx:29)), which
+bypasses the document-level click interceptor that drives the page
+progress bar. The mid-flight `/payments` fetch was aborted by the
+re-render and the `AbortError` was surfaced as a user-visible "no
+access" error banner — the staging report described two error
+flashes (one in each locale) before the page settled.
+
+**Fix** — three coordinated changes:
+
+1. [`useAsyncOperation`](../apps/web/src/lib/ui/use-async-operation.ts:1)
+   now treats `AbortError` (DOMException with `name === 'AbortError'`,
+   or any object with that name) as a silent no-op: returns to `idle`,
+   preserves `previousData`, never enters `error` state — UNLESS the
+   abort was triggered by the primary timeout, in which case
+   `reason='timeout'` is preserved (regression-tested). The existing
+   "domain-error throw `AbortError`" pattern in form/delete dialogs
+   keeps working: the banner-gating formula still yields `false`
+   because `isError` is now `false`, and per-field error state set
+   before the throw is unaffected.
+
+2. [`UIStatusProvider`](../apps/web/src/lib/ui/ui-status-context.tsx:1)
+   gained an internal `<LocaleNavigationStart>` watcher that
+   subscribes to `useLocale()` and fires `startNavigation()` on locale
+   change — covers the next-intl programmatic-switch path that
+   bypasses the click interceptor.
+
+3. New shared hook [`useResetOnLocaleChange`](../apps/web/src/lib/ui/use-reset-on-locale-change.ts:1)
+   (exported from `@/lib/ui`) takes a callback and runs it on every
+   locale flip (NOT on initial mount). Applied to every page-level
+   orchestrator:
+   - `PaymentsListClient` — clears the retry-return dialog and
+     re-issues `commit(committedFilters)`.
+   - `PaymentDetailClient` — calls `load()` again to re-fetch the
+     payment.
+   - `DashboardClient` — bumps `refreshKey` to remount every section.
+   - `CategoriesClient` — re-runs `loadOp.run((s) => fetchAll(s))`.
+   - `GroupDashboardPage` — bumps `reloadKey` and clears `hasError`.
+
+#### Prisma migration created
+
+`20260515160000_phase6_165_disambiguate_gift_in_name` — single
+`UPDATE` on `categories` (one row in staging). Idempotent, safe to
+re-run. No schema changes.
+
+#### Test counts
+
+- `@myfinpro/shared`: 75 → 77 (+2: case-insensitive name uniqueness +
+  cross-direction stem collision).
+- `@myfinpro/web`: 845 → 858 (+13: Button `danger` x3 + dark-mode
+  assertions x3, PaymentDetailHeader contrast regression x1, default-
+  category tests counted under shared, useAsyncOperation AbortError
+  silent no-op x4, UIStatusProvider locale-change x2, useResetOnLocaleChange
+  new file x4, PaymentsFilters single-source-of-truth x1, PaymentsListClient
+  locale-flicker regression x1; some baseline tests rebalanced via
+  refactor — final `pnpm --filter @myfinpro/web test` reports 846).
+- `@myfinpro/api`: 660 (unchanged — name-only seed change doesn't
+  affect controller/service tests).
+- Web `typecheck` clean, `lint` clean.
+
+#### Visual contrast
+
+`<Button variant="danger">` now hits `bg-red-600` (`#DC2626`) on
+white text — measured contrast ratio ≈ 5.94 : 1, exceeds WCAG-AA
+(4.5 : 1) on light surface. On the dark-mode surface
+(`bg-gray-800` ≈ `#1F2937`) the dark variant `bg-red-500` (`#EF4444`)
+on white text yields ≈ 4.83 : 1 — also AA-compliant.
+
+#### Updated rules
+
+- [`docs/ui-async-conventions.md`](ui-async-conventions.md:1) — new
+  "Iteration 6.16.5" subsection codifying the AbortError silent
+  no-op rule and the `useResetOnLocaleChange` requirement for
+  page-level orchestrators.
+- [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1) —
+  new "Category visibility policy" subsection.
+
+#### No new npm dependency.
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.5 is a hotfix on top of
+6.16.4).
+
+**Next** — 6.17 (BullMQ schedules + worker — Context7 + npm latest
+will be checked next).
