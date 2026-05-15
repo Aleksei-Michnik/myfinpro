@@ -1,6 +1,8 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import { DiskHealthIndicator, TerminusModule } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
 import { HealthController } from './health.controller';
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
 import { MemoryHealthIndicator } from './indicators/memory.indicator';
@@ -21,6 +23,13 @@ describe('HealthController', () => {
     }),
   };
 
+  // BullMQ Queue mock — the Redis indicator awaits `queue.client` and calls
+  // `.ping()` on it. We resolve immediately with a fake ioredis-like client.
+  const mockRedisClient = { ping: jest.fn().mockResolvedValue('PONG') };
+  const mockQueue = {
+    client: Promise.resolve(mockRedisClient),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [TerminusModule],
@@ -28,6 +37,10 @@ describe('HealthController', () => {
       providers: [
         DatabaseHealthIndicator,
         RedisHealthIndicator,
+        {
+          provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE),
+          useValue: mockQueue,
+        },
         {
           provide: MemoryHealthIndicator,
           useValue: mockMemoryHealthIndicator,
@@ -62,15 +75,28 @@ describe('HealthController', () => {
       expect(result.info).toHaveProperty('database');
       expect(result.info).toHaveProperty('memory');
     });
+
+    it('should not ping Redis (fast liveness probe)', async () => {
+      mockRedisClient.ping.mockClear();
+      await controller.check();
+      expect(mockRedisClient.ping).not.toHaveBeenCalled();
+    });
   });
 
   describe('checkDetails', () => {
-    it('should return detailed health check result', async () => {
+    it('should return detailed health check result with redis up', async () => {
       const result = await controller.checkDetails();
       expect(result).toHaveProperty('status', 'ok');
       expect(result.info).toHaveProperty('database');
       expect(result.info).toHaveProperty('memory');
       expect(result.info).toHaveProperty('redis');
+      expect(result.info?.redis).toMatchObject({ status: 'up', reply: 'PONG' });
+    });
+
+    it('should ping Redis through the BullMQ queue client', async () => {
+      mockRedisClient.ping.mockClear();
+      await controller.checkDetails();
+      expect(mockRedisClient.ping).toHaveBeenCalledTimes(1);
     });
   });
 });

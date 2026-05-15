@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ScheduleModule.forRoot(),
     LoggerModule,
     PrismaModule,
+    QueueModule,
     MailModule,
     MetricsModule,
     AppThrottlerModule,

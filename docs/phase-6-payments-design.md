@@ -1202,6 +1202,40 @@ Fixtures live in `apps/api/test/integration/payments/fixtures.ts` (reusable fact
 - BullMQ worker runs inside the existing API container, so no new container/service is added to Docker Compose. The shared Redis instance is already provisioned in every env.
 - The hourly cron is safe during blue-green: both slots will try to process; BullMQ's default queue locking ensures each job runs exactly once.
 
+### §7 Job Queue Infrastructure (landed in iteration 6.17.1)
+
+The recurring-payment scheduler (Phase 6.17) runs on top of [BullMQ](https://docs.bullmq.io/) v5+. The foundation landed in iteration 6.17.1 — schedule CRUD lands in 6.17.2 and the processor in 6.17.3.
+
+**Redis service.** A `redis:8-alpine` container ships in every environment's infra compose:
+
+- Dev: [`docker-compose.yml`](../docker-compose.yml:1) — port `6379` mapped to host for tooling.
+- Staging: [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml:1) — internal network only, container `myfinpro-staging-redis`, volume `myfinpro-staging-redis`.
+- Production: [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml:1) — internal network only, container `myfinpro-prod-redis`, volume `myfinpro-production-redis`.
+
+Each container runs `redis-server --appendonly yes --maxmemory <N>mb --maxmemory-policy allkeys-lru` and conditionally appends `--requirepass "$REDIS_PASSWORD"` when the env var is non-empty. The healthcheck shells out to `redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping` (or unauthenticated `redis-cli ping` when the password is empty).
+
+**BullModule wiring.** A single `@Global()` module — [`QueueModule`](../apps/api/src/queue/queue.module.ts:1) — calls `BullModule.forRootAsync` with the typed connection produced by [`buildRedisConnection`](../apps/api/src/config/redis.config.ts:1) and `BullModule.registerQueue` for every queue. Today there is exactly one queue, `payment-occurrences`, registered via the [`PAYMENT_OCCURRENCES_QUEUE`](../apps/api/src/queue/queue.constants.ts:1) constant (no string literals at call sites). Adding a new queue is two lines: a new constant and a new `registerQueue` entry.
+
+**Env-var contract.** The API consumes four typed vars; everything else is derived:
+
+| Var              | Dev default | Staging / Production source                                          |
+| ---------------- | ----------- | -------------------------------------------------------------------- |
+| `REDIS_HOST`     | `localhost` | Static `redis` (Docker service alias on the env's network)           |
+| `REDIS_PORT`     | `6379`      | Static `6379`                                                        |
+| `REDIS_PASSWORD` | _empty_     | GitHub secret `STAGING_REDIS_PASSWORD` / `PRODUCTION_REDIS_PASSWORD` |
+| `REDIS_TLS`      | `false`     | Static `false` (internal Docker network — no TLS)                    |
+
+The deploy workflows ([`deploy-staging.yml`](../.github/workflows/deploy-staging.yml:1) and [`deploy-production.yml`](../.github/workflows/deploy-production.yml:1)) inject the password into the SSH session's environment exactly the same way `JWT_SECRET` and `DATABASE_URL` are injected — no `.env` file is ever written to either server.
+
+**Health checks.**
+
+- `GET /api/v1/health` — fast liveness probe. Checks DB + memory only. **Does not** touch Redis, so transient Redis hiccups never take the API container out of the LB rotation.
+- `GET /api/v1/health/details` — deep status probe. Checks DB + memory + Redis (`queue.client.ping()`) + disk. Returns 503 with the offending indicator's status `down` if any check fails. Used by deploy verification, not by the per-second LB probe.
+
+The Redis ping reuses the BullMQ-managed ioredis connection rather than opening a separate client — this guarantees the probe and the worker share authentication state, so a credentials-rotation regression surfaces in `/health/details` immediately.
+
+**Graceful shutdown.** `@nestjs/bullmq` registers `OnApplicationShutdown` hooks on every queue/worker provider it creates. With shutdown hooks enabled in [`main.ts`](../apps/api/src/main.ts:1) (already the case for Prisma's `$disconnect`), `app.close()` — fired automatically on `SIGTERM` from Docker — closes the underlying ioredis client cleanly. No bespoke lifecycle hook is needed at the Queue or QueueModule level.
+
 ---
 
 ## 12. Extendability & Out-of-Scope

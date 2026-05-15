@@ -33,23 +33,39 @@ services:
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
 
-  # ───── Redis ─────
+  # ───── Redis (BullMQ + future caching) ─────
   redis:
     image: redis:8-alpine
     container_name: myfinpro-staging-redis
     restart: unless-stopped
-    ports:
-      - '6379:6379'
+    environment:
+      # REDIS_PASSWORD is injected by the staging deploy workflow from the
+      # STAGING_REDIS_PASSWORD GitHub secret. No .env file is ever written
+      # to disk on the staging server.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    # No host port mapping — internal network only.
     volumes:
       - myfinpro-staging-redis:/data
     networks:
       - myfinpro-staging-net
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test:
+        [
+          'CMD-SHELL',
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping; else redis-cli ping; fi',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "$$REDIS_PASSWORD"
+        else
+          exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+        fi
 
   # ───── Haraka SMTP Server ─────
   haraka:
