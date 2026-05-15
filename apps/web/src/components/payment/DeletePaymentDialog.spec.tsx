@@ -87,7 +87,9 @@ describe('DeletePaymentDialog', () => {
     expect((screen.getByTestId('delete-mode-this') as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByTestId('delete-mode-all')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'personal'));
+    await waitFor(() =>
+      expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'personal', expect.any(AbortSignal)),
+    );
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
   });
@@ -124,7 +126,9 @@ describe('DeletePaymentDialog', () => {
     );
     expect((screen.getByTestId('delete-mode-all') as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'all'));
+    await waitFor(() =>
+      expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'all', expect.any(AbortSignal)),
+    );
   });
 
   it('switching to "this scope" with two accessible: scope picker visible and confirm sends ?scope=group:<id>', async () => {
@@ -161,7 +165,9 @@ describe('DeletePaymentDialog', () => {
     expect(screen.getByTestId('delete-scope-picker')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('delete-scope-pick-group:g-1'));
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'group:g-1'));
+    await waitFor(() =>
+      expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'group:g-1', expect.any(AbortSignal)),
+    );
   });
 
   it('zero accessible scopes: shows error and disables Delete', () => {
@@ -343,6 +349,8 @@ describe('DeletePaymentDialog', () => {
     );
     expect(screen.queryByTestId('delete-mode-all')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'group:g-1'));
+    await waitFor(() =>
+      expect(mockRemovePayment).toHaveBeenCalledWith('p-1', 'group:g-1', expect.any(AbortSignal)),
+    );
   });
 });

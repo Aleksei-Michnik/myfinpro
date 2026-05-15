@@ -63,7 +63,9 @@ describe('DeleteCategoryDialog', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('delete-category-confirm'));
-    await waitFor(() => expect(mockRemove).toHaveBeenCalledWith('c-1', {}));
+    await waitFor(() =>
+      expect(mockRemove).toHaveBeenCalledWith('c-1', {}, expect.any(AbortSignal)),
+    );
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
   });
 

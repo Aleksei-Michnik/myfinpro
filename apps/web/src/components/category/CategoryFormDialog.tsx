@@ -1,12 +1,21 @@
 'use client';
 
 // Phase 6 · Iteration 6.16 — create / edit category dialog.
+// Phase 6 · Iteration 6.16.4 — save flow migrated to
+// useAsyncOperation({ scope: 'control' }). Save button shows
+// <ButtonSpinner>; inputs disabled + aria-busy on the form. Cancel
+// triggers cancel(). Domain errors (CATEGORY_SLUG_CONFLICT) still map
+// to the per-field name error. Network/timeout/HTTP failures shown via
+// the inline error banner with Retry.
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useCategories } from '@/lib/category/category-context';
 import type { CategoryApiError, CategoryDto } from '@/lib/category/types';
+import { useAsyncOperation } from '@/lib/ui';
 
 export type CategoryFormScope = { type: 'personal' } | { type: 'group'; groupId: string };
 
@@ -48,18 +57,23 @@ export function CategoryFormDialog({
   const [icon, setIcon] = useState(category?.icon ?? '');
   const [color, setColor] = useState(category?.color ?? '');
   const [direction, setDirection] = useState<'IN' | 'OUT' | 'BOTH'>(category?.direction ?? 'BOTH');
-  const [errors, setErrors] = useState<{ name?: string; color?: string; generic?: string }>({});
-  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; color?: string }>({});
+
+  const saveOp = useAsyncOperation<CategoryDto>({ scope: 'control' });
+  const isLoading = saveOp.isLoading;
 
   // Reset on `open` toggle / category change.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      saveOp.cancel();
+      return;
+    }
     setName(category?.name ?? '');
     setIcon(category?.icon ?? '');
     setColor(category?.color ?? '');
     setDirection(category?.direction ?? 'BOTH');
     setErrors({});
-    setSaving(false);
+    saveOp.reset();
   }, [open, category]);
 
   if (!open) return null;
@@ -73,41 +87,64 @@ export function CategoryFormDialog({
     return Object.keys(nextErr).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const runSave = () => {
     if (!validate()) return;
-    setSaving(true);
-    try {
-      if (mode === 'create') {
-        const created = await create({
-          name: name.trim(),
-          scope: scope.type,
-          groupId: scope.type === 'group' ? scope.groupId : undefined,
-          direction,
-          icon: icon.trim() || undefined,
-          color: color.trim() || undefined,
-        });
+    void saveOp
+      .run(async (signal) => {
+        try {
+          if (mode === 'create') {
+            return await create(
+              {
+                name: name.trim(),
+                scope: scope.type,
+                groupId: scope.type === 'group' ? scope.groupId : undefined,
+                direction,
+                icon: icon.trim() || undefined,
+                color: color.trim() || undefined,
+              },
+              signal,
+            );
+          }
+          if (!category) throw new Error('Missing category');
+          return await update(
+            category.id,
+            {
+              name: name.trim(),
+              icon: icon.trim() || undefined,
+              color: color.trim() || undefined,
+              direction,
+            },
+            signal,
+          );
+        } catch (e) {
+          const err = e as CategoryApiError;
+          if (err.errorCode === 'CATEGORY_SLUG_CONFLICT') {
+            setErrors({ name: t('errors.duplicate') });
+            // Treat as a domain error; suppress the inline banner by
+            // landing in 'aborted'.
+            throw new DOMException('domain', 'AbortError');
+          }
+          throw e;
+        }
+      })
+      .then((created) => {
+        if (!created) return;
         onSaved(created);
-      } else if (category) {
-        const updated = await update(category.id, {
-          name: name.trim(),
-          icon: icon.trim() || undefined,
-          color: color.trim() || undefined,
-          direction,
-        });
-        onSaved(updated);
-      }
-      onClose();
-    } catch (e) {
-      const err = e as CategoryApiError;
-      if (err.errorCode === 'CATEGORY_SLUG_CONFLICT') {
-        setErrors({ name: t('errors.duplicate') });
-      } else {
-        setErrors({ generic: t('errors.generic', { message: err.message || '' }) });
-      }
-      setSaving(false);
-    }
+        onClose();
+      });
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSave();
+  };
+
+  const handleCancel = () => {
+    saveOp.cancel();
+    onClose();
+  };
+
+  const showBanner = saveOp.isError && saveOp.error !== null && saveOp.error.reason !== 'aborted';
 
   return (
     <div
@@ -119,6 +156,7 @@ export function CategoryFormDialog({
     >
       <form
         onSubmit={handleSubmit}
+        aria-busy={isLoading || undefined}
         className="w-full max-w-md space-y-4 rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
       >
         <h2
@@ -139,7 +177,7 @@ export function CategoryFormDialog({
             onChange={(e) => setName(e.target.value)}
             placeholder={t('name.placeholder')}
             maxLength={100}
-            disabled={saving}
+            disabled={isLoading}
             data-testid="category-form-name"
             className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
@@ -161,14 +199,14 @@ export function CategoryFormDialog({
             onChange={(e) => setIcon(e.target.value)}
             placeholder={t('icon.placeholder')}
             maxLength={4}
-            disabled={saving}
+            disabled={isLoading}
             data-testid="category-form-icon"
             className="w-24 rounded-md border border-gray-300 bg-white px-3 py-2 text-center text-base text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
         </label>
 
         {/* Direction */}
-        <fieldset>
+        <fieldset disabled={isLoading}>
           <legend className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('direction.label')}
           </legend>
@@ -188,7 +226,7 @@ export function CategoryFormDialog({
                   value={d}
                   checked={direction === d}
                   onChange={() => setDirection(d)}
-                  disabled={saving}
+                  disabled={isLoading}
                   data-testid={`category-form-direction-${d}`}
                   className="sr-only"
                 />
@@ -210,7 +248,7 @@ export function CategoryFormDialog({
               onChange={(e) => setColor(e.target.value)}
               placeholder={t('color.placeholder')}
               maxLength={7}
-              disabled={saving}
+              disabled={isLoading}
               data-testid="category-form-color"
               className="w-32 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
@@ -230,7 +268,7 @@ export function CategoryFormDialog({
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  disabled={saving}
+                  disabled={isLoading}
                   aria-label={c}
                   data-testid={`category-form-preset-${c}`}
                   className={`h-7 w-7 rounded-full border-2 ${
@@ -245,10 +283,17 @@ export function CategoryFormDialog({
           </div>
         </div>
 
-        {errors.generic && (
-          <p className="text-sm text-red-600" data-testid="category-form-generic-error">
-            {errors.generic}
-          </p>
+        {showBanner && saveOp.error && (
+          <div data-testid="category-form-generic-error">
+            <InlineErrorBanner
+              reason={saveOp.error.reason}
+              httpStatus={saveOp.error.httpStatus}
+              message={t('errors.generic', { message: saveOp.error.message ?? '' })}
+              onRetry={() => void saveOp.retry()}
+              retrying={isLoading}
+              data-testid="category-form-error-banner"
+            />
+          </div>
         )}
 
         <div className="flex justify-end gap-2">
@@ -256,8 +301,7 @@ export function CategoryFormDialog({
             type="button"
             variant="secondary"
             size="md"
-            onClick={onClose}
-            disabled={saving}
+            onClick={handleCancel}
             data-testid="category-form-cancel"
           >
             {t('cancel')}
@@ -266,10 +310,18 @@ export function CategoryFormDialog({
             type="submit"
             variant="primary"
             size="md"
-            disabled={saving}
+            disabled={isLoading}
+            aria-busy={isLoading}
             data-testid="category-form-submit"
           >
-            {saving ? t('saving') : t('save')}
+            {isLoading ? (
+              <span className="inline-flex items-center gap-2">
+                <ButtonSpinner />
+                <span>{t('saving')}</span>
+              </span>
+            ) : (
+              t('save')
+            )}
           </Button>
         </div>
       </form>

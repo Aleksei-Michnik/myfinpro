@@ -1,12 +1,12 @@
 'use client';
 
 // Phase 6 · Iteration 6.13 — create + edit ONE_TIME payment dialog.
-//
-// Wraps <PaymentScopeSelector>, <PaymentCategoryPicker>, <PaymentTypeSelector>.
-// Validation is synchronous and runs on save. `computeDiff` builds a minimal
-// PATCH payload in edit mode so the backend audit log stays tight.
-// RECURRING / INSTALLMENT / LOAN / MORTGAGE are not supported here — the
-// dialog shows a read-only notice when asked to edit such a payment.
+// Phase 6 · Iteration 6.16.4 — save flow migrated to useAsyncOperation
+// ({ scope: 'control' }). Save button shows <ButtonSpinner>, disabled
+// inputs and aria-busy on the form. Cancel triggers cancel() on the
+// in-flight op. Network/timeout/HTTP failures shown via inline banner
+// with Retry. Domain errors (PAYMENT_INVALID_*) still map to per-field
+// errors.
 
 import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
@@ -15,6 +15,8 @@ import { PaymentCategoryPicker } from './PaymentCategoryPicker';
 import { PaymentScopeSelector } from './PaymentScopeSelector';
 import { PaymentTypeSelector } from './PaymentTypeSelector';
 import { Button } from '@/components/ui/Button';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
@@ -34,6 +36,7 @@ import type {
   PaymentType,
   UpdatePaymentInput,
 } from '@/lib/payment/types';
+import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentFormDialogProps {
   open: boolean;
@@ -218,10 +221,12 @@ export function PaymentFormDialog({
 
   const [state, setState] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<ValidationErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const initialStateRef = useRef(initialState);
+
+  // Save flow runs through the universal control-scope async hook.
+  const saveOp = useAsyncOperation<PaymentSummary | null>({ scope: 'control' });
+  const isLoading = saveOp.isLoading;
 
   // Reset when reopened.
   useEffect(() => {
@@ -229,10 +234,13 @@ export function PaymentFormDialog({
       setState(initialState);
       initialStateRef.current = initialState;
       setErrors({});
-      setFormError(null);
-      setSaving(false);
       setConfirmDiscard(false);
+      saveOp.reset();
+    } else {
+      // Closed mid-flight → abort.
+      saveOp.cancel();
     }
+    // saveOp identity is stable; including it would re-fire on unrelated churn.
   }, [open, initialState]);
 
   // Focus direction button on open.
@@ -261,8 +269,6 @@ export function PaymentFormDialog({
       : [];
 
   // For edit mode with non-accessible attributions, constrain scopes to only the accessible ones.
-  // Initial state already set above from payment.attributions; but we want the UI to only
-  // operate on the accessible subset. Replace scopes initial when edit + non-accessibles exist.
   useEffect(() => {
     if (mode === 'edit' && payment && nonAccessibleAttributions.length > 0) {
       setState((s) => ({ ...s, scopes: accessibleInitial }));
@@ -327,49 +333,88 @@ export function PaymentFormDialog({
 
   // ── Save handler ─────────────────────────────────────────────────────────
 
-  async function onSave() {
+  // Domain-error code → per-field error mapping. Anything else falls through
+  // to the inline banner driven by the async-operation hook.
+  function applyDomainError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const code = (err as Error & { errorCode?: string }).errorCode;
+    if (!code) return false;
+    if (code === 'PAYMENT_INVALID_AMOUNT') {
+      setErrors((prev) => ({ ...prev, amount: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'PAYMENT_INVALID_CURRENCY') {
+      setErrors((prev) => ({ ...prev, currency: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'PAYMENT_INVALID_DATE') {
+      setErrors((prev) => ({ ...prev, date: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'PAYMENT_CATEGORY_INVALID' || code === 'PAYMENT_CATEGORY_DIRECTION_MISMATCH') {
+      setErrors((prev) => ({ ...prev, category: extractMessage(err) }));
+      return true;
+    }
+    return false;
+  }
+
+  function runSave() {
     if (isGeneratedOccurrence) return;
     const { ok, amountCents, occurredAtIso, errors: valErrors } = validate(state, categories);
     setErrors(valErrors);
     if (!ok) return;
 
-    setSaving(true);
-    setFormError(null);
-    try {
-      if (mode === 'create') {
-        const payload: CreatePaymentInput = {
-          direction: state.direction,
-          type: 'ONE_TIME',
-          amountCents,
-          currency: state.currency,
-          occurredAt: occurredAtIso,
-          categoryId: state.categoryId!,
-          note: state.note.length > 0 ? state.note : undefined,
-          attributions: state.scopes,
-        };
-        const created = await createPayment(payload);
-        setLastUsedDirection(state.direction);
-        setLastUsedScopes(state.scopes);
-        setLastUsedType('ONE_TIME');
-        onSaved(created);
-        onClose();
-      } else if (mode === 'edit' && payment) {
-        const diff = computeDiff(payment, state, amountCents, occurredAtIso);
-        if (Object.keys(diff).length === 0) {
-          // Nothing to change — just close.
-          onSaved(payment);
-          onClose();
-          return;
+    void saveOp
+      .run(async (signal) => {
+        try {
+          if (mode === 'create') {
+            const payload: CreatePaymentInput = {
+              direction: state.direction,
+              type: 'ONE_TIME',
+              amountCents,
+              currency: state.currency,
+              occurredAt: occurredAtIso,
+              categoryId: state.categoryId!,
+              note: state.note.length > 0 ? state.note : undefined,
+              attributions: state.scopes,
+            };
+            const created = await createPayment(payload, signal);
+            return created as PaymentSummary | null;
+          }
+          if (mode === 'edit' && payment) {
+            const diff = computeDiff(payment, state, amountCents, occurredAtIso);
+            if (Object.keys(diff).length === 0) return payment;
+            const result = await updatePayment(payment.id, diff, signal);
+            return result;
+          }
+          return null;
+        } catch (e) {
+          if (applyDomainError(e)) {
+            // Treat as domain error — surface via per-field errors only.
+            // Re-throw an aborted-style error so the hook does not show the
+            // inline banner (it lands in 'error' with reason='aborted',
+            // which we ignore in render).
+            throw new DOMException('domain', 'AbortError');
+          }
+          throw e;
         }
-        const result = await updatePayment(payment.id, diff);
+      })
+      .then((result) => {
+        if (result === undefined) return; // either error, abort, or domain-error
+        if (mode === 'create') {
+          setLastUsedDirection(state.direction);
+          setLastUsedScopes(state.scopes);
+          setLastUsedType('ONE_TIME');
+        }
         onSaved(result);
         onClose();
-      }
-    } catch (e) {
-      setFormError(extractMessage(e));
-    } finally {
-      setSaving(false);
-    }
+      });
+  }
+
+  function handleCancel() {
+    saveOp.cancel();
+    if (isDirty()) setConfirmDiscard(true);
+    else onClose();
   }
 
   // ── Draft-change detection for ESC confirm ───────────────────────────────
@@ -396,7 +441,7 @@ export function PaymentFormDialog({
         if (isDirty()) {
           setConfirmDiscard(true);
         } else {
-          onClose();
+          handleCancel();
         }
       }
     };
@@ -409,7 +454,7 @@ export function PaymentFormDialog({
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       if (isDirty()) setConfirmDiscard(true);
-      else onClose();
+      else handleCancel();
     }
   };
 
@@ -419,6 +464,12 @@ export function PaymentFormDialog({
     defaultCurrency,
     ...[...CURRENCY_CODES].filter((c) => c !== defaultCurrency).sort(),
   ];
+
+  // Suppress 'aborted' (which we use for domain-error short-circuit) from
+  // the inline banner.
+  const showBanner = saveOp.isError && saveOp.error !== null && saveOp.error.reason !== 'aborted';
+
+  const allInputsDisabled = isGeneratedOccurrence || isLoading;
 
   return (
     <div
@@ -439,7 +490,7 @@ export function PaymentFormDialog({
           </h3>
           <button
             type="button"
-            onClick={() => (isDirty() ? setConfirmDiscard(true) : onClose())}
+            onClick={() => (isDirty() ? setConfirmDiscard(true) : handleCancel())}
             className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
             aria-label={t('close')}
             data-testid="payment-form-close"
@@ -458,223 +509,241 @@ export function PaymentFormDialog({
           </div>
         )}
 
-        {/* Direction */}
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('direction')}
+        <form
+          aria-busy={isLoading || undefined}
+          onSubmit={(e) => {
+            e.preventDefault();
+            runSave();
+          }}
+        >
+          {/* Direction */}
+          <div className="mb-3">
+            <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              {t('direction')}
+            </div>
+            <div
+              className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
+              role="group"
+              aria-label={t('direction')}
+            >
+              <button
+                ref={directionRef}
+                type="button"
+                onClick={() => setState((s) => ({ ...s, direction: 'IN' }))}
+                disabled={allInputsDisabled}
+                aria-pressed={state.direction === 'IN'}
+                data-testid="form-direction-in"
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  state.direction === 'IN'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                {t('directionIn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setState((s) => ({ ...s, direction: 'OUT' }))}
+                disabled={allInputsDisabled}
+                aria-pressed={state.direction === 'OUT'}
+                data-testid="form-direction-out"
+                className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
+                  state.direction === 'OUT'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                {t('directionOut')}
+              </button>
+            </div>
           </div>
-          <div
-            className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
-            role="group"
-            aria-label={t('direction')}
-          >
-            <button
-              ref={directionRef}
-              type="button"
-              onClick={() => setState((s) => ({ ...s, direction: 'IN' }))}
-              disabled={isGeneratedOccurrence}
-              aria-pressed={state.direction === 'IN'}
-              data-testid="form-direction-in"
-              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                state.direction === 'IN'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              {t('directionIn')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setState((s) => ({ ...s, direction: 'OUT' }))}
-              disabled={isGeneratedOccurrence}
-              aria-pressed={state.direction === 'OUT'}
-              data-testid="form-direction-out"
-              className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
-                state.direction === 'OUT'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              {t('directionOut')}
-            </button>
+
+          {/* Amount + Currency + Date */}
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('amount')}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={state.amountStr}
+                onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
+                placeholder={t('amountPlaceholder')}
+                disabled={allInputsDisabled}
+                data-testid="form-amount"
+                aria-invalid={!!errors.amount}
+                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+              {errors.amount && (
+                <span className="mt-1 text-xs text-red-600" data-testid="form-error-amount">
+                  {errors.amount}
+                </span>
+              )}
+            </label>
+
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('currency')}</span>
+              <select
+                value={state.currency}
+                onChange={(e) => setState((s) => ({ ...s, currency: e.target.value }))}
+                disabled={allInputsDisabled}
+                data-testid="form-currency"
+                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              >
+                {sortedCurrencies.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              {errors.currency && (
+                <span className="mt-1 text-xs text-red-600" data-testid="form-error-currency">
+                  {errors.currency}
+                </span>
+              )}
+            </label>
+
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('date')}</span>
+              <input
+                type="date"
+                value={state.occurredAt}
+                onChange={(e) => setState((s) => ({ ...s, occurredAt: e.target.value }))}
+                disabled={allInputsDisabled}
+                data-testid="form-date"
+                aria-invalid={!!errors.date}
+                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+              {errors.date && (
+                <span className="mt-1 text-xs text-red-600" data-testid="form-error-date">
+                  {errors.date}
+                </span>
+              )}
+            </label>
           </div>
-        </div>
 
-        {/* Amount + Currency + Date */}
-        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('amount')}</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={state.amountStr}
-              onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
-              placeholder={t('amountPlaceholder')}
-              disabled={isGeneratedOccurrence}
-              data-testid="form-amount"
-              aria-invalid={!!errors.amount}
-              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          {/* Category */}
+          <div className="mb-3">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('category')}</span>
+              <div className="mt-1">
+                <PaymentCategoryPicker
+                  direction={state.direction}
+                  value={state.categoryId}
+                  onChange={(id) => setState((s) => ({ ...s, categoryId: id }))}
+                  categories={categories}
+                  disabled={allInputsDisabled}
+                  testId="form-category-picker"
+                />
+              </div>
+            </label>
+            {errors.category && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
+                {errors.category}
+              </span>
+            )}
+          </div>
+
+          {/* Scopes */}
+          <div className="mb-3">
+            <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              {t('attributedTo')}
+            </div>
+            <PaymentScopeSelector
+              value={state.scopes}
+              onChange={(next) => setState((s) => ({ ...s, scopes: next }))}
+              disabled={allInputsDisabled}
             />
-            {errors.amount && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-amount">
-                {errors.amount}
+            {errors.scopes && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-scopes">
+                {errors.scopes}
               </span>
             )}
-          </label>
+            {nonAccessibleAttributions.length > 0 && (
+              <p
+                className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
+                data-testid="form-non-accessible-footnote"
+              >
+                {t('othersCount', { count: nonAccessibleAttributions.length })}{' '}
+                {t('othersPreserved')}
+              </p>
+            )}
+          </div>
 
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('currency')}</span>
-            <select
-              value={state.currency}
-              onChange={(e) => setState((s) => ({ ...s, currency: e.target.value }))}
-              disabled={isGeneratedOccurrence}
-              data-testid="form-currency"
-              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            >
-              {sortedCurrencies.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            {errors.currency && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-currency">
-                {errors.currency}
+          {/* Note */}
+          <div className="mb-3">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('noteLabel')}</span>
+              <textarea
+                value={state.note}
+                onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
+                placeholder={t('notePlaceholder')}
+                rows={2}
+                maxLength={2000}
+                disabled={allInputsDisabled}
+                data-testid="form-note"
+                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+            </label>
+            {errors.note && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-note">
+                {errors.note}
               </span>
             )}
-          </label>
+          </div>
 
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('date')}</span>
-            <input
-              type="date"
-              value={state.occurredAt}
-              onChange={(e) => setState((s) => ({ ...s, occurredAt: e.target.value }))}
-              disabled={isGeneratedOccurrence}
-              data-testid="form-date"
-              aria-invalid={!!errors.date}
-              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          {/* Type */}
+          <div className="mb-4">
+            <PaymentTypeSelector
+              value={state.type}
+              onChange={(next) => setState((s) => ({ ...s, type: next }))}
+              disabled={allInputsDisabled}
             />
-            {errors.date && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-date">
-                {errors.date}
-              </span>
-            )}
-          </label>
-        </div>
+          </div>
 
-        {/* Category */}
-        <div className="mb-3">
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('category')}</span>
-            <div className="mt-1">
-              <PaymentCategoryPicker
-                direction={state.direction}
-                value={state.categoryId}
-                onChange={(id) => setState((s) => ({ ...s, categoryId: id }))}
-                categories={categories}
-                disabled={isGeneratedOccurrence}
-                testId="form-category-picker"
+          {showBanner && saveOp.error && (
+            <div className="mb-3" data-testid="form-api-error">
+              <InlineErrorBanner
+                reason={saveOp.error.reason}
+                httpStatus={saveOp.error.httpStatus}
+                message={t('errorGeneric', { message: saveOp.error.message ?? '' })}
+                onRetry={() => void saveOp.retry()}
+                retrying={isLoading}
+                data-testid="form-api-error-banner"
               />
             </div>
-          </label>
-          {errors.category && (
-            <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
-              {errors.category}
-            </span>
           )}
-        </div>
 
-        {/* Scopes */}
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('attributedTo')}
-          </div>
-          <PaymentScopeSelector
-            value={state.scopes}
-            onChange={(next) => setState((s) => ({ ...s, scopes: next }))}
-            disabled={isGeneratedOccurrence}
-          />
-          {errors.scopes && (
-            <span className="mt-1 text-xs text-red-600" data-testid="form-error-scopes">
-              {errors.scopes}
-            </span>
-          )}
-          {nonAccessibleAttributions.length > 0 && (
-            <p
-              className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
-              data-testid="form-non-accessible-footnote"
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={handleCancel}
+              data-testid="form-cancel"
             >
-              {t('othersCount', { count: nonAccessibleAttributions.length })} {t('othersPreserved')}
-            </p>
-          )}
-        </div>
-
-        {/* Note */}
-        <div className="mb-3">
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('noteLabel')}</span>
-            <textarea
-              value={state.note}
-              onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
-              placeholder={t('notePlaceholder')}
-              rows={2}
-              maxLength={2000}
-              disabled={isGeneratedOccurrence}
-              data-testid="form-note"
-              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            />
-          </label>
-          {errors.note && (
-            <span className="mt-1 text-xs text-red-600" data-testid="form-error-note">
-              {errors.note}
-            </span>
-          )}
-        </div>
-
-        {/* Type */}
-        <div className="mb-4">
-          <PaymentTypeSelector
-            value={state.type}
-            onChange={(next) => setState((s) => ({ ...s, type: next }))}
-            disabled={isGeneratedOccurrence}
-          />
-        </div>
-
-        {formError && (
-          <div
-            className="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
-            role="alert"
-            data-testid="form-api-error"
-          >
-            {t('errorGeneric', { message: formError })}
+              {t('cancel')}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="flex-1"
+              disabled={isLoading || isGeneratedOccurrence}
+              aria-busy={isLoading}
+              data-testid="form-save"
+            >
+              {isLoading ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <ButtonSpinner />
+                  <span>{t('saving')}</span>
+                </span>
+              ) : (
+                t('save')
+              )}
+            </Button>
           </div>
-        )}
-
-        <div className="flex gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            className="flex-1"
-            onClick={() => (isDirty() ? setConfirmDiscard(true) : onClose())}
-            disabled={saving}
-            data-testid="form-cancel"
-          >
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            className="flex-1"
-            onClick={onSave}
-            disabled={saving || isGeneratedOccurrence}
-            data-testid="form-save"
-          >
-            {saving ? t('saving') : t('save')}
-          </Button>
-        </div>
+        </form>
 
         {confirmDiscard && (
           <div

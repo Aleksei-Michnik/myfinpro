@@ -126,14 +126,17 @@ describe('CategoryFormDialog', () => {
     fireEvent.click(screen.getByTestId('category-form-direction-OUT'));
     fireEvent.click(screen.getByTestId('category-form-submit'));
     await waitFor(() =>
-      expect(mockCreate).toHaveBeenCalledWith({
-        name: 'Hobby',
-        scope: 'personal',
-        groupId: undefined,
-        direction: 'OUT',
-        icon: '🎨',
-        color: '#7c3aed',
-      }),
+      expect(mockCreate).toHaveBeenCalledWith(
+        {
+          name: 'Hobby',
+          scope: 'personal',
+          groupId: undefined,
+          direction: 'OUT',
+          icon: '🎨',
+          color: '#7c3aed',
+        },
+        expect.any(AbortSignal),
+      ),
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
@@ -181,7 +184,11 @@ describe('CategoryFormDialog', () => {
     });
     fireEvent.click(screen.getByTestId('category-form-submit'));
     await waitFor(() =>
-      expect(mockUpdate).toHaveBeenCalledWith('c-1', expect.objectContaining({ name: 'Hobbies' })),
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'c-1',
+        expect.objectContaining({ name: 'Hobbies' }),
+        expect.any(AbortSignal),
+      ),
     );
   });
 

@@ -720,6 +720,7 @@
       "errorPost": "פרסום התגובה נכשל. {message}",
       "errorEdit": "שמירת התגובה נכשלה. {message}",
       "errorDelete": "מחיקת התגובה נכשלה. {message}",
+      "alreadyRemoved": "תגובה זו כבר הוסרה.",
       "validation": {
         "tooShort": "התגובה לא יכולה להיות ריקה.",
         "tooLong": "התגובה יכולה להכיל עד 2000 תווים."

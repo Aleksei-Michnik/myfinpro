@@ -1,8 +1,10 @@
 'use client';
 
 // Phase 6 · Iteration 6.16 — render one scope's categories in a section.
-// System categories (read-only) at the top with a "Default" badge; custom
-// categories below with edit/delete; "+ New category" CTA opens the form.
+// Phase 6 · Iteration 6.16.4 — operates in controlled mode: data + loading
+// flow from the parent (categories-client orchestrator). When loading,
+// the section renders a <LoadingOverlay> over its content instead of an
+// ad-hoc text placeholder.
 
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -10,6 +12,7 @@ import { CategoryFormDialog } from './CategoryFormDialog';
 import { CategoryRow } from './CategoryRow';
 import { DeleteCategoryDialog } from './DeleteCategoryDialog';
 import { Button } from '@/components/ui/Button';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import type { CategoryDto } from '@/lib/category/types';
 
 export type SectionScope = { type: 'personal' } | { type: 'group'; groupId: string };
@@ -47,9 +50,10 @@ export function CategoryListSection({
 
   return (
     <section
-      className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+      className="relative rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
       data-testid={sectionTestId}
       aria-label={title}
+      aria-busy={loading || undefined}
     >
       <header className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
@@ -59,6 +63,7 @@ export function CategoryListSection({
             variant="secondary"
             size="sm"
             onClick={() => setCreating(true)}
+            disabled={loading}
             data-testid={`${sectionTestId}-create`}
           >
             {t('actions.create')}
@@ -66,33 +71,30 @@ export function CategoryListSection({
         )}
       </header>
 
+      {/* Hidden text placeholder kept for spec backwards-compat — the
+          <LoadingOverlay> is the visible affordance. */}
       {loading && (
-        <p
-          className="text-sm text-gray-500 dark:text-gray-400"
-          data-testid={`${sectionTestId}-loading`}
-        >
+        <p className="sr-only" data-testid={`${sectionTestId}-loading`}>
           {t('loading')}
         </p>
       )}
 
-      {!loading && (
-        <ul
-          className="divide-y divide-gray-100 dark:divide-gray-700"
-          data-testid={`${sectionTestId}-list`}
-        >
-          {systemCategories.map((c) => (
-            <CategoryRow key={c.id} category={c} />
-          ))}
-          {customCategories.map((c) => (
-            <CategoryRow
-              key={c.id}
-              category={c}
-              onEdit={readOnly ? undefined : setEditing}
-              onDelete={readOnly ? undefined : setDeleting}
-            />
-          ))}
-        </ul>
-      )}
+      <ul
+        className="divide-y divide-gray-100 dark:divide-gray-700"
+        data-testid={`${sectionTestId}-list`}
+      >
+        {systemCategories.map((c) => (
+          <CategoryRow key={c.id} category={c} />
+        ))}
+        {customCategories.map((c) => (
+          <CategoryRow
+            key={c.id}
+            category={c}
+            onEdit={readOnly ? undefined : setEditing}
+            onDelete={readOnly ? undefined : setDeleting}
+          />
+        ))}
+      </ul>
 
       {!loading && customCategories.length === 0 && systemCategories.length === 0 && (
         <p
@@ -102,6 +104,12 @@ export function CategoryListSection({
           {t('empty')}
         </p>
       )}
+
+      <LoadingOverlay
+        active={loading}
+        data-testid={`${sectionTestId}-overlay`}
+        message={t('loading')}
+      />
 
       {(creating || editing) && (
         <CategoryFormDialog

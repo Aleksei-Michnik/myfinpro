@@ -62,7 +62,9 @@ describe('PaymentCommentInput', () => {
       target: { value: '  hi  ' },
     });
     fireEvent.click(screen.getByTestId('comment-input-submit'));
-    await waitFor(() => expect(mockPostComment).toHaveBeenCalledWith('p-1', 'hi'));
+    await waitFor(() =>
+      expect(mockPostComment).toHaveBeenCalledWith('p-1', 'hi', expect.any(AbortSignal)),
+    );
   });
 
   it('fires onPosted with the returned comment', async () => {
@@ -92,10 +94,43 @@ describe('PaymentCommentInput', () => {
     const textarea = screen.getByTestId('comment-input-textarea') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'keepme' } });
     fireEvent.click(screen.getByTestId('comment-input-submit'));
-    await waitFor(() =>
-      expect(screen.getByTestId('comment-input-error')).toHaveTextContent('errorPost'),
-    );
+    // Network errors now surface in the inline error banner (control-scope).
+    await waitFor(() => expect(screen.getByTestId('comment-input-banner')).toBeInTheDocument());
+    expect(screen.getByTestId('comment-input-banner-retry')).toBeInTheDocument();
     expect(textarea.value).toBe('keepme');
+  });
+
+  it('clicking Retry on the banner re-runs the post and clears on success', async () => {
+    mockPostComment.mockRejectedValueOnce(new Error('boom'));
+    mockPostComment.mockResolvedValueOnce(makeComment());
+    render(<PaymentCommentInput paymentId="p-1" onPosted={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('comment-input-textarea'), {
+      target: { value: 'keepme' },
+    });
+    fireEvent.click(screen.getByTestId('comment-input-submit'));
+    await waitFor(() => expect(screen.getByTestId('comment-input-banner')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('comment-input-banner-retry'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('comment-input-banner')).not.toBeInTheDocument(),
+    );
+    expect(mockPostComment).toHaveBeenCalledTimes(2);
+  });
+
+  it('aria-busy=true on root + textarea/submit disabled while posting', async () => {
+    let resolveFn: (c: Comment) => void = () => {};
+    mockPostComment.mockImplementationOnce(
+      () => new Promise<Comment>((resolve) => (resolveFn = resolve)),
+    );
+    render(<PaymentCommentInput paymentId="p-1" onPosted={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('comment-input-textarea'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByTestId('comment-input-submit'));
+    await waitFor(() => {
+      const root = screen.getByTestId('payment-comment-input');
+      expect(root.getAttribute('aria-busy')).toBe('true');
+    });
+    expect(screen.getByTestId('comment-input-textarea')).toBeDisabled();
+    expect(screen.getByTestId('comment-input-submit')).toBeDisabled();
+    resolveFn(makeComment());
   });
 
   it('submit button is disabled when the disabled prop is true', () => {

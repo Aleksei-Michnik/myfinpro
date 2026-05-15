@@ -18,6 +18,11 @@ vi.mock('@/components/auth/ProtectedRoute', () => ({
   ProtectedRoute: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/lib/category/category-context', () => ({
   useCategories: () => ({
     fetchAll: mockFetchAll,

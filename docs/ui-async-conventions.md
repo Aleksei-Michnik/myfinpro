@@ -143,22 +143,71 @@ return (
 );
 ```
 
-## Migration scope (iteration 6.16.2)
+## Inline error banner (control-scope failures)
 
-**Migrated:**
+Control-scope dialogs (form save, delete confirm, post comment) should NOT open `<RetryReturnDialog>` on failure — that pushes another modal on top of a user-driven action. Use the small inline banner instead.
+
+```tsx
+import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+
+const op = useAsyncOperation<MyEntity>({ scope: 'control' });
+
+return (
+  <form
+    aria-busy={op.isLoading || undefined}
+    onSubmit={(e) => {
+      e.preventDefault();
+      runSave();
+    }}
+  >
+    {/* … inputs … */}
+    {op.isError && op.error && op.error.reason !== 'aborted' && (
+      <InlineErrorBanner
+        reason={op.error.reason}
+        httpStatus={op.error.httpStatus}
+        message={t('errorGeneric', { message: op.error.message ?? '' })}
+        onRetry={() => void op.retry()}
+        retrying={op.isLoading}
+      />
+    )}
+    <button type="submit" disabled={op.isLoading} aria-busy={op.isLoading}>
+      {op.isLoading ? <ButtonSpinner /> : t('save')}
+    </button>
+  </form>
+);
+```
+
+The component renders `role="alert"` so AT announces the failure, plus a Retry button that re-issues the last op via `op.retry()` (using the 30-s retry timeout). Domain-error code paths (per-field errors) bypass the banner by throwing `new DOMException('domain', 'AbortError')` from inside `op.run(...)`, which lands the hook in `error` with `reason='aborted'` — gated out of the banner condition above.
+
+## Migration scope
+
+### Iteration 6.16.2 — Initial migration
 
 - `/payments` filter loading — full state machine (URL deferred until commit, `<LoadingOverlay>`, `<RetryReturnDialog>`).
 - Page navigation flash — `<UIStatusProvider>` registers a 250 ms page-scope op on `usePathname` changes; `<PageProgressBar>` reflects.
 - Star toggle — `useStarToggle` rebuilt on top of `useAsyncOperation({ scope: 'control' })`. The star button shows `<ButtonSpinner>` while in flight.
 - `<PaymentsList>` "Load more" pagination — `useAsyncOperation({ scope: 'container' })` with `<InlineLoader>` inside the button and inline retry on failure.
 
-**Deferred to future iterations:**
+### Iteration 6.16.4 — Comments + form/delete dialogs + categories
 
-- Comment input/list (Phase 6 future iteration).
-- Payment form dialog save (Phase 6 future iteration).
-- Delete payment confirm (Phase 6 future iteration).
-- Categories CRUD (Phase 6 future iteration).
-- Dashboard widgets (Phase 10; widgets are read-only, low-urgency).
+- `<PaymentCommentInput>` — submit uses `scope='control'` with `<ButtonSpinner>` + inline error banner on network failure.
+- `<PaymentCommentList>` — initial fetch + "Load earlier" use `scope='container'`. Per-comment edit save and soft-delete use `scope='control'` per row. `<RetryReturnDialog>` on initial-fetch failure. 410 Gone surfaces as a friendly "already removed" message + list refresh.
+- `<PaymentFormDialog>` — save uses `scope='control'` with `<ButtonSpinner>`, disabled inputs, `aria-busy` on the form. Cancel triggers `cancel()`. Per-field domain errors (`PAYMENT_INVALID_*`) preserved.
+- `<DeletePaymentDialog>` — delete uses `scope='control'`. Scope inputs disabled while in flight. Cancel aborts gracefully.
+- `<PaymentCategoryPicker>` — self-fetch migrated to `scope='container'`.
+- `categories-client` (`/settings/categories`) — initial fetch uses `scope='page'` so the top progress bar continues past the route change. `<RetryReturnDialog>` on failure with Return = navigate back to settings.
+- `<CategoryListSection>` — controlled mode (data + loading from parent); renders `<LoadingOverlay>` during initial load.
+- `<CategoryFormDialog>` — save uses `scope='control'`. `CATEGORY_SLUG_CONFLICT` → field error; network failures → inline banner.
+- `<DeleteCategoryDialog>` — both attempts of the `CATEGORY_IN_USE` two-step flow share one hook; `replaceWithCategoryId` is a re-`run()` on the same hook instance.
+- `category-context` — `AbortSignal` threaded through `fetchAll`, `create`, `update`, `remove`.
+
+**Deferred (still self-fetch — out of scope by design):**
+
+- Dashboard widgets (`<RecentActivity>`, `<StarredPayments>`, `<TotalsCard>`, `<ScopeEntryCards>`, `<GroupPaymentsTab>`) — read-only, low-priority.
+- Auth flows (login, register, password change, email verification) — distinct surface, not requested.
+- Group management (members, invites, settings) — same reasoning.
+
+These will migrate when their next feature iteration touches them.
 
 ## Rule (recorded in `.kilocode/rules/dna.md`)
 

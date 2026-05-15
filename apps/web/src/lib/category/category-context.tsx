@@ -1,11 +1,11 @@
 'use client';
 
 // Phase 6 · Iteration 6.16 — CategoryProvider.
-// Mirrors the structure of [`payment-context.tsx`](apps/web/src/lib/payment/payment-context.tsx)
-// — bearer-token auth via `useAuth().getAccessToken()`, per-method fetch,
-// normalised `CategoryApiError` with `errorCode`. Maintains an in-memory
-// cache of categories grouped by scope; mutations update the cache so
-// downstream components (pickers, pages) re-render without a full reload.
+// Phase 6 · Iteration 6.16.4 — every public method now accepts an optional
+// `AbortSignal` so callers wired through `useAsyncOperation()` can cancel
+// in-flight requests on dialog close, retry, or component unmount. The
+// signal is forwarded to the underlying `fetch` call (mirror of the
+// payment-context wiring done in 6.16.2).
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {
@@ -23,7 +23,7 @@ interface CategoryContextValue {
   categories: CategoryDto[];
   isLoading: boolean;
   error: string | null;
-  fetchAll(): Promise<CategoryDto[]>;
+  fetchAll(signal?: AbortSignal): Promise<CategoryDto[]>;
   /** System categories (read-only). */
   systemCategories(): CategoryDto[];
   /** Personal (user-owned) categories. */
@@ -31,9 +31,13 @@ interface CategoryContextValue {
   /** Group-owned categories for a given group id. */
   groupCategories(groupId: string): CategoryDto[];
   findById(id: string): CategoryDto | undefined;
-  create(input: CreateCategoryInput): Promise<CategoryDto>;
-  update(id: string, input: UpdateCategoryInput): Promise<CategoryDto>;
-  remove(id: string, opts?: DeleteCategoryOptions): Promise<DeleteCategoryResult>;
+  create(input: CreateCategoryInput, signal?: AbortSignal): Promise<CategoryDto>;
+  update(id: string, input: UpdateCategoryInput, signal?: AbortSignal): Promise<CategoryDto>;
+  remove(
+    id: string,
+    opts?: DeleteCategoryOptions,
+    signal?: AbortSignal,
+  ): Promise<DeleteCategoryResult>;
   clearError(): void;
 }
 
@@ -61,6 +65,20 @@ function extractMessage(err: unknown): string {
   return 'Unexpected error';
 }
 
+/** Aborts are user-initiated and shouldn't surface as a top-level error. */
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (
+    err &&
+    typeof err === 'object' &&
+    'name' in err &&
+    (err as { name: string }).name === 'AbortError'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function CategoryProvider({ children }: { children: ReactNode }) {
   const { getAccessToken } = useAuth();
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -76,33 +94,41 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
     };
   }, [getAccessToken]);
 
-  const fetchAll = useCallback(async (): Promise<CategoryDto[]> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/categories`, {
-        method: 'GET',
-        headers: authHeaders(),
-      });
-      if (!res.ok) await throwApiError(res, 'Failed to load categories');
-      const data = (await res.json()) as CategoryDto[];
-      setCategories(data);
-      return data;
-    } catch (e) {
-      setError(extractMessage(e));
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [authHeaders]);
+  const fetchAll = useCallback(
+    async (signal?: AbortSignal): Promise<CategoryDto[]> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_BASE}/categories`, {
+          method: 'GET',
+          headers: authHeaders(),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to load categories');
+        const data = (await res.json()) as CategoryDto[];
+        setCategories(data);
+        return data;
+      } catch (e) {
+        // Aborts are silent — user-initiated cancellations from useAsyncOperation.
+        if (!isAbortError(e)) {
+          setError(extractMessage(e));
+        }
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authHeaders],
+  );
 
   const create = useCallback(
-    async (input: CreateCategoryInput): Promise<CategoryDto> => {
+    async (input: CreateCategoryInput, signal?: AbortSignal): Promise<CategoryDto> => {
       setError(null);
       const res = await fetch(`${API_BASE}/categories`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(input),
+        signal,
       });
       if (!res.ok) await throwApiError(res, 'Failed to create category');
       const created = (await res.json()) as CategoryDto;
@@ -113,12 +139,13 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
   );
 
   const update = useCallback(
-    async (id: string, input: UpdateCategoryInput): Promise<CategoryDto> => {
+    async (id: string, input: UpdateCategoryInput, signal?: AbortSignal): Promise<CategoryDto> => {
       setError(null);
       const res = await fetch(`${API_BASE}/categories/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: authHeaders(),
         body: JSON.stringify(input),
+        signal,
       });
       if (!res.ok) await throwApiError(res, 'Failed to update category');
       const updated = (await res.json()) as CategoryDto;
@@ -129,7 +156,11 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
   );
 
   const remove = useCallback(
-    async (id: string, opts?: DeleteCategoryOptions): Promise<DeleteCategoryResult> => {
+    async (
+      id: string,
+      opts?: DeleteCategoryOptions,
+      signal?: AbortSignal,
+    ): Promise<DeleteCategoryResult> => {
       setError(null);
       const qs = opts?.replaceWithCategoryId
         ? `?replaceWithCategoryId=${encodeURIComponent(opts.replaceWithCategoryId)}`
@@ -137,6 +168,7 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${API_BASE}/categories/${encodeURIComponent(id)}${qs}`, {
         method: 'DELETE',
         headers: authHeaders(),
+        signal,
       });
       if (!res.ok) await throwApiError(res, 'Failed to delete category');
       const result = (await res.json()) as DeleteCategoryResult;

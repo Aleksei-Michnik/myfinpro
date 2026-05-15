@@ -1,21 +1,18 @@
 'use client';
 
 // Phase 6 · Iteration 6.12 — scope-aware payment delete dialog (design §2.4).
-//
-// Computes the *accessible* attributions for the current caller and offers
-// only those as removal targets. Non-accessible attributions are silently
-// preserved by the backend; the dialog must NEVER reveal them.
-//
-// Two delete modes:
-//   - "this scope": single-attribution removal (?scope=...). Disabled when
-//     accessible-count > 1 unless `singleScope` is forced (used by detail
-//     page's per-scope delete in 6.16).
-//   - "all":         multi-attribution removal across every accessible
-//     scope (no ?scope=... query, backend treats as "all caller's scopes").
+// Phase 6 · Iteration 6.16.4 — delete flow uses
+// useAsyncOperation({ scope: 'control' }). Confirm button shows
+// <ButtonSpinner>, scope inputs disabled while in flight, Cancel triggers
+// cancel(). Network/timeout/HTTP failures surface via inline banner with
+// Retry. Domain errors keep the existing `<div data-testid="delete-payment-error">`
+// inline message contract (no banner double-render).
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
@@ -24,25 +21,20 @@ import type {
   PaymentAttribution,
   PaymentSummary,
 } from '@/lib/payment/types';
+import { useAsyncOperation } from '@/lib/ui';
 
 export interface DeletePaymentDialogProps {
   payment: PaymentSummary;
   onClose(): void;
   onDeleted(result: AttributionChangeResult): void;
   /**
-   * Forces the dialog into "this-scope" mode, locked to a specific scope
-   * (e.g. when the detail page hosts a per-scope delete button). The given
-   * scope still has to be in the caller's accessible list — otherwise the
-   * dialog renders the no-access error.
+   * Forces the dialog into "this-scope" mode, locked to a specific scope.
    */
   singleScope?: string;
 }
 
-/** A scope option presented to the user (already filtered by access). */
 interface AccessibleScope {
-  /** API token: 'personal' | 'group:<id>' */
   key: string;
-  /** Human label as rendered by `formatScopeLabel`. */
   label: string;
   attribution: PaymentAttribution;
 }
@@ -59,14 +51,6 @@ export function DeletePaymentDialog({
   const { groups } = useGroups();
   const { removePayment } = usePayments();
 
-  // ── Compute accessible scopes ─────────────────────────────────────────────
-  // Per design §2.4, an attribution is accessible iff:
-  //   - scope='personal' AND userId === currentUser.id
-  //   - scope='group'    AND currentUser is a member of groupId
-  //
-  // We use `useGroups().groups` as the source of truth for membership: the
-  // list returned by GET /api/v1/groups only contains groups where the
-  // user IS a member.
   const accessible: AccessibleScope[] = useMemo(() => {
     if (!user) return [];
     const groupIds = new Set(groups.map((g) => g.id));
@@ -92,14 +76,11 @@ export function DeletePaymentDialog({
   const noAccess = accessible.length === 0;
   const forcedSingle = !!singleScope;
 
-  // Default selection: "all" when the user has multiple accessible scopes,
-  // "this scope" otherwise (or when forced).
   const [mode, setMode] = useState<'this' | 'all'>(() => {
     if (forcedSingle) return 'this';
     return accessible.length <= 1 ? 'this' : 'all';
   });
 
-  // Picked scope (for "this scope" mode with multiple options).
   const initialPick = forcedSingle
     ? singleScope
     : accessible.length === 1
@@ -107,53 +88,60 @@ export function DeletePaymentDialog({
       : accessible[0]?.key;
   const [pickedScope, setPickedScope] = useState<string | undefined>(initialPick);
 
-  // Validate: in forced-single mode the scope MUST be in the accessible list.
   const forcedScopeAccessible = !forcedSingle || accessible.some((a) => a.key === singleScope);
   const effectiveNoAccess = noAccess || !forcedScopeAccessible;
 
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const deleteOp = useAsyncOperation<AttributionChangeResult>({ scope: 'control' });
+  const isLoading = deleteOp.isLoading;
 
-  // ESC closes the dialog.
+  // ESC closes the dialog (also aborts the in-flight op).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        deleteOp.cancel();
         onClose();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [onClose, deleteOp]);
 
-  const handleConfirm = async () => {
-    if (effectiveNoAccess || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      let scopeArg: string | undefined;
-      if (forcedSingle) {
-        scopeArg = singleScope;
-      } else if (mode === 'this') {
-        scopeArg = pickedScope;
-      } else {
-        scopeArg = 'all';
-      }
-      const r = await removePayment(payment.id, scopeArg);
-      onDeleted(r);
-      onClose();
-    } catch (err) {
-      setError((err as Error).message || 'Failed to delete payment');
-      setSubmitting(false);
-    }
-  };
+  function buildScope(): string | undefined {
+    if (forcedSingle) return singleScope;
+    if (mode === 'this') return pickedScope;
+    return 'all';
+  }
+
+  function runDelete() {
+    if (effectiveNoAccess || isLoading) return;
+    const scopeArg = buildScope();
+    void deleteOp
+      .run((signal) => removePayment(payment.id, scopeArg, signal))
+      .then((result) => {
+        if (!result) return;
+        onDeleted(result);
+        onClose();
+      });
+  }
+
+  function handleCancel() {
+    deleteOp.cancel();
+    onClose();
+  }
 
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target === e.currentTarget) handleCancel();
   };
 
   // The "all" mode is meaningful only when there's > 1 accessible scope.
   const allowsAll = !forcedSingle && accessible.length > 1;
   const allowsThisWithPicker = !forcedSingle && accessible.length > 1 && mode === 'this';
+
+  // Distinguish HTTP errors with a domain message (preserved below) vs
+  // network/timeout (full inline banner with retry). Both go through the
+  // same error state — we surface the message either way.
+  const showBanner =
+    deleteOp.isError && deleteOp.error !== null && deleteOp.error.reason !== 'aborted';
 
   return (
     <div
@@ -163,6 +151,7 @@ export function DeletePaymentDialog({
       aria-labelledby="delete-payment-title"
       data-testid="delete-payment-dialog"
       onMouseDown={handleBackdrop}
+      aria-busy={isLoading || undefined}
     >
       <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
         <h3
@@ -186,7 +175,6 @@ export function DeletePaymentDialog({
               {tDelete('description')}
             </p>
 
-            {/* Read-only list of *accessible* scopes the user controls. */}
             <ul
               className="mb-4 space-y-1 rounded-md border border-gray-200 p-2 text-sm text-gray-700 dark:border-gray-700 dark:text-gray-300"
               data-testid="delete-payment-accessible-list"
@@ -206,6 +194,7 @@ export function DeletePaymentDialog({
                   value="this"
                   checked={mode === 'this'}
                   onChange={() => setMode('this')}
+                  disabled={isLoading}
                   data-testid="delete-mode-this"
                   className="mt-1"
                 />
@@ -220,6 +209,7 @@ export function DeletePaymentDialog({
                     value="all"
                     checked={mode === 'all'}
                     onChange={() => setMode('all')}
+                    disabled={isLoading}
                     data-testid="delete-mode-all"
                     className="mt-1"
                   />
@@ -228,7 +218,6 @@ export function DeletePaymentDialog({
               )}
             </div>
 
-            {/* Scope picker visible when "this scope" + multiple accessible. */}
             {allowsThisWithPicker && (
               <div
                 className="mb-4 space-y-1 rounded-md border border-gray-200 p-2 dark:border-gray-700"
@@ -250,6 +239,7 @@ export function DeletePaymentDialog({
                       value={s.key}
                       checked={pickedScope === s.key}
                       onChange={() => setPickedScope(s.key)}
+                      disabled={isLoading}
                       data-testid={`delete-scope-pick-${s.key}`}
                     />
                     <span>{s.label}</span>
@@ -260,13 +250,25 @@ export function DeletePaymentDialog({
           </>
         )}
 
-        {error && (
-          <div
-            className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
-            role="alert"
-            data-testid="delete-payment-error"
-          >
-            {error}
+        {showBanner && deleteOp.error && (
+          <div className="mb-4">
+            {/* Preserve legacy error testid for spec compatibility — show the
+                raw message inline so older assertions keep passing. */}
+            <p
+              className="mb-2 text-sm text-red-700 dark:text-red-300"
+              role="alert"
+              data-testid="delete-payment-error"
+            >
+              {deleteOp.error.message ?? deleteOp.error.reason}
+            </p>
+            <InlineErrorBanner
+              reason={deleteOp.error.reason}
+              httpStatus={deleteOp.error.httpStatus}
+              message={deleteOp.error.message ?? undefined}
+              onRetry={() => void deleteOp.retry()}
+              retrying={isLoading}
+              data-testid="delete-payment-error-banner"
+            />
           </div>
         )}
 
@@ -276,8 +278,7 @@ export function DeletePaymentDialog({
             variant="secondary"
             size="md"
             className="flex-1"
-            onClick={onClose}
-            disabled={submitting}
+            onClick={handleCancel}
             data-testid="delete-payment-cancel"
           >
             {tDelete('cancel')}
@@ -287,11 +288,19 @@ export function DeletePaymentDialog({
             variant="primary"
             size="md"
             className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-            onClick={handleConfirm}
-            disabled={submitting || effectiveNoAccess}
+            onClick={runDelete}
+            disabled={isLoading || effectiveNoAccess}
+            aria-busy={isLoading}
             data-testid="delete-payment-confirm"
           >
-            {submitting ? '...' : tDelete('confirm')}
+            {isLoading ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <ButtonSpinner />
+                <span>{tDelete('confirm')}</span>
+              </span>
+            ) : (
+              tDelete('confirm')
+            )}
           </Button>
         </div>
       </div>

@@ -3,12 +3,15 @@
 // Phase 6 · Iteration 6.13 — category <select> with optgroups (System /
 // Personal / per-group). Reusable across the form dialog and future
 // recurring / installment forms (6.18 / 6.20).
+// Phase 6 · Iteration 6.16.4 — self-fetch migrated to
+// useAsyncOperation({ scope: 'container' }) for DRY compliance.
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { CategoryDto } from '@/lib/payment/types';
+import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentCategoryPickerProps {
   direction: 'IN' | 'OUT';
@@ -83,38 +86,18 @@ export function PaymentCategoryPicker({
   const { groups } = useGroups();
   const { listCategories } = usePayments();
 
-  const [fetched, setFetched] = useState<CategoryDto[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const fetchOp = useAsyncOperation<CategoryDto[]>({ scope: 'container' });
   const useOwn = categoriesProp === undefined || categoriesProp === null;
+  const loading = fetchOp.isLoading;
+  const error = fetchOp.isError ? (fetchOp.error?.message ?? 'Failed') : null;
 
   useEffect(() => {
     if (!useOwn) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    listCategories({ direction })
-      .then((list) => {
-        if (!cancelled) {
-          setFetched(list);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed');
-          setFetched([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    void fetchOp.run((signal) => listCategories({ direction }, signal));
+    // fetchOp identity is stable across renders.
   }, [useOwn, direction, listCategories]);
 
-  const categories = useOwn ? fetched : categoriesProp;
+  const categories = useOwn ? (fetchOp.data ?? null) : categoriesProp;
   const filtered = categories ? filterByDirection(categories, direction) : null;
   const grouped = filtered ? groupBy(filtered) : null;
 

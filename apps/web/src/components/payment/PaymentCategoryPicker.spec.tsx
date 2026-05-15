@@ -45,7 +45,12 @@ describe('PaymentCategoryPicker', () => {
   it('fetches on mount when categories prop is undefined', async () => {
     listCategoriesMock.mockResolvedValueOnce([]);
     render(<PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
-    await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledWith({ direction: 'OUT' }));
+    await waitFor(() =>
+      expect(listCategoriesMock).toHaveBeenCalledWith(
+        { direction: 'OUT' },
+        expect.any(AbortSignal),
+      ),
+    );
   });
 
   it('refetches when direction changes', async () => {
@@ -56,7 +61,7 @@ describe('PaymentCategoryPicker', () => {
     await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(1));
     rerender(<PaymentCategoryPicker direction="IN" value={null} onChange={() => {}} />);
     await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(2));
-    expect(listCategoriesMock.mock.calls[1][0].direction).toBe('IN');
+    expect((listCategoriesMock.mock.calls[1][0] as { direction: string }).direction).toBe('IN');
   });
 
   it('does not fetch when categories prop is provided', async () => {

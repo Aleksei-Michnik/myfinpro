@@ -57,7 +57,11 @@ describe('PaymentCommentList', () => {
     mockListComments.mockResolvedValueOnce(resp([makeComment()]));
     render(<PaymentCommentList paymentId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('comment-row-c-1')).toBeInTheDocument());
-    expect(mockListComments).toHaveBeenCalledWith('p-1', { cursor: undefined });
+    expect(mockListComments).toHaveBeenCalledWith(
+      'p-1',
+      { cursor: undefined },
+      expect.any(AbortSignal),
+    );
   });
 
   it('shows empty state when no rows', async () => {
@@ -111,7 +115,7 @@ describe('PaymentCommentList', () => {
     );
     fireEvent.click(screen.getByTestId('comment-edit-save-c-1'));
     await waitFor(() => expect(screen.getByTestId('comment-content-c-1')).toHaveTextContent('new'));
-    expect(mockEditComment).toHaveBeenCalledWith('p-1', 'c-1', 'new');
+    expect(mockEditComment).toHaveBeenCalledWith('p-1', 'c-1', 'new', expect.any(AbortSignal));
   });
 
   it('cancel on edit discards local changes', async () => {
@@ -133,7 +137,7 @@ describe('PaymentCommentList', () => {
     mockDeleteComment.mockResolvedValueOnce(undefined);
     fireEvent.click(screen.getByTestId('comment-confirm-delete-c-1'));
     await waitFor(() => expect(screen.queryByTestId('comment-row-c-1')).not.toBeInTheDocument());
-    expect(mockDeleteComment).toHaveBeenCalledWith('p-1', 'c-1');
+    expect(mockDeleteComment).toHaveBeenCalledWith('p-1', 'c-1', expect.any(AbortSignal));
   });
 
   it('delete error stays on the row with message', async () => {

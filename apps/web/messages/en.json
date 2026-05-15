@@ -720,6 +720,7 @@
       "errorPost": "Could not post comment. {message}",
       "errorEdit": "Could not save comment. {message}",
       "errorDelete": "Could not delete comment. {message}",
+      "alreadyRemoved": "This comment was already removed.",
       "validation": {
         "tooShort": "Comment can't be empty.",
         "tooLong": "Comment must be 2000 characters or fewer."

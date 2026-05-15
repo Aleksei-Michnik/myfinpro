@@ -215,12 +215,14 @@ describe('PaymentFormDialog', () => {
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
     const payload = createPaymentMock.mock.calls[0][0];
+    const signal = createPaymentMock.mock.calls[0][1];
     expect(payload.amountCents).toBe(1250);
     expect(payload.currency).toBe('USD');
     expect(payload.type).toBe('ONE_TIME');
     expect(payload.categoryId).toBe('c-out');
     expect(payload.attributions).toEqual([{ scope: 'personal' }]);
     expect(payload.occurredAt).toBe('2026-04-25T00:00:00Z');
+    expect(signal).toBeInstanceOf(AbortSignal);
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
   });
@@ -233,7 +235,7 @@ describe('PaymentFormDialog', () => {
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-    expect(localStorage.getItem('myfin.payment.lastDirection')).toBe('OUT');
+    await waitFor(() => expect(localStorage.getItem('myfin.payment.lastDirection')).toBe('OUT'));
     expect(localStorage.getItem('myfin.payment.lastType')).toBe('ONE_TIME');
     expect(localStorage.getItem('myfin.payment.lastScopes')).toContain('personal');
   });

@@ -1,16 +1,25 @@
 'use client';
 
 // Phase 6 · Iteration 6.14 — cursor-paginated comments thread.
-// Oldest → newest; "Load earlier comments" prepends older entries.
-// Exposes an imperative `appendComment` handle so the input box (owned by
-// the parent page) can push the newly posted comment into the bottom of
-// the list without triggering a refetch.
+// Phase 6 · Iteration 6.16.4 — every async surface migrated to
+// useAsyncOperation:
+//   - initial fetch & "Load earlier" use scope='container'
+//   - per-comment edit save & soft-delete use scope='control' per row
+// Initial-fetch failure → <RetryReturnDialog>. Load-more failure →
+// inline retry inside the button (matches PaymentsList).
+// 410 Gone on a soft-delete surfaces as a friendly "already removed"
+// message and refreshes the list.
 
 import { useTranslations } from 'next-intl';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { InlineLoader } from '@/components/ui/InlineLoader';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { usePayments } from '@/lib/payment/payment-context';
-import type { Comment } from '@/lib/payment/types';
+import type { Comment, CommentListResponse } from '@/lib/payment/types';
+import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentCommentListProps {
   paymentId: string;
@@ -49,67 +58,82 @@ function isEdited(c: Comment): boolean {
   );
 }
 
+type LoadMode = 'initial' | 'more';
+
 export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCommentListProps>(
   function PaymentCommentList({ paymentId, allowMutations = true, pollingIntervalMs = 0 }, ref) {
     const t = useTranslations('payments.comments');
+    const tUi = useTranslations('ui.errors');
     const { listComments, editComment, deleteComment } = usePayments();
 
     const [items, setItems] = useState<Comment[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [firstLoad, setFirstLoad] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+    const lastLoadModeRef = useRef<LoadMode>('initial');
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [editError, setEditError] = useState<string | null>(null);
-    const [savingEdit, setSavingEdit] = useState(false);
 
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [deleteError, setDeleteError] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    // Pin these for stable effect deps.
+    // Container-scope hook drives both initial fetch and "Load earlier".
+    // We use one hook so a new run() on Load-earlier cancels any stale
+    // in-flight initial request automatically.
+    const listOp = useAsyncOperation<CommentListResponse>({ scope: 'container' });
+    // Per-comment control-scope ops; one hook reused across rows.
+    const editOp = useAsyncOperation<Comment>({ scope: 'control' });
+    const deleteOp = useAsyncOperation<{ ok: true }>({ scope: 'control' });
+
+    // Pin paymentId / cursor for stable callbacks.
     const paymentIdRef = useRef(paymentId);
     paymentIdRef.current = paymentId;
     const cursorRef = useRef(cursor);
     cursorRef.current = cursor;
 
     const load = useCallback(
-      async (reset: boolean) => {
-        setLoading(true);
-        setError(null);
-        try {
-          const r = await listComments(paymentIdRef.current, {
-            cursor: reset ? undefined : (cursorRef.current ?? undefined),
+      (mode: LoadMode) => {
+        lastLoadModeRef.current = mode;
+        return listOp
+          .run((signal) =>
+            listComments(
+              paymentIdRef.current,
+              { cursor: mode === 'initial' ? undefined : (cursorRef.current ?? undefined) },
+              signal,
+            ),
+          )
+          .then((r) => {
+            if (!r) return;
+            setItems((prev) => (mode === 'initial' ? r.data : [...r.data, ...prev]));
+            setCursor(r.nextCursor);
+            setHasMore(r.hasMore);
+            setHasLoadedOnce(true);
           });
-          setItems((prev) => (reset ? r.data : [...r.data, ...prev]));
-          setCursor(r.nextCursor);
-          setHasMore(r.hasMore);
-        } catch (e) {
-          setError((e as Error).message || 'Failed to load comments');
-        } finally {
-          setLoading(false);
-          setFirstLoad(false);
-        }
       },
-      [listComments],
+      [listOp, listComments],
     );
 
+    // Initial load on paymentId change — guarded so it doesn't re-fire on
+    // listOp identity churn.
+    const lastPaymentIdRef = useRef<string | null>(null);
     useEffect(() => {
+      if (lastPaymentIdRef.current === paymentId) return;
+      lastPaymentIdRef.current = paymentId;
       setItems([]);
       setCursor(null);
       setHasMore(false);
-      setFirstLoad(true);
-      void load(true);
+      setHasLoadedOnce(false);
+      void load('initial');
     }, [paymentId, load]);
 
-    // Polling: refetch first page at interval.
+    // Polling: refetch first page at interval (unaffected by error/loading).
     useEffect(() => {
       if (!pollingIntervalMs || pollingIntervalMs <= 0) return;
       const id = setInterval(() => {
-        void load(true);
+        void load('initial');
       }, pollingIntervalMs);
       return () => clearInterval(id);
     }, [pollingIntervalMs, load]);
@@ -128,15 +152,18 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
       setEditingId(c.id);
       setEditValue(c.content);
       setEditError(null);
+      editOp.reset();
     };
 
     const cancelEdit = () => {
+      // Aborts an in-flight save if the user cancels mid-flight.
+      editOp.cancel();
       setEditingId(null);
       setEditValue('');
       setEditError(null);
     };
 
-    const saveEdit = async (c: Comment) => {
+    const saveEdit = (c: Comment) => {
       const trimmed = editValue.trim();
       if (trimmed.length === 0) {
         setEditError(t('validation.tooShort'));
@@ -146,54 +173,127 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
         setEditError(t('validation.tooLong'));
         return;
       }
-      setSavingEdit(true);
-      try {
-        const updated = await editComment(paymentId, c.id, trimmed);
-        setItems((prev) => prev.map((x) => (x.id === c.id ? updated : x)));
-        cancelEdit();
-      } catch (e) {
-        setEditError(t('errorEdit', { message: (e as Error).message || '' }));
-      } finally {
-        setSavingEdit(false);
-      }
+      setEditError(null);
+      void editOp
+        .run((signal) => editComment(paymentId, c.id, trimmed, signal))
+        .then((updated) => {
+          if (!updated) return;
+          setItems((prev) => prev.map((x) => (x.id === c.id ? updated : x)));
+          setEditingId(null);
+          setEditValue('');
+        });
     };
 
-    const confirmDelete = async (c: Comment) => {
+    const beginConfirmDelete = (id: string) => {
+      setConfirmDeleteId(id);
+      setDeleteError(null);
+      deleteOp.reset();
+    };
+
+    const cancelConfirmDelete = () => {
+      deleteOp.cancel();
+      setConfirmDeleteId(null);
+      setDeleteError(null);
+    };
+
+    const confirmDelete = (c: Comment) => {
       setDeletingId(c.id);
       setDeleteError(null);
-      try {
-        await deleteComment(paymentId, c.id);
-        setItems((prev) => prev.filter((x) => x.id !== c.id));
-        setConfirmDeleteId(null);
-      } catch (e) {
-        setDeleteError(t('errorDelete', { message: (e as Error).message || '' }));
-      } finally {
-        setDeletingId(null);
-      }
+      void deleteOp
+        .run(async (signal) => {
+          await deleteComment(paymentId, c.id, signal);
+          return { ok: true } as const;
+        })
+        .then((res) => {
+          // res is undefined on error / abort; skip optimistic removal.
+          if (!res) return;
+          setItems((prev) => prev.filter((x) => x.id !== c.id));
+          setConfirmDeleteId(null);
+        })
+        .finally(() => setDeletingId(null));
     };
+
+    // Map a delete-op error to UI state (special-case 410 Gone).
+    const deleteIsError = deleteOp.isError;
+    const deleteErrorInfo = deleteOp.error;
+    useEffect(() => {
+      if (!deleteIsError || !deleteErrorInfo) return;
+      if (deleteErrorInfo.httpStatus === 410) {
+        // Already deleted on the server — friendly message + refresh list.
+        setDeleteError(t('alreadyRemoved'));
+        if (confirmDeleteId) {
+          setItems((prev) => prev.filter((x) => x.id !== confirmDeleteId));
+        }
+        setConfirmDeleteId(null);
+        void load('initial');
+      } else {
+        setDeleteError(
+          t('errorDelete', {
+            message: deleteErrorInfo.message ?? deleteErrorInfo.reason,
+          }),
+        );
+      }
+    }, [deleteIsError, deleteErrorInfo, confirmDeleteId, load, t]);
+
+    // Map an edit-op error to UI inline message under the textarea.
+    const editIsError = editOp.isError;
+    const editErrorInfo = editOp.error;
+    useEffect(() => {
+      if (!editIsError || !editErrorInfo) return;
+      setEditError(t('errorEdit', { message: editErrorInfo.message ?? editErrorInfo.reason }));
+    }, [editIsError, editErrorInfo, t]);
 
     const visible = items.filter((c) => c.deletedAt === null);
     const locale =
       typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en';
 
+    const initialError =
+      listOp.isError && lastLoadModeRef.current === 'initial' && !hasLoadedOnce
+        ? listOp.error
+        : null;
+    const loadMoreError =
+      listOp.isError && lastLoadModeRef.current === 'more' ? listOp.error : null;
+    const isInitialLoading =
+      listOp.isLoading && lastLoadModeRef.current === 'initial' && !hasLoadedOnce;
+    const isLoadingMore = listOp.isLoading && lastLoadModeRef.current === 'more';
+
     return (
-      <div className="space-y-3" data-testid="payment-comment-list" aria-live="polite">
+      <div className="relative space-y-3" data-testid="payment-comment-list" aria-live="polite">
         {hasMore && (
           <div className="flex justify-center">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => void load(false)}
-              disabled={loading}
+              onClick={() => void load('more')}
+              disabled={listOp.isLoading}
+              aria-busy={isLoadingMore}
               data-testid="comment-load-earlier"
             >
-              {loading ? t('loadingMore') : t('loadEarlier')}
+              {isLoadingMore ? <InlineLoader label={t('loadingMore')} /> : t('loadEarlier')}
             </Button>
           </div>
         )}
 
-        {firstLoad && loading && (
+        {loadMoreError && (
+          <div
+            className="rounded-md bg-red-50 p-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300"
+            role="alert"
+            data-testid="comment-load-more-error"
+          >
+            {t('errorLoading', { message: loadMoreError.message ?? '' })}{' '}
+            <button
+              type="button"
+              onClick={() => void load('more')}
+              className="font-medium underline"
+              data-testid="comment-load-more-retry"
+            >
+              {tUi('retry')}
+            </button>
+          </div>
+        )}
+
+        {isInitialLoading && (
           <div
             className="py-4 text-center text-sm text-gray-500 dark:text-gray-400"
             data-testid="comment-list-loading"
@@ -203,17 +303,7 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
           </div>
         )}
 
-        {error && (
-          <div
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
-            role="alert"
-            data-testid="comment-list-error"
-          >
-            {t('errorLoading', { message: error })}
-          </div>
-        )}
-
-        {!loading && !error && visible.length === 0 && !firstLoad && (
+        {!listOp.isLoading && !listOp.isError && visible.length === 0 && hasLoadedOnce && (
           <p
             className="py-4 text-center text-sm text-gray-500 dark:text-gray-400"
             data-testid="comment-list-empty"
@@ -226,6 +316,8 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
           {visible.map((c) => {
             const editing = editingId === c.id;
             const confirming = confirmDeleteId === c.id;
+            const savingThisRow = editing && editOp.isLoading;
+            const deletingThisRow = deletingId === c.id && deleteOp.isLoading;
             return (
               <li
                 key={c.id}
@@ -257,6 +349,7 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
                       onChange={(e) => setEditValue(e.target.value)}
                       maxLength={2000}
                       rows={3}
+                      disabled={savingThisRow}
                       data-testid={`comment-edit-textarea-${c.id}`}
                       className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     />
@@ -270,18 +363,25 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
                         type="button"
                         variant="primary"
                         size="sm"
-                        onClick={() => void saveEdit(c)}
-                        disabled={savingEdit}
+                        onClick={() => saveEdit(c)}
+                        disabled={savingThisRow}
+                        aria-busy={savingThisRow}
                         data-testid={`comment-edit-save-${c.id}`}
                       >
-                        {t('save')}
+                        {savingThisRow ? (
+                          <span className="inline-flex items-center gap-2">
+                            <ButtonSpinner />
+                            <span>{t('save')}</span>
+                          </span>
+                        ) : (
+                          t('save')
+                        )}
                       </Button>
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
                         onClick={cancelEdit}
-                        disabled={savingEdit}
                         data-testid={`comment-edit-cancel-${c.id}`}
                       >
                         {t('cancel')}
@@ -309,10 +409,7 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setConfirmDeleteId(c.id);
-                        setDeleteError(null);
-                      }}
+                      onClick={() => beginConfirmDelete(c.id)}
                       className="text-red-700 hover:underline dark:text-red-300"
                       data-testid={`comment-delete-${c.id}`}
                     >
@@ -337,21 +434,25 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
                         variant="primary"
                         size="sm"
                         className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-                        onClick={() => void confirmDelete(c)}
-                        disabled={deletingId === c.id}
+                        onClick={() => confirmDelete(c)}
+                        disabled={deletingThisRow}
+                        aria-busy={deletingThisRow}
                         data-testid={`comment-confirm-delete-${c.id}`}
                       >
-                        {deletingId === c.id ? t('deleting') : t('deleteConfirm')}
+                        {deletingThisRow ? (
+                          <span className="inline-flex items-center gap-2">
+                            <ButtonSpinner />
+                            <span>{t('deleteConfirm')}</span>
+                          </span>
+                        ) : (
+                          t('deleteConfirm')
+                        )}
                       </Button>
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
-                        onClick={() => {
-                          setConfirmDeleteId(null);
-                          setDeleteError(null);
-                        }}
-                        disabled={deletingId === c.id}
+                        onClick={cancelConfirmDelete}
                         data-testid={`comment-confirm-cancel-${c.id}`}
                       >
                         {t('cancel')}
@@ -363,6 +464,16 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
             );
           })}
         </ul>
+
+        <LoadingOverlay active={isInitialLoading} data-testid="comment-list-overlay" />
+
+        <RetryReturnDialog
+          open={!!initialError}
+          reason={initialError?.reason ?? 'unknown'}
+          httpStatus={initialError?.httpStatus}
+          onRetry={() => void load('initial')}
+          onReturn={() => listOp.cancel()}
+        />
       </div>
     );
   },
