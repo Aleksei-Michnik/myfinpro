@@ -5315,3 +5315,145 @@ on white text yields ≈ 4.83 : 1 — also AA-compliant.
 
 **Next** — 6.17 (BullMQ schedules + worker — Context7 + npm latest
 will be checked next).
+
+### Iteration 6.17.1 — BullMQ infrastructure (Redis + @nestjs/bullmq) (2026-05-15)
+
+Foundation for the recurring-payment scheduler. The API doesn't have
+schedule endpoints yet (those land in 6.17.2) and there's no worker
+processor (lands in 6.17.3) — this iteration just made Redis
+reachable, wired BullMQ into the Nest API, and exposed a deep
+health-check that reports Redis status.
+
+**Versions installed.** Captured from `npm view` at commit time:
+
+```
+$ npm view bullmq version
+5.76.8
+$ npm view @nestjs/bullmq version
+11.0.4
+$ npm view @nestjs/bullmq peerDependencies
+{
+  '@nestjs/common': '^10.0.0 || ^11.0.0',
+  '@nestjs/core': '^10.0.0 || ^11.0.0',
+  bullmq: '^3.0.0 || ^4.0.0 || ^5.0.0'
+}
+```
+
+`ioredis` is bundled internally by BullMQ v5+ — pnpm install never
+asked for it as a top-level dep, so the workspace lockfile only gained
+`bullmq` and `@nestjs/bullmq` plus their transitive deps.
+
+**Files created / modified.**
+
+| File                                                                                                                    | Change                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`apps/api/src/config/redis.config.ts`](../apps/api/src/config/redis.config.ts:1)                                       | New — typed `buildRedisConnection(ConfigService)` factory + `redis` config namespace.        |
+| [`apps/api/src/queue/queue.constants.ts`](../apps/api/src/queue/queue.constants.ts:1)                                   | New — `PAYMENT_OCCURRENCES_QUEUE = 'payment-occurrences'`.                                   |
+| [`apps/api/src/queue/queue.module.ts`](../apps/api/src/queue/queue.module.ts:1)                                         | New — `@Global` `QueueModule` wires `BullModule.forRootAsync` + `registerQueue`.             |
+| [`apps/api/src/queue/queue.module.spec.ts`](../apps/api/src/queue/queue.module.spec.ts:1)                               | New — unit smoke test asserts `@InjectQueue` resolves.                                       |
+| [`apps/api/src/health/indicators/redis.indicator.ts`](../apps/api/src/health/indicators/redis.indicator.ts:1)           | Replaced placeholder with real `queue.client.ping()` check.                                  |
+| [`apps/api/src/health/indicators/redis.indicator.spec.ts`](../apps/api/src/health/indicators/redis.indicator.spec.ts:1) | New — unit covers up / non-PONG / connection-error → `HealthCheckError`.                     |
+| [`apps/api/src/health/health.controller.spec.ts`](../apps/api/src/health/health.controller.spec.ts:1)                   | Updated — provides a fake Queue token; asserts `/health` skips Redis, `/details` pings it.   |
+| [`apps/api/src/app.module.ts`](../apps/api/src/app.module.ts:1)                                                         | Imports `QueueModule` after `ConfigModule` and `PrismaModule`.                               |
+| [`apps/api/test/integration/queue.integration.spec.ts`](../apps/api/test/integration/queue.integration.spec.ts:1)       | New — testcontainers Redis 7-alpine; PING + enqueue/getJob round-trip.                       |
+| [`apps/api/package.json`](../apps/api/package.json:1)                                                                   | `bullmq ^5.76.8` + `@nestjs/bullmq ^11.0.4`.                                                 |
+| [`docker-compose.yml`](../docker-compose.yml:1)                                                                         | Redis service: conditional `--requirepass`, `CMD-SHELL` healthcheck, API container env vars. |
+| [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml:1)                                             | Same conditional-auth wrapper; bind-only network (no host port).                             |
+| [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml:1)                                       | Same conditional-auth wrapper; bind-only network.                                            |
+| [`docker-compose.staging.app.yml`](../docker-compose.staging.app.yml:1)                                                 | API container env: `REDIS_HOST/PORT/PASSWORD/TLS` (replaces `REDIS_URL`).                    |
+| [`docker-compose.production.app.yml`](../docker-compose.production.app.yml:1)                                           | Same.                                                                                        |
+| [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml:1)                                     | Inject `STAGING_REDIS_PASSWORD` + static `REDIS_TLS=false` (deploy + rollback steps).        |
+| [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml:1)                               | Same for production.                                                                         |
+| [`.env.example`](../.env.example:1)                                                                                     | Adds `REDIS_HOST/PORT/PASSWORD/TLS`.                                                         |
+| [`.env.staging.template`](../.env.staging.template:1) / [`.env.production.template`](../.env.production.template:1)     | Document the four typed vars + secret-name mapping.                                          |
+| [`apps/api/.env.example`](../apps/api/.env.example:1)                                                                   | Adds `REDIS_TLS`.                                                                            |
+| [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)                                                       | New `§7 Job Queue Infrastructure` block inside section 11.                                   |
+| [`docs/deployment.md`](deployment.md:1)                                                                                 | Application-secrets table swaps `*_REDIS_URL` → `*_REDIS_PASSWORD`; new "Redis" subsection.  |
+
+**GitHub-secrets diff.** New secret added on the staging environment;
+production already had its counterpart. Old `STAGING_REDIS_URL` /
+`PRODUCTION_REDIS_URL` are no longer referenced — left in place
+intentionally for rollback safety, can be pruned after 6.17.3 lands:
+
+| Secret                       | Status                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `STAGING_REDIS_PASSWORD`     | **Added** in this iteration (32-char alphanumeric).                                |
+| `PRODUCTION_REDIS_PASSWORD`  | Already present in the repo's secrets — will be picked up by the next prod deploy. |
+| `STAGING_REDIS_URL` (old)    | Unused; safe to delete next iteration.                                             |
+| `PRODUCTION_REDIS_URL` (old) | Unused; safe to delete next iteration.                                             |
+
+The injection diff in [`deploy-staging.yml`](../.github/workflows/deploy-staging.yml:177)
+mirrors how `JWT_SECRET` and `DATABASE_URL` already cross from
+GitHub-secret → `appleboy/ssh-action` env → exported in the SSH session
+→ docker-compose interpolation. No `.env` file lands on the server.
+
+**Health-check contract.** The split that blue-green LB probes care
+about:
+
+```
+GET /api/v1/health           # fast liveness probe (DB + memory)
+→ 200 OK
+{ "status": "ok",
+  "info":  { "database": {"status":"up"}, "memory": {"status":"up", ...} },
+  ... }
+
+GET /api/v1/health/details   # deep status (DB + memory + Redis + disk)
+→ 200 OK when Redis up
+{ "status": "ok",
+  "info":  { "database": {"status":"up"},
+             "memory":   {"status":"up", ...},
+             "redis":    {"status":"up", "reply":"PONG"},
+             "disk":     {"status":"up"} },
+  ... }
+
+→ 504 / 503 when Redis is down (fast endpoint stays 200 so the LB
+  never drops the API container during a Redis hiccup).
+```
+
+The Redis ping reuses the BullMQ-managed ioredis client
+(`queue.client.ping()`) so the probe sees the same auth state the
+worker uses.
+
+**Test counts.** Unit: 670 (was 667; +1 queue-module + +2 redis-indicator
+specs, plus the existing health-controller spec gained a "doesn't ping
+Redis" assertion). Integration: 17 (was 16; +1 queue.integration.spec).
+Lint + typecheck + Prettier: all green.
+
+**Staging smoke (post-deploy).**
+
+```
+$ ssh deploy@<staging> docker exec myfinpro-staging-redis \
+    redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
+PONG
+
+$ curl -fsS https://<staging>/api/v1/health           # 200 OK (no Redis)
+$ curl -fsS https://<staging>/api/v1/health/details   # 200 OK redis: up reply: PONG
+
+$ docker stop myfinpro-staging-redis
+$ curl -fsS https://<staging>/api/v1/health           # still 200 OK (LB-safe)
+$ curl    https://<staging>/api/v1/health/details     # 504 (clear NOT-OK signal)
+
+$ docker start myfinpro-staging-redis
+$ curl -fsS https://<staging>/api/v1/health/details   # 200 OK redis: up
+```
+
+**Known follow-up.** When Redis is unavailable, `/health/details`
+returns 504 (Cloudflare/nginx upstream timeout) rather than 503 from
+terminus — the indicator hangs on `queue.client.ping()` while ioredis
+retries the connection. Functionally fine (both are clear NOT-OK
+signals), but a small `Promise.race` with a 2 s timeout in
+[`RedisHealthIndicator`](../apps/api/src/health/indicators/redis.indicator.ts:1)
+would tighten this up. Deferred to 6.17.2/6.17.3.
+
+**Operator note for the next production deploy.** The same `requirepass`
+flip happens automatically: compose detects the `REDIS_PASSWORD` env
+change on the production redis container and recreates it with auth
+enabled. The API container reconnects within seconds. No data loss
+(BullMQ has no jobs yet — schedule CRUD lands in 6.17.2).
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.17.1 is foundation —
+schedule CRUD card flips when 6.17.2 lands, worker card when 6.17.3
+lands; matches how 6.15.1 / 6.16.4 handled sub-iterations).
+
+**Next** — 6.17.2 (schedule CRUD against the now-live `payment-occurrences`
+queue).
