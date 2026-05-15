@@ -5070,3 +5070,110 @@ center; }` so the bar fills from the right edge in Hebrew.
 6.16.2).
 
 **Next** — 6.17 (BullMQ schedules + worker).
+
+### Iteration 6.16.4 — Async-operation migration of comments + form/delete dialogs + categories (2026-05-15)
+
+User requested before moving to 6.17:
+
+> Please also migrate all existing components (comments / form dialog
+> / delete dialog / categories) to the async-operation infrastructure.
+
+This finishes what 6.16.2 started — applying the global async
+primitives to every remaining payments + categories surface so all
+loading/error states behave identically.
+
+#### Surfaces migrated
+
+| Surface                          | Scope                     | Visualization                                            | Failure UX                                           |
+| -------------------------------- | ------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| `<PaymentCommentInput>` submit   | `control`                 | `<ButtonSpinner>` + `aria-busy`                          | Inline `<InlineErrorBanner>` + Retry                 |
+| `<PaymentCommentList>` initial   | `container`               | `<LoadingOverlay>`                                       | `<RetryReturnDialog>`                                |
+| `<PaymentCommentList>` load-more | `container`               | `<InlineLoader>` inside button                           | Inline retry text + button (matches PaymentsList)    |
+| `<PaymentCommentList>` edit save | `control` per row         | `<ButtonSpinner>` on save button                         | Inline message under textarea                        |
+| `<PaymentCommentList>` delete    | `control` per row         | `<ButtonSpinner>` on delete                              | Inline message; 410 → "already removed" + reload     |
+| `<PaymentFormDialog>` save       | `control`                 | `<ButtonSpinner>` + `aria-busy` on form                  | Per-field domain errors + inline banner              |
+| `<DeletePaymentDialog>` delete   | `control`                 | `<ButtonSpinner>` + disabled scope inputs                | Inline banner with Retry                             |
+| `<PaymentCategoryPicker>` fetch  | `container`               | `aria-busy` on `<select>`                                | Inline error text                                    |
+| `categories-client` initial      | `page`                    | Top `<PageProgressBar>` + `<LoadingOverlay>` per section | `<RetryReturnDialog>` (Return = settings index)      |
+| `<CategoryListSection>`          | controlled (parent-owned) | `<LoadingOverlay>` over the section                      | n/a (handled by parent)                              |
+| `<CategoryFormDialog>` save      | `control`                 | `<ButtonSpinner>` + disabled inputs                      | `CATEGORY_SLUG_CONFLICT` → field; banner otherwise   |
+| `<DeleteCategoryDialog>` 2-step  | `control` (single hook)   | `<ButtonSpinner>` on confirm                             | `CATEGORY_IN_USE` → replace select; banner otherwise |
+
+#### Inline error banner pattern
+
+Introduced [`InlineErrorBanner`](../apps/web/src/components/ui/InlineErrorBanner.tsx:1)
+as the canonical recipe for control-scope failures:
+
+```tsx
+<InlineErrorBanner
+  reason={op.error.reason}
+  httpStatus={op.error.httpStatus}
+  message={t('errorGeneric', { message: op.error.message ?? '' })}
+  onRetry={() => void op.retry()}
+  retrying={op.isLoading}
+/>
+```
+
+Renders `role="alert"` + Retry button (re-issues last op via the
+30 s retry timeout). Domain-error code paths bypass the banner by
+throwing `new DOMException('domain', 'AbortError')` from inside
+`op.run(...)`, which lands the hook in `error` with
+`reason='aborted'` — gated out of every banner condition. This keeps
+field-level error mapping and async failure UX cleanly separated.
+
+#### `AbortSignal` threading
+
+[`category-context`](../apps/web/src/lib/category/category-context.tsx:1)
+mirrors the work done on `payment-context` in 6.16.2 — `fetchAll`,
+`create`, `update`, `remove` all accept an optional `AbortSignal`,
+forward it to `fetch`, and silently swallow `AbortError` in the
+shared `error` state.
+
+#### DRY grep
+
+```
+=== useState<boolean>(false) ===  →  0 matches in payment / category
+=== setLoading( ===                →  0 matches (1 hit is a comment in
+                                       PaymentsList.tsx referencing the rule)
+=== animate-spin ===               →  0 matches
+```
+
+#### Out of scope (deferred)
+
+Documented in [`docs/ui-async-conventions.md`](ui-async-conventions.md:1):
+
+- Dashboard widgets (`<RecentActivity>`, `<StarredPayments>`,
+  `<TotalsCard>`, `<ScopeEntryCards>`, `<GroupPaymentsTab>`) —
+  read-only, low-priority. Stay on existing self-fetch.
+- Auth flows (login, register, password change, email verification) —
+  distinct surface; not requested.
+- Group management (members, invites, settings) — same reasoning.
+
+These will migrate when their next feature iteration touches them.
+
+#### Tests
+
+- 831 passed (up from 824 in 6.16.3). +7 new test cases:
+  - `<PaymentCommentInput>`: inline error banner appears on network
+    failure + Retry re-runs the post; aria-busy on root + textarea /
+    submit disabled while posting.
+  - All 12 specs that mock per-context API methods updated to expect
+    the trailing `expect.any(AbortSignal)` arg.
+  - `categories-page.spec.tsx` mocks `@/i18n/navigation` (the new
+    page-scope client uses `useRouter` for the Return action).
+
+#### i18n additions
+
+- `payments.comments.alreadyRemoved` ("This comment was already
+  removed.") in en + he.
+- All other messages reused from `ui.errors.messages.*` (intentional
+  DRY — the inline banner picks the right message via
+  `reason`/`httpStatus`).
+
+#### No new npm dependency.
+
+**Phase 6 status** — 16 / 21 (unchanged; 6.16.4 is a hotfix on top of
+6.16.2 / 6.16.3).
+
+**Next** — 6.17 (BullMQ schedules + worker — Context7 + npm latest
+will be checked next).
