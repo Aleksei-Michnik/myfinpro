@@ -197,9 +197,8 @@ export function PaymentDetailHeader({
         </Button>
         <Button
           type="button"
-          variant="secondary"
+          variant="danger"
           size="sm"
-          className="!border-red-300 !text-red-700 hover:!bg-red-50 dark:!border-red-700 dark:!text-red-300 dark:hover:!bg-red-900/30"
           onClick={onDeleteClick}
           data-testid="detail-delete"
         >

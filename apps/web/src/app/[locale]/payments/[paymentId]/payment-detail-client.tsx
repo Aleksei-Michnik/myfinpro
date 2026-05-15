@@ -25,6 +25,7 @@ import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { AttributionChangeResult, PaymentSummary } from '@/lib/payment/types';
+import { useResetOnLocaleChange } from '@/lib/ui';
 
 interface PaymentDetailClientProps {
   paymentId: string;
@@ -70,6 +71,13 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Phase 6 · Iteration 6.16.5 — clear stale errors when the locale flips
+  // (en ↔ he) and re-fetch quietly so we don't briefly flash a "no access"
+  // error from the previous render.
+  useResetOnLocaleChange(() => {
+    void load();
+  });
 
   const handleStarToggled = useCallback((starred: boolean) => {
     setPayment((prev) => (prev ? { ...prev, starredByMe: starred } : prev));

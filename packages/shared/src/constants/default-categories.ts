@@ -10,7 +10,12 @@ import type { CategoryDirection } from '../types/payment.types';
  * DB uniqueness is on (owner_type, owner_id, slug, direction), so `other` would
  * technically co-exist as (system, null, 'other', 'OUT') vs (system, null, 'other', 'IN').
  * For defensive clarity we use distinct slugs `other_out` / `other_in`.
- * Same for `gift` → `gift_in` (OUT stays as the plural `gifts`).
+ *
+ * Note on gifts: OUT direction uses the plural `gifts` ("Gifts" — outgoing
+ * presents). IN direction uses `gift_in` with the disambiguated display name
+ * "Gifts received" — without the suffix the OUT-singular "Gift" appeared
+ * side-by-side with OUT-plural "Gifts" in unfiltered category dropdowns and
+ * read as a duplicate (Phase 6 · Iteration 6.16.5 staging UX bug).
  */
 export interface DefaultCategoryDef {
   slug: string;
@@ -47,7 +52,7 @@ export const DEFAULT_IN_CATEGORIES: readonly DefaultCategoryDef[] = [
   { slug: 'freelance', name: 'Freelance', direction: 'IN', icon: 'laptop' },
   { slug: 'investment', name: 'Investment', direction: 'IN', icon: 'trending-up' },
   { slug: 'refund', name: 'Refund', direction: 'IN', icon: 'rotate-ccw' },
-  { slug: 'gift_in', name: 'Gift', direction: 'IN', icon: 'gift' },
+  { slug: 'gift_in', name: 'Gifts received', direction: 'IN', icon: 'gift' },
   { slug: 'other_in', name: 'Other', direction: 'IN', icon: 'more-horizontal' },
 ] as const;
 

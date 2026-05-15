@@ -15,7 +15,7 @@ import { useRouter } from '@/i18n/navigation';
 import { useCategories } from '@/lib/category/category-context';
 import type { CategoryDto } from '@/lib/category/types';
 import { useGroups } from '@/lib/group/group-context';
-import { useAsyncOperation } from '@/lib/ui';
+import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 export function CategoriesClient() {
   const t = useTranslations('categories');
@@ -33,6 +33,11 @@ export function CategoriesClient() {
     startedRef.current = true;
     void loadOp.run((signal) => fetchAll(signal));
   }, []);
+
+  // Phase 6 · Iteration 6.16.5 — re-fetch + clear errors on locale flip.
+  useResetOnLocaleChange(() => {
+    void loadOp.run((signal) => fetchAll(signal));
+  });
 
   const isInitialLoading = loadOp.isLoading && loadOp.data === undefined;
   const showInitialError = loadOp.isError && loadOp.data === undefined;

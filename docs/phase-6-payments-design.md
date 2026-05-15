@@ -1214,6 +1214,36 @@ Fixtures live in `apps/api/test/integration/payments/fixtures.ts` (reusable fact
 - **Budgets** (Phase 8) can query `payments` by `categoryId` + date range.
 - **Analytics** (Phase 10) will add aggregation views over the same tables — no schema changes expected.
 
+### Category visibility policy (added in iteration 6.16.5)
+
+Both the `<PaymentsFilters>` category dropdown (on `/payments`) and the
+`<PaymentCategoryPicker>` inside `<PaymentFormDialog>` consume
+`usePayments().listCategories()` as their **single source of truth**. There
+is no client-side filtering, sorting, or hard-coded list anywhere — the API
+result is rendered as-is, grouped only by `ownerType` (System / Personal /
+per-Group).
+
+**Per-direction filtering.** When a direction filter is active (`IN` or
+`OUT`), both consumers pass `{ direction }` to `listCategories()` and the
+API restricts results to categories whose `direction === requested ||
+direction === 'BOTH'`. When direction is undefined (the All filter on
+`/payments`), categories from both directions appear together — the
+defaults seed avoids visually-similar pairs across directions
+(e.g., `gifts` (OUT, "Gifts") vs `gift_in` (IN, "Gifts received")) so the
+combined list never reads as duplicate.
+
+**Per-scope visibility.** The All scope tab on `/payments` shows every
+category the user can author against (System + Personal + every member
+group). On a specific scope tab (Personal or `/payments?scope=group:<id>`)
+the API restricts to that scope, and the dialog inside the same page sees
+the same restriction. Both surfaces stay in sync because both call
+`listCategories()` with the same arguments.
+
+**Slug uniqueness.** Display names within a single direction are unique
+case-insensitively; cross-direction stem collisions (after stripping a
+trailing `s`) are forbidden except for `other` (allow-listed). This is
+enforced by [`packages/shared/src/__tests__/default-categories.test.ts`](../packages/shared/src/__tests__/default-categories.test.ts).
+
 ### Out-of-scope for Phase 6 (deferred by design)
 
 - Receipt upload UI + OCR (Phase 9 adds upload to `PaymentDocument`).

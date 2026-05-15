@@ -11,16 +11,22 @@ import {
 
 const pathnameMock = vi.fn(() => '/');
 const searchParamsMock = vi.fn(() => new URLSearchParams());
+const localeMock = vi.fn(() => 'en');
 
 vi.mock('next/navigation', () => ({
   usePathname: () => pathnameMock(),
   useSearchParams: () => searchParamsMock(),
 }));
 
+vi.mock('next-intl', () => ({
+  useLocale: () => localeMock(),
+}));
+
 beforeEach(() => {
   vi.useFakeTimers();
   pathnameMock.mockReturnValue('/');
   searchParamsMock.mockReturnValue(new URLSearchParams());
+  localeMock.mockReturnValue('en');
 });
 
 afterEach(() => {
@@ -351,6 +357,61 @@ describe('UIStatusContext — nprogress-style state machine', () => {
     // No auto-end — bar still in progressing phase.
     expect(apiRef.current?.visible).toBe(true);
     expect(apiRef.current?.progress).toBeLessThan(100);
+  });
+
+  it('useLocale() change auto-fires startNavigation() (locale switcher path)', () => {
+    localeMock.mockReturnValue('en');
+    const apiRef: { current: ReturnType<typeof useUIStatus> | null } = { current: null };
+    function Capture() {
+      apiRef.current = useUIStatus();
+      return null;
+    }
+    const { rerender } = render(
+      <UIStatusProvider disablePathnameTracking disableClickInterception>
+        <Capture />
+      </UIStatusProvider>,
+    );
+    expect(apiRef.current?.visible).toBe(false);
+
+    // Simulate the locale switcher flipping en → he.
+    localeMock.mockReturnValue('he');
+    act(() => {
+      rerender(
+        <UIStatusProvider disablePathnameTracking disableClickInterception>
+          <Capture />
+        </UIStatusProvider>,
+      );
+    });
+    // Pending phase — wait the debounce.
+    act(() => {
+      vi.advanceTimersByTime(NAV_VISIBILITY_DEBOUNCE_MS + 20);
+    });
+    expect(apiRef.current?.visible).toBe(true);
+    expect(apiRef.current?.progress).toBeLessThan(100);
+  });
+
+  it('disableLocaleTracking prevents the locale-change auto-start', () => {
+    localeMock.mockReturnValue('en');
+    const apiRef: { current: ReturnType<typeof useUIStatus> | null } = { current: null };
+    function Capture() {
+      apiRef.current = useUIStatus();
+      return null;
+    }
+    const { rerender } = render(
+      <UIStatusProvider disablePathnameTracking disableClickInterception disableLocaleTracking>
+        <Capture />
+      </UIStatusProvider>,
+    );
+    localeMock.mockReturnValue('he');
+    act(() => {
+      rerender(
+        <UIStatusProvider disablePathnameTracking disableClickInterception disableLocaleTracking>
+          <Capture />
+        </UIStatusProvider>,
+      );
+      vi.advanceTimersByTime(NAV_VISIBILITY_DEBOUNCE_MS + 20);
+    });
+    expect(apiRef.current?.visible).toBe(false);
   });
 });
 

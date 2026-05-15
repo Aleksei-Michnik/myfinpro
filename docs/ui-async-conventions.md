@@ -209,8 +209,50 @@ The component renders `role="alert"` so AT announces the failure, plus a Retry b
 
 These will migrate when their next feature iteration touches them.
 
+### Iteration 6.16.5 — AbortError silent no-op + locale-change reset hook
+
+Two related staging UX fixes landed in `useAsyncOperation()` and the
+surrounding ecosystem:
+
+1. **AbortError is silent.** When `op()` rejects with a
+   `DOMException('…', 'AbortError')` (or any object with
+   `name === 'AbortError'`) the hook now transitions back to `idle`,
+   preserving `previousData`, **unless** the abort was triggered by the
+   primary timeout — in which case `reason='timeout'` is preserved.
+
+   Rationale: the locale switcher (next-intl cookie + `router.refresh()`)
+   could race the in-flight `/payments` fetch and surface the AbortError
+   as a user-visible "no access" error banner. The hook must never bubble
+   genuine cancellations to the UI.
+
+   Domain-error code paths that intentionally throw
+   `new DOMException('domain', 'AbortError')` to suppress the inline
+   banner now leave the hook in `idle` rather than `error` with
+   `reason='aborted'`. Per-field error state set _before_ the throw is
+   unaffected; banner-gating logic (`showBanner = isError && reason !==
+'aborted'`) keeps working because `isError` is now `false`.
+
+2. **`useResetOnLocaleChange(onChange)`** — DRY hook in
+   [`apps/web/src/lib/ui/use-reset-on-locale-change.ts`](../apps/web/src/lib/ui/use-reset-on-locale-change.ts).
+   Subscribes to `useLocale()` from `next-intl` and fires `onChange()` on
+   any locale flip (does NOT fire on initial mount). Page-level
+   orchestrators MUST use it to clear page-scoped errors and re-issue
+   their fetch on en ↔ he switches:
+   - [`PaymentsListClient`](../apps/web/src/app/[locale]/payments/payments-list-client.tsx)
+   - [`PaymentDetailClient`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx)
+   - [`DashboardClient`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)
+   - [`CategoriesClient`](../apps/web/src/app/[locale]/settings/categories/categories-client.tsx)
+   - [`GroupDashboardPage`](../apps/web/src/app/[locale]/groups/[groupId]/page.tsx)
+
+3. **`UIStatusProvider`** also subscribes to `useLocale()` and fires
+   `startNavigation()` on locale change, so the page progress bar shows
+   during the locale switch (the next-intl flow bypasses the
+   document-level click interceptor).
+
 ## Rule (recorded in `.kilocode/rules/dna.md`)
 
 > Any new fetch or mutation MUST use `useAsyncOperation()` from [`apps/web/src/lib/ui/`](../apps/web/src/lib/ui/index.ts). Pick the appropriate scope. Do not implement ad-hoc `useState<boolean>(loading)` / inline spinner / try-catch error state.
+>
+> AbortError must NEVER surface as a user-visible error. The hook handles this automatically (idle + preserved `previousData`); page-level orchestrators must additionally call `useResetOnLocaleChange(reset)` so locale switches clear stale errors and re-fetch quietly.
 
 Searching the migrated files for `setLoading(true)` / inline `useState<boolean>(loading)` / inline rotating SVGs must find zero matches.

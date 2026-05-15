@@ -12,6 +12,7 @@ vi.mock('next-intl', () => ({
     if (vals?.group) return `${vals.group}`;
     return k;
   },
+  useLocale: () => 'en',
 }));
 
 vi.mock('@/components/auth/ProtectedRoute', () => ({

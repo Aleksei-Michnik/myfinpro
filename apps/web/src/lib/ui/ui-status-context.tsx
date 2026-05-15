@@ -23,6 +23,7 @@
 // decrement activePageOps via registerPageOp.
 
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useLocale } from 'next-intl';
 import {
   createContext,
   useCallback,
@@ -69,6 +70,12 @@ export interface UIStatusProviderProps {
   disablePathnameTracking?: boolean;
   /** Skip the document-level click interception (tests only). */
   disableClickInterception?: boolean;
+  /**
+   * Phase 6 · Iteration 6.16.5 — skip the `useLocale()` watcher that drives
+   * the page progress bar on locale-only navigations (tests only; opt-in
+   * because not every test mounts a `NextIntlClientProvider`).
+   */
+  disableLocaleTracking?: boolean;
 }
 
 type Phase = 'idle' | 'pending' | 'progressing' | 'completing';
@@ -113,6 +120,7 @@ export function UIStatusProvider({
   children,
   disablePathnameTracking,
   disableClickInterception,
+  disableLocaleTracking,
 }: UIStatusProviderProps) {
   // ── Page-scope op count (6.16.2 API) ────────────────────────────────────
   const activeOpsRef = useRef<Set<string>>(new Set());
@@ -339,6 +347,7 @@ export function UIStatusProvider({
     <UIStatusContext.Provider value={value}>
       {!disablePathnameTracking && <PathnameNavigationEnd />}
       {!disableClickInterception && <ClickNavigationStart />}
+      {!disableLocaleTracking && <LocaleNavigationStart />}
       {children}
     </UIStatusContext.Provider>
   );
@@ -392,6 +401,31 @@ function ClickNavigationStart() {
       document.removeEventListener('click', handler, true);
     };
   }, []);
+
+  return null;
+}
+
+/**
+ * Phase 6 · Iteration 6.16.5 — internal: drives the page progress bar when
+ * the active locale changes. The `next-intl` locale switcher uses a cookie
+ * + `router.refresh()` flow that bypasses the document-level click
+ * interceptor, so without this watcher the bar never appeared during
+ * en ↔ he switches. We treat a locale change as a navigation start (and
+ * rely on `usePathname` change to fire `endNavigation` once the new
+ * subtree mounts).
+ */
+function LocaleNavigationStart() {
+  const ctx = useContext(UIStatusContext);
+  const locale = useLocale();
+  const previousLocaleRef = useRef<string>(locale);
+  const startRef = useRef(ctx?.startNavigation);
+  startRef.current = ctx?.startNavigation;
+
+  useEffect(() => {
+    if (previousLocaleRef.current === locale) return;
+    previousLocaleRef.current = locale;
+    startRef.current?.();
+  }, [locale]);
 
   return null;
 }

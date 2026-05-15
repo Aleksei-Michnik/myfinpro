@@ -5,6 +5,7 @@ import { UIStatusProvider, useUIStatus } from '@/lib/ui';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (k: string) => `ui.loading.${k}`,
+  useLocale: () => 'en',
 }));
 
 vi.mock('next/navigation', () => ({

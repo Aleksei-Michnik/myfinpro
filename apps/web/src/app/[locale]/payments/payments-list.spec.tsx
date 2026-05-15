@@ -7,6 +7,7 @@ import { PaymentsListClient } from './payments-list-client';
 // on commit. <RetryReturnDialog> opens on failure.
 
 let searchString = '';
+let currentLocale = 'en';
 
 const mockReplace = vi.fn();
 const mockListProps = vi.fn();
@@ -14,6 +15,7 @@ const mockFetchList = vi.fn();
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (k: string) => k,
+  useLocale: () => currentLocale,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -97,6 +99,7 @@ describe('PaymentsListClient (orchestrator)', () => {
     mockFetchList.mockReset();
     mockFetchList.mockImplementation(() => listResp());
     searchString = '';
+    currentLocale = 'en';
   });
 
   afterEach(() => {
@@ -291,5 +294,29 @@ describe('PaymentsListClient (orchestrator)', () => {
     expect(mockReplace).not.toHaveBeenCalled();
     // committed starred filter unchanged.
     expect(lastListProps().filters.starred).toBeUndefined();
+  });
+
+  // ── Iteration 6.16.5 — locale switch flicker fix ────────────────────────
+
+  it('locale change clears the error dialog and re-fetches with the same filters', async () => {
+    // First mount: a deferred fetch that we leave unresolved long enough to
+    // simulate the in-flight cancellation that produces the AbortError flash.
+    mockFetchList.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { rerender } = render(<PaymentsListClient />);
+    await flushFetch();
+    // Subsequent-change failure → dialog opens.
+    await waitFor(() => expect(screen.getByTestId('retry-return-dialog')).toBeInTheDocument());
+
+    mockFetchList.mockReset();
+    mockFetchList.mockImplementation(() => listResp());
+
+    // Locale flips → useResetOnLocaleChange fires → dialog closes, fresh
+    // fetch resolves with empty list, no error banner re-renders.
+    currentLocale = 'he';
+    rerender(<PaymentsListClient />);
+    await flushFetch();
+
+    expect(screen.queryByTestId('retry-return-dialog')).not.toBeInTheDocument();
+    expect(mockFetchList).toHaveBeenCalled();
   });
 });

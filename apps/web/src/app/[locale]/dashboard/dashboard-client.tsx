@@ -16,11 +16,19 @@ import { ScopeEntryCards } from '@/components/dashboard/ScopeEntryCards';
 import { StarredPayments } from '@/components/dashboard/StarredPayments';
 import { TotalsCard } from '@/components/dashboard/TotalsCard';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useResetOnLocaleChange } from '@/lib/ui';
 
 export function DashboardClient() {
   const t = useTranslations('dashboard');
   const { user } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Phase 6 · Iteration 6.16.5 — bump the refreshKey on locale switch to
+  // re-mount each section. They will silently re-fetch in the new locale,
+  // dropping any leftover error state from the previous render.
+  useResetOnLocaleChange(() => {
+    setRefreshKey((k) => k + 1);
+  });
 
   // Stable across the lifetime of the page; no need to recompute on each render.
   const range = useMemo(() => computeMonthRange(), []);

@@ -168,6 +168,14 @@ export function useAsyncOperation<T>(
         runStateRef.current = null;
 
         const info = classifyError(err);
+
+        if (info.reason === 'aborted' && !timedOut) {
+          if (mountedRef.current) {
+            setPhase({ kind: 'idle' });
+          }
+          return undefined;
+        }
+
         // If we triggered the abort via timeout, classify as timeout.
         const reason = timedOut ? 'timeout' : info.reason;
 

@@ -35,7 +35,7 @@ import {
 } from '@/lib/payment/filters';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { PaymentListResponse } from '@/lib/payment/types';
-import { useAsyncOperation } from '@/lib/ui';
+import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 const PAGE_LIMIT = 20;
 
@@ -143,6 +143,15 @@ export function PaymentsListClient() {
     didMountFetchRef.current = true;
     void commit(initialFilters);
   }, [commit, initialFilters, noAccess]);
+
+  // Phase 6 · Iteration 6.16.5 — locale switch (en ↔ he via the next-intl
+  // switcher) must NOT leave a stale error banner from the previous render.
+  // Clear the error dialog and re-issue the most recently committed fetch.
+  useResetOnLocaleChange(() => {
+    setShowErrorDialog(false);
+    if (noAccess) return;
+    void commit(committedFilters);
+  });
 
   // ── Filter change handlers — all funnel into commit() ─────────────────
   const handleFiltersChange = useCallback(

@@ -11,6 +11,7 @@ let savedHandler: ((p: { id: string }) => void) | null = null;
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
+  useLocale: () => 'en',
 }));
 
 vi.mock('@/i18n/navigation', () => ({

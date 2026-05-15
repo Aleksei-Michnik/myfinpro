@@ -242,4 +242,38 @@ describe('PaymentsFilters', () => {
     const root = container.querySelector('[data-testid="payments-filters"]') as HTMLElement;
     expect(root.style.direction).toBe('');
   });
+
+  // ── Phase 6 · Iteration 6.16.5 — single-source-of-truth ─────────────────
+  // The filter dropdown and the form-dialog category picker must source
+  // categories from the SAME endpoint (`usePayments().listCategories()`).
+  // This guards against the staging bug where the two lists drifted out of
+  // sync. We assert the option labels surfaced by <PaymentsFilters> match
+  // exactly what `listCategories()` returns — no client-side filtering or
+  // sorting that the form picker doesn't also apply.
+  it('filter dropdown options exactly mirror listCategories() (same source as form dialog)', async () => {
+    const cats: CategoryDto[] = [
+      makeCategory({ id: 's-out-gifts', name: 'Gifts', ownerType: 'system', direction: 'OUT' }),
+      makeCategory({
+        id: 's-in-gifts',
+        name: 'Gifts received',
+        ownerType: 'system',
+        direction: 'IN',
+      }),
+      makeCategory({ id: 'p-1', name: 'Custom', ownerType: 'user', direction: 'OUT' }),
+    ];
+    mockListCategories.mockResolvedValue(cats);
+    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} />);
+    await waitFor(() => expect(mockListCategories).toHaveBeenCalledTimes(1));
+    const select = await screen.findByTestId('filter-category');
+    const options = Array.from((select as HTMLSelectElement).options).filter((o) => o.value);
+    // Every option ID came from the API response.
+    const optionIds = new Set(options.map((o) => o.value));
+    for (const c of cats) expect(optionIds.has(c.id)).toBe(true);
+    // No extras appeared from a separate client-side fetch / hard-coded list.
+    expect(optionIds.size).toBe(cats.length);
+    // Names rendered exactly as the API delivered them — verifies the IN
+    // gifts label is "Gifts received" (not the legacy ambiguous "Gift").
+    const gifts = options.find((o) => o.value === 's-in-gifts');
+    expect(gifts?.textContent).toContain('Gifts received');
+  });
 });

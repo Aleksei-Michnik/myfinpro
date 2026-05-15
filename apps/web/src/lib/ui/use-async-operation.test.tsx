@@ -11,6 +11,10 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+vi.mock('next-intl', () => ({
+  useLocale: () => 'en',
+}));
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -388,5 +392,68 @@ describe('useAsyncOperation', () => {
     });
     expect(res).toBeUndefined();
     expect(result.current.isIdle).toBe(true);
+  });
+
+  describe('AbortError silent no-op (6.16.5)', () => {
+    it('AbortError thrown outside cancel/unmount → phase returns to idle, no error', async () => {
+      const { result } = renderHook(() => useAsyncOperation<string>({ scope: 'container' }));
+      const op = vi.fn().mockRejectedValue(new DOMException('aborted by caller', 'AbortError'));
+      let returned: string | undefined = 'unset';
+      await act(async () => {
+        returned = await result.current.run(op);
+      });
+      expect(returned).toBeUndefined();
+      // Critically: NOT in error state — the previous "error" classification
+      // surfaced the AbortError as a user-visible "no access" banner.
+      expect(result.current.isError).toBe(false);
+      expect(result.current.isIdle).toBe(true);
+      expect(result.current.error).toBeNull();
+    });
+
+    it('plain object with name="AbortError" is also silent', async () => {
+      const { result } = renderHook(() => useAsyncOperation<string>({ scope: 'container' }));
+      const op = vi.fn().mockRejectedValue({ name: 'AbortError', message: 'aborted' });
+      await act(async () => {
+        await result.current.run(op);
+      });
+      expect(result.current.isError).toBe(false);
+      expect(result.current.isIdle).toBe(true);
+    });
+
+    it('previousData is preserved across a silent abort following a successful run', async () => {
+      const { result } = renderHook(() => useAsyncOperation<string>({ scope: 'container' }));
+      const ok = vi.fn().mockResolvedValue('cached-value');
+      const aborted = vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError'));
+      await act(async () => {
+        await result.current.run(ok);
+      });
+      expect(result.current.data).toBe('cached-value');
+      await act(async () => {
+        await result.current.run(aborted);
+      });
+      expect(result.current.isIdle).toBe(true);
+      // Data is still surfaced from the previous successful run.
+      expect(result.current.data).toBe('cached-value');
+    });
+
+    it('timeout-triggered abort still classifies as timeout (regression guard)', async () => {
+      vi.useFakeTimers();
+      const { result } = renderHook(() => useAsyncOperation<string>({ scope: 'container' }));
+      const slow = (signal: AbortSignal) =>
+        new Promise<string>((_, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      let p: Promise<string | undefined> | undefined;
+      act(() => {
+        p = result.current.run(slow, { timeoutMs: 50 });
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(70);
+      });
+      await act(async () => {
+        await p;
+      });
+      expect(result.current.error?.reason).toBe('timeout');
+    });
   });
 });

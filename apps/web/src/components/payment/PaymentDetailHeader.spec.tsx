@@ -175,6 +175,25 @@ describe('PaymentDetailHeader', () => {
     expect(screen.getByTestId('detail-delete')).not.toBeDisabled();
   });
 
+  // Phase 6 · Iteration 6.16.5 — regression: the Delete button must use the
+  // canonical solid `danger` variant (white text on red), NOT the previous
+  // low-contrast tinted treatment that left the button looking disabled when
+  // idle. Also: the button must NOT be disabled when the page is idle —
+  // any disabled-state bleed-through from an unrelated async op is forbidden.
+  it('delete button uses solid danger variant (WCAG-AA contrast) and is enabled when idle', () => {
+    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+    const btn = screen.getByTestId('detail-delete');
+    // Solid red background + white foreground → matches `<Button variant="danger">`.
+    expect(btn.className).toContain('bg-red-600');
+    expect(btn.className).toContain('text-white');
+    // No low-contrast tint.
+    expect(btn.className).not.toMatch(/text-red-300/);
+    expect(btn.className).not.toMatch(/text-red-700/);
+    // No disabled bleed-through.
+    expect(btn).not.toBeDisabled();
+    expect(btn.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
   it('star toggle optimistic flip + bubble onStarToggled', async () => {
     mockToggleStar.mockResolvedValueOnce({ starred: true, starCount: 1 });
     const onStar = vi.fn();
