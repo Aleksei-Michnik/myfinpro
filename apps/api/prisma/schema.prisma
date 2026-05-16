@@ -210,6 +210,11 @@ model Payment {
   note            String?   @db.Text
   createdById     String    @map("created_by_id") @db.VarChar(36)
   createdBy       User      @relation("PaymentCreator", fields: [createdById], references: [id])
+  // Set only on worker-generated occurrences (Phase 6, iteration 6.17.3).
+  // Format: `${scheduleId}:${firedAtMs}` — deterministic per (schedule, fire-time)
+  // so a re-fired BullMQ job hits the unique index and we treat it as a no-op.
+  // Nullable + unique so existing manual rows are unaffected.
+  idempotencyKey  String?   @unique @map("idempotency_key") @db.VarChar(120)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

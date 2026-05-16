@@ -1283,6 +1283,33 @@ Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, s
 
 **Health-ping polish.** [`RedisHealthIndicator`](../apps/api/src/health/indicators/redis.indicator.ts:1) now wraps `client.ping()` in `Promise.race([ping(), timeout(2000)])`. A hung Redis surfaces as `503` + `redis: { status: 'down', reason: 'ping_timeout' }` within ~2 s, instead of the upstream proxy's 504 after 30+ s.
 
+### §8 Real occurrence-creation worker (landed in iteration 6.17.3)
+
+**Producer side (unchanged).** `Queue.upsertJobScheduler` continues to fire the `create-occurrence` job per the schedule's `cron` / `everyMs`. Job options bumped to `attempts: 3` with `backoff: { type: 'exponential', delay: 5_000 }` now that the worker performs real DB writes — transient Prisma / Redis blips retry; the unique `idempotencyKey` column guards against double-creation across retries.
+
+**Worker decision tree** (`PaymentOccurrenceProcessor.process`, skip-don't-throw on normal eventual-consistency edges):
+
+1. Read `PaymentSchedule` + parent `Payment` (with attributions) by `scheduleId` in one query.
+2. Schedule row missing → `[orphan]` log + `Queue.removeJobScheduler` + return success.
+3. `cancelledAt !== null` → `[skipped] schedule cancelled` + return success (no `removeJobScheduler` — the row is the source of truth; lifecycle behaviour lands in 6.17.4).
+4. `pausedAt !== null` → `[skipped] schedule paused` + return success.
+5. Parent missing → `[orphan]` log + `removeJobScheduler` + return success.
+6. Parent type ≠ `RECURRING` → `[skipped] parent is no longer RECURRING` + `removeJobScheduler` + return success.
+7. Compute `firedMs = floor((job.processedOn ?? Date.now()) / 1000) * 1000` (rounded to second so a re-fired clone with slightly different `processedOn` hits the same idempotency key).
+8. `idempotencyKey = ${scheduleId}:${firedMs}`.
+9. In a single `$transaction`: INSERT child Payment (`type: ONE_TIME`, `parentPaymentId`, parent's `direction/amountCents/currency/categoryId/note/createdById`, `occurredAt = firedAt`, `status: POSTED`, `idempotencyKey`) + clone every parent attribution (`scopeType/userId/groupId`) + UPDATE schedule `lastRunAt = firedAt`, `nextRunAt = computeNextRunAt(spec, firedAt)`.
+10. Catch Prisma `P2002` on `idempotency_key` → `[duplicate]` log, fetch + return existing `occurrenceId` without inserting.
+11. Best-effort `auditLog.create({ action: 'PAYMENT_OCCURRENCE_CREATED', entity: 'Payment', entityId: parentId, userId: parent.createdById, details: { scheduleId, parentId, occurrenceId, firedAt } })` — failures logged but never break the success result.
+12. Unrecoverable errors propagate; BullMQ retries per the `attempts: 3` opt.
+
+**Idempotency design.** `payments.idempotency_key` is a nullable VARCHAR(120) UNIQUE column added in migration [`20260516125000_phase6_173_payment_idempotency_key`](../apps/api/prisma/migrations/20260516125000_phase6_173_payment_idempotency_key/migration.sql:1). Format `${scheduleId}:${firedAtMs}` is human-debuggable, narrow enough for a B-tree index, and deterministic per (schedule, fire-second). Manual rows + ONE_TIME parents leave the column NULL (uniqueness is over non-null values per MySQL semantics).
+
+**`nextRunAt` computation strategy.** Computed locally by [`computeNextRunAt(spec, lastRunAt)`](../apps/api/src/payment/utils/next-run-at.ts:1) using the `cron-parser` package (transitive dep of `bullmq`, declared explicitly in [`apps/api/package.json`](../apps/api/package.json:1) so we don't depend on hoisting) for cron specs and `lastRunAt + everyMs` for fixed-interval specs. Returns `null` for invalid specs — the caller leaves the field untouched. Same helper is used by `PaymentScheduleService` to pre-populate `nextRunAt` on `POST` / `PUT` so a fresh `GET /schedule` returns a useful value before the first firing.
+
+**Test-environment interval floor.** `PaymentScheduleService` resolves the `everyMs` floor from `process.env.PAYMENT_SCHEDULE_MIN_INTERVAL_MS` (fallback `60_000`). Production keeps the 60 s minimum; integration tests set it to `200` so they can observe ≥ 2 firings within Jest's per-suite budget. The DTO-level `@Min` decorator is relaxed to `1` (positive integer) — policy enforcement lives in the service, decorators only enforce wire-shape.
+
+**Audit code.** `PAYMENT_OCCURRENCE_CREATED` lives in [`payment-errors.ts`](../apps/api/src/payment/constants/payment-errors.ts:1) for symmetry with the existing `PAYMENT_SCHEDULE_*` audit actions written by the producer.
+
 ---
 
 ## 12. Extendability & Out-of-Scope

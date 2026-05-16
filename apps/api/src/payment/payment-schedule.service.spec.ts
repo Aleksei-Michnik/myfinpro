@@ -96,7 +96,10 @@ describe('PaymentScheduleService', () => {
         expect.objectContaining({
           name: PAYMENT_OCCURRENCE_JOB,
           data: { scheduleId, paymentId, createdById: userId },
-          opts: expect.objectContaining({ attempts: 1 }),
+          opts: expect.objectContaining({
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5_000 },
+          }),
         }),
       );
       expect(out.id).toBe(scheduleId);

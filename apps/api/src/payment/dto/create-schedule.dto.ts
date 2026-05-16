@@ -11,12 +11,25 @@ import {
 } from 'class-validator';
 
 /**
- * Minimum allowed `everyMs` value (1 minute) — keeps abusive sub-second
- * schedulers off Redis. The cap (≤ 365 days) prevents nonsensical "every 100
- * years" specs from sitting in the DB.
+ * Production-default minimum allowed `everyMs` value (1 minute) — keeps
+ * abusive sub-second schedulers off Redis. Iteration 6.17.3 made the
+ * effective floor configurable via the `PAYMENT_SCHEDULE_MIN_INTERVAL_MS`
+ * env var (read by `PaymentScheduleService`) so integration tests can drop
+ * it to ~100 ms while production keeps the 60 s floor.
+ *
+ * The cap (≤ 365 days) prevents nonsensical "every 100 years" specs from
+ * sitting in the DB.
  */
 export const SCHEDULE_EVERY_MS_MIN = 60_000;
 export const SCHEDULE_EVERY_MS_MAX = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * DTO-level absolute floor — the actual policy floor is enforced by
+ * `PaymentScheduleService` against `PAYMENT_SCHEDULE_MIN_INTERVAL_MS`. We
+ * still reject ≤ 0 here so the wire-level type contract (positive integer)
+ * is honoured before the request reaches the service.
+ */
+export const SCHEDULE_EVERY_MS_DTO_MIN = 1;
 
 /**
  * Lightweight cron sanity regex. Matches 5- or 6-field crons where each field
@@ -51,7 +64,7 @@ export class CreateScheduleDto {
   })
   @IsOptional()
   @IsInt()
-  @Min(SCHEDULE_EVERY_MS_MIN)
+  @Min(SCHEDULE_EVERY_MS_DTO_MIN)
   @Max(SCHEDULE_EVERY_MS_MAX)
   everyMs?: number;
 

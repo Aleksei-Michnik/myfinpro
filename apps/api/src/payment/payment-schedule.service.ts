@@ -19,6 +19,19 @@ import {
 import { ScheduleResponseDto } from './dto/schedule-response.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { PaymentService } from './payment.service';
+import { computeNextRunAt } from './utils/next-run-at';
+
+/**
+ * Production minimum interval (1 minute). Overridable via the
+ * `PAYMENT_SCHEDULE_MIN_INTERVAL_MS` env var so the integration suite can
+ * drop it to ~100 ms without rewriting the service.
+ */
+function resolveMinIntervalMs(): number {
+  const raw = process.env.PAYMENT_SCHEDULE_MIN_INTERVAL_MS;
+  if (!raw) return SCHEDULE_EVERY_MS_MIN;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : SCHEDULE_EVERY_MS_MIN;
+}
 
 /**
  * Build the deterministic BullMQ scheduler id for a `PaymentSchedule` row.
@@ -38,12 +51,16 @@ export function buildSchedulerId(scheduleId: string): string {
 export const PAYMENT_OCCURRENCE_JOB = 'create-occurrence';
 
 /**
- * Default job options. `attempts: 1` keeps the no-op processor (6.17.2) from
- * retrying forever during this transition iteration; 6.17.3 will bump this
- * to 3 with exponential backoff once the worker actually creates rows.
+ * Default job options for scheduler-fired occurrence-creation jobs.
+ *
+ * Iteration 6.17.3 bumps `attempts` to 3 with exponential backoff now that
+ * the worker performs real DB writes — transient Prisma / network blips
+ * should retry automatically. The unique `idempotencyKey` column on
+ * `payments` guards against double-creation across retries.
  */
 const SCHEDULER_JOB_OPTIONS: JobsOptions = {
-  attempts: 1,
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 5_000 },
   removeOnComplete: { age: 3600, count: 1000 },
   removeOnFail: { age: 86_400 },
 };
@@ -92,14 +109,24 @@ export class PaymentScheduleService {
       });
     }
 
+    const startsAt = dto.startsAt ? new Date(dto.startsAt) : new Date();
+    // Pre-populate nextRunAt so a fresh `GET /schedule` returns a useful
+    // value before the worker has fired even once. The processor refreshes
+    // this on every firing.
+    const initialNextRunAt = computeNextRunAt(
+      { cron: dto.cron ?? null, everyMs: dto.everyMs ?? null },
+      startsAt,
+    );
+
     const created = await this.prisma.paymentSchedule.create({
       data: {
         paymentId: parent.id,
         cron: dto.cron ?? null,
         everyMs: dto.everyMs ?? null,
-        startsAt: dto.startsAt ? new Date(dto.startsAt) : new Date(),
+        startsAt,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
         limit: dto.limit ?? null,
+        nextRunAt: initialNextRunAt,
       },
     });
 
@@ -174,6 +201,14 @@ export class PaymentScheduleService {
       limit: dto.limit ?? null,
     };
 
+    // Pre-populate nextRunAt so the read API returns a useful value
+    // immediately after replace. Worker refreshes on each firing.
+    const refreshedNextRunAt = computeNextRunAt(
+      { cron: data.cron, everyMs: data.everyMs },
+      data.startsAt instanceof Date ? data.startsAt : new Date(data.startsAt as string),
+    );
+    data.nextRunAt = refreshedNextRunAt;
+
     const row = await this.prisma.paymentSchedule.upsert({
       where: { paymentId },
       create: data,
@@ -183,9 +218,7 @@ export class PaymentScheduleService {
         startsAt: data.startsAt,
         endsAt: data.endsAt,
         limit: data.limit,
-        // Re-upsert clears denormalized scheduler bookkeeping; the worker
-        // will repopulate nextRunAt on the first fire.
-        nextRunAt: null,
+        nextRunAt: refreshedNextRunAt,
       },
     });
 
@@ -278,11 +311,14 @@ export class PaymentScheduleService {
       });
     }
 
-    if (hasEvery && dto.everyMs! < SCHEDULE_EVERY_MS_MIN) {
-      throw new BadRequestException({
-        message: `everyMs must be ≥ ${SCHEDULE_EVERY_MS_MIN}`,
-        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_INVALID_INTERVAL,
-      });
+    if (hasEvery) {
+      const floor = resolveMinIntervalMs();
+      if (dto.everyMs! < floor) {
+        throw new BadRequestException({
+          message: `everyMs must be ≥ ${floor}`,
+          errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_INVALID_INTERVAL,
+        });
+      }
     }
 
     if (dto.startsAt && dto.endsAt) {
