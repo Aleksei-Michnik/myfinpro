@@ -5457,3 +5457,154 @@ lands; matches how 6.15.1 / 6.16.4 handled sub-iterations).
 
 **Next** — 6.17.2 (schedule CRUD against the now-live `payment-occurrences`
 queue).
+
+### Iteration 6.17.2 — Schedule CRUD API + 2 s ping timeout (2026-05-16)
+
+Lands the database + REST surface for `PaymentSchedule`. Every write
+mirrors into BullMQ via `Queue.upsertJobScheduler` / `removeJobScheduler`
+under a deterministic, never-reused key. Real occurrence creation is
+deferred to 6.17.3 — a no-op processor is registered now so jobs that
+fire from the scheduler are acknowledged cleanly during the transition.
+Also bundles the deferred 2 s [`Promise.race`](apps/api/src/health/indicators/redis.indicator.ts:1)
+polish on the Redis health-ping so `/health/details` returns a clean 503
+instead of upstream 504 when Redis is unreachable.
+
+**Endpoint contract** (under `/api/v1/payments/:paymentId/schedule` —
+singular path because of the 1:1 cardinality with the parent):
+
+| Verb     | Status | Behavior                                                                                                                   |
+| -------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | 201    | Create. Parent must be visible + `type=RECURRING`. 409 if exists / parent not RECURRING. Audit `PAYMENT_SCHEDULE_CREATED`. |
+| `GET`    | 200    | Read. 404 if no row or invisible parent (existence not leaked).                                                            |
+| `PUT`    | 200    | Replace (idempotent upsert). Re-upserts BullMQ under the same key. Audit `PAYMENT_SCHEDULE_UPDATED`.                       |
+| `DELETE` | 204    | Hard-delete row + `removeJobScheduler`. Already-fired children stay (history immutable). Audit `PAYMENT_SCHEDULE_DELETED`. |
+
+**Files created / modified.**
+
+| Path                                                                                                                                                                                                 | Change   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma:1)                                                                                                                                   | modified |
+| [`apps/api/prisma/migrations/20260515230000_phase6_172_payment_schedule_cron_every/migration.sql`](apps/api/prisma/migrations/20260515230000_phase6_172_payment_schedule_cron_every/migration.sql:1) | new      |
+| [`apps/api/src/payment/payment-schedule.service.ts`](apps/api/src/payment/payment-schedule.service.ts:1)                                                                                             | new      |
+| [`apps/api/src/payment/payment-schedule.service.spec.ts`](apps/api/src/payment/payment-schedule.service.spec.ts:1)                                                                                   | new      |
+| [`apps/api/src/payment/payment-schedule.controller.ts`](apps/api/src/payment/payment-schedule.controller.ts:1)                                                                                       | new      |
+| [`apps/api/src/payment/payment-schedule.controller.spec.ts`](apps/api/src/payment/payment-schedule.controller.spec.ts:1)                                                                             | new      |
+| [`apps/api/src/payment/payment-occurrence.processor.ts`](apps/api/src/payment/payment-occurrence.processor.ts:1)                                                                                     | new      |
+| [`apps/api/src/payment/dto/create-schedule.dto.ts`](apps/api/src/payment/dto/create-schedule.dto.ts:1)                                                                                               | new      |
+| [`apps/api/src/payment/dto/update-schedule.dto.ts`](apps/api/src/payment/dto/update-schedule.dto.ts:1)                                                                                               | new      |
+| [`apps/api/src/payment/dto/schedule-response.dto.ts`](apps/api/src/payment/dto/schedule-response.dto.ts:1)                                                                                           | new      |
+| [`apps/api/src/payment/constants/payment-errors.ts`](apps/api/src/payment/constants/payment-errors.ts:1)                                                                                             | modified |
+| [`apps/api/src/payment/payment.module.ts`](apps/api/src/payment/payment.module.ts:1)                                                                                                                 | modified |
+| [`apps/api/src/health/indicators/redis.indicator.ts`](apps/api/src/health/indicators/redis.indicator.ts:1)                                                                                           | modified |
+| [`apps/api/src/health/indicators/redis.indicator.spec.ts`](apps/api/src/health/indicators/redis.indicator.spec.ts:1)                                                                                 | modified |
+| [`apps/api/test/integration/payment-schedule.integration.spec.ts`](apps/api/test/integration/payment-schedule.integration.spec.ts:1)                                                                 | new      |
+| [`docs/phase-6-payments-design.md`](docs/phase-6-payments-design.md:1)                                                                                                                               | modified |
+
+**Schema change.** The 6.2 `PaymentSchedule` columns
+(`frequency`/`interval`/`next_occurrence_at`/`max_occurrences`/
+`generated_count`/`is_active`) were never wired to a producer or worker.
+6.17.2 replaces them with the cron / `every_ms` model that mirrors
+BullMQ's `Queue.upsertJobScheduler` API: `cron`, `every_ms`, `starts_at`
+(default `now()`), `ends_at`, `limit`, `next_run_at` / `last_run_at`
+(denormalized — written by the 6.17.3 worker), plus forward-compat
+`paused_at` / `cancelled_at` columns whose lifecycle endpoints land in
+6.17.4. Service-level invariant: exactly one of `cron` / `every_ms` is
+non-null.
+
+**Idempotency / consistency.**
+
+- POST writes the DB row first, then `upsertJobScheduler`. On queue
+  failure: retry once (deterministic id makes this safe); on a second
+  failure the DB row is rolled back so the system stays converged.
+- PUT writes the DB row first (Prisma `upsert`), then `upsertJobScheduler`.
+  On queue failure we propagate the error and leave the DB row — the
+  caller can retry the PUT (idempotent) and operator alerting surfaces
+  the divergence.
+- DELETE deletes the DB row first, then attempts `removeJobScheduler`.
+  Queue removal failures are swallowed (DB row is the source of truth;
+  an orphan scheduler entry will be acked by the no-op processor).
+
+**`schedulerId` formula** — `payment-schedule:${schedule.id}`. Stable for
+the schedule's lifetime, never reused, deterministic across retries.
+
+**New error codes.**
+
+- `PAYMENT_SCHEDULE_PARENT_NOT_RECURRING` (409 — caller tried to attach
+  a schedule to a non-RECURRING parent).
+- `PAYMENT_SCHEDULE_ALREADY_EXISTS` (409 — POST after a schedule already
+  exists; PUT is the idempotent path).
+- `PAYMENT_SCHEDULE_NOT_FOUND` (404).
+- `PAYMENT_SCHEDULE_INVALID_CRON` (400 — fails the lightweight 5/6-field
+  sanity regex).
+- `PAYMENT_SCHEDULE_INVALID_INTERVAL` (400 — `everyMs < 60_000`).
+- `PAYMENT_SCHEDULE_INVALID_END_DATE` (400 — `endsAt <= startsAt`).
+- `PAYMENT_SCHEDULE_INVALID_SPEC` (400 — neither / both of `cron` and
+  `everyMs` provided).
+
+**No-op processor.** [`PaymentOccurrenceProcessor`](apps/api/src/payment/payment-occurrence.processor.ts:1)
+acks every fired job and logs `[no-op] would create occurrence for
+schedule X (payment Y) at Z`. Job options use `attempts: 1` during this
+transition so a misbehaving processor doesn't retry endlessly. Real
+occurrence creation lands in 6.17.3.
+
+**2 s ping timeout polish.** [`RedisHealthIndicator.isHealthy`](apps/api/src/health/indicators/redis.indicator.ts:1)
+wraps `queue.client.ping()` in `Promise.race([ping, timeout(2000)])`.
+On timeout, throws `HealthCheckError` with `redis: { status: 'down',
+reason: 'ping_timeout' }`. Without this, an ioredis reconnect loop
+could hold the request open for 30+ s and the upstream proxy would
+return 504 — now we surface a clean 503 within ~2 s. Spec adds a
+fake-timers test that asserts the timeout outcome via an
+unresolved-promise stand-in.
+
+**Smoke transcript** (staging, parent payment
+`e1a5995e-5122-11f1-9735-66d566803e73`, schedule
+`8ac193e3-acbe-4b57-9f1b-8f4a4bba1e10`):
+
+```
+POST .../schedule { everyMs:60000, limit:3 } → 201
+Redis KEYS:
+  bull:payment-occurrences:repeat:payment-schedule:8ac193e3-…
+  bull:payment-occurrences:repeat:payment-schedule:8ac193e3-…:1778934612545
+  bull:payment-occurrences:repeat:payment-schedule:8ac193e3-…:1778934672545
+  bull:payment-occurrences:repeat:payment-schedule:8ac193e3-…:1778934732545
+
+API logs (no-op processor, 60s apart, exactly limit=3 firings):
+  [no-op] would create occurrence for schedule 8ac193e3-… at 12:30:12.560Z
+  [no-op] would create occurrence for schedule 8ac193e3-… at 12:31:12.605Z
+  [no-op] would create occurrence for schedule 8ac193e3-… at 12:32:12.597Z
+
+PUT .../schedule { cron: "*/2 * * * *" } → 200; same DB id, new repeat opts.
+DELETE .../schedule → 204; parent scheduler key + new pattern entry removed.
+GET .../schedule → 404 PAYMENT_SCHEDULE_NOT_FOUND.
+POST on a ONE_TIME parent → 409 PAYMENT_SCHEDULE_PARENT_NOT_RECURRING.
+
+docker stop myfinpro-staging-redis
+curl /api/v1/health/details
+  → HTTP 503 in 2.07s
+  → redis: { status: "down", reason: "ping_timeout" }
+docker start myfinpro-staging-redis
+curl /api/v1/health/details  → HTTP 200, redis: { status: "up", reply: "PONG" }
+```
+
+**Test counts.**
+
+- Unit: +18 cases (13 service, 4 controller, 1 redis-indicator timeout).
+- Integration: +3 (POST→DB+Redis+DELETE; ONE_TIME→409; PUT idempotent
+  replace), spinning a real Redis testcontainer alongside the local
+  MySQL.
+- Existing: 687 unit pass; 89 / 89 payment-related integration pass
+  (the auth / telegram / system-categories suites that fail locally
+  fail for pre-existing env-config reasons unrelated to this iteration
+  — they run cleanly in CI with secrets injected).
+
+**Phase 6 status: 16 / 21** (counting the 6.17 epic as one card —
+6.17.1 + 6.17.2 are sub-iterations of the same item, matching how
+6.15.1 / 6.16.4 handled their sub-cards). Worker card flips when
+6.17.3 lands.
+
+**Commits.** Feat: `447a377d`. CI + Deploy Staging both green.
+Docs (this entry): see [`docs/progress.md`](docs/progress.md:1).
+
+**Next** — 6.17.3 (real occurrence-creation worker that turns each
+fired job into a child Payment row + updates `next_run_at` /
+`last_run_at`).
