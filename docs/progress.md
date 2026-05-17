@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-09
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 16/21 iterations complete (backend complete; 6/11 frontend iterations done)
+> **Last updated:** 2026-05-17
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 16/21 iterations complete (backend complete; 6/11 frontend iterations done; recurring worker live on staging)
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -5608,3 +5608,138 @@ Docs (this entry): see [`docs/progress.md`](docs/progress.md:1).
 **Next** — 6.17.3 (real occurrence-creation worker that turns each
 fired job into a child Payment row + updates `next_run_at` /
 `last_run_at`).
+
+---
+
+### Iteration 6.17.3 — Real occurrence-creation worker (2026-05-17)
+
+**What was implemented.** The `PaymentOccurrenceProcessor` no-op body
+from 6.17.2 was replaced with the real worker. When a BullMQ job
+fires from the producer's `Queue.upsertJobScheduler`, the worker now
+materialises a child `Payment` row that mirrors the parent's
+economic shape (amount, currency, category, attributions, note,
+`createdById`) but is `type: ONE_TIME` with `parentPaymentId` set,
+plus refreshes the schedule's `lastRunAt` / `nextRunAt` and writes a
+`PAYMENT_OCCURRENCE_CREATED` audit log.
+
+**Decision tree** (skip-don't-throw on every normal eventual-
+consistency edge — see [`PaymentOccurrenceProcessor`](../apps/api/src/payment/payment-occurrence.processor.ts:1)):
+
+1. Resolve `PaymentSchedule` (with parent `Payment` + attributions)
+   in one Prisma read.
+2. Schedule row vanished → `[orphan]` log + `removeJobScheduler`
+   self-heal.
+3. `cancelledAt !== null` → `[skipped] schedule cancelled`
+   (forward-compat for 6.17.4; no `removeJobScheduler` because the
+   row stays as the source of truth).
+4. `pausedAt !== null` → `[skipped] schedule paused` (same).
+5. Parent gone → `[orphan]` + `removeJobScheduler`.
+6. Parent type ≠ `RECURRING` → `[skipped] parent is no longer
+RECURRING` + `removeJobScheduler`.
+7. Compute `firedMs = floor((job.processedOn ?? Date.now()) /
+1000) * 1000` and `idempotencyKey = "${scheduleId}:${firedMs}"`.
+8. In a single `$transaction`: INSERT child Payment + clone every
+   parent `PaymentAttribution` + UPDATE `payment_schedules.lastRunAt`
+   = `firedAt`, `nextRunAt` = `computeNextRunAt(spec, firedAt)`.
+9. Catch `P2002` on `idempotency_key` → `[duplicate]`, fetch +
+   return existing `occurrenceId` without inserting.
+10. Best-effort `auditLog.create({ action:
+'PAYMENT_OCCURRENCE_CREATED', ... })`. Failures logged but never
+    break the success result.
+11. Other exceptions propagate; BullMQ retries via
+    `attempts: 3, backoff: { type: 'exponential', delay: 5_000 }`.
+
+**Idempotency design.** New nullable unique column
+`payments.idempotency_key VARCHAR(120)` (migration
+[`20260516125000_phase6_173_payment_idempotency_key`](../apps/api/prisma/migrations/20260516125000_phase6_173_payment_idempotency_key/migration.sql:1)).
+Format `${scheduleId}:${firedAtMs}` is human-debuggable (the staging
+sample below has `ef721ccb-…:1779040747000` — schedule id + epoch
+ms), narrow enough for a B-tree index, and deterministic per
+(schedule, fire-second). Manual rows + ONE_TIME parents leave it
+NULL (MySQL uniqueness over non-null values).
+
+**`nextRunAt` computation strategy.** Shared helper
+[`computeNextRunAt(spec, lastRunAt)`](../apps/api/src/payment/utils/next-run-at.ts:1)
+delegates to `cron-parser` for cron specs (with `tz: 'UTC'` +
+`currentDate: lastRunAt`) and uses `lastRunAt + everyMs` for fixed-
+interval specs. `cron-parser` is a transitive dep of `bullmq` —
+declared explicitly in [`apps/api/package.json`](../apps/api/package.json:1)
+(`^4.9.0`) so we don't depend on pnpm hoisting. The same helper is
+used by `PaymentScheduleService.create()` / `replace()` to pre-
+populate `nextRunAt` so a fresh `GET /schedule` returns a useful
+value before the worker has fired even once.
+
+**Test-environment interval floor.** The 60 s production minimum
+for `everyMs` is now read from
+`PAYMENT_SCHEDULE_MIN_INTERVAL_MS` env var (default `60_000`,
+override `200` in the integration spec). The DTO `@Min` decorator is
+relaxed to `1` (positive integer); policy enforcement lives in the
+service.
+
+**Sample staging child Payment** (from the smoke run):
+
+```
+id              fd0113ee-b720-4131-be87-c4b0d852bf4b
+parent_payment_id  d58eb7ae-e403-4f99-bfcb-fa9845fd7c2c
+type            ONE_TIME
+amount_cents    4242
+currency        USD
+idempotency_key ef721ccb-d24e-4004-8436-dac99e5f6b0b:1779040747000
+occurred_at     2026-05-17 17:59:07.000
+```
+
+**Sample audit log:**
+
+```
+action       PAYMENT_OCCURRENCE_CREATED
+entity_id    d58eb7ae-e403-4f99-bfcb-fa9845fd7c2c
+details      {"firedAt":"2026-05-17T17:59:07.000Z",
+              "parentId":"d58eb7ae-...",
+              "scheduleId":"ef721ccb-...",
+              "occurrenceId":"fd0113ee-..."}
+created_at   2026-05-17 17:59:07.837
+```
+
+**Tests.**
+
+- Unit: +9 cases for `computeNextRunAt` (cron next slot, hour
+  boundary, everyMs, invalid cron, both-nil null, non-positive
+  everyMs, cron-prevails-when-both); +12 cases for the processor
+  (happy path, multi-attribution clone, cron next-run, cancelled
+  skip, paused skip, missing-schedule orphan, parent-type-changed
+  self-heal, P2002 idempotency duplicate, generic-error propagation,
+  audit-log failure, `Date.now` fallback, cancelled-precedence-over-
+  parent-checks).
+- Integration: +1 (`payment-occurrence.integration.spec.ts`) — boots
+  full Nest + Redis testcontainer with
+  `PAYMENT_SCHEDULE_MIN_INTERVAL_MS=200`, posts a schedule with
+  `everyMs: 1500, limit: 2`, waits for 2 child Payments, asserts
+  attributions cloned + distinct idempotency keys + audit logs +
+  `lastRunAt`/`nextRunAt` populated, then DELETE stops further
+  firings.
+- Total: 708 unit pass; the touched integration suites
+  (payment-schedule, payment-occurrence) pass green.
+
+**Smoke (staging, 2026-05-17).**
+
+- Schedule `ef721ccb-d24e-4004-8436-dac99e5f6b0b` posted with
+  `everyMs: 60_000, limit: 3` against a fresh RECURRING parent.
+- 3 child Payments materialised at 17:59:07, 18:00:07, 18:01:07
+  (each one minute apart, deterministic idempotency keys, identical
+  amount / currency / category / attributions to the parent).
+- 3 `PAYMENT_OCCURRENCE_CREATED` audit log rows recorded with
+  matching `firedAt` / `occurrenceId` payloads.
+- `payment_schedules.last_run_at` / `next_run_at` advanced on each
+  fire; producer's pre-populated `nextRunAt` was visible from the
+  initial POST response.
+
+**Phase 6 status: 16 / 21** — the 6.17 epic still counts as one
+in-progress card; it flips to ✅ once 6.17.4 (lifecycle: pause /
+resume / cancel + cascade rules) lands.
+
+**Commits.** Feat: `12f2537d`. Docs (this entry): committed as
+`docs(phase-6.17.3)`.
+
+**Next** — 6.17.4 (schedule lifecycle: pause / resume / cancel +
+cascade rules + the cancelled/paused skip paths exercised end-to-
+end).
