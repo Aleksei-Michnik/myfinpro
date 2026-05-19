@@ -1363,4 +1363,74 @@ enforced by [`packages/shared/src/__tests__/default-categories.test.ts`](../pack
 
 ---
 
+## Schedule lifecycle (iteration 6.17.4)
+
+The `PaymentSchedule` row carries two timestamp columns to model the full
+state machine without leaking implementation details into the wire DTO:
+
+| Column        | Meaning                                                                |
+| ------------- | ---------------------------------------------------------------------- |
+| `pausedAt`    | Non-null = scheduler removed from BullMQ; reversible via POST /resume. |
+| `cancelledAt` | Non-null = terminal soft-cancel; row preserved for child provenance.   |
+
+### State machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> active : POST /schedule
+    active --> paused : POST /pause
+    paused --> active : POST /resume
+    active --> cancelled : POST /cancel
+    paused --> cancelled : POST /cancel
+    cancelled --> [*] : terminal
+    active --> [*] : DELETE
+    paused --> [*] : DELETE
+```
+
+### Endpoint contract
+
+All under `/api/v1/payments/:paymentId/schedule/*`.
+
+| Verb | Path      | Behavior                                                                                              | Idempotency 409                                                             |
+| ---- | --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| POST | `/pause`  | `pausedAt = NOW()`, `Queue.removeJobScheduler(...)`. Audit `PAYMENT_SCHEDULE_PAUSED`.                 | `PAYMENT_SCHEDULE_ALREADY_PAUSED`, `PAYMENT_SCHEDULE_CANCELLED`             |
+| POST | `/resume` | `pausedAt = null`, `Queue.upsertJobScheduler(...)`. `nextRunAt` recomputed via `computeNextRunAt`.    | `PAYMENT_SCHEDULE_NOT_PAUSED`, `PAYMENT_SCHEDULE_CANCELLED`, `..._PAST_END` |
+| POST | `/cancel` | `cancelledAt = NOW()`, `Queue.removeJobScheduler(...)`. Terminal — preserves row. Audit `_CANCELLED`. | `PAYMENT_SCHEDULE_ALREADY_CANCELLED`                                        |
+| DEL  | `/`       | Hard-delete row + scheduler key (existing 6.17.2 endpoint).                                           | n/a                                                                         |
+
+The schedule-response DTO exposes `pausedAt` + `cancelledAt` (lit up in
+6.17.4) so clients can reconstruct the state without a separate call.
+
+### Cascade rules (parent-payment changes)
+
+The producer side mirrors the worker's self-heal paths from 6.17.3. Every
+cascade routes through the single chokepoint
+[`removeScheduleForPayment()`](../apps/api/src/payment/utils/schedule-cascade.ts:1):
+
+| Trigger                                      | Behavior                                                                                                                          | Audit                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Parent edited `RECURRING` → other type       | Schedule row + scheduler torn down silently. The edit succeeds (no 409). The DB write happens inside the parent-edit transaction. | `PAYMENT_SCHEDULE_DELETED` with `details.reason = 'parent_type_changed'` |
+| Parent edited `ONE_TIME` → `RECURRING`       | No automatic schedule creation. User must explicitly POST /schedule afterwards.                                                   | n/a (just `PAYMENT_UPDATED`)                                             |
+| Parent hard-deleted (final attribution gone) | Schedule row + scheduler torn down BEFORE the parent FK cascade fires. Already-fired child occurrences become orphaned-but-valid. | `PAYMENT_SCHEDULE_DELETED` with `details.reason = 'parent_deleted'`      |
+
+### Decisions
+
+- **Cascade on type-change is silent** + audit-logged (not 409). The user's
+  intent to change the type is unambiguous; rejecting the edit with "you
+  still have a schedule" would force a redundant DELETE step.
+- **Child occurrences become orphaned-but-valid** on parent hard-delete.
+  `parentPaymentId` is still useful for history queries even after the
+  template is gone.
+- **Cancel preserves the row** (carries `parentScheduleId` provenance);
+  DELETE is the hard-remove. Two distinct verbs because the data they
+  remove has different downstream value.
+- **Queue I/O happens after the DB transaction commits** for the
+  cascade paths. Holding Redis I/O while MySQL row locks are open
+  triggered deadlocks under integration concurrency. The cascade is
+  best-effort on the queue side; the worker's self-heal path
+  (iteration 6.17.3) covers any divergence.
+- **Lifecycle endpoints (pause/resume/cancel) keep the queue write inside
+  the transaction** — they only touch a single row and the strict
+  consistency outweighs the small deadlock risk of those low-traffic paths.
+
 **End of Phase 6 design document.**

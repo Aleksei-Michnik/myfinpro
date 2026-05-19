@@ -1,4 +1,5 @@
 import { CURRENCY_CODES, CurrencyCode } from '@myfinpro/shared';
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   ConflictException,
@@ -8,8 +9,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
 import { AttributionDto } from './dto/attribution.dto';
@@ -24,6 +27,7 @@ import {
 } from './dto/payment-summary.dto';
 import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { removeScheduleForPayment } from './utils/schedule-cascade';
 
 /** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
 const MAX_AMOUNT_CENTS = 1e11;
@@ -144,6 +148,7 @@ export class PaymentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categoryService: CategoryService,
+    @InjectQueue(PAYMENT_OCCURRENCES_QUEUE) private readonly queue: Queue,
   ) {}
 
   /**
@@ -463,7 +468,8 @@ export class PaymentService {
       dto.currency !== undefined ||
       dto.occurredAt !== undefined ||
       dto.categoryId !== undefined ||
-      dto.note !== undefined;
+      dto.note !== undefined ||
+      dto.type !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     if (!hasScalarField && !hasAttributionField) {
@@ -475,7 +481,13 @@ export class PaymentService {
     }
 
     // 4. Generated-occurrence guard (forward compat for 6.17 / 6.19).
-    if (existing.parentPaymentId !== null || existing.type !== 'ONE_TIME') {
+    //
+    // Iteration 6.17.4 carve-out: a RECURRING parent CAN be edited iff the
+    // sole purpose is changing its `type` (which then cascades the schedule
+    // tear-down — see §cascade below). All other RECURRING-parent edits stay
+    // 400 to avoid muddying the generated-occurrence semantics.
+    const isTypeChange = dto.type !== undefined && dto.type !== existing.type;
+    if (existing.parentPaymentId !== null || (existing.type !== 'ONE_TIME' && !isTypeChange)) {
       throw new BadRequestException({
         message:
           'Generated occurrences / schedule-derived payments cannot be edited via this endpoint',
@@ -603,11 +615,29 @@ export class PaymentService {
     if (nextOccurredAt !== undefined) data.occurredAt = nextOccurredAt;
     if (categoryChanging) data.category = { connect: { id: nextCategoryId } };
     if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
+    if (dto.type !== undefined) data.type = dto.type;
 
-    // 12. Execute everything in one transaction.
+    // Cascade trigger: parent transitioning out of RECURRING tears down its
+    // schedule + scheduler in the same transaction. ONE_TIME → RECURRING is
+    // a silent no-op here — the user must POST /schedule to attach one.
+    const cascadeOnTypeChange = isTypeChange && existing.type === 'RECURRING';
+
+    // 12. Execute everything in one transaction. The cascade DB writes
+    // (schedule row + audit) participate in the tx; the queue mutation
+    // happens AFTER commit (Redis I/O held across SQL row locks invites
+    // MySQL deadlocks under concurrency — see helper).
+    let cascadeRemovedScheduleId: string | null = null;
     const txResult = await this.prisma.$transaction(async (tx) => {
       if (hasScalarField) {
         await tx.payment.update({ where: { id: paymentId }, data });
+      }
+      if (cascadeOnTypeChange) {
+        const cascade = await removeScheduleForPayment(this.prisma, this.queue, paymentId, {
+          tx,
+          reason: 'parent_type_changed',
+          actorId: userId,
+        });
+        cascadeRemovedScheduleId = cascade.scheduleId;
       }
 
       let paymentDeleted = false;
@@ -636,6 +666,20 @@ export class PaymentService {
 
       return { paymentDeleted };
     });
+
+    // Post-commit queue tear-down for the cascade tear-down path. Failure
+    // is logged + swallowed; the worker's self-heal path picks up any
+    // orphan scheduler key on its next firing.
+    if (cascadeRemovedScheduleId !== null) {
+      const schedulerId = `payment-schedule:${cascadeRemovedScheduleId}`;
+      try {
+        await this.queue.removeJobScheduler(schedulerId);
+      } catch (err) {
+        this.logger.warn(
+          `cascade removeJobScheduler(${schedulerId}) failed for payment ${paymentId}: ${(err as Error).message} — worker will self-heal`,
+        );
+      }
+    }
 
     // 13. Audit — fire-and-forget.
     if (hasScalarField) {
@@ -781,17 +825,39 @@ export class PaymentService {
 
     const targetIds = targets.map((t) => t.id);
 
-    // 4. Transactional delete.
+    // 4. Transactional delete. On the final hard-delete branch we cascade
+    // the schedule (DB row + audit) BEFORE the parent row goes away. The
+    // BullMQ scheduler key is removed AFTER the tx commits — Redis I/O
+    // inside a SQL transaction triggers MySQL deadlocks under concurrent
+    // load. Worker self-heal covers any divergence if Redis is down.
+    let cascadeRemovedScheduleId: string | null = null;
     const { paymentDeleted } = await this.prisma.$transaction(async (tx) => {
       await tx.paymentAttribution.deleteMany({ where: { id: { in: targetIds } } });
       const remaining = await tx.paymentAttribution.count({ where: { paymentId } });
       let hardDeleted = false;
       if (remaining === 0) {
+        const cascade = await removeScheduleForPayment(this.prisma, this.queue, paymentId, {
+          tx,
+          reason: 'parent_deleted',
+          actorId: userId,
+        });
+        cascadeRemovedScheduleId = cascade.scheduleId;
         await tx.payment.delete({ where: { id: paymentId } });
         hardDeleted = true;
       }
       return { paymentDeleted: hardDeleted };
     });
+
+    if (cascadeRemovedScheduleId !== null) {
+      const schedulerId = `payment-schedule:${cascadeRemovedScheduleId}`;
+      try {
+        await this.queue.removeJobScheduler(schedulerId);
+      } catch (err) {
+        this.logger.warn(
+          `cascade removeJobScheduler(${schedulerId}) failed for payment ${paymentId}: ${(err as Error).message} — worker will self-heal`,
+        );
+      }
+    }
 
     // 5. Audit (best-effort).
     for (const t of targets) {

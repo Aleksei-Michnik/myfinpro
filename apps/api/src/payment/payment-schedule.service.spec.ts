@@ -20,8 +20,10 @@ describe('PaymentScheduleService', () => {
       create: jest.Mock;
       upsert: jest.Mock;
       delete: jest.Mock;
+      update: jest.Mock;
     };
     auditLog: { create: jest.Mock };
+    $transaction: jest.Mock;
   };
   let paymentService: { assertVisible: jest.Mock };
   let queue: {
@@ -41,9 +43,16 @@ describe('PaymentScheduleService', () => {
         create: jest.fn(),
         upsert: jest.fn(),
         delete: jest.fn(),
+        update: jest.fn(),
       },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
-    };
+      $transaction: jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          paymentSchedule: prisma.paymentSchedule,
+          auditLog: prisma.auditLog,
+        }),
+      ),
+    } as unknown as typeof prisma;
     paymentService = { assertVisible: jest.fn().mockResolvedValue(undefined) };
     queue = {
       upsertJobScheduler: jest.fn().mockResolvedValue({}),
@@ -72,6 +81,8 @@ describe('PaymentScheduleService', () => {
       limit: null,
       nextRunAt: null,
       lastRunAt: null,
+      pausedAt: null,
+      cancelledAt: null,
       createdAt: new Date('2026-05-15T00:00:00Z'),
       updatedAt: new Date('2026-05-15T00:00:00Z'),
       ...over,
@@ -209,6 +220,143 @@ describe('PaymentScheduleService', () => {
 
       await expect(service.remove(userId, paymentId)).resolves.toBeUndefined();
       expect(prisma.paymentSchedule.delete).toHaveBeenCalled();
+    });
+  });
+
+  describe('pause()', () => {
+    it('happy path: sets pausedAt, removes scheduler, writes audit', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+
+      const out = await service.pause(userId, paymentId);
+
+      expect(prisma.paymentSchedule.update).toHaveBeenCalledWith({
+        where: { id: scheduleId },
+        data: expect.objectContaining({ pausedAt: expect.any(Date) }),
+      });
+      expect(queue.removeJobScheduler).toHaveBeenCalledWith(buildSchedulerId(scheduleId));
+      expect(out.pausedAt).not.toBeNull();
+      await Promise.resolve();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'PAYMENT_SCHEDULE_PAUSED' }),
+        }),
+      );
+    });
+
+    it('rejects 409 ALREADY_PAUSED when pausedAt is already set', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+      await expect(service.pause(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+      expect(queue.removeJobScheduler).not.toHaveBeenCalled();
+    });
+
+    it('rejects 409 CANCELLED when schedule is in terminal state', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ cancelledAt: new Date() }));
+      await expect(service.pause(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects 404 when no schedule exists', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      await expect(service.pause(userId, paymentId)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('forwards 404 when parent payment is invisible', async () => {
+      paymentService.assertVisible.mockRejectedValue(new NotFoundException('hidden'));
+      await expect(service.pause(userId, paymentId)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('resume()', () => {
+    it('happy path: clears pausedAt, re-upserts scheduler, recomputes nextRunAt, audit', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ pausedAt: null }));
+
+      const out = await service.resume(userId, paymentId);
+
+      expect(prisma.paymentSchedule.update).toHaveBeenCalledWith({
+        where: { id: scheduleId },
+        data: expect.objectContaining({ pausedAt: null, nextRunAt: expect.any(Date) }),
+      });
+      expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
+        buildSchedulerId(scheduleId),
+        { every: 60_000 },
+        expect.objectContaining({ name: PAYMENT_OCCURRENCE_JOB }),
+      );
+      expect(out.pausedAt).toBeNull();
+      await Promise.resolve();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'PAYMENT_SCHEDULE_RESUMED' }),
+        }),
+      );
+    });
+
+    it('rejects 409 NOT_PAUSED when schedule is active', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      await expect(service.resume(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects 409 CANCELLED when terminal', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(
+        rowFor({ pausedAt: new Date(), cancelledAt: new Date() }),
+      );
+      await expect(service.resume(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects 409 PAST_END when endsAt is past', async () => {
+      const past = new Date(Date.now() - 60_000);
+      prisma.paymentSchedule.findUnique.mockResolvedValue(
+        rowFor({ pausedAt: new Date(), endsAt: past }),
+      );
+      await expect(service.resume(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects 404 when no schedule', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      await expect(service.resume(userId, paymentId)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('cancel()', () => {
+    it('happy path: sets cancelledAt, removes scheduler, audit', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ cancelledAt: new Date() }));
+
+      const out = await service.cancel(userId, paymentId);
+
+      expect(prisma.paymentSchedule.update).toHaveBeenCalledWith({
+        where: { id: scheduleId },
+        data: expect.objectContaining({ cancelledAt: expect.any(Date) }),
+      });
+      expect(queue.removeJobScheduler).toHaveBeenCalledWith(buildSchedulerId(scheduleId));
+      expect(out.cancelledAt).not.toBeNull();
+      await Promise.resolve();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'PAYMENT_SCHEDULE_CANCELLED' }),
+        }),
+      );
+    });
+
+    it('rejects 409 ALREADY_CANCELLED when already cancelled', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ cancelledAt: new Date() }));
+      await expect(service.cancel(userId, paymentId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('cancel from paused state succeeds (cancel supersedes pause)', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+      prisma.paymentSchedule.update.mockResolvedValue(
+        rowFor({ pausedAt: new Date(), cancelledAt: new Date() }),
+      );
+
+      const out = await service.cancel(userId, paymentId);
+      expect(out.cancelledAt).not.toBeNull();
+      expect(out.pausedAt).not.toBeNull();
+    });
+
+    it('rejects 404 when no schedule', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      await expect(service.cancel(userId, paymentId)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

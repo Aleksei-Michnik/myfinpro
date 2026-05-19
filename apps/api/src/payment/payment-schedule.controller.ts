@@ -140,4 +140,83 @@ export class PaymentScheduleController {
   ): Promise<void> {
     await this.service.remove(user.sub, paymentId);
   }
+
+  // ── lifecycle (Phase 6.17.4) ──
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('pause')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Pause the schedule (reversible)',
+    description:
+      'Sets pausedAt=NOW() and removes the BullMQ scheduler entry — no further occurrences ' +
+      'fire until POST /resume. Idempotent: 409 PAYMENT_SCHEDULE_ALREADY_PAUSED on repeat. ' +
+      '409 PAYMENT_SCHEDULE_CANCELLED when the schedule is already in the terminal cancelled state.',
+  })
+  @ApiOkResponse({ description: 'Schedule paused', type: ScheduleResponseDto })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Parent payment not visible, or no schedule attached' })
+  @ApiConflictResponse({ description: 'Already paused or cancelled' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (30/min)' })
+  async pause(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ): Promise<ScheduleResponseDto> {
+    return this.service.pause(user.sub, paymentId);
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Resume a paused schedule',
+    description:
+      'Clears pausedAt and re-upserts the BullMQ scheduler with the persisted spec. ' +
+      'nextRunAt is recomputed from now via the shared computeNextRunAt helper. ' +
+      '409 PAYMENT_SCHEDULE_NOT_PAUSED when active, PAYMENT_SCHEDULE_CANCELLED when terminal, ' +
+      'PAYMENT_SCHEDULE_PAST_END when endsAt is in the past.',
+  })
+  @ApiOkResponse({ description: 'Schedule resumed', type: ScheduleResponseDto })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Parent payment not visible, or no schedule attached' })
+  @ApiConflictResponse({ description: 'Not paused, cancelled, or past endsAt' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (30/min)' })
+  async resume(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ): Promise<ScheduleResponseDto> {
+    return this.service.resume(user.sub, paymentId);
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Cancel the schedule (terminal soft-cancel)',
+    description:
+      'Sets cancelledAt=NOW() and removes the BullMQ scheduler entry. Terminal: cannot be ' +
+      'resumed (use POST /schedule to create a fresh one). The DB row is preserved so ' +
+      'parentScheduleId provenance survives on already-fired child occurrences. Use DELETE ' +
+      'to hard-remove the row.',
+  })
+  @ApiOkResponse({ description: 'Schedule cancelled', type: ScheduleResponseDto })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Parent payment not visible, or no schedule attached' })
+  @ApiConflictResponse({ description: 'Already cancelled' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (30/min)' })
+  async cancel(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ): Promise<ScheduleResponseDto> {
+    return this.service.cancel(user.sub, paymentId);
+  }
 }

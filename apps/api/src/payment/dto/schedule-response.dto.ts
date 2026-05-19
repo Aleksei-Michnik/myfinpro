@@ -1,11 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
- * Wire-level shape for a `PaymentSchedule` row. Iteration 6.17.2.
+ * Wire-level shape for a `PaymentSchedule` row.
  *
- * `pausedAt` / `cancelledAt` are intentionally omitted — the columns ship in
- * 6.17.2 for forward-compat but the lifecycle endpoints land in 6.17.4. We
- * don't expose fields whose semantics aren't yet defined.
+ * Iteration 6.17.2 introduced the columns; 6.17.4 lit up `pausedAt` /
+ * `cancelledAt` once the lifecycle endpoints (POST /pause | /resume |
+ * /cancel) defined their semantics. `pausedAt !== null` means the
+ * scheduler entry has been removed from BullMQ; `cancelledAt !== null`
+ * means the schedule is terminal — only DELETE can purge the row.
  */
 export class ScheduleResponseDto {
   @ApiProperty()
@@ -34,6 +36,23 @@ export class ScheduleResponseDto {
 
   @ApiPropertyOptional({ nullable: true, type: String, description: 'ISO 8601 datetime' })
   lastRunAt!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'ISO 8601 datetime — when the schedule was paused via POST /pause. Null when active.',
+  })
+  pausedAt!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'ISO 8601 datetime — when the schedule was soft-cancelled via POST /cancel. ' +
+      'Terminal: cannot be resumed. Null when not cancelled.',
+  })
+  cancelledAt!: string | null;
 
   @ApiProperty({ description: 'ISO 8601 datetime' })
   createdAt!: string;

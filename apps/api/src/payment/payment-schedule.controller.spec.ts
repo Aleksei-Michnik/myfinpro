@@ -4,7 +4,15 @@ import { PaymentScheduleService } from './payment-schedule.service';
 
 describe('PaymentScheduleController', () => {
   let controller: PaymentScheduleController;
-  let service: { create: jest.Mock; get: jest.Mock; replace: jest.Mock; remove: jest.Mock };
+  let service: {
+    create: jest.Mock;
+    get: jest.Mock;
+    replace: jest.Mock;
+    remove: jest.Mock;
+    pause: jest.Mock;
+    resume: jest.Mock;
+    cancel: jest.Mock;
+  };
 
   beforeEach(async () => {
     service = {
@@ -12,6 +20,9 @@ describe('PaymentScheduleController', () => {
       get: jest.fn(),
       replace: jest.fn(),
       remove: jest.fn(),
+      pause: jest.fn(),
+      resume: jest.fn(),
+      cancel: jest.fn(),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PaymentScheduleController],
@@ -48,5 +59,26 @@ describe('PaymentScheduleController', () => {
     service.remove.mockResolvedValue(undefined);
     await expect(controller.remove(user as never, paymentId)).resolves.toBeUndefined();
     expect(service.remove).toHaveBeenCalledWith('u1', paymentId);
+  });
+
+  it('POST /pause → service.pause', async () => {
+    service.pause.mockResolvedValue({ id: 's1', pausedAt: '2026-05-15T00:00:00Z' });
+    const res = await controller.pause(user as never, paymentId);
+    expect(service.pause).toHaveBeenCalledWith('u1', paymentId);
+    expect(res.pausedAt).toBe('2026-05-15T00:00:00Z');
+  });
+
+  it('POST /resume → service.resume', async () => {
+    service.resume.mockResolvedValue({ id: 's1', pausedAt: null });
+    const res = await controller.resume(user as never, paymentId);
+    expect(service.resume).toHaveBeenCalledWith('u1', paymentId);
+    expect(res.pausedAt).toBeNull();
+  });
+
+  it('POST /cancel → service.cancel', async () => {
+    service.cancel.mockResolvedValue({ id: 's1', cancelledAt: '2026-05-15T00:00:00Z' });
+    const res = await controller.cancel(user as never, paymentId);
+    expect(service.cancel).toHaveBeenCalledWith('u1', paymentId);
+    expect(res.cancelledAt).toBe('2026-05-15T00:00:00Z');
   });
 });

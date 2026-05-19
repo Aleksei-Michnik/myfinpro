@@ -20,6 +20,7 @@ import { ScheduleResponseDto } from './dto/schedule-response.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { PaymentService } from './payment.service';
 import { computeNextRunAt } from './utils/next-run-at';
+import { buildSchedulerId, removeScheduleForPayment } from './utils/schedule-cascade';
 
 /**
  * Production minimum interval (1 minute). Overridable via the
@@ -33,16 +34,10 @@ function resolveMinIntervalMs(): number {
   return Number.isFinite(n) && n > 0 ? n : SCHEDULE_EVERY_MS_MIN;
 }
 
-/**
- * Build the deterministic BullMQ scheduler id for a `PaymentSchedule` row.
- *
- * Stable for the schedule's lifetime — never reused. Re-upserting under the
- * same id replaces the existing repeatable job entry (BullMQ idempotency
- * contract — see Queue.upsertJobScheduler v5+ docs).
- */
-export function buildSchedulerId(scheduleId: string): string {
-  return `payment-schedule:${scheduleId}`;
-}
+// `buildSchedulerId` lives in [`utils/schedule-cascade.ts`](utils/schedule-cascade.ts:1)
+// to keep the cascade helper cycle-free; re-exported here so existing
+// imports (test specs, integration suites) keep working.
+export { buildSchedulerId };
 
 /**
  * Job name fired by the scheduler. Centralised so the processor (lands in
@@ -287,6 +282,176 @@ export class PaymentScheduleService {
     this.logger.log(`Schedule ${existing.id} for payment ${paymentId} deleted by user ${userId}`);
   }
 
+  /**
+   * POST /payments/:paymentId/schedule/pause — soft-pause.
+   *
+   * Sets `pausedAt = NOW()` and removes the BullMQ scheduler entry so no
+   * further occurrences fire. The DB row is preserved so resume can re-
+   * upsert under the same id with the original spec.
+   */
+  async pause(userId: string, paymentId: string): Promise<ScheduleResponseDto> {
+    await this.paymentService.assertVisible(userId, paymentId);
+
+    const existing = await this.prisma.paymentSchedule.findUnique({ where: { paymentId } });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Schedule not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_NOT_FOUND,
+      });
+    }
+    if (existing.cancelledAt !== null) {
+      throw new ConflictException({
+        message: 'Schedule has been cancelled — terminal state',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_CANCELLED,
+      });
+    }
+    if (existing.pausedAt !== null) {
+      throw new ConflictException({
+        message: 'Schedule is already paused',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_ALREADY_PAUSED,
+      });
+    }
+
+    const schedulerId = buildSchedulerId(existing.id);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.paymentSchedule.update({
+        where: { id: existing.id },
+        data: { pausedAt: new Date() },
+      });
+      // Queue mutation inside the transaction so a Redis failure rolls back
+      // the DB write.
+      await this.queue.removeJobScheduler(schedulerId);
+      return row;
+    });
+
+    void this.writeAudit(userId, paymentId, 'PAYMENT_SCHEDULE_PAUSED', {
+      scheduleId: existing.id,
+    });
+    this.logger.log(`Schedule ${existing.id} for payment ${paymentId} paused by user ${userId}`);
+    return mapScheduleRowToDto(updated);
+  }
+
+  /**
+   * POST /payments/:paymentId/schedule/resume — un-pause.
+   *
+   * Clears `pausedAt`, re-upserts the BullMQ scheduler under the persisted
+   * spec, and recomputes `nextRunAt` from "now" so the read API reflects
+   * the post-resume firing schedule before the worker fires once.
+   */
+  async resume(userId: string, paymentId: string): Promise<ScheduleResponseDto> {
+    await this.paymentService.assertVisible(userId, paymentId);
+
+    const existing = await this.prisma.paymentSchedule.findUnique({ where: { paymentId } });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Schedule not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_NOT_FOUND,
+      });
+    }
+    if (existing.cancelledAt !== null) {
+      throw new ConflictException({
+        message: 'Schedule has been cancelled — terminal state',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_CANCELLED,
+      });
+    }
+    if (existing.pausedAt === null) {
+      throw new ConflictException({
+        message: 'Schedule is not paused',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_NOT_PAUSED,
+      });
+    }
+    if (existing.endsAt !== null && existing.endsAt.getTime() < Date.now()) {
+      throw new ConflictException({
+        message: 'Schedule has passed its end date — cannot resume',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_PAST_END,
+      });
+    }
+
+    const repeatOpts = this.dtoToRepeatOpts({
+      cron: existing.cron ?? undefined,
+      everyMs: existing.everyMs ?? undefined,
+      startsAt: existing.startsAt.toISOString(),
+      endsAt: existing.endsAt?.toISOString(),
+      limit: existing.limit ?? undefined,
+    });
+
+    const schedulerId = buildSchedulerId(existing.id);
+    const now = new Date();
+    const refreshedNextRunAt = computeNextRunAt(
+      { cron: existing.cron, everyMs: existing.everyMs },
+      now,
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.paymentSchedule.update({
+        where: { id: existing.id },
+        data: { pausedAt: null, nextRunAt: refreshedNextRunAt },
+      });
+      await this.upsertSchedulerWithRetry(schedulerId, repeatOpts, {
+        scheduleId: existing.id,
+        paymentId,
+        createdById: userId,
+      });
+      return row;
+    });
+
+    void this.writeAudit(userId, paymentId, 'PAYMENT_SCHEDULE_RESUMED', {
+      scheduleId: existing.id,
+    });
+    this.logger.log(`Schedule ${existing.id} for payment ${paymentId} resumed by user ${userId}`);
+    return mapScheduleRowToDto(updated);
+  }
+
+  /**
+   * POST /payments/:paymentId/schedule/cancel — soft-cancel (terminal).
+   *
+   * Sets `cancelledAt = NOW()` and removes the BullMQ scheduler. The row is
+   * preserved so child occurrences keep their `parentScheduleId` provenance;
+   * use DELETE for a hard remove.
+   */
+  async cancel(userId: string, paymentId: string): Promise<ScheduleResponseDto> {
+    await this.paymentService.assertVisible(userId, paymentId);
+
+    const existing = await this.prisma.paymentSchedule.findUnique({ where: { paymentId } });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Schedule not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_NOT_FOUND,
+      });
+    }
+    if (existing.cancelledAt !== null) {
+      throw new ConflictException({
+        message: 'Schedule is already cancelled',
+        errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_ALREADY_CANCELLED,
+      });
+    }
+
+    const schedulerId = buildSchedulerId(existing.id);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.paymentSchedule.update({
+        where: { id: existing.id },
+        data: { cancelledAt: new Date() },
+      });
+      await this.queue.removeJobScheduler(schedulerId);
+      return row;
+    });
+
+    void this.writeAudit(userId, paymentId, 'PAYMENT_SCHEDULE_CANCELLED', {
+      scheduleId: existing.id,
+    });
+    this.logger.log(`Schedule ${existing.id} for payment ${paymentId} cancelled by user ${userId}`);
+    return mapScheduleRowToDto(updated);
+  }
+
+  // Re-export the cascade helper bound to this service's prisma + queue, so
+  // sibling services don't need to import the bare util.
+  async removeForPaymentCascade(
+    paymentId: string,
+    opts?: { reason?: 'parent_type_changed' | 'parent_deleted'; actorId?: string | null },
+  ): Promise<void> {
+    await removeScheduleForPayment(this.prisma, this.queue, paymentId, opts);
+  }
+
   // ── helpers ──
 
   /**
@@ -393,7 +558,13 @@ export class PaymentScheduleService {
   private async writeAudit(
     userId: string,
     paymentId: string,
-    action: 'PAYMENT_SCHEDULE_CREATED' | 'PAYMENT_SCHEDULE_UPDATED' | 'PAYMENT_SCHEDULE_DELETED',
+    action:
+      | 'PAYMENT_SCHEDULE_CREATED'
+      | 'PAYMENT_SCHEDULE_UPDATED'
+      | 'PAYMENT_SCHEDULE_DELETED'
+      | 'PAYMENT_SCHEDULE_PAUSED'
+      | 'PAYMENT_SCHEDULE_RESUMED'
+      | 'PAYMENT_SCHEDULE_CANCELLED',
     details: Record<string, unknown>,
   ): Promise<void> {
     try {
@@ -425,6 +596,8 @@ export function mapScheduleRowToDto(row: {
   limit: number | null;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
+  pausedAt: Date | null;
+  cancelledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): ScheduleResponseDto {
@@ -438,6 +611,8 @@ export function mapScheduleRowToDto(row: {
     limit: row.limit,
     nextRunAt: row.nextRunAt ? row.nextRunAt.toISOString() : null,
     lastRunAt: row.lastRunAt ? row.lastRunAt.toISOString() : null,
+    pausedAt: row.pausedAt ? row.pausedAt.toISOString() : null,
+    cancelledAt: row.cancelledAt ? row.cancelledAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -1,4 +1,4 @@
-import { PAYMENT_DIRECTIONS } from '@myfinpro/shared';
+import { PAYMENT_DIRECTIONS, PAYMENT_TYPES } from '@myfinpro/shared';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -34,6 +34,16 @@ export class UpdatePaymentDto {
   @IsOptional()
   @IsIn([...PAYMENT_DIRECTIONS])
   direction?: 'IN' | 'OUT';
+
+  @ApiPropertyOptional({
+    enum: [...PAYMENT_TYPES],
+    description:
+      'Change the payment type (e.g. RECURRING → ONE_TIME). Transitioning out of RECURRING ' +
+      'silently tears down the attached schedule + BullMQ scheduler (cascade audit).',
+  })
+  @IsOptional()
+  @IsIn([...PAYMENT_TYPES])
+  type?: 'ONE_TIME' | 'RECURRING' | 'LIMITED_PERIOD' | 'INSTALLMENT' | 'LOAN' | 'MORTGAGE';
 
   @ApiPropertyOptional({ description: 'Amount in minor units (cents).' })
   @IsOptional()

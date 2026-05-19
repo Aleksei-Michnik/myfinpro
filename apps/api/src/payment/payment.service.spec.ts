@@ -1,3 +1,4 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import {
   BadRequestException,
   ConflictException,
@@ -7,6 +8,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
@@ -56,6 +58,10 @@ describe('PaymentService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    paymentSchedule: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      delete: jest.fn().mockResolvedValue({}),
+    },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
@@ -64,6 +70,11 @@ describe('PaymentService', () => {
 
   const categoryServiceMock = {
     findById: jest.fn(),
+  };
+
+  const queueMock = {
+    upsertJobScheduler: jest.fn().mockResolvedValue({}),
+    removeJobScheduler: jest.fn().mockResolvedValue(true),
   };
 
   const now = new Date('2026-05-01T00:00:00Z');
@@ -127,17 +138,24 @@ describe('PaymentService', () => {
         PaymentService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: CategoryService, useValue: categoryServiceMock },
+        { provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE), useValue: queueMock },
       ],
     }).compile();
     service = mod.get(PaymentService);
     jest.clearAllMocks();
     prismaMock.auditLog.create.mockResolvedValue({});
+    prismaMock.paymentSchedule.findUnique.mockResolvedValue(null);
+    prismaMock.paymentSchedule.delete.mockResolvedValue({});
+    queueMock.upsertJobScheduler.mockResolvedValue({});
+    queueMock.removeJobScheduler.mockResolvedValue(true);
     // Default: $transaction runs the callback with a tx that points at the same mocks.
     prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
       cb({
         payment: prismaMock.payment,
         paymentAttribution: prismaMock.paymentAttribution,
         paymentStar: prismaMock.paymentStar,
+        paymentSchedule: prismaMock.paymentSchedule,
+        auditLog: prismaMock.auditLog,
       }),
     );
     // Remaining-count default: payment still has attributions after remove.
@@ -1982,6 +2000,103 @@ describe('PaymentService', () => {
       expect(prismaMock.paymentStar.findUnique).toHaveBeenCalledWith({
         where: { paymentId_userId: { paymentId: 'pay-1', userId: 'user-1' } },
       });
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.17.4 — schedule cascade hooks
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('cascade: parent type-change & hard-delete', () => {
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => {
+        const merged = { ...makeFullRow(), ...(data as Record<string, unknown>) };
+        prismaMock.payment.findUnique.mockResolvedValue(merged);
+        return merged;
+      });
+    });
+
+    it('update() RECURRING → ONE_TIME triggers cascade (schedule row + scheduler removed, audit reason=parent_type_changed)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ type: 'RECURRING' }));
+      prismaMock.paymentSchedule.findUnique.mockResolvedValue({
+        id: 'sched-1',
+        paymentId: 'pay-1',
+      });
+      prismaMock.paymentSchedule.delete.mockResolvedValue({ id: 'sched-1' });
+
+      await service.update('user-1', 'pay-1', { type: 'ONE_TIME' });
+
+      expect(prismaMock.paymentSchedule.delete).toHaveBeenCalledWith({
+        where: { id: 'sched-1' },
+      });
+      expect(queueMock.removeJobScheduler).toHaveBeenCalledWith('payment-schedule:sched-1');
+      await new Promise((res) => setImmediate(res));
+      const cascadeAudit = prismaMock.auditLog.create.mock.calls.find(
+        (c) =>
+          (c[0] as { data: { action: string; entity: string } }).data.action ===
+            'PAYMENT_SCHEDULE_DELETED' &&
+          (c[0] as { data: { entity: string } }).data.entity === 'PaymentSchedule',
+      )?.[0] as { data: { details: { reason?: string } } };
+      expect(cascadeAudit.data.details.reason).toBe('parent_type_changed');
+    });
+
+    it('update() RECURRING → RECURRING (no type change) does NOT trigger cascade', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ type: 'RECURRING' }));
+      // type provided but identical → not a change
+      try {
+        await service.update('user-1', 'pay-1', { type: 'RECURRING' });
+      } catch {
+        // The current guard rejects RECURRING edits without a real type change.
+      }
+      expect(queueMock.removeJobScheduler).not.toHaveBeenCalled();
+      expect(prismaMock.paymentSchedule.delete).not.toHaveBeenCalled();
+    });
+
+    it('update() ONE_TIME → RECURRING does NOT auto-create a schedule', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ type: 'ONE_TIME' }));
+      await service.update('user-1', 'pay-1', { type: 'RECURRING' });
+      expect(queueMock.upsertJobScheduler).not.toHaveBeenCalled();
+      expect(prismaMock.paymentSchedule.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('remove() final hard-delete with active schedule → cascade tears it down before payment.delete', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+      prismaMock.paymentSchedule.findUnique.mockResolvedValue({
+        id: 'sched-1',
+        paymentId: 'pay-1',
+      });
+      prismaMock.paymentSchedule.delete.mockResolvedValue({ id: 'sched-1' });
+
+      await service.remove('user-1', 'pay-1', { scope: 'all' });
+
+      expect(prismaMock.paymentSchedule.delete).toHaveBeenCalledWith({
+        where: { id: 'sched-1' },
+      });
+      expect(queueMock.removeJobScheduler).toHaveBeenCalledWith('payment-schedule:sched-1');
+      expect(prismaMock.payment.delete).toHaveBeenCalledWith({ where: { id: 'pay-1' } });
+      // Audit cascade reason
+      await new Promise((res) => setImmediate(res));
+      const cascadeAudit = prismaMock.auditLog.create.mock.calls.find(
+        (c) =>
+          (c[0] as { data: { action: string; entity: string } }).data.action ===
+            'PAYMENT_SCHEDULE_DELETED' &&
+          (c[0] as { data: { entity: string } }).data.entity === 'PaymentSchedule',
+      )?.[0] as { data: { details: { reason?: string } } };
+      expect(cascadeAudit.data.details.reason).toBe('parent_deleted');
+    });
+
+    it('remove() final hard-delete without a schedule is a no-op cascade (idempotent)', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+      prismaMock.paymentSchedule.findUnique.mockResolvedValue(null);
+
+      await expect(service.remove('user-1', 'pay-1', { scope: 'all' })).resolves.toBeDefined();
+      expect(queueMock.removeJobScheduler).not.toHaveBeenCalled();
+      expect(prismaMock.paymentSchedule.delete).not.toHaveBeenCalled();
     });
   });
 });
