@@ -6086,3 +6086,215 @@ iteration 6.18.1; the next status bump still lands with 6.18.3).
 **Next** — 6.18.2 (lifecycle UI: pause / resume / cancel + edit-
 schedule dialog), then 6.18.3 (filter chip + RECURRING indicator
 on the payments list).
+
+### Iteration 6.18.1.2 — Edit-on-RECURRING + time-of-day everywhere (2026-05-19)
+
+Two small staging-reported bugs bundled into one fix commit. Trivial separately.
+
+**Issue 1 — Edit button stuck on `disabled` for RECURRING parents.**
+[`<PaymentDetailHeader>`](apps/web/src/components/payment/PaymentDetailHeader.tsx:1)
+inherited a 6.13-era guard that allowed editing only for
+`type === 'ONE_TIME'`. Iteration 6.18.1 widened the form to
+support `RECURRING` (the schedule sub-form drives the spec on
+PUT) but the guard never followed. New rule extracted as a
+single helper, [`canEditPayment(payment)`](apps/web/src/lib/payment/types.ts:1),
+consumed from both the detail header and the row-actions menu in
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1) (DRY):
+
+```ts
+canEditPayment(p) = p.parentPaymentId === null && (p.type === 'ONE_TIME' || p.type === 'RECURRING');
+```
+
+| Payment shape                                          | Edit | Delete | Reason                             |
+| ------------------------------------------------------ | :--: | :----: | ---------------------------------- |
+| `type=ONE_TIME, parentPaymentId=null`                  |  ✅  |   ✅   | —                                  |
+| `type=RECURRING, parentPaymentId=null` (parent)        |  ✅  |   ✅   | — (regression fix)                 |
+| `parentPaymentId !== null` (generated occurrence)      |  ❌  |   ❌   | `editDisabled.generatedOccurrence` |
+| `type ∈ {INSTALLMENT, LOAN, MORTGAGE, LIMITED_PERIOD}` |  ❌  |   ❌   | `editDisabled.unsupportedType`     |
+| Edit only: viewer is not the creator                   |  ❌  |   ✅   | `editDisabledNotCreator`           |
+
+Per-child overrides for generated occurrences land in 6.18.1.6;
+until then they remain non-editable. Disabled buttons get
+`aria-disabled` + a `title=` tooltip with the reason. Two new
+i18n keys (en + he, RTL-safe):
+
+```
+payments.detail.editDisabled.generatedOccurrence
+payments.detail.editDisabled.unsupportedType
+```
+
+**Issue 2 — Time-of-day visible alongside dates everywhere.**
+`occurredAt` is stored as a full ISO datetime, but the UI was
+formatting it date-only via [`formatOccurredAt(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1).
+The helper now defaults to `dateStyle: 'medium', timeStyle: 'short'`
+through `Intl.DateTimeFormat`, with two siblings:
+
+- [`formatOccurredDate(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1) — date-only fallback for surfaces that genuinely don't want the time.
+- [`formatOccurredAtAbsolute(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1) — fully-qualified `dateStyle: 'long', timeStyle: 'medium'` for the schedule-badge `title=` tooltip.
+
+Sample renders:
+
+| Locale  | `2026-05-19T14:30:00Z`  |
+| ------- | ----------------------- |
+| `en-US` | `May 19, 2026, 2:30 PM` |
+| `he-IL` | `19 במאי 2026, 14:30`   |
+
+Surfaces updated automatically (they all consume the helper):
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1)
+(payment list per-scope + "All"),
+[`<PaymentDetailHeader>`](apps/web/src/components/payment/PaymentDetailHeader.tsx:1)
+(Date row),
+[`<RecentActivity>`](apps/web/src/components/dashboard/RecentActivity.tsx:1)
+
+- [`<StarredPayments>`](apps/web/src/components/dashboard/StarredPayments.tsx:1)
+  (transitively, via `<PaymentsList>` → `<PaymentRow>`).
+
+`<PaymentFormDialog>` switched the `occurredAt` field from
+`<input type="date">` to `<input type="datetime-local">` so the
+user picks a real timestamp; default is the current local time.
+The schedule sub-form's `Starts on` / `Ends on` stay date-only
+(time of day comes from the cron / `everyMs` spec, not these
+fields).
+
+Existing payments stored with a midnight `occurredAt` keep
+rendering — they just show `12:00 AM` / `00:00`; we deliberately
+do not suppress the time component so the format stays consistent.
+
+`computeDiff` compares `occurredAt` numerically (`Date.getTime()`)
+so the millisecond-precision round-trip
+(`2026-04-25T00:00:00Z` → `2026-04-25T00:00` → `2026-04-25T00:00:00.000Z`)
+no longer produces a spurious diff in edit mode.
+[`vitest.config.ts`](apps/web/vitest.config.ts:1) pins `TZ=UTC`
+so the datetime-local ↔ UTC conversion is deterministic across
+CI + dev machines.
+
+**Tests.** Added 14 cases:
+
+- 6 in [`formatters.test.ts`](apps/web/src/lib/payment/__tests__/formatters.test.ts:1) — time-component appears in en + he, midnight not suppressed, `formatOccurredDate` strips the time, `formatOccurredAtAbsolute` round-trip.
+- 4 in [`types.test.ts`](apps/web/src/lib/payment/__tests__/types.test.ts:1) — truth-table for `canEditPayment` + `cannotEditReason`.
+- 4 in [`PaymentRow.spec.tsx`](apps/web/src/components/payment/PaymentRow.spec.tsx:1) — date cell shows time, Edit/Delete menu disabled for child + INSTALLMENT, enabled for RECURRING parent.
+- 4 in [`PaymentDetailHeader.spec.tsx`](apps/web/src/components/payment/PaymentDetailHeader.spec.tsx:1) — Edit/Delete enabled/disabled rules per the table above + tooltip text.
+- 5 in [`payment-detail.spec.tsx`](apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx:1) — page-level eligibility regressions + Date row time component.
+- 1 in [`PaymentFormDialog.spec.tsx`](apps/web/src/components/payment/PaymentFormDialog.spec.tsx:1) — date input is `type=datetime-local`, default is `YYYY-MM-DDTHH:mm` shape.
+
+All 924/924 web suites green.
+
+**Constraints honoured.** No new npm dependency. DRY (single
+`canEditPayment` helper). A11y (`aria-disabled` + `title=` on
+disabled buttons; `<input type="datetime-local">` is the
+browser's native picker). Backward-compat (existing midnight
+rows render `00:00`).
+
+**Phase 6 status: 17 / 21** (unchanged — hotfix on top of
+iteration 6.18.1).
+
+**Commits.** Fix: `ce387c5`. Docs (this entry): `docs(phase-6.18.1.2)`.
+
+**Next** — 6.18.1.3 (recurring detail page lists child occurrences
+via `<PaymentsList>` + Load more), then 6.18.2 (lifecycle UI).
+
+### Iteration 6.18.1.2 — Edit-on-RECURRING + time-of-day everywhere (2026-05-19)
+
+Two small staging-reported bugs bundled into one fix commit. Trivial separately.
+
+**Issue 1 — Edit button stuck on `disabled` for RECURRING parents.**
+[`<PaymentDetailHeader>`](apps/web/src/components/payment/PaymentDetailHeader.tsx:1)
+inherited a 6.13-era guard that allowed editing only for
+`type === 'ONE_TIME'`. Iteration 6.18.1 widened the form to
+support `RECURRING` (the schedule sub-form drives the spec on
+PUT) but the guard never followed. New rule extracted as a
+single helper, [`canEditPayment(payment)`](apps/web/src/lib/payment/types.ts:1),
+consumed from both the detail header and the row-actions menu in
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1) (DRY):
+
+```ts
+canEditPayment(p) = p.parentPaymentId === null && (p.type === 'ONE_TIME' || p.type === 'RECURRING');
+```
+
+| Payment shape                                          | Edit | Delete | Reason                             |
+| ------------------------------------------------------ | :--: | :----: | ---------------------------------- |
+| `type=ONE_TIME, parentPaymentId=null`                  |  ✅  |   ✅   | —                                  |
+| `type=RECURRING, parentPaymentId=null` (parent)        |  ✅  |   ✅   | — (regression fix)                 |
+| `parentPaymentId !== null` (generated occurrence)      |  ❌  |   ❌   | `editDisabled.generatedOccurrence` |
+| `type ∈ {INSTALLMENT, LOAN, MORTGAGE, LIMITED_PERIOD}` |  ❌  |   ❌   | `editDisabled.unsupportedType`     |
+| Edit only: viewer is not the creator                   |  ❌  |   ✅   | `editDisabledNotCreator`           |
+
+Per-child overrides for generated occurrences land in 6.18.1.6;
+until then they remain non-editable. Disabled buttons get
+`aria-disabled` + a `title=` tooltip with the reason. Two new
+i18n keys (en + he, RTL-safe):
+
+```
+payments.detail.editDisabled.generatedOccurrence
+payments.detail.editDisabled.unsupportedType
+```
+
+**Issue 2 — Time-of-day visible alongside dates everywhere.**
+`occurredAt` is stored as a full ISO datetime, but the UI was
+formatting it date-only via [`formatOccurredAt(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1).
+The helper now defaults to `dateStyle: 'medium', timeStyle: 'short'`
+through `Intl.DateTimeFormat`, with two siblings:
+
+- [`formatOccurredDate(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1) — date-only fallback for surfaces that genuinely don't want the time.
+- [`formatOccurredAtAbsolute(iso, locale)`](apps/web/src/lib/payment/formatters.ts:1) — fully-qualified `dateStyle: 'long', timeStyle: 'medium'` for the schedule-badge `title=` tooltip.
+
+Sample renders:
+
+| Locale  | `2026-05-19T14:30:00Z`  |
+| ------- | ----------------------- |
+| `en-US` | `May 19, 2026, 2:30 PM` |
+| `he-IL` | `19 במאי 2026, 14:30`   |
+
+Surfaces updated automatically (they all consume the helper):
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1)
+(payment list per-scope + "All"),
+[`<PaymentDetailHeader>`](apps/web/src/components/payment/PaymentDetailHeader.tsx:1)
+(Date row),
+[`<RecentActivity>`](apps/web/src/components/dashboard/RecentActivity.tsx:1)
+
+- [`<StarredPayments>`](apps/web/src/components/dashboard/StarredPayments.tsx:1)
+  (transitively, via `<PaymentsList>` → `<PaymentRow>`).
+
+`<PaymentFormDialog>` switched the `occurredAt` field from
+`<input type="date">` to `<input type="datetime-local">` so the
+user picks a real timestamp; default is the current local time.
+The schedule sub-form's `Starts on` / `Ends on` stay date-only
+(time of day comes from the cron / `everyMs` spec, not these
+fields).
+
+Existing payments stored with a midnight `occurredAt` keep
+rendering — they just show `12:00 AM` / `00:00`; we deliberately
+do not suppress the time component so the format stays consistent.
+
+`computeDiff` compares `occurredAt` numerically (`Date.getTime()`)
+so the millisecond-precision round-trip
+(`2026-04-25T00:00:00Z` → `2026-04-25T00:00` → `2026-04-25T00:00:00.000Z`)
+no longer produces a spurious diff in edit mode.
+[`vitest.config.ts`](apps/web/vitest.config.ts:1) pins `TZ=UTC`
+so the datetime-local ↔ UTC conversion is deterministic across
+CI + dev machines.
+
+**Tests.** Added 14 cases:
+
+- 6 in [`formatters.test.ts`](apps/web/src/lib/payment/__tests__/formatters.test.ts:1) — time-component appears in en + he, midnight not suppressed, `formatOccurredDate` strips the time, `formatOccurredAtAbsolute` round-trip.
+- 4 in [`types.test.ts`](apps/web/src/lib/payment/__tests__/types.test.ts:1) — truth-table for `canEditPayment` + `cannotEditReason`.
+- 4 in [`PaymentRow.spec.tsx`](apps/web/src/components/payment/PaymentRow.spec.tsx:1) — date cell shows time, Edit/Delete menu disabled for child + INSTALLMENT, enabled for RECURRING parent.
+- 4 in [`PaymentDetailHeader.spec.tsx`](apps/web/src/components/payment/PaymentDetailHeader.spec.tsx:1) — Edit/Delete enabled/disabled rules per the table above + tooltip text.
+- 5 in [`payment-detail.spec.tsx`](apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx:1) — page-level eligibility regressions + Date row time component.
+- 1 in [`PaymentFormDialog.spec.tsx`](apps/web/src/components/payment/PaymentFormDialog.spec.tsx:1) — date input is `type=datetime-local`, default is `YYYY-MM-DDTHH:mm` shape.
+
+All 924/924 web suites green.
+
+**Constraints honoured.** No new npm dependency. DRY (single
+`canEditPayment` helper). A11y (`aria-disabled` + `title=` on
+disabled buttons; `<input type="datetime-local">` is the
+browser's native picker). Backward-compat (existing midnight
+rows render `00:00`).
+
+**Phase 6 status: 17 / 21** (unchanged — hotfix on top of
+iteration 6.18.1).
+
+**Commits.** Fix: `ce387c5`. Docs (this entry): `docs(phase-6.18.1.2)`.
+
+**Next** — 6.18.1.3 (recurring detail page lists child occurrences
+via `<PaymentsList>` + Load more), then 6.18.2 (lifecycle UI).
