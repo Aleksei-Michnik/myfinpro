@@ -5836,3 +5836,151 @@ UI), 6.20 (INSTALLMENT UI), 6.21 (LOAN/MORTGAGE UI).
 
 **Next** — 6.18 (recurring UI: payment-form RECURRING branch +
 schedule list page + lifecycle controls).
+
+## Phase 6 — Iteration 6.18.1: Recurring UI — form + read-only badge (2026-05-19)
+
+Producer-facing UI for `RECURRING` payments. The end-user can now
+create a recurring payment with a schedule from the dashboard,
+edit the schedule's spec, and see the schedule's status on the
+payment detail page. Lifecycle controls (pause / resume / cancel)
+land in 6.18.2; filters / list indicators in 6.18.3.
+
+**Files added.**
+
+| File                                                                                                                                   | Purpose                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`apps/web/src/components/payment/PaymentScheduleSubForm.tsx`](apps/web/src/components/payment/PaymentScheduleSubForm.tsx:1)           | Every/Cron radio, fields, validation, sticky state           |
+| [`apps/web/src/components/payment/ScheduleBadge.tsx`](apps/web/src/components/payment/ScheduleBadge.tsx:1)                             | Read-only badge with status pill + repeat / next-run / limit |
+| [`apps/web/src/lib/payment/schedule-formatters.ts`](apps/web/src/lib/payment/schedule-formatters.ts:1)                                 | `humanReadableRepeat()` + `decomposeEveryMs()`               |
+| [`apps/web/src/lib/payment/__tests__/schedule-formatters.test.ts`](apps/web/src/lib/payment/__tests__/schedule-formatters.test.ts:1)   | 12 cases                                                     |
+| [`apps/web/src/lib/payment/__tests__/types.test.ts`](apps/web/src/lib/payment/__tests__/types.test.ts:1)                               | 5 truth-table cases for `deriveScheduleStatus()`             |
+| [`apps/web/src/components/payment/PaymentScheduleSubForm.spec.tsx`](apps/web/src/components/payment/PaymentScheduleSubForm.spec.tsx:1) | 16 cases                                                     |
+| [`apps/web/src/components/payment/ScheduleBadge.spec.tsx`](apps/web/src/components/payment/ScheduleBadge.spec.tsx:1)                   | 8 cases incl. RTL + null defensive                           |
+
+**Files modified.**
+
+| File                                                                                                                                                     | Change                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`apps/web/src/lib/payment/types.ts`](apps/web/src/lib/payment/types.ts:1)                                                                               | Adds `ScheduleSpec` / `ScheduleResponse` / `ScheduleStatus` + `deriveScheduleStatus()`; widens `CreatePaymentInput.type` and `UpdatePaymentInput.type` |
+| [`apps/web/src/lib/payment/payment-context.tsx`](apps/web/src/lib/payment/payment-context.tsx:1)                                                         | New methods: `createSchedule`, `getSchedule` (404→null), `replaceSchedule`, `removeSchedule` — all accept `AbortSignal`                                |
+| [`apps/web/src/components/payment/PaymentFormDialog.tsx`](apps/web/src/components/payment/PaymentFormDialog.tsx:1)                                       | Renders sub-form for `RECURRING`; two-step create + rollback; PUT-on-edit; type-change warning                                                         |
+| [`apps/web/src/components/payment/PaymentTypeSelector.tsx`](apps/web/src/components/payment/PaymentTypeSelector.tsx:1)                                   | `RECURRING` is now enabled                                                                                                                             |
+| [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx`](apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx:1) | Container-scope `getSchedule` fetch + `<ScheduleBadge>` + back-link from child occurrences                                                             |
+| [`apps/web/messages/en.json`](apps/web/messages/en.json:1), [`apps/web/messages/he.json`](apps/web/messages/he.json:1)                                   | `payments.schedule.{form,badge}.*` keys; full RTL coverage                                                                                             |
+
+**Two-step create rollback.** When `type === 'RECURRING'`, the
+form first POSTs the payment, then POSTs the schedule. If the
+schedule call fails — e.g. the user typed a bad cron and the
+server returns `400 PAYMENT_SCHEDULE_INVALID_CRON` — we issue
+`DELETE /payments/:id?scope=all` against the freshly-created
+payment so the dashboard never shows a "recurring parent without
+a schedule" orphan. The rollback failure is swallowed (logged,
+not surfaced) — the schedule error is the user-facing message.
+
+**Decision: server-side cron validation only.** We weighed
+shipping `cron-parser` to the web bundle to give the user live
+feedback as they type. Rejected — it adds ~20 KB gzipped and
+duplicates the API's authoritative validator. Instead, the form
+forwards the raw cron string and surfaces the `400` response
+inline under the field. The `<CronInput>` carries an
+"Examples" helper text instead of a live preview.
+
+**A11y / RTL.** Radio group has a label and `aria-describedby`;
+inline error messages carry `role="alert"`; the sub-form
+respects `aria-busy` from the parent dialog's
+`useAsyncOperation()`. Hebrew translations are RTL-aware and
+respect the no-double-prefix lock-in from 6.15.2 — verified by
+the existing [`i18n-key-shape.test.ts`](apps/web/src/lib/payment/__tests__/i18n-key-shape.test.ts:1) regression suite.
+
+**Test counts.**
+
+- 899 unit / component tests pass (60 new across 6 files: 16
+  schedule-sub-form, 8 schedule-badge, 12 schedule-formatters,
+  5 types-truthtable, 10 payment-form-dialog extensions
+  including rollback, 2 payment-detail badge + back-link, 1
+  type-selector RECURRING-enabled, plus a few smaller cases).
+- Lint + typecheck green.
+
+**Phase 6 status: 17 / 21** — sub-iteration 6.18.x is mid-flight;
+flips to 18/21 when 6.18.3 lands.
+
+**Commits.** Feat: `d3ecdf2`. Docs (this entry): committed as
+`docs(phase-6.18.1)`.
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel + edit-
+schedule dialog), then 6.18.3 (filter chip + RECURRING indicator
+on the payments list).
+
+## Phase 6 — Iteration 6.18.1: Recurring UI — form + read-only badge (2026-05-19)
+
+Producer-facing UI for `RECURRING` payments. The end-user can now
+create a recurring payment with a schedule from the dashboard,
+edit the schedule's spec, and see the schedule's status on the
+payment detail page. Lifecycle controls (pause / resume / cancel)
+land in 6.18.2; filters / list indicators in 6.18.3.
+
+**Files added.**
+
+| File                                                                                                                                   | Purpose                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`apps/web/src/components/payment/PaymentScheduleSubForm.tsx`](apps/web/src/components/payment/PaymentScheduleSubForm.tsx:1)           | Every/Cron radio, fields, validation, sticky state           |
+| [`apps/web/src/components/payment/ScheduleBadge.tsx`](apps/web/src/components/payment/ScheduleBadge.tsx:1)                             | Read-only badge with status pill + repeat / next-run / limit |
+| [`apps/web/src/lib/payment/schedule-formatters.ts`](apps/web/src/lib/payment/schedule-formatters.ts:1)                                 | `humanReadableRepeat()` + `decomposeEveryMs()`               |
+| [`apps/web/src/lib/payment/__tests__/schedule-formatters.test.ts`](apps/web/src/lib/payment/__tests__/schedule-formatters.test.ts:1)   | 12 cases                                                     |
+| [`apps/web/src/lib/payment/__tests__/types.test.ts`](apps/web/src/lib/payment/__tests__/types.test.ts:1)                               | 5 truth-table cases for `deriveScheduleStatus()`             |
+| [`apps/web/src/components/payment/PaymentScheduleSubForm.spec.tsx`](apps/web/src/components/payment/PaymentScheduleSubForm.spec.tsx:1) | 16 cases                                                     |
+| [`apps/web/src/components/payment/ScheduleBadge.spec.tsx`](apps/web/src/components/payment/ScheduleBadge.spec.tsx:1)                   | 8 cases incl. RTL + null defensive                           |
+
+**Files modified.**
+
+| File                                                                                                                                                     | Change                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`apps/web/src/lib/payment/types.ts`](apps/web/src/lib/payment/types.ts:1)                                                                               | Adds `ScheduleSpec` / `ScheduleResponse` / `ScheduleStatus` + `deriveScheduleStatus()`; widens `CreatePaymentInput.type` and `UpdatePaymentInput.type` |
+| [`apps/web/src/lib/payment/payment-context.tsx`](apps/web/src/lib/payment/payment-context.tsx:1)                                                         | New methods: `createSchedule`, `getSchedule` (404→null), `replaceSchedule`, `removeSchedule` — all accept `AbortSignal`                                |
+| [`apps/web/src/components/payment/PaymentFormDialog.tsx`](apps/web/src/components/payment/PaymentFormDialog.tsx:1)                                       | Renders sub-form for `RECURRING`; two-step create + rollback; PUT-on-edit; type-change warning                                                         |
+| [`apps/web/src/components/payment/PaymentTypeSelector.tsx`](apps/web/src/components/payment/PaymentTypeSelector.tsx:1)                                   | `RECURRING` is now enabled                                                                                                                             |
+| [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx`](apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx:1) | Container-scope `getSchedule` fetch + `<ScheduleBadge>` + back-link from child occurrences                                                             |
+| [`apps/web/messages/en.json`](apps/web/messages/en.json:1), [`apps/web/messages/he.json`](apps/web/messages/he.json:1)                                   | `payments.schedule.{form,badge}.*` keys; full RTL coverage                                                                                             |
+
+**Two-step create rollback.** When `type === 'RECURRING'`, the
+form first POSTs the payment, then POSTs the schedule. If the
+schedule call fails — e.g. the user typed a bad cron and the
+server returns `400 PAYMENT_SCHEDULE_INVALID_CRON` — we issue
+`DELETE /payments/:id?scope=all` against the freshly-created
+payment so the dashboard never shows a "recurring parent without
+a schedule" orphan. The rollback failure is swallowed (logged,
+not surfaced) — the schedule error is the user-facing message.
+
+**Decision: server-side cron validation only.** We weighed
+shipping `cron-parser` to the web bundle to give the user live
+feedback as they type. Rejected — it adds ~20 KB gzipped and
+duplicates the API's authoritative validator. Instead, the form
+forwards the raw cron string and surfaces the `400` response
+inline under the field. The `<CronInput>` carries an
+"Examples" helper text instead of a live preview.
+
+**A11y / RTL.** Radio group has a label and `aria-describedby`;
+inline error messages carry `role="alert"`; the sub-form
+respects `aria-busy` from the parent dialog's
+`useAsyncOperation()`. Hebrew translations are RTL-aware and
+respect the no-double-prefix lock-in from 6.15.2 — verified by
+the existing [`i18n-key-shape.test.ts`](apps/web/src/lib/payment/__tests__/i18n-key-shape.test.ts:1) regression suite.
+
+**Test counts.**
+
+- 899 unit / component tests pass (60 new across 6 files: 16
+  schedule-sub-form, 8 schedule-badge, 12 schedule-formatters,
+  5 types-truthtable, 10 payment-form-dialog extensions
+  including rollback, 2 payment-detail badge + back-link, 1
+  type-selector RECURRING-enabled, plus a few smaller cases).
+- Lint + typecheck green.
+
+**Phase 6 status: 17 / 21** — sub-iteration 6.18.x is mid-flight;
+flips to 18/21 when 6.18.3 lands.
+
+**Commits.** Feat: `d3ecdf2`. Docs (this entry): committed as
+`docs(phase-6.18.1)`.
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel + edit-
+schedule dialog), then 6.18.3 (filter chip + RECURRING indicator
+on the payments list).
