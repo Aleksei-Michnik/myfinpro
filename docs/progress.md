@@ -5984,3 +5984,105 @@ flips to 18/21 when 6.18.3 lands.
 **Next** — 6.18.2 (lifecycle UI: pause / resume / cancel + edit-
 schedule dialog), then 6.18.3 (filter chip + RECURRING indicator
 on the payments list).
+
+### Iteration 6.18.1.1 — Hotfix: allow type=RECURRING on create (2026-05-19)
+
+**Bug repro.** On staging, every Save in the new
+[`PaymentFormDialog`](apps/web/src/components/payment/PaymentFormDialog.tsx:1)
+with the **Recurring** tab selected returned the API error
+`Could not save the payment. Payment type 'RECURRING' is not
+implemented yet`. Reproduced in the browser by picking Recurring,
+filling amount + category + cron / `every 1 minute`, and clicking
+Save — the create POST 400'd before the second schedule POST ever
+fired.
+
+**Diagnosis.** The recurring-payment infrastructure (queue,
+scheduler CRUD, worker, cascade, two-step create flow) all
+shipped in 6.17.1 → 6.17.4 and the producer-facing UI shipped in
+6.18.1. But the very first guard in
+[`PaymentService.create()`](apps/api/src/payment/payment.service.ts:206)
+— a leftover from 6.5 when only `ONE_TIME` was implemented — was
+still hard-coded `if (dto.type !== 'ONE_TIME') throw …`. The
+edit-path's matching guard had been relaxed in 6.17.4 (so the
+RECURRING → ONE_TIME cascade could fire), but the create path was
+never extended. Result: `POST /payments` rejected `RECURRING` for
+every caller, including the brand-new web UI.
+
+**Fix.** One contained change in
+[`payment.service.ts`](apps/api/src/payment/payment.service.ts:32):
+add a module-level `SUPPORTED_CREATE_TYPES = ['ONE_TIME',
+'RECURRING'] as const` constant, switch the guard to
+`if (!SUPPORTED_CREATE_TYPES.includes(dto.type)) throw …`, and
+write the persisted row's `type` from `dto.type` instead of
+hard-coded `'ONE_TIME'`. The audit-log payload + log line use
+`dto.type` for the same reason. The other unimplemented types
+(`LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`, `MORTGAGE`) keep
+returning the same structured error code
+`PAYMENT_TYPE_NOT_IMPLEMENTED` — they are deferred to phase 7+.
+
+The two-step client flow stays identical: `POST /payments`
+creates the payment row only; the schedule remains a separate
+resource at `POST /payments/:paymentId/schedule`. The server
+explicitly does **not** auto-create a `PaymentSchedule` on a
+RECURRING create — that's the web client's second POST. The
+RECURRING-specific unit test asserts this by checking that
+`prismaMock.paymentSchedule.findUnique` and
+`queueMock.upsertJobScheduler` are never called during the
+create flow.
+
+The DTO already used the full `PaymentType` enum (the original
+6.5 comment in
+[`create-payment.dto.ts`](apps/api/src/payment/dto/create-payment.dto.ts:23)
+even called this out) so no DTO change was needed. The
+`PAYMENT_TYPE_NOT_IMPLEMENTED` error code was already present in
+[`payment-errors.ts`](apps/api/src/payment/constants/payment-errors.ts:20).
+
+**Test counts.**
+
+- Unit: 738 pass (+1 new accepted-RECURRING case in
+  [`payment.service.spec.ts`](apps/api/src/payment/payment.service.spec.ts:181)
+  asserting type passthrough + no schedule side-effects + audit
+  log; the existing rejection table now lists only
+  `LIMITED_PERIOD / INSTALLMENT / LOAN / MORTGAGE`).
+- Controller: +1 smoke case in
+  [`payment.controller.spec.ts`](apps/api/src/payment/payment.controller.spec.ts:98)
+  asserting the controller passes `type=RECURRING` straight to
+  the service.
+- Integration: 15 / 15 pass in
+  [`payments-create.integration.spec.ts`](apps/api/test/integration/payments-create.integration.spec.ts:1)
+  — three new cases (12: RECURRING accepted + DB row has no
+  schedule + audit log; 13: two-step create with schedule POST
+  succeeds end-to-end; 14: RECURRING create then DELETE returns
+  `paymentDeleted=true` with no orphan schedule). The suite now
+  spins up its own Redis testcontainer (mirroring the existing
+  `payment-schedule.integration.spec.ts` pattern) because case
+  13 hits the BullMQ scheduler upsert; `PAYMENT_SCHEDULE_MIN_INTERVAL_MS`
+  is dropped to `100` for the duration of the suite so test 13
+  doesn't have to wait for the production 60-second floor.
+
+**Staging smoke (commit `e349e75`, image
+`staging-e349e75`).** From inside the staging Docker network:
+
+```
+POST /api/v1/payments  type=RECURRING   → 201 (id 7a80f36d…, type RECURRING, status POSTED)
+POST /api/v1/payments  type=INSTALLMENT → 400 errorCode=PAYMENT_TYPE_NOT_IMPLEMENTED
+```
+
+— exactly the contract the unit + integration tests pin.
+
+**Constraints honoured.** No new npm dependency, no schema
+migration, error code + message live in the existing
+[`PAYMENT_ERRORS`](apps/api/src/payment/constants/payment-errors.ts:8)
+union (DRY), backward-compat for the existing `ONE_TIME` create
+flow is unchanged (covered by the unmodified 11 existing
+integration cases).
+
+**Phase 6 status: 17 / 21** (unchanged — hotfix on top of
+iteration 6.18.1; the next status bump still lands with 6.18.3).
+
+**Commits.** Fix: `e349e75`. Docs (this entry): committed as
+`docs(phase-6.18.1.1)`.
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel + edit-
+schedule dialog), then 6.18.3 (filter chip + RECURRING indicator
+on the payments list).
