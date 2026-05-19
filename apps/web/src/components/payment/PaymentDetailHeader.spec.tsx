@@ -139,7 +139,7 @@ describe('PaymentDetailHeader', () => {
     expect(btn.getAttribute('title')).toMatch(/editDisabledNotCreator/);
   });
 
-  it('edit button disabled for generated occurrences', () => {
+  it('edit button disabled for generated occurrences (child) with the right tooltip', () => {
     render(
       <PaymentDetailHeader
         payment={makePayment({ parentPaymentId: 'parent-1' })}
@@ -149,10 +149,14 @@ describe('PaymentDetailHeader', () => {
     );
     const btn = screen.getByTestId('detail-edit');
     expect(btn).toBeDisabled();
-    expect(btn.getAttribute('title')).toMatch(/editDisabledOccurrence/);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.getAttribute('title')).toMatch(/editDisabled\.generatedOccurrence/);
   });
 
-  it('edit button disabled for non-ONE_TIME types', () => {
+  // Phase 6 · Iteration 6.18.1.2 — RECURRING parents are now editable
+  // (the form ships the schedule sub-form). Regression for the lifted
+  // 6.13 ONE_TIME-only guard.
+  it('edit button enabled for RECURRING parent (parentPaymentId === null)', () => {
     render(
       <PaymentDetailHeader
         payment={makePayment({ type: 'RECURRING' })}
@@ -160,10 +164,23 @@ describe('PaymentDetailHeader', () => {
         onDeleteClick={noop}
       />,
     );
-    expect(screen.getByTestId('detail-edit')).toBeDisabled();
+    expect(screen.getByTestId('detail-edit')).not.toBeDisabled();
   });
 
-  it('delete button visible regardless of creator', () => {
+  it('edit button disabled for unsupported types (INSTALLMENT) with the right tooltip', () => {
+    render(
+      <PaymentDetailHeader
+        payment={makePayment({ type: 'INSTALLMENT' })}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
+    const btn = screen.getByTestId('detail-edit');
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toMatch(/editDisabled\.unsupportedType/);
+  });
+
+  it('delete button visible and enabled regardless of creator', () => {
     render(
       <PaymentDetailHeader
         payment={makePayment({ createdById: 'someone-else' })}
@@ -172,6 +189,33 @@ describe('PaymentDetailHeader', () => {
       />,
     );
     expect(screen.getByTestId('detail-delete')).toBeInTheDocument();
+    expect(screen.getByTestId('detail-delete')).not.toBeDisabled();
+  });
+
+  // Delete follows the same form-eligibility rule (no schedule cascade
+  // for unsupported types). Creator is NOT required (a non-creator can
+  // still detach their own attribution via the dialog).
+  it('delete button disabled for child occurrences with tooltip', () => {
+    render(
+      <PaymentDetailHeader
+        payment={makePayment({ parentPaymentId: 'parent-1' })}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
+    const btn = screen.getByTestId('detail-delete');
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toMatch(/editDisabled\.generatedOccurrence/);
+  });
+
+  it('delete button enabled for RECURRING parent', () => {
+    render(
+      <PaymentDetailHeader
+        payment={makePayment({ type: 'RECURRING' })}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     expect(screen.getByTestId('detail-delete')).not.toBeDisabled();
   });
 

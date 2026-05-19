@@ -302,4 +302,45 @@ describe('PaymentDetailClient', () => {
     await waitFor(() => expect(screen.getByTestId('payment-detail-back')).toBeInTheDocument());
     expect(screen.getByTestId('payment-detail-back').getAttribute('href')).toBe('/dashboard');
   });
+
+  // ── Phase 6 · Iteration 6.18.1.2 — Edit/Delete eligibility regressions ──
+
+  it('Edit button is enabled for RECURRING parent payments', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
+    expect(screen.getByTestId('detail-edit')).not.toBeDisabled();
+  });
+
+  it('Edit button is disabled for child occurrences with the right tooltip', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ parentPaymentId: 'parent-1' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
+    const btn = screen.getByTestId('detail-edit');
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toMatch(/editDisabled\.generatedOccurrence/);
+  });
+
+  it('Edit button is disabled for unsupported types (INSTALLMENT) with the right tooltip', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
+    const btn = screen.getByTestId('detail-edit');
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toMatch(/editDisabled\.unsupportedType/);
+  });
+
+  it('Delete button follows the same eligibility rules', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ parentPaymentId: 'parent-1' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('detail-delete')).toBeInTheDocument());
+    expect(screen.getByTestId('detail-delete')).toBeDisabled();
+  });
+
+  it('Date row displays the time-of-day component', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment());
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('detail-date')).toBeInTheDocument());
+    expect(screen.getByTestId('detail-date').textContent).toMatch(/\d{1,2}:\d{2}/);
+  });
 });

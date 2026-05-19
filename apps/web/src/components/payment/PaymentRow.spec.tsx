@@ -284,4 +284,42 @@ describe('PaymentRow', () => {
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  // ── Iteration 6.18.1.2 additions ─────────────────────────────────────────
+
+  it('date cell renders the time-of-day component', () => {
+    const payment = makePayment();
+    renderDesktop({ payment });
+    const tr = screen.getByTestId(`payment-row-${payment.id}`);
+    // The date cell is the second `<td>` (after the star cell).
+    const dateCell = tr.querySelectorAll('td')[1] as HTMLTableCellElement;
+    expect(dateCell.textContent).toMatch(/\d{1,2}:\d{2}/);
+    expect(dateCell.textContent).toMatch(/2026/);
+  });
+
+  it('Edit/Delete menu entries disabled for child occurrences', () => {
+    const payment = makePayment();
+    // Override parentPaymentId so the helper reports a generated occurrence.
+    const child: PaymentSummary = { ...payment, parentPaymentId: 'parent-1' };
+    renderDesktop({ payment: child });
+    fireEvent.click(screen.getByTestId(`row-controls-${child.id}`));
+    expect(screen.getByTestId(`row-edit-${child.id}`)).toBeDisabled();
+    expect(screen.getByTestId(`row-delete-${child.id}`)).toBeDisabled();
+  });
+
+  it('Edit/Delete menu entries disabled for unsupported types (INSTALLMENT)', () => {
+    const payment: PaymentSummary = { ...makePayment(), type: 'INSTALLMENT' };
+    renderDesktop({ payment });
+    fireEvent.click(screen.getByTestId(`row-controls-${payment.id}`));
+    expect(screen.getByTestId(`row-edit-${payment.id}`)).toBeDisabled();
+    expect(screen.getByTestId(`row-delete-${payment.id}`)).toBeDisabled();
+  });
+
+  it('Edit/Delete menu entries enabled for RECURRING parent', () => {
+    const payment: PaymentSummary = { ...makePayment(), type: 'RECURRING' };
+    renderDesktop({ payment });
+    fireEvent.click(screen.getByTestId(`row-controls-${payment.id}`));
+    expect(screen.getByTestId(`row-edit-${payment.id}`)).not.toBeDisabled();
+    expect(screen.getByTestId(`row-delete-${payment.id}`)).not.toBeDisabled();
+  });
 });

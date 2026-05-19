@@ -199,6 +199,36 @@ export function deriveScheduleStatus(schedule: ScheduleResponse | null): Schedul
   return 'active';
 }
 
+/**
+ * Edit-eligibility predicate consumed by `<PaymentDetailHeader>` and
+ * `<PaymentRow>` (Phase 6 · Iteration 6.18.1.2).
+ *
+ * The form supports `ONE_TIME` and `RECURRING` (parent) types; everything
+ * else (`INSTALLMENT` / `LOAN` / `MORTGAGE` / `LIMITED_PERIOD`) is still
+ * read-only until the dedicated forms ship. Server-generated occurrences
+ * (`parentPaymentId !== null`) stay non-editable per the
+ * `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE` rule; per-child overrides
+ * land in 6.18.1.6.
+ *
+ * Authorisation (creator / co-owner) is layered separately by the caller —
+ * this helper only reports whether the form *can technically* edit the
+ * payment.
+ */
+export type CannotEditReason = 'generatedOccurrence' | 'unsupportedType';
+
+export function canEditPayment(payment: Pick<PaymentSummary, 'parentPaymentId' | 'type'>): boolean {
+  if (payment.parentPaymentId !== null) return false;
+  return payment.type === 'ONE_TIME' || payment.type === 'RECURRING';
+}
+
+export function cannotEditReason(
+  payment: Pick<PaymentSummary, 'parentPaymentId' | 'type'>,
+): CannotEditReason | null {
+  if (payment.parentPaymentId !== null) return 'generatedOccurrence';
+  if (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING') return 'unsupportedType';
+  return null;
+}
+
 export interface UpdatePaymentInput {
   direction?: 'IN' | 'OUT';
   type?: 'ONE_TIME' | 'RECURRING';

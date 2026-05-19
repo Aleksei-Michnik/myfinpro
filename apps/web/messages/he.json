@@ -695,8 +695,11 @@
       "starRemove": "הסר סימון",
       "edit": "ערוך",
       "delete": "מחק",
-      "editDisabledOccurrence": "הופעות שנוצרו אוטומטית לא ניתנות לעריכה עדיין.",
       "editDisabledNotCreator": "רק היוצר יכול לערוך את התשלום.",
+      "editDisabled": {
+        "generatedOccurrence": "תשלום זה נוצר אוטומטית מתבנית קבועה. ערוך את התשלום ההורה כדי לשנות את כל המופעים.",
+        "unsupportedType": "עריכת תשלום מסוג זה אינה נתמכת עדיין."
+      },
       "edited": "נערך",
       "deletedToast": "התשלום נמחק."
     },

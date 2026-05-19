@@ -74,7 +74,13 @@ interface FormState {
   direction: PaymentDirection;
   amountStr: string; // raw string so we can validate empty / negative.
   currency: string;
-  occurredAt: string; // yyyy-mm-dd
+  /**
+   * `<input type="datetime-local">` value — `YYYY-MM-DDTHH:mm` (no
+   * seconds, no timezone). Phase 6 · Iteration 6.18.1.2 widened this
+   * from a date-only `YYYY-MM-DD` so users can pick the actual time of
+   * day on `occurredAt`.
+   */
+  occurredAt: string;
   categoryId: string | null;
   scopes: AttributionScope[];
   note: string;
@@ -90,8 +96,33 @@ interface ValidationErrors {
   note?: string;
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+/**
+ * Default value for the `<input type="datetime-local">` field — the
+ * current local date+time formatted as `YYYY-MM-DDTHH:mm` (the only
+ * shape the input control accepts; no seconds, no timezone). Phase 6 ·
+ * Iteration 6.18.1.2.
+ */
+function nowLocalIso(): string {
+  const now = new Date();
+  const off = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - off).toISOString().slice(0, 16);
+}
+
+/** Convert an ISO UTC timestamp to the local-zone datetime-local value. */
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return nowLocalIso();
+  const off = d.getTimezoneOffset() * 60_000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 16);
+}
+
+/** Convert a local-zone datetime-local value back to an ISO UTC timestamp. */
+function localInputToIso(local: string): string {
+  // `Date(local)` interprets a bare `YYYY-MM-DDTHH:mm` as local time,
+  // so toISOString() yields the correct UTC counterpart.
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
 }
 
 function paymentToState(p: PaymentSummary): FormState {
@@ -99,7 +130,7 @@ function paymentToState(p: PaymentSummary): FormState {
     direction: p.direction,
     amountStr: (p.amountCents / 100).toFixed(2),
     currency: p.currency,
-    occurredAt: p.occurredAt.slice(0, 10),
+    occurredAt: isoToLocalInput(p.occurredAt),
     categoryId: p.category.id,
     scopes: p.attributions.map((a) =>
       a.scope === 'personal'
@@ -152,7 +183,14 @@ export function computeDiff(
   if (draft.direction !== original.direction) diff.direction = draft.direction;
   if (draftAmountCents !== original.amountCents) diff.amountCents = draftAmountCents;
   if (draft.currency !== original.currency) diff.currency = draft.currency;
-  if (draftOccurredAt !== original.occurredAt) diff.occurredAt = draftOccurredAt;
+  // Compare timestamps numerically — the datetime-local round-trip emits
+  // millisecond precision (`.000Z`) while the API may have stored the row
+  // with a bare `Z` suffix; both encode the same instant.
+  const draftMs = new Date(draftOccurredAt).getTime();
+  const originalMs = new Date(original.occurredAt).getTime();
+  if (Number.isFinite(draftMs) && Number.isFinite(originalMs) && draftMs !== originalMs) {
+    diff.occurredAt = draftOccurredAt;
+  }
   if (draft.categoryId && draft.categoryId !== original.category.id) {
     diff.categoryId = draft.categoryId;
   }
@@ -230,7 +268,7 @@ export function PaymentFormDialog({
       direction,
       amountStr: '',
       currency: defaults?.currency ?? user?.defaultCurrency ?? 'USD',
-      occurredAt: todayIso(),
+      occurredAt: nowLocalIso(),
       categoryId: defaults?.categoryId ?? null,
       scopes,
       note: '',
@@ -329,8 +367,10 @@ export function PaymentFormDialog({
       next.currency = tValidation('currencyInvalid');
     }
 
-    // date must parse and not be > today + 1d
-    const d = new Date(`${s.occurredAt}T00:00:00Z`);
+    // datetime-local interpreted as local time → UTC ISO. Reject empty
+    // and far-future timestamps (allow up to 1 day ahead, mirroring the
+    // pre-6.18.1.2 date-only behaviour).
+    const d = s.occurredAt ? new Date(s.occurredAt) : new Date(NaN);
     if (Number.isNaN(d.getTime())) {
       next.date = tValidation('dateInvalid');
     } else {
@@ -362,7 +402,7 @@ export function PaymentFormDialog({
     return {
       ok: Object.keys(next).length === 0,
       amountCents: cents ?? 0,
-      occurredAtIso: `${s.occurredAt}T00:00:00Z`,
+      occurredAtIso: localInputToIso(s.occurredAt),
       errors: next,
     };
   }
@@ -720,7 +760,7 @@ export function PaymentFormDialog({
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('date')}</span>
               <input
-                type="date"
+                type="datetime-local"
                 value={state.occurredAt}
                 onChange={(e) => setState((s) => ({ ...s, occurredAt: e.target.value }))}
                 disabled={allInputsDisabled}

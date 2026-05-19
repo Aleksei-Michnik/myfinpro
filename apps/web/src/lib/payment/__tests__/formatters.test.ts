@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   formatAmount,
   formatOccurredAt,
+  formatOccurredAtAbsolute,
+  formatOccurredDate,
   formatScopeLabel,
   formatSignedAmount,
 } from '../formatters';
@@ -75,6 +77,51 @@ describe('formatOccurredAt', () => {
 
   it('returns an empty string for an unparseable input', () => {
     expect(formatOccurredAt('not-a-date', 'en-US')).toBe('');
+  });
+
+  // Phase 6 · Iteration 6.18.1.2 — the default formatter now embeds the
+  // time of day. We assert via a `H:MM` regex so the test stays
+  // timezone-agnostic (CI runs in UTC; local devs may be elsewhere).
+  it('includes the time component in the en-US output', () => {
+    const s = formatOccurredAt('2026-05-19T14:30:00Z', 'en-US');
+    expect(s).toMatch(/\d{1,2}:\d{2}/);
+    expect(s).toMatch(/2026/);
+  });
+
+  it('includes the time component in the he-IL output (RTL-safe)', () => {
+    const s = formatOccurredAt('2026-05-19T14:30:00Z', 'he-IL');
+    expect(s).toMatch(/\d{1,2}:\d{2}/);
+    expect(s).toMatch(/2026/);
+  });
+
+  it('does not suppress midnight — `00:00` / `12:00` still renders', () => {
+    const s = formatOccurredAt('2026-05-19T00:00:00Z', 'en-US');
+    expect(s).toMatch(/\d{1,2}:\d{2}/);
+  });
+});
+
+describe('formatOccurredDate', () => {
+  it('renders date only (no time component) for surfaces that opt out', () => {
+    const s = formatOccurredDate('2026-05-19T14:30:00Z', 'en-US');
+    expect(s).toMatch(/2026/);
+    // Exhaustive: no `H:MM`-style time present.
+    expect(s).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('returns an empty string for an unparseable input', () => {
+    expect(formatOccurredDate('not-a-date', 'en-US')).toBe('');
+  });
+});
+
+describe('formatOccurredAtAbsolute', () => {
+  it('emits a fully-qualified date+time tooltip string', () => {
+    const s = formatOccurredAtAbsolute('2026-05-19T14:30:00Z', 'en-US');
+    expect(s).toMatch(/2026/);
+    expect(s).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('returns an empty string for an unparseable input', () => {
+    expect(formatOccurredAtAbsolute('not-a-date', 'en-US')).toBe('');
   });
 });
 

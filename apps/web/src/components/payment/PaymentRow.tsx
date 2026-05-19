@@ -15,6 +15,7 @@ import { type KeyboardEvent } from 'react';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
+import { canEditPayment } from '@/lib/payment/types';
 import type { PaymentSummary } from '@/lib/payment/types';
 import { useStarToggle } from '@/lib/payment/use-star-toggle';
 
@@ -129,6 +130,10 @@ export function PaymentRow({
     </button>
   ) : null;
 
+  // Phase 6 · Iteration 6.18.1.2 — disable the Edit/Delete menu entries
+  // when the form can't handle this payment (child occurrences + future
+  // types) so the row-level affordance matches the detail page's rule.
+  const formCanEdit = canEditPayment(payment);
   const controlsMenu = showControls ? (
     <RowActionsMenu
       triggerLabel={t('table.controls')}
@@ -138,6 +143,7 @@ export function PaymentRow({
           key: 'edit',
           label: t('controls.edit'),
           onClick: handleEdit,
+          disabled: !formCanEdit,
           testId: `row-edit-${payment.id}`,
         },
         {
@@ -145,6 +151,7 @@ export function PaymentRow({
           label: t('controls.delete'),
           destructive: true,
           onClick: handleDelete,
+          disabled: !formCanEdit,
           testId: `row-delete-${payment.id}`,
         },
       ]}

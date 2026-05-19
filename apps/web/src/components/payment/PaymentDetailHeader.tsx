@@ -14,6 +14,7 @@ import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
+import { canEditPayment, cannotEditReason } from '@/lib/payment/types';
 import type { PaymentSummary } from '@/lib/payment/types';
 import { useStarToggle } from '@/lib/payment/use-star-toggle';
 
@@ -55,14 +56,27 @@ export function PaymentDetailHeader({
 
   const tFn = (key: string) => t(key);
 
+  // Phase 6 · Iteration 6.18.1.2 — edit/delete eligibility is a single
+  // shared rule (`canEditPayment`): not a generated occurrence + a type
+  // the form supports (`ONE_TIME` / `RECURRING`). Authorisation (creator)
+  // is layered on top.
+  // Phase 6 · Iteration 6.18.1.2 — edit/delete eligibility is a single
+  // shared rule (`canEditPayment`): not a generated occurrence + a type
+  // the form supports (`ONE_TIME` / `RECURRING`). The Edit button is
+  // additionally guarded by creator authorisation; the Delete button is
+  // not (the API allows a non-creator to remove their own attribution).
   const isCreator = !!user && user.id === payment.createdById;
-  const isOccurrence = payment.parentPaymentId !== null || payment.type !== 'ONE_TIME';
-  const canEdit = isCreator && !isOccurrence;
-  const editDisabledReason = !isCreator
-    ? tDetail('editDisabledNotCreator')
-    : isOccurrence
-      ? tDetail('editDisabledOccurrence')
-      : undefined;
+  const formCanEdit = canEditPayment(payment);
+  const cannotReason = cannotEditReason(payment);
+  const canEdit = isCreator && formCanEdit;
+  const canDelete = formCanEdit;
+  const formDisabledReason =
+    cannotReason === 'generatedOccurrence'
+      ? tDetail('editDisabled.generatedOccurrence')
+      : cannotReason === 'unsupportedType'
+        ? tDetail('editDisabled.unsupportedType')
+        : undefined;
+  const editDisabledReason = !isCreator ? tDetail('editDisabledNotCreator') : formDisabledReason;
 
   const groupMembership = new Set(groups.map((g) => g.id));
   const note = (payment.note ?? '').trim();
@@ -190,6 +204,7 @@ export function PaymentDetailHeader({
           size="sm"
           onClick={onEditClick}
           disabled={!canEdit}
+          aria-disabled={!canEdit || undefined}
           title={editDisabledReason}
           data-testid="detail-edit"
         >
@@ -200,6 +215,9 @@ export function PaymentDetailHeader({
           variant="danger"
           size="sm"
           onClick={onDeleteClick}
+          disabled={!canDelete}
+          aria-disabled={!canDelete || undefined}
+          title={canDelete ? undefined : formDisabledReason}
           data-testid="detail-delete"
         >
           {tDetail('delete')}

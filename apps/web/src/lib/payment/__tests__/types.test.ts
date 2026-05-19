@@ -4,7 +4,12 @@
 // badge colour pill.
 
 import { describe, expect, it } from 'vitest';
-import { deriveScheduleStatus, type ScheduleResponse } from '../types';
+import {
+  canEditPayment,
+  cannotEditReason,
+  deriveScheduleStatus,
+  type ScheduleResponse,
+} from '../types';
 
 function s(partial: Partial<ScheduleResponse> = {}): ScheduleResponse {
   return {
@@ -48,5 +53,39 @@ describe('deriveScheduleStatus', () => {
         s({ pausedAt: '2026-01-02T00:00:00Z', cancelledAt: '2026-01-03T00:00:00Z' }),
       ),
     ).toBe('cancelled');
+  });
+});
+
+// Phase 6 · Iteration 6.18.1.2 — edit-eligibility helper consumed by
+// `<PaymentDetailHeader>` and `<PaymentRow>` (DRY).
+describe('canEditPayment / cannotEditReason', () => {
+  it('ONE_TIME parent (no parentPaymentId) is editable', () => {
+    expect(canEditPayment({ parentPaymentId: null, type: 'ONE_TIME' })).toBe(true);
+    expect(cannotEditReason({ parentPaymentId: null, type: 'ONE_TIME' })).toBeNull();
+  });
+
+  it('RECURRING parent is editable (6.18.1 added schedule sub-form support)', () => {
+    expect(canEditPayment({ parentPaymentId: null, type: 'RECURRING' })).toBe(true);
+    expect(cannotEditReason({ parentPaymentId: null, type: 'RECURRING' })).toBeNull();
+  });
+
+  it('child occurrence (parentPaymentId set) is non-editable → generatedOccurrence', () => {
+    expect(canEditPayment({ parentPaymentId: 'p-parent', type: 'ONE_TIME' })).toBe(false);
+    expect(cannotEditReason({ parentPaymentId: 'p-parent', type: 'ONE_TIME' })).toBe(
+      'generatedOccurrence',
+    );
+  });
+
+  it('child occurrence wins over unsupported type when both apply', () => {
+    expect(cannotEditReason({ parentPaymentId: 'p-parent', type: 'INSTALLMENT' })).toBe(
+      'generatedOccurrence',
+    );
+  });
+
+  it('still-unsupported types map to unsupportedType', () => {
+    for (const type of ['INSTALLMENT', 'LOAN', 'MORTGAGE', 'LIMITED_PERIOD'] as const) {
+      expect(canEditPayment({ parentPaymentId: null, type })).toBe(false);
+      expect(cannotEditReason({ parentPaymentId: null, type })).toBe('unsupportedType');
+    }
   });
 });

@@ -170,7 +170,7 @@ describe('PaymentFormDialog', () => {
 
   it('create: validation — amount required', async () => {
     renderCreate();
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-amount')).toBeInTheDocument();
@@ -180,7 +180,7 @@ describe('PaymentFormDialog', () => {
   it('create: validation — category required', async () => {
     renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '10.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-category')).toBeInTheDocument();
   });
@@ -189,7 +189,7 @@ describe('PaymentFormDialog', () => {
     renderCreate();
     // OUT direction by default
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '10.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-in' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-category')).toBeInTheDocument();
@@ -198,7 +198,7 @@ describe('PaymentFormDialog', () => {
   it('create: validation — scopes required', async () => {
     renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '10.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     // Uncheck the default personal scope.
     fireEvent.click(screen.getByTestId('scope-toggle-personal'));
@@ -219,7 +219,7 @@ describe('PaymentFormDialog', () => {
     createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-1' }));
     const { onSaved, onClose } = renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '12.50' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
@@ -230,7 +230,10 @@ describe('PaymentFormDialog', () => {
     expect(payload.type).toBe('ONE_TIME');
     expect(payload.categoryId).toBe('c-out');
     expect(payload.attributions).toEqual([{ scope: 'personal' }]);
-    expect(payload.occurredAt).toBe('2026-04-25T00:00:00Z');
+    // Phase 6 · Iteration 6.18.1.2 — datetime-local → UTC ISO conversion
+    // now goes through `Date.prototype.toISOString()`, which always emits
+    // millisecond precision. (Vitest pins TZ=UTC so this is deterministic.)
+    expect(payload.occurredAt).toBe('2026-04-25T00:00:00.000Z');
     expect(signal).toBeInstanceOf(AbortSignal);
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
@@ -240,7 +243,7 @@ describe('PaymentFormDialog', () => {
     createPaymentMock.mockResolvedValueOnce(makePayment());
     renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '12.50' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
@@ -253,7 +256,7 @@ describe('PaymentFormDialog', () => {
     createPaymentMock.mockRejectedValueOnce(new Error('Boom'));
     const { onClose } = renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '1.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-api-error')).toHaveTextContent('Boom');
@@ -266,12 +269,23 @@ describe('PaymentFormDialog', () => {
     expect((select.options[0] as HTMLOptionElement).value).toBe('USD');
   });
 
+  // Phase 6 · Iteration 6.18.1.2 — date input is a `datetime-local`
+  // picker so users can specify the time of day for `occurredAt`.
+  it('create: date input is type=datetime-local with a sensible default', () => {
+    renderCreate();
+    const dateInput = screen.getByTestId('form-date') as HTMLInputElement;
+    expect(dateInput.type).toBe('datetime-local');
+    // Default value follows the YYYY-MM-DDTHH:mm shape (current local time).
+    expect(dateInput.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+
   // ── Edit mode ─────────────────────────────────────────────────────────────
 
   it('edit: prefills fields from payment', () => {
     renderEdit(makePayment({ note: 'hello', amountCents: 3400 }));
     expect((screen.getByTestId('form-amount') as HTMLInputElement).value).toBe('34.00');
-    expect((screen.getByTestId('form-date') as HTMLInputElement).value).toBe('2026-04-25');
+    // datetime-local input — `YYYY-MM-DDTHH:mm`. Phase 6 · Iteration 6.18.1.2.
+    expect((screen.getByTestId('form-date') as HTMLInputElement).value).toBe('2026-04-25T00:00');
     expect((screen.getByTestId('form-note') as HTMLTextAreaElement).value).toBe('hello');
   });
 
@@ -364,7 +378,7 @@ describe('PaymentFormDialog', () => {
 
   function fillBaseFields() {
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '50.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), {
       target: { value: 'c-out' },
     });
