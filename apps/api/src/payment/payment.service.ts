@@ -33,6 +33,21 @@ import { removeScheduleForPayment } from './utils/schedule-cascade';
 const MAX_AMOUNT_CENTS = 1e11;
 
 /**
+ * Payment types that the create flow accepts today.
+ *
+ * - `ONE_TIME` — shipped in iteration 6.5.
+ * - `RECURRING` — shipped in iteration 6.18.1.1; the schedule sub-resource
+ *   (POST /payments/:id/schedule) is created in a separate request.
+ *
+ * Other `PaymentType` enum values (`LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`,
+ * `MORTGAGE`) are intentionally absent: their behaviour is deferred to phase
+ * 7+ per the design doc, and the create endpoint surfaces that with the
+ * structured `PAYMENT_TYPE_NOT_IMPLEMENTED` error code.
+ */
+export const SUPPORTED_CREATE_TYPES = ['ONE_TIME', 'RECURRING'] as const;
+export type SupportedCreateType = (typeof SUPPORTED_CREATE_TYPES)[number];
+
+/**
  * Single source of truth for the relation load used by list(), findByIdForUser(),
  * and update(). Keeps mapping code honest — every path feeds the same shape into
  * `mapPaymentToSummary()`, so rendering diffs can only come from row values, not
@@ -199,13 +214,29 @@ export class PaymentService {
   }
 
   /**
-   * Create a ONE_TIME payment with N attributions in a single transaction.
+   * Create a ONE_TIME or RECURRING payment with N attributions in a single transaction.
+   *
+   * Iteration 6.5 introduced the endpoint behind a strict ONE_TIME-only guard;
+   * iteration 6.18.1.1 lifts the guard to also accept RECURRING because the
+   * recurring infrastructure (schedule CRUD, worker, cascade) shipped fully in
+   * 6.17.1–6.17.4 and the web client (6.18.1) needs the parent row before it
+   * can POST the schedule sub-resource. The remaining types (LIMITED_PERIOD,
+   * INSTALLMENT, LOAN, MORTGAGE) keep returning PAYMENT_TYPE_NOT_IMPLEMENTED;
+   * they are scheduled for phase 7+.
+   *
+   * Note on RECURRING: this method only inserts the parent row — it does NOT
+   * auto-create a `PaymentSchedule`. The web client follows up with a second
+   * POST to `/payments/:id/schedule` (the two-step create from 6.18.1), and
+   * the server keeps that resource separate so the schedule lifecycle stays
+   * orthogonal to the payment lifecycle.
    *
    * See design §5.2 "Payments" for validation rules and §5.7 for error codes.
    */
   async create(userId: string, dto: CreatePaymentDto): Promise<PaymentSummaryDto> {
-    // 1. Type guard — only ONE_TIME is implemented in iteration 6.5.
-    if (dto.type !== 'ONE_TIME') {
+    // 1. Type guard — ONE_TIME (6.5) and RECURRING (6.18.1.1) are implemented.
+    //    LIMITED_PERIOD / INSTALLMENT / LOAN / MORTGAGE remain deferred to
+    //    later phases and reject with the same structured error code.
+    if (!(SUPPORTED_CREATE_TYPES as readonly string[]).includes(dto.type)) {
       throw new BadRequestException({
         message: `Payment type '${dto.type}' is not implemented yet`,
         errorCode: PAYMENT_ERRORS.PAYMENT_TYPE_NOT_IMPLEMENTED,
@@ -247,12 +278,14 @@ export class PaymentService {
     // 7. Attributions — non-empty, well-formed, de-duplicated, in-scope.
     await this.validateAttributions(userId, dto.attributions);
 
-    // 8. Transaction — Payment + N attributions.
+    // 8. Transaction — Payment + N attributions. The schedule (for RECURRING)
+    //    is intentionally NOT created here; the web client posts it as a
+    //    separate request to /payments/:id/schedule.
     const created = await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({
         data: {
           direction: dto.direction,
-          type: 'ONE_TIME',
+          type: dto.type,
           amountCents: dto.amountCents,
           currency: dto.currency,
           occurredAt,
@@ -283,14 +316,16 @@ export class PaymentService {
     // 9. Audit — fire-and-forget.
     void this.writeAudit(userId, created.id, 'PAYMENT_CREATED', {
       direction: dto.direction,
-      type: 'ONE_TIME',
+      type: dto.type,
       amountCents: dto.amountCents,
       currency: dto.currency,
       categoryId: dto.categoryId,
       attributions: dto.attributions,
     });
 
-    this.logger.log(`Payment ${created.id} (ONE_TIME, ${dto.direction}) created by user ${userId}`);
+    this.logger.log(
+      `Payment ${created.id} (${dto.type}, ${dto.direction}) created by user ${userId}`,
+    );
 
     // 10. Serialize.
     return mapPaymentToSummary(created as PaymentWithRelations, { starredByMe: false });

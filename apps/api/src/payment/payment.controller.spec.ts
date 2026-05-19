@@ -95,6 +95,19 @@ describe('PaymentController', () => {
     expect(serviceMock.create).toHaveBeenCalledWith('user-42', dto);
   });
 
+  it('passes type=RECURRING through to the service unchanged (iteration 6.18.1.1)', async () => {
+    // Smoke test for the type-guard relaxation: the controller is a thin
+    // delegator and must not filter or rewrite `type`. Server-side acceptance
+    // of RECURRING is asserted by the service-level + integration suites.
+    const recurringDto: CreatePaymentDto = { ...dto, type: 'RECURRING' };
+    serviceMock.create.mockResolvedValue({ id: 'pay-r', type: 'RECURRING' });
+
+    const r = await controller.create(user, recurringDto);
+
+    expect(serviceMock.create).toHaveBeenCalledWith('user-1', recurringDto);
+    expect(r).toEqual({ id: 'pay-r', type: 'RECURRING' });
+  });
+
   // ── iteration 6.6: GET /payments ──
 
   describe('list()', () => {

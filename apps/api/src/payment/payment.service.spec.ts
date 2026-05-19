@@ -165,7 +165,11 @@ describe('PaymentService', () => {
   // ── type guard ──
 
   describe('type guard', () => {
-    it.each(['RECURRING', 'LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE'] as const)(
+    // Iteration 6.5 introduced the guard as ONE_TIME-only; iteration 6.18.1.1
+    // lifted RECURRING out of the deferred set because the recurring
+    // infrastructure (schedule CRUD + worker + cascade) shipped in
+    // 6.17.1–6.17.4. The remaining types stay 400 with the same code.
+    it.each(['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE'] as const)(
       'rejects type=%s with PAYMENT_TYPE_NOT_IMPLEMENTED',
       async (t) => {
         await expect(service.create('user-1', baseDto({ type: t }))).rejects.toThrow(
@@ -178,6 +182,32 @@ describe('PaymentService', () => {
         }
       },
     );
+
+    it('accepts type=RECURRING and creates the payment without auto-creating a schedule', async () => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.payment.create.mockResolvedValue(makePersistedPayment({ type: 'RECURRING' }));
+
+      const r = await service.create('user-1', baseDto({ type: 'RECURRING' }));
+
+      // The persisted row carries the RECURRING type forward.
+      const arg = prismaMock.payment.create.mock.calls[0][0] as {
+        data: { type: string };
+      };
+      expect(arg.data.type).toBe('RECURRING');
+      expect(r.type).toBe('RECURRING');
+
+      // The two-step create from 6.18.1 means the schedule is a separate POST
+      // — the create flow MUST NOT touch PaymentSchedule on its own.
+      expect(prismaMock.paymentSchedule.findUnique).not.toHaveBeenCalled();
+      expect(prismaMock.paymentSchedule.delete).not.toHaveBeenCalled();
+      expect(queueMock.upsertJobScheduler).not.toHaveBeenCalled();
+
+      await new Promise((res) => setImmediate(res));
+      const auditArg = prismaMock.auditLog.create.mock.calls.find(
+        (c) => (c[0] as { data: { action: string } }).data.action === 'PAYMENT_CREATED',
+      )?.[0] as { data: { details: { type: string } } };
+      expect(auditArg.data.details.type).toBe('RECURRING');
+    });
   });
 
   // ── schedule / plan guards ──
