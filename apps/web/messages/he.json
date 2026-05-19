@@ -751,6 +751,66 @@
       },
       "clearFilters": "נקה סינון",
       "groupTabTitle": "תשלומים"
+    },
+    "schedule": {
+      "form": {
+        "legend": "לוח זמנים",
+        "repeatModeLabel": "מצב חזרה",
+        "repeatMode": {
+          "every": "חזרה כל <interval>",
+          "cron": "ביטוי Cron"
+        },
+        "every": {
+          "label": "כל",
+          "unitLabel": "יחידה",
+          "unitMinute": "דקה (דקות)",
+          "unitHour": "שעה (שעות)",
+          "unitDay": "יום (ימים)",
+          "unitWeek": "שבוע (שבועות)",
+          "unitMonth": "חודש (חודשים) (≈ 30 ימים)",
+          "minHelp": "מינימום: דקה אחת. חודש מחושב כ-30 ימים; ל\"ראשון לחודש\" מדויק יש להשתמש בביטוי cron."
+        },
+        "cron": {
+          "label": "ביטוי Cron",
+          "help": "Cron סטנדרטי בן 5 שדות (דקה שעה יום-בחודש חודש יום-בשבוע). דוגמאות: 0 9 * * 1 = ימי חול 9 בבוקר, 0 0 1 * * = הראשון לחודש, */15 * * * * = כל 15 דקות."
+        },
+        "startsAt": {
+          "label": "מתחיל ב"
+        },
+        "endsAt": {
+          "label": "מסתיים ב (לא חובה)"
+        },
+        "limit": {
+          "label": "מקסימום הפעלות (לא חובה)"
+        },
+        "typeChangeWarning": "שינוי הסוג יסיר את לוח הזמנים ויפסיק יצירת מופעים חדשים. תשלומים שכבר נוצרו יישמרו.",
+        "validation": {
+          "everyCountInvalid": "הזן מספר שלם חיובי.",
+          "everyMsTooSmall": "המרווח חייב להיות לפחות דקה אחת.",
+          "cronRequired": "הזן ביטוי cron.",
+          "startsAtInvalid": "הזן תאריך התחלה תקין.",
+          "endsAtBeforeStart": "תאריך הסיום חייב להיות אחרי תאריך ההתחלה.",
+          "limitInvalid": "מספר ההפעלות חייב להיות לפחות 1.",
+          "specRequired": "ציין מרווח זמן או ביטוי cron."
+        }
+      },
+      "badge": {
+        "title": "לוח זמנים",
+        "statusActive": "פעיל",
+        "statusPaused": "מושהה",
+        "statusCancelled": "בוטל",
+        "repeatEveryMinutes": "כל {n} דקה (דקות)",
+        "repeatEveryHours": "כל {n} שעה (שעות)",
+        "repeatEveryDays": "כל {n} יום (ימים)",
+        "repeatEveryWeeks": "כל {n} שבוע (שבועות)",
+        "repeatEveryMonths": "כל {n} חודש (חודשים) (≈30 ימים)",
+        "repeatCron": "Cron: {expr}",
+        "nextRun": "הפעלה הבאה: {when}",
+        "lastRun": "הפעלה אחרונה: {when}",
+        "cancelledAt": "בוטל ב-{when}",
+        "runsLimit": "תקרה: {n} הפעלות",
+        "fromRecurring": "→ מתשלום חוזר"
+      }
     }
   },
   "categories": {

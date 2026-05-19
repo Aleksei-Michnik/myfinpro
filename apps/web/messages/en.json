@@ -751,6 +751,66 @@
       },
       "clearFilters": "Clear filters",
       "groupTabTitle": "Payments"
+    },
+    "schedule": {
+      "form": {
+        "legend": "Schedule",
+        "repeatModeLabel": "Repeat mode",
+        "repeatMode": {
+          "every": "Repeat every <interval>",
+          "cron": "Cron expression"
+        },
+        "every": {
+          "label": "Every",
+          "unitLabel": "Unit",
+          "unitMinute": "minute(s)",
+          "unitHour": "hour(s)",
+          "unitDay": "day(s)",
+          "unitWeek": "week(s)",
+          "unitMonth": "month(s) (≈ 30 days)",
+          "minHelp": "Minimum 1 minute. Month is approximated as 30 days; for exact calendar months use a cron expression."
+        },
+        "cron": {
+          "label": "Cron expression",
+          "help": "Standard 5-field cron (minute hour dom month dow). Examples: 0 9 * * 1 = weekday 9 AM, 0 0 1 * * = first of month, */15 * * * * = every 15 minutes."
+        },
+        "startsAt": {
+          "label": "Starts on"
+        },
+        "endsAt": {
+          "label": "Ends on (optional)"
+        },
+        "limit": {
+          "label": "Run at most N times (optional)"
+        },
+        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated payments stay.",
+        "validation": {
+          "everyCountInvalid": "Enter a positive whole number.",
+          "everyMsTooSmall": "Interval must be at least 1 minute.",
+          "cronRequired": "Enter a cron expression.",
+          "startsAtInvalid": "Enter a valid start date.",
+          "endsAtBeforeStart": "End date must be after start date.",
+          "limitInvalid": "Limit must be at least 1.",
+          "specRequired": "Provide either an interval or a cron expression."
+        }
+      },
+      "badge": {
+        "title": "Schedule",
+        "statusActive": "Active",
+        "statusPaused": "Paused",
+        "statusCancelled": "Cancelled",
+        "repeatEveryMinutes": "Every {n} minute(s)",
+        "repeatEveryHours": "Every {n} hour(s)",
+        "repeatEveryDays": "Every {n} day(s)",
+        "repeatEveryWeeks": "Every {n} week(s)",
+        "repeatEveryMonths": "Every {n} month(s) (≈30 days)",
+        "repeatCron": "Cron: {expr}",
+        "nextRun": "Next run: {when}",
+        "lastRun": "Last run: {when}",
+        "cancelledAt": "Cancelled {when}",
+        "runsLimit": "Limit: {n} run(s)",
+        "fromRecurring": "← from recurring payment"
+      }
     }
   },
   "categories": {

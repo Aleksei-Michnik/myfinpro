@@ -18,6 +18,8 @@ import type {
   ListPaymentsParams,
   PaymentListResponse,
   PaymentSummary,
+  ScheduleResponse,
+  ScheduleSpec,
   ToggleStarResult,
   UpdatePaymentInput,
 } from './types';
@@ -59,6 +61,31 @@ interface PaymentContextValue {
 
   // Categories (read-only in 6.11; CRUD comes in 6.16)
   listCategories(query?: ListCategoriesParams, signal?: AbortSignal): Promise<CategoryDto[]>;
+
+  // Schedules (Phase 6 · Iteration 6.18.1)
+  /**
+   * Create the schedule attached to a RECURRING payment. Lifecycle endpoints
+   * (pause / resume / cancel) ship in 6.18.2.
+   */
+  createSchedule(
+    paymentId: string,
+    spec: ScheduleSpec,
+    signal?: AbortSignal,
+  ): Promise<ScheduleResponse>;
+  /**
+   * Read the schedule. The API responds 404 when the parent payment has no
+   * schedule attached — we translate that to `null` so the absence is not a
+   * UI-level error.
+   */
+  getSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse | null>;
+  /** Idempotent upsert of the schedule's spec. */
+  replaceSchedule(
+    paymentId: string,
+    spec: ScheduleSpec,
+    signal?: AbortSignal,
+  ): Promise<ScheduleResponse>;
+  /** Remove the schedule + its BullMQ scheduler entry. */
+  removeSchedule(paymentId: string, signal?: AbortSignal): Promise<void>;
 
   // Transient state
   isLoading: boolean;
@@ -330,6 +357,67 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  // ── Schedules (Phase 6 · Iteration 6.18.1) ─────────────────────────────
+
+  const createSchedule = useCallback(
+    (paymentId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(spec),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to create schedule');
+        return (await res.json()) as ScheduleResponse;
+      }),
+    [authHeaders, run],
+  );
+
+  const getSchedule = useCallback(
+    (paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse | null> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
+          method: 'GET',
+          headers: authHeaders(),
+          signal,
+        });
+        if (res.status === 404) return null;
+        if (!res.ok) await throwApiError(res, 'Failed to load schedule');
+        return (await res.json()) as ScheduleResponse;
+      }),
+    [authHeaders, run],
+  );
+
+  const replaceSchedule = useCallback(
+    (paymentId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(spec),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to update schedule');
+        return (await res.json()) as ScheduleResponse;
+      }),
+    [authHeaders, run],
+  );
+
+  const removeSchedule = useCallback(
+    (paymentId: string, signal?: AbortSignal): Promise<void> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to delete schedule');
+        // 204 → nothing to read.
+      }),
+    [authHeaders, run],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<PaymentContextValue>(
@@ -345,6 +433,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       editComment,
       deleteComment,
       listCategories,
+      createSchedule,
+      getSchedule,
+      replaceSchedule,
+      removeSchedule,
       isLoading,
       error,
       clearError,
@@ -361,6 +453,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       editComment,
       deleteComment,
       listCategories,
+      createSchedule,
+      getSchedule,
+      replaceSchedule,
+      removeSchedule,
       isLoading,
       error,
       clearError,

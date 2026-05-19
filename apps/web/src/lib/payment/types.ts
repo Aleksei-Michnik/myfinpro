@@ -123,7 +123,13 @@ export interface CategoryDto {
  */
 export interface CreatePaymentInput {
   direction: 'IN' | 'OUT';
-  type: 'ONE_TIME';
+  /**
+   * Iteration 6.18.1 widens the union to include `'RECURRING'`. The schedule
+   * itself is created by a separate POST /payments/:id/schedule call (see
+   * the two-step create flow in `<PaymentFormDialog>`); the request body
+   * therefore still carries no `schedule` payload.
+   */
+  type: 'ONE_TIME' | 'RECURRING';
   amountCents: number;
   currency: string;
   occurredAt: string;
@@ -134,8 +140,68 @@ export interface CreatePaymentInput {
   plan?: never;
 }
 
+// ── Schedule wire types (Phase 6 · Iteration 6.18.1) ────────────────────────
+
+/**
+ * Body shape for POST / PUT /payments/:paymentId/schedule.
+ *
+ * Exactly one of `cron` / `everyMs` must be set — the API does the
+ * authoritative cross-field check; client-side validation rejects the
+ * obvious "both" / "neither" cases before the round trip.
+ *
+ * `everyMs` minimum is 60_000 (1 minute) in production. Tests / staging
+ * may relax it via the `PAYMENT_SCHEDULE_MIN_INTERVAL_MS` env knob.
+ */
+export interface ScheduleSpec {
+  cron?: string;
+  everyMs?: number;
+  /** ISO 8601 datetime. */
+  startsAt?: string;
+  /** ISO 8601 datetime. `null`/`undefined` means no end. */
+  endsAt?: string | null;
+  /** ≥ 1. `null`/`undefined` means unlimited. */
+  limit?: number | null;
+}
+
+/** Wire shape returned by all schedule endpoints. */
+export interface ScheduleResponse {
+  id: string;
+  paymentId: string;
+  cron: string | null;
+  everyMs: number | null;
+  startsAt: string;
+  endsAt: string | null;
+  limit: number | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  pausedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Derived status used by the read-only `<ScheduleBadge>` (and, in 6.18.2,
+ * the lifecycle buttons). `null` is returned when there is no schedule
+ * attached at all so callers can render a neutral state.
+ */
+export type ScheduleStatus = 'active' | 'paused' | 'cancelled' | null;
+
+/**
+ * Ordering matters: `cancelledAt` is terminal and wins over `pausedAt`
+ * (a cancelled schedule will typically have both columns set if it was
+ * paused first, then cancelled).
+ */
+export function deriveScheduleStatus(schedule: ScheduleResponse | null): ScheduleStatus {
+  if (!schedule) return null;
+  if (schedule.cancelledAt) return 'cancelled';
+  if (schedule.pausedAt) return 'paused';
+  return 'active';
+}
+
 export interface UpdatePaymentInput {
   direction?: 'IN' | 'OUT';
+  type?: 'ONE_TIME' | 'RECURRING';
   amountCents?: number;
   currency?: string;
   occurredAt?: string;

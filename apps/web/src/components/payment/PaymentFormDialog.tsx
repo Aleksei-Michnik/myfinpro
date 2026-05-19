@@ -12,6 +12,14 @@ import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PaymentCategoryPicker } from './PaymentCategoryPicker';
+import {
+  PaymentScheduleSubForm,
+  buildScheduleSpec,
+  defaultScheduleSubFormState,
+  scheduleResponseToFormState,
+  type ScheduleSubFormErrors,
+  type ScheduleSubFormState,
+} from './PaymentScheduleSubForm';
 import { PaymentScopeSelector } from './PaymentScopeSelector';
 import { PaymentTypeSelector } from './PaymentTypeSelector';
 import { Button } from '@/components/ui/Button';
@@ -34,6 +42,7 @@ import type {
   PaymentDirection,
   PaymentSummary,
   PaymentType,
+  ScheduleResponse,
   UpdatePaymentInput,
 } from '@/lib/payment/types';
 import { useAsyncOperation } from '@/lib/ui';
@@ -43,6 +52,12 @@ export interface PaymentFormDialogProps {
   mode: 'create' | 'edit';
   /** Required in 'edit' mode. */
   payment?: PaymentSummary;
+  /**
+   * Existing schedule attached to `payment` (edit mode). Required for
+   * pre-filling the schedule sub-form when editing a RECURRING payment.
+   * `null` when no schedule is attached or when the parent is ONE_TIME.
+   */
+  existingSchedule?: ScheduleResponse | null;
   defaults?: Partial<{
     direction: PaymentDirection;
     scope: AttributionScope[];
@@ -184,6 +199,7 @@ export function PaymentFormDialog({
   open,
   mode,
   payment,
+  existingSchedule,
   defaults,
   onClose,
   onSaved,
@@ -191,9 +207,12 @@ export function PaymentFormDialog({
 }: PaymentFormDialogProps) {
   const t = useTranslations('payments.form');
   const tValidation = useTranslations('payments.form.validation');
+  const tSchedule = useTranslations('payments.schedule.form');
+  const tScheduleValidation = useTranslations('payments.schedule.form.validation');
   const { user } = useAuth();
   const { groups } = useGroups();
-  const { createPayment, updatePayment } = usePayments();
+  const { createPayment, updatePayment, removePayment, createSchedule, replaceSchedule } =
+    usePayments();
 
   const groupIdSet = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
 
@@ -219,10 +238,20 @@ export function PaymentFormDialog({
     };
   }, [mode, payment?.id]);
 
+  // Schedule sub-form state — sticky across type-toggles. Pre-filled from
+  // the existing schedule on the edit path; otherwise defaults.
+  const initialScheduleState = useMemo<ScheduleSubFormState>(() => {
+    if (existingSchedule) return scheduleResponseToFormState(existingSchedule);
+    return defaultScheduleSubFormState();
+  }, [existingSchedule?.id]);
+
   const [state, setState] = useState<FormState>(initialState);
+  const [scheduleState, setScheduleState] = useState<ScheduleSubFormState>(initialScheduleState);
+  const [scheduleErrors, setScheduleErrors] = useState<ScheduleSubFormErrors>({});
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const initialStateRef = useRef(initialState);
+  const initialScheduleStateRef = useRef(initialScheduleState);
 
   // Save flow runs through the universal control-scope async hook.
   const saveOp = useAsyncOperation<PaymentSummary | null>({ scope: 'control' });
@@ -233,6 +262,9 @@ export function PaymentFormDialog({
     if (open) {
       setState(initialState);
       initialStateRef.current = initialState;
+      setScheduleState(initialScheduleState);
+      initialScheduleStateRef.current = initialScheduleState;
+      setScheduleErrors({});
       setErrors({});
       setConfirmDiscard(false);
       saveOp.reset();
@@ -241,7 +273,7 @@ export function PaymentFormDialog({
       saveOp.cancel();
     }
     // saveOp identity is stable; including it would re-fire on unrelated churn.
-  }, [open, initialState]);
+  }, [open, initialState, initialScheduleState]);
 
   // Focus direction button on open.
   const directionRef = useRef<HTMLButtonElement | null>(null);
@@ -253,9 +285,13 @@ export function PaymentFormDialog({
 
   // ── Edit-mode constraints ────────────────────────────────────────────────
 
+  // A child occurrence (server-generated, parentPaymentId set) is read-only.
+  // RECURRING parent payments are editable from 6.18.1 onwards (the schedule
+  // sub-form drives the spec). Other non-ONE_TIME types ship later.
   const isGeneratedOccurrence =
     mode === 'edit' && payment
-      ? payment.parentPaymentId !== null || payment.type !== 'ONE_TIME'
+      ? payment.parentPaymentId !== null ||
+        (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING')
       : false;
 
   const nonAccessibleAttributions =
@@ -355,6 +391,27 @@ export function PaymentFormDialog({
       setErrors((prev) => ({ ...prev, category: extractMessage(err) }));
       return true;
     }
+    // Schedule-side domain errors map onto the schedule sub-form.
+    if (code === 'PAYMENT_SCHEDULE_INVALID_CRON') {
+      setScheduleErrors((prev) => ({ ...prev, cron: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'PAYMENT_SCHEDULE_INVALID_INTERVAL') {
+      setScheduleErrors((prev) => ({ ...prev, every: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'PAYMENT_SCHEDULE_INVALID_END_DATE') {
+      setScheduleErrors((prev) => ({ ...prev, endsAt: extractMessage(err) }));
+      return true;
+    }
+    if (
+      code === 'PAYMENT_SCHEDULE_INVALID_SPEC' ||
+      code === 'PAYMENT_SCHEDULE_PARENT_NOT_RECURRING' ||
+      code === 'PAYMENT_SCHEDULE_ALREADY_EXISTS'
+    ) {
+      setScheduleErrors((prev) => ({ ...prev, spec: extractMessage(err) }));
+      return true;
+    }
     return false;
   }
 
@@ -362,7 +419,22 @@ export function PaymentFormDialog({
     if (isGeneratedOccurrence) return;
     const { ok, amountCents, occurredAtIso, errors: valErrors } = validate(state, categories);
     setErrors(valErrors);
+
+    // When the payment is RECURRING (create or edit-with-existing-or-new-schedule),
+    // also validate the schedule sub-form. Mirror its build result locally so
+    // the network calls don't fire on a partially-filled spec.
+    let scheduleBuild: ReturnType<typeof buildScheduleSpec> | null = null;
+    const wasRecurring = !!existingSchedule || (mode === 'edit' && payment?.type === 'RECURRING');
+    const willBeRecurring = state.type === 'RECURRING';
+    if (willBeRecurring) {
+      scheduleBuild = buildScheduleSpec(scheduleState, tScheduleValidation);
+      setScheduleErrors(scheduleBuild.errors);
+    } else {
+      setScheduleErrors({});
+    }
+
     if (!ok) return;
+    if (willBeRecurring && scheduleBuild && !scheduleBuild.ok) return;
 
     void saveOp
       .run(async (signal) => {
@@ -370,7 +442,7 @@ export function PaymentFormDialog({
           if (mode === 'create') {
             const payload: CreatePaymentInput = {
               direction: state.direction,
-              type: 'ONE_TIME',
+              type: willBeRecurring ? 'RECURRING' : 'ONE_TIME',
               amountCents,
               currency: state.currency,
               occurredAt: occurredAtIso,
@@ -379,12 +451,48 @@ export function PaymentFormDialog({
               attributions: state.scopes,
             };
             const created = await createPayment(payload, signal);
+            // Two-step create for RECURRING: payment, then schedule. Roll
+            // back the payment via DELETE on schedule failure to keep the
+            // invariant "no recurring parent without a schedule" — see
+            // 6.18.1 task spec.
+            if (willBeRecurring && scheduleBuild) {
+              try {
+                await createSchedule(created.id, scheduleBuild.spec, signal);
+              } catch (scheduleErr) {
+                // Best-effort rollback. Use a fresh signal-less call so the
+                // delete still completes if the user has navigated away.
+                try {
+                  await removePayment(created.id, 'all');
+                } catch {
+                  // Swallow — the payment is now an orphan, but we've
+                  // already surfaced the schedule error to the user.
+                }
+                throw scheduleErr;
+              }
+            }
             return created as PaymentSummary | null;
           }
           if (mode === 'edit' && payment) {
             const diff = computeDiff(payment, state, amountCents, occurredAtIso);
-            if (Object.keys(diff).length === 0) return payment;
-            const result = await updatePayment(payment.id, diff, signal);
+            // Type changed → include in diff so the API drives the cascade
+            // (RECURRING → ONE_TIME tears down the schedule server-side per
+            // 6.17.4). PATCH /payments accepts `type` from 6.18.1 onwards.
+            // The sub-form only ever lets the user pick ONE_TIME / RECURRING
+            // in this iteration; narrow the assertion accordingly.
+            if (
+              state.type !== payment.type &&
+              (state.type === 'ONE_TIME' || state.type === 'RECURRING')
+            ) {
+              diff.type = state.type;
+            }
+            let result: PaymentSummary | null = payment;
+            if (Object.keys(diff).length > 0) {
+              result = await updatePayment(payment.id, diff, signal);
+            }
+            // Schedule edit: PUT when the payment is (or becomes) RECURRING.
+            if (willBeRecurring && scheduleBuild && result) {
+              await replaceSchedule(result.id, scheduleBuild.spec, signal);
+            }
             return result;
           }
           return null;
@@ -404,8 +512,10 @@ export function PaymentFormDialog({
         if (mode === 'create') {
           setLastUsedDirection(state.direction);
           setLastUsedScopes(state.scopes);
-          setLastUsedType('ONE_TIME');
+          setLastUsedType(willBeRecurring ? 'RECURRING' : 'ONE_TIME');
         }
+        // Suppress unused-var lint when only used inside the closure.
+        void wasRecurring;
         onSaved(result);
         onClose();
       });
@@ -422,15 +532,20 @@ export function PaymentFormDialog({
   function isDirty(): boolean {
     const a = initialStateRef.current;
     const b = state;
-    return (
+    if (
       a.direction !== b.direction ||
       a.amountStr !== b.amountStr ||
       a.currency !== b.currency ||
       a.occurredAt !== b.occurredAt ||
       a.categoryId !== b.categoryId ||
       a.note !== b.note ||
+      a.type !== b.type ||
       JSON.stringify(a.scopes) !== JSON.stringify(b.scopes)
-    );
+    ) {
+      return true;
+    }
+    // Schedule sub-form dirtiness — compare deep.
+    return JSON.stringify(initialScheduleStateRef.current) !== JSON.stringify(scheduleState);
   }
 
   useEffect(() => {
@@ -447,7 +562,7 @@ export function PaymentFormDialog({
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open, state]);
+  }, [open, state, scheduleState]);
 
   if (!open) return null;
 
@@ -699,6 +814,32 @@ export function PaymentFormDialog({
               disabled={allInputsDisabled}
             />
           </div>
+
+          {/* Type-change warning: RECURRING → ONE_TIME tears down the
+              schedule server-side (cascade audit). Surface the warning so
+              the user is not surprised when they hit Save. */}
+          {mode === 'edit' && payment?.type === 'RECURRING' && state.type !== 'RECURRING' && (
+            <div
+              className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+              role="alert"
+              data-testid="schedule-type-change-warning"
+            >
+              {tSchedule('typeChangeWarning')}
+            </div>
+          )}
+
+          {/* Schedule sub-form — only for type=RECURRING. State is owned
+              by the parent so toggling type preserves draft values. */}
+          {state.type === 'RECURRING' && (
+            <div className="mb-4">
+              <PaymentScheduleSubForm
+                state={scheduleState}
+                errors={scheduleErrors}
+                onChange={setScheduleState}
+                disabled={allInputsDisabled}
+              />
+            </div>
+          )}
 
           {showBanner && saveOp.error && (
             <div className="mb-3" data-testid="form-api-error">

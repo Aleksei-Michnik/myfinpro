@@ -24,30 +24,44 @@ describe('PaymentTypeSelector', () => {
     expect(radio.disabled).toBe(false);
   });
 
-  it('advanced radios are disabled with aria-disabled', () => {
+  it('still-disabled advanced radios carry aria-disabled', () => {
     render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    for (const t of ['RECURRING', 'LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE']) {
+    for (const t of ['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE']) {
       const el = screen.getByTestId(`type-radio-${t}`) as HTMLInputElement;
       expect(el.disabled).toBe(true);
       expect(el).toHaveAttribute('aria-disabled', 'true');
     }
   });
 
-  it('each disabled option renders the coming-soon badge', () => {
+  it('RECURRING radio is enabled in 6.18.1', () => {
     render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    expect(screen.getByTestId('type-badge-RECURRING')).toBeInTheDocument();
+    const radio = screen.getByTestId('type-radio-RECURRING') as HTMLInputElement;
+    expect(radio.disabled).toBe(false);
+    expect(screen.queryByTestId('type-badge-RECURRING')).not.toBeInTheDocument();
+  });
+
+  it('still-disabled options render the coming-soon badge', () => {
+    render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} />);
+    fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
     expect(screen.getByTestId('type-badge-INSTALLMENT')).toBeInTheDocument();
     expect(screen.getByTestId('type-badge-MORTGAGE')).toBeInTheDocument();
   });
 
-  it('clicking a disabled advanced radio does not fire onChange', () => {
+  it('clicking RECURRING fires onChange with RECURRING', () => {
     const onChange = vi.fn();
     render(<PaymentTypeSelector value="ONE_TIME" onChange={onChange} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    // Disabled radios do not emit a 'change' event in the browser.
-    fireEvent.change(screen.getByTestId('type-radio-RECURRING'));
+    fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
+    expect(onChange).toHaveBeenCalledWith('RECURRING');
+  });
+
+  it('clicking a still-disabled advanced radio does not fire onChange', () => {
+    const onChange = vi.fn();
+    render(<PaymentTypeSelector value="ONE_TIME" onChange={onChange} />);
+    fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+    fireEvent.change(screen.getByTestId('type-radio-INSTALLMENT'));
     expect(onChange).not.toHaveBeenCalled();
   });
 

@@ -8,7 +8,7 @@
 //   - edit (PaymentFormDialog) + delete (DeletePaymentDialog) mounts
 //   - star-toggle bubble-up + comment-append bridging
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DeletePaymentDialog } from '@/components/payment/DeletePaymentDialog';
 import { PaymentCommentInput } from '@/components/payment/PaymentCommentInput';
@@ -20,12 +20,17 @@ import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
 import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
 import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
 import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
+import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { usePayments } from '@/lib/payment/payment-context';
-import type { AttributionChangeResult, PaymentSummary } from '@/lib/payment/types';
-import { useResetOnLocaleChange } from '@/lib/ui';
+import type {
+  AttributionChangeResult,
+  PaymentSummary,
+  ScheduleResponse,
+} from '@/lib/payment/types';
+import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 interface PaymentDetailClientProps {
   paymentId: string;
@@ -40,16 +45,23 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   const t = useTranslations('payments');
   const tDetail = useTranslations('payments.detail');
   const tComments = useTranslations('payments.comments');
-  const { getPayment } = usePayments();
+  const tBadge = useTranslations('payments.schedule.badge');
+  const locale = useLocale();
+  const { getPayment, getSchedule } = usePayments();
   const { addToast } = useToast();
   const router = useRouter();
 
   const [payment, setPayment] = useState<PaymentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError | null>(null);
+  const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
+
+  // Container-scope async op for the schedule fetch — separate from the
+  // payment fetch so loading/error states stay independent.
+  const scheduleOp = useAsyncOperation<ScheduleResponse | null>({ scope: 'container' });
 
   const commentListRef = useRef<PaymentCommentListHandle | null>(null);
 
@@ -71,6 +83,20 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Fetch the schedule whenever the payment is RECURRING. 404 → null.
+  useEffect(() => {
+    if (!payment || payment.type !== 'RECURRING' || payment.parentPaymentId !== null) {
+      setSchedule(null);
+      return;
+    }
+    void scheduleOp
+      .run(async (signal) => getSchedule(payment.id, signal))
+      .then((s) => {
+        if (s !== undefined) setSchedule(s);
+      });
+    // scheduleOp identity is stable; including it would re-fire continuously.
+  }, [payment?.id, payment?.type, payment?.parentPaymentId]);
 
   // Phase 6 · Iteration 6.16.5 — clear stale errors when the locale flips
   // (en ↔ he) and re-fetch quietly so we don't briefly flash a "no access"
@@ -176,11 +202,19 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
     );
   }
 
-  const showSchedulePlan = payment.parentPaymentId !== null || payment.type !== 'ONE_TIME';
+  // 6.18.1: RECURRING parents render the live `<ScheduleBadge>`. The
+  // legacy "schedule/plan placeholder" stays visible only for the still-
+  // unsupported types (LIMITED_PERIOD, INSTALLMENT, LOAN, MORTGAGE) and
+  // for non-RECURRING child occurrences.
+  const isRecurringParent = payment.type === 'RECURRING' && payment.parentPaymentId === null;
+  const isChildOccurrence = payment.parentPaymentId !== null;
+  const showLegacyPlaceholder =
+    !isRecurringParent &&
+    (isChildOccurrence || (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING'));
 
   return (
     <main className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/dashboard"
           className="text-sm text-primary-700 hover:underline dark:text-primary-300"
@@ -188,6 +222,15 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         >
           ← {tDetail('back')}
         </Link>
+        {isChildOccurrence && payment.parentPaymentId && (
+          <Link
+            href={`/payments/${payment.parentPaymentId}`}
+            className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+            data-testid="payment-detail-from-recurring"
+          >
+            {tBadge('fromRecurring')}
+          </Link>
+        )}
       </div>
 
       <h1 className="sr-only">{t('detail.amountLabel')}</h1>
@@ -198,6 +241,8 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         onDeleteClick={() => setPaymentToDelete(payment)}
         onStarToggled={handleStarToggled}
       />
+
+      {isRecurringParent && schedule && <ScheduleBadge schedule={schedule} locale={locale} />}
 
       <PaymentDocumentsPlaceholder />
 
@@ -220,13 +265,14 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         </div>
       </section>
 
-      {showSchedulePlan && <PaymentSchedulePlanPlaceholder />}
+      {showLegacyPlaceholder && <PaymentSchedulePlanPlaceholder />}
 
       {editOpen && (
         <PaymentFormDialog
           open
           mode="edit"
           payment={payment}
+          existingSchedule={schedule}
           onClose={() => setEditOpen(false)}
           onSaved={handleEditSaved}
         />

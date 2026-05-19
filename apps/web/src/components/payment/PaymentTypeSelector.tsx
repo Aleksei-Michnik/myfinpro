@@ -15,13 +15,11 @@ export interface PaymentTypeSelectorProps {
   disabled?: boolean;
 }
 
-const ADVANCED_TYPES: PaymentType[] = [
-  'RECURRING',
-  'LIMITED_PERIOD',
-  'INSTALLMENT',
-  'LOAN',
-  'MORTGAGE',
-];
+// Phase 6 · Iteration 6.18.1 — RECURRING moves out of the "coming soon"
+// list; the schedule sub-form is the producer-facing UI for it. The
+// remaining types still ship later (LIMITED_PERIOD: 6.18.x, plans: 6.20).
+const ENABLED_ADVANCED_TYPES: PaymentType[] = ['RECURRING'];
+const COMING_SOON_TYPES: PaymentType[] = ['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE'];
 
 export function PaymentTypeSelector({ value, onChange, disabled }: PaymentTypeSelectorProps) {
   const t = useTranslations('payments.types');
@@ -63,7 +61,25 @@ export function PaymentTypeSelector({ value, onChange, disabled }: PaymentTypeSe
 
       {expanded && (
         <div className="mt-2 space-y-1" data-testid="type-advanced-list">
-          {ADVANCED_TYPES.map((type) => (
+          {ENABLED_ADVANCED_TYPES.map((type) => (
+            <label
+              key={type}
+              className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"
+            >
+              <input
+                type="radio"
+                name="payment-type"
+                value={type}
+                checked={value === type}
+                disabled={disabled}
+                onChange={() => onChange(type)}
+                data-testid={`type-radio-${type}`}
+                className="h-4 w-4"
+              />
+              <span>{t(`options.${type}`)}</span>
+            </label>
+          ))}
+          {COMING_SOON_TYPES.map((type) => (
             <label
               key={type}
               className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"

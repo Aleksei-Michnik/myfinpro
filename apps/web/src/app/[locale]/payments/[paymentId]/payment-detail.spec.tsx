@@ -6,6 +6,7 @@ import type { PaymentSummary } from '@/lib/payment/types';
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockGetPayment = vi.fn();
+const mockGetSchedule = vi.fn();
 const mockListComments = vi.fn();
 const mockPostComment = vi.fn();
 const mockEditComment = vi.fn();
@@ -14,6 +15,8 @@ const mockToggleStar = vi.fn();
 const mockRemovePayment = vi.fn();
 const mockUpdatePayment = vi.fn();
 const mockCreatePayment = vi.fn();
+const mockCreateSchedule = vi.fn();
+const mockReplaceSchedule = vi.fn();
 const mockListCategories = vi.fn();
 
 const mockRouterReplace = vi.fn();
@@ -22,8 +25,14 @@ const mockAddToast = vi.fn();
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
-  useTranslations: () => (key: string, values?: Record<string, string | number>) =>
-    values && 'message' in values ? `${key}:${values.message}` : key,
+  useTranslations: () => (key: string, values?: Record<string, string | number>) => {
+    if (!values) return key;
+    if ('message' in values) return `${key}:${values.message}`;
+    if ('when' in values) return `${key}:${values.when}`;
+    if ('n' in values) return `${key}:${values.n}`;
+    if ('expr' in values) return `${key}:${values.expr}`;
+    return key;
+  },
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -50,6 +59,7 @@ vi.mock('@/lib/group/group-context', () => ({
 vi.mock('@/lib/payment/payment-context', () => ({
   usePayments: () => ({
     getPayment: mockGetPayment,
+    getSchedule: mockGetSchedule,
     listComments: mockListComments,
     postComment: mockPostComment,
     editComment: mockEditComment,
@@ -58,6 +68,8 @@ vi.mock('@/lib/payment/payment-context', () => ({
     removePayment: mockRemovePayment,
     updatePayment: mockUpdatePayment,
     createPayment: mockCreatePayment,
+    createSchedule: mockCreateSchedule,
+    replaceSchedule: mockReplaceSchedule,
     listCategories: mockListCategories,
   }),
 }));
@@ -90,6 +102,8 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
 describe('PaymentDetailClient', () => {
   beforeEach(() => {
     mockGetPayment.mockReset();
+    mockGetSchedule.mockReset();
+    mockGetSchedule.mockResolvedValue(null);
     mockListComments.mockReset();
     mockListComments.mockResolvedValue({ data: [], nextCursor: null, hasMore: false });
     mockPostComment.mockReset();
@@ -99,6 +113,8 @@ describe('PaymentDetailClient', () => {
     mockRemovePayment.mockReset();
     mockUpdatePayment.mockReset();
     mockCreatePayment.mockReset();
+    mockCreateSchedule.mockReset();
+    mockReplaceSchedule.mockReset();
     mockListCategories.mockReset();
     mockListCategories.mockResolvedValue([]);
     mockRouterReplace.mockReset();
@@ -236,11 +252,47 @@ describe('PaymentDetailClient', () => {
     );
   });
 
-  it('schedule/plan placeholder is shown for non-ONE_TIME types', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+  it('schedule/plan placeholder is shown for still-unsupported types (INSTALLMENT)', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
     render(<PaymentDetailClient paymentId="p-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('payment-schedule-plan-placeholder')).toBeInTheDocument(),
+    );
+  });
+
+  it('RECURRING parent renders <ScheduleBadge> with the fetched schedule', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+    mockGetSchedule.mockResolvedValueOnce({
+      id: 's-1',
+      paymentId: 'p-1',
+      cron: null,
+      everyMs: 86_400_000,
+      startsAt: '2026-04-25T00:00:00Z',
+      endsAt: null,
+      limit: null,
+      nextRunAt: '2026-04-26T00:00:00Z',
+      lastRunAt: null,
+      pausedAt: null,
+      cancelledAt: null,
+      createdAt: '2026-04-25T00:00:00Z',
+      updatedAt: '2026-04-25T00:00:00Z',
+    });
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
+    expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
+    expect(mockGetSchedule).toHaveBeenCalledWith('p-1', expect.any(AbortSignal));
+  });
+
+  it('child occurrence renders the "from recurring payment" back-link', async () => {
+    mockGetPayment.mockResolvedValueOnce(
+      makePayment({ id: 'child-1', parentPaymentId: 'parent-1' }),
+    );
+    render(<PaymentDetailClient paymentId="child-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('payment-detail-from-recurring')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('payment-detail-from-recurring').getAttribute('href')).toBe(
+      '/payments/parent-1',
     );
   });
 

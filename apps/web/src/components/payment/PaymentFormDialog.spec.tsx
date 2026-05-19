@@ -16,7 +16,10 @@ vi.mock('next-intl', () => ({
 
 const createPaymentMock = vi.fn();
 const updatePaymentMock = vi.fn();
+const removePaymentMock = vi.fn();
 const listCategoriesMock = vi.fn();
+const createScheduleMock = vi.fn();
+const replaceScheduleMock = vi.fn();
 
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me', defaultCurrency: 'USD' } }),
@@ -32,7 +35,10 @@ vi.mock('@/lib/payment/payment-context', () => ({
   usePayments: () => ({
     createPayment: createPaymentMock,
     updatePayment: updatePaymentMock,
+    removePayment: removePaymentMock,
     listCategories: listCategoriesMock,
+    createSchedule: createScheduleMock,
+    replaceSchedule: replaceScheduleMock,
   }),
 }));
 
@@ -126,8 +132,11 @@ describe('PaymentFormDialog', () => {
   beforeEach(() => {
     createPaymentMock.mockReset();
     updatePaymentMock.mockReset();
+    removePaymentMock.mockReset();
     listCategoriesMock.mockReset();
     listCategoriesMock.mockResolvedValue(DEFAULT_CATS);
+    createScheduleMock.mockReset();
+    replaceScheduleMock.mockReset();
     localStorage.clear();
   });
 
@@ -293,9 +302,15 @@ describe('PaymentFormDialog', () => {
     expect((screen.getByTestId('form-save') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('edit: generated occurrence (type!=ONE_TIME) shows banner', () => {
-    renderEdit(makePayment({ type: 'RECURRING' }));
+  it('edit: still-unsupported type (INSTALLMENT) shows banner', () => {
+    renderEdit(makePayment({ type: 'INSTALLMENT' }));
     expect(screen.getByTestId('payment-form-occurrence-banner')).toBeInTheDocument();
+  });
+
+  it('edit: RECURRING parent is editable in 6.18.1 (no occurrence banner)', () => {
+    renderEdit(makePayment({ type: 'RECURRING' }));
+    expect(screen.queryByTestId('payment-form-occurrence-banner')).not.toBeInTheDocument();
+    expect((screen.getByTestId('form-save') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('edit: non-accessible attributions show read-only footnote', () => {
@@ -343,5 +358,172 @@ describe('PaymentFormDialog', () => {
       fireEvent.keyDown(document, { key: 'Escape' });
     });
     expect(screen.getByTestId('form-discard-prompt')).toBeInTheDocument();
+  });
+
+  // ── 6.18.1 — RECURRING flow ───────────────────────────────────────────────
+
+  function fillBaseFields() {
+    fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '50.00' } });
+    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25' } });
+    fireEvent.change(screen.getByTestId('category-picker-select'), {
+      target: { value: 'c-out' },
+    });
+  }
+
+  function pickRecurring() {
+    // Expand advanced section, then click RECURRING radio.
+    fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+    fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
+  }
+
+  it('recurring: picking RECURRING reveals the schedule sub-form', () => {
+    renderCreate();
+    expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+    pickRecurring();
+    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+  });
+
+  it('recurring create: posts payment then schedule in sequence', async () => {
+    createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-1', type: 'RECURRING' }));
+    createScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+    const { onSaved, onClose } = renderCreate();
+    fillBaseFields();
+    pickRecurring();
+    fireEvent.click(screen.getByTestId('form-save'));
+    await waitFor(() => expect(createScheduleMock).toHaveBeenCalled());
+    const [paymentId, spec] = createScheduleMock.mock.calls[0];
+    expect(paymentId).toBe('new-1');
+    expect(spec.everyMs).toBe(86_400_000); // default = every 1 day
+    expect(createPaymentMock.mock.calls[0][0].type).toBe('RECURRING');
+    expect(onSaved).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('recurring create: schedule failure rolls back the payment via DELETE', async () => {
+    createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-2', type: 'RECURRING' }));
+    const scheduleErr = Object.assign(new Error('Invalid cron expression.'), {
+      errorCode: 'PAYMENT_SCHEDULE_INVALID_CRON',
+    });
+    createScheduleMock.mockRejectedValueOnce(scheduleErr);
+    removePaymentMock.mockResolvedValueOnce({
+      deletedAttributions: 1,
+      addedAttributions: 0,
+      paymentDeleted: true,
+      payment: null,
+    });
+    const { onSaved, onClose } = renderCreate();
+    fillBaseFields();
+    pickRecurring();
+    // Switch to cron mode + invalid string (server validates).
+    fireEvent.click(screen.getByTestId('schedule-mode-cron'));
+    fireEvent.change(screen.getByTestId('schedule-cron-input'), {
+      target: { value: 'bogus expression text' },
+    });
+    fireEvent.click(screen.getByTestId('form-save'));
+    await waitFor(() => expect(createScheduleMock).toHaveBeenCalled());
+    await waitFor(() => expect(removePaymentMock).toHaveBeenCalledWith('new-2', 'all'));
+    // Inline cron error surfaced; dialog stays open.
+    await waitFor(() => expect(screen.getByTestId('schedule-error-cron')).toBeInTheDocument());
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('recurring edit: PUT /schedule when spec changes', async () => {
+    const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
+    updatePaymentMock.mockResolvedValueOnce(payment);
+    replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    render(
+      <PaymentFormDialog
+        open
+        mode="edit"
+        payment={payment}
+        existingSchedule={{
+          id: 's-1',
+          paymentId: payment.id,
+          cron: null,
+          everyMs: 86_400_000,
+          startsAt: '2026-04-25T00:00:00Z',
+          endsAt: null,
+          limit: null,
+          nextRunAt: null,
+          lastRunAt: null,
+          pausedAt: null,
+          cancelledAt: null,
+          createdAt: '2026-04-25T00:00:00Z',
+          updatedAt: '2026-04-25T00:00:00Z',
+        }}
+        onClose={onClose}
+        onSaved={onSaved}
+        categories={DEFAULT_CATS}
+      />,
+    );
+    // Sub-form is auto-shown for RECURRING parent.
+    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+    // Change the count from 1 → 5.
+    fireEvent.change(screen.getByTestId('schedule-every-count'), { target: { value: '5' } });
+    fireEvent.click(screen.getByTestId('form-save'));
+    await waitFor(() => expect(replaceScheduleMock).toHaveBeenCalled());
+    const spec = replaceScheduleMock.mock.calls[0][1];
+    expect(spec.everyMs).toBe(5 * 86_400_000);
+  });
+
+  it('recurring edit: changing type RECURRING → ONE_TIME shows the type-change warning', () => {
+    const payment = makePayment({ type: 'RECURRING' });
+    renderEdit(payment);
+    // ONE_TIME radio is always visible up top — flip back to ONE_TIME.
+    fireEvent.click(screen.getByTestId('type-radio-ONE_TIME'));
+    expect(screen.getByTestId('schedule-type-change-warning')).toBeInTheDocument();
+  });
+
+  it('recurring create: validation aggregates payment + schedule errors', async () => {
+    renderCreate();
+    pickRecurring();
+    // Skip filling amount → payment validation fails; clear startsAt to also
+    // fail the schedule validation.
+    fireEvent.change(screen.getByTestId('schedule-starts-at'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('form-save'));
+    expect(await screen.findByTestId('form-error-amount')).toBeInTheDocument();
+    expect(await screen.findByTestId('schedule-error-starts-at')).toBeInTheDocument();
+    expect(createPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it('recurring create: client-side everyMs<60_000 short-circuits the create', async () => {
+    renderCreate();
+    fillBaseFields();
+    pickRecurring();
+    // Clear the count → buildScheduleSpec rejects via "everyCountInvalid".
+    fireEvent.change(screen.getByTestId('schedule-every-count'), { target: { value: '' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('form-save'));
+    });
+    expect(await screen.findByTestId('schedule-error-every')).toBeInTheDocument();
+    expect(createPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it('recurring create: type=ONE_TIME path stays unchanged (no schedule call)', async () => {
+    createPaymentMock.mockResolvedValueOnce(makePayment());
+    renderCreate();
+    fillBaseFields();
+    fireEvent.click(screen.getByTestId('form-save'));
+    await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
+    expect(createPaymentMock.mock.calls[0][0].type).toBe('ONE_TIME');
+    expect(createScheduleMock).not.toHaveBeenCalled();
+  });
+
+  it('recurring: switching ONE_TIME → RECURRING → ONE_TIME hides sub-form (sticky state)', () => {
+    renderCreate();
+    pickRecurring();
+    // Tweak a value in the every-path so we can verify it survives the toggle.
+    fireEvent.change(screen.getByTestId('schedule-every-count'), { target: { value: '7' } });
+    expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
+    // Toggle off → sub-form hidden.
+    fireEvent.click(screen.getByTestId('type-radio-ONE_TIME'));
+    expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+    // Re-toggle on → sub-form re-shown with sticky 7.
+    fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
+    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+    expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
   });
 });
