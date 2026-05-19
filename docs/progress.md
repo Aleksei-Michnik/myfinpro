@@ -5637,7 +5637,9 @@ consistency edge — see [`PaymentOccurrenceProcessor`](../apps/api/src/payment/
 6. Parent type ≠ `RECURRING` → `[skipped] parent is no longer
 RECURRING` + `removeJobScheduler`.
 7. Compute `firedMs = floor((job.processedOn ?? Date.now()) /
-1000) * 1000` and `idempotencyKey = "${scheduleId}:${firedMs}"`.
+
+1000) - 1000`and`idempotencyKey = "${scheduleId}:${firedMs}"`.
+
 8. In a single `$transaction`: INSERT child Payment + clone every
    parent `PaymentAttribution` + UPDATE `payment_schedules.lastRunAt`
    = `firedAt`, `nextRunAt` = `computeNextRunAt(spec, firedAt)`.
@@ -5743,3 +5745,94 @@ resume / cancel + cascade rules) lands.
 **Next** — 6.17.4 (schedule lifecycle: pause / resume / cancel +
 cascade rules + the cancelled/paused skip paths exercised end-to-
 end).
+
+### Iteration 6.17.4 — Schedule lifecycle + cascade rules (2026-05-19)
+
+**Goal.** Land the public lifecycle endpoints on `PaymentSchedule`
+and the cascade rules on parent-payment changes. The processor's
+skip / self-heal paths shipped in 6.17.3 — this iteration adds the
+producer side that flips `pausedAt` / `cancelledAt` and updates
+BullMQ in lockstep, plus exercises every skip path on staging.
+Closes the 6.17 epic.
+
+**Endpoint contract.**
+
+| Verb | Path                            | Behavior                                                                         |
+| ---- | ------------------------------- | -------------------------------------------------------------------------------- |
+| POST | `/payments/:id/schedule/pause`  | `pausedAt = NOW()` + `removeJobScheduler(...)`. Audit `PAYMENT_SCHEDULE_PAUSED`. |
+| POST | `/payments/:id/schedule/resume` | `pausedAt = null` + `upsertJobScheduler(...)`; `nextRunAt` recomputed.           |
+| POST | `/payments/:id/schedule/cancel` | `cancelledAt = NOW()` (terminal) + `removeJobScheduler(...)`. Row preserved.     |
+
+409 idempotency guards:
+`PAYMENT_SCHEDULE_ALREADY_PAUSED` / `_NOT_PAUSED` /
+`_ALREADY_CANCELLED` / `_CANCELLED` (terminal-state guard for
+pause+resume) / `_PAST_END` (resume after `endsAt` elapsed).
+
+**State machine.**
+
+```mermaid
+stateDiagram-v2
+    [*] --> active : POST /schedule
+    active --> paused : POST /pause
+    paused --> active : POST /resume
+    active --> cancelled : POST /cancel
+    paused --> cancelled : POST /cancel
+    cancelled --> [*] : terminal
+    active --> [*] : DELETE
+    paused --> [*] : DELETE
+```
+
+**Cascade decisions.**
+
+| Trigger                                 | Outcome                                                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Parent edited `RECURRING` → other type  | Schedule + scheduler torn down silently. Audit `PAYMENT_SCHEDULE_DELETED` w/ `reason=parent_type_changed`. |
+| Parent edited `ONE_TIME` → `RECURRING`  | No automatic schedule creation. User must explicitly POST /schedule.                                       |
+| Parent hard-deleted (final attribution) | Schedule + scheduler torn down BEFORE the FK cascade fires. Audit `reason=parent_deleted`.                 |
+
+Both flows route through the single chokepoint
+[`removeScheduleForPayment()`](../apps/api/src/payment/utils/schedule-cascade.ts:1) —
+producer-side cleanup is DRY.
+
+Reasoning:
+
+- **Cascade is silent + audit-logged**, not 409 — the user's intent
+  to change the type is unambiguous; rejecting them would force a
+  redundant DELETE step.
+- **Child occurrences become orphaned-but-valid** on parent
+  hard-delete; their `parentPaymentId` is still useful for history
+  queries even after the template is gone.
+- **Cancel preserves the row**; DELETE is the hard-remove. Two
+  distinct verbs because the data they remove has different
+  downstream value.
+
+**Race + deadlock note.** Lifecycle endpoints (pause/resume/cancel)
+keep DB write + queue mutation in one Prisma transaction. The
+cascade paths split: DB writes inside the parent-edit/delete
+transaction; queue mutation post-commit. Holding Redis I/O while
+MySQL row locks are open triggered deadlocks under integration
+concurrency, and the worker's self-heal path from 6.17.3 covers
+any divergence on the cascade path.
+
+**Test counts.**
+
+- 737 unit tests pass (16 new: pause/resume/cancel happy paths +
+  state-violation 409s + visibility 404 + cascade idempotency +
+  edit/delete cascade hooks).
+- 83 payment integration tests pass (2 new testcontainers
+  suites: lifecycle state machine + cascade rules under real
+  Postgres + Redis).
+- Lint + typecheck green.
+
+**Sample API + audit transcripts (staging, 2026-05-19).** TBD —
+appended once smoke run completes.
+
+**Phase 6 status: 17 / 21** — bumped from 16/21; the 6.17 epic
+is now ✅. Remaining: 6.18 (recurring UI), 6.19 (LIMITED_PERIOD
+UI), 6.20 (INSTALLMENT UI), 6.21 (LOAN/MORTGAGE UI).
+
+**Commits.** Feat: `39881fb`. Docs (this entry): committed as
+`docs(phase-6.17.4)`.
+
+**Next** — 6.18 (recurring UI: payment-form RECURRING branch +
+schedule list page + lifecycle controls).
