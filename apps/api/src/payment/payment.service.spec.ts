@@ -891,6 +891,66 @@ describe('PaymentService', () => {
         const r = await service.list('user-1', baseQ());
         expect(r).toEqual({ data: [], nextCursor: null, hasMore: false });
       });
+
+      // ── Iteration 6.18.1.3 — parentPaymentId / withParent filters ──
+
+      describe('parentPaymentId / withParent filters (6.18.1.3)', () => {
+        it('parentPaymentId narrows to children + asserts visibility on parent first', async () => {
+          // assertVisible() goes through prisma.payment.findFirst({ select: { id: true } }).
+          prismaMock.payment.findFirst.mockResolvedValue({ id: 'parent-1' });
+          await service.list('user-1', baseQ({ parentPaymentId: 'parent-1' }));
+          expect(lastFindManyArg().where.AND).toContainEqual({ parentPaymentId: 'parent-1' });
+          // The first findFirst call IS the visibility probe.
+          const visibilityArg = prismaMock.payment.findFirst.mock.calls[0][0] as {
+            where: { AND: Array<Record<string, unknown>> };
+            select: Record<string, unknown>;
+          };
+          expect(visibilityArg.where.AND[0]).toEqual({ id: 'parent-1' });
+          expect(visibilityArg.select).toEqual({ id: true });
+        });
+
+        it('parentPaymentId where caller cannot see the parent → 404 (no leak)', async () => {
+          prismaMock.payment.findFirst.mockResolvedValue(null);
+          await expect(
+            service.list('user-1', baseQ({ parentPaymentId: 'parent-1' })),
+          ).rejects.toThrow(NotFoundException);
+          try {
+            prismaMock.payment.findFirst.mockResolvedValue(null);
+            await service.list('user-1', baseQ({ parentPaymentId: 'parent-1' }));
+          } catch (err) {
+            expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+          }
+          // findMany should never have been called when visibility fails.
+          expect(prismaMock.payment.findMany).not.toHaveBeenCalled();
+        });
+
+        it('withParent=true narrows to parents (parentPaymentId is null)', async () => {
+          await service.list('user-1', baseQ({ withParent: 'true' }));
+          expect(lastFindManyArg().where.AND).toContainEqual({ parentPaymentId: null });
+        });
+
+        it('withParent=false narrows to occurrences (parentPaymentId not null)', async () => {
+          await service.list('user-1', baseQ({ withParent: 'false' }));
+          expect(lastFindManyArg().where.AND).toContainEqual({
+            parentPaymentId: { not: null },
+          });
+        });
+
+        it('withParent omitted → no parent partition added (forward-compat)', async () => {
+          await service.list('user-1', baseQ());
+          const andClauses = lastFindManyArg().where.AND;
+          const hasParentNull = andClauses.some(
+            (c) => (c as { parentPaymentId?: unknown }).parentPaymentId === null,
+          );
+          const hasParentNotNull = andClauses.some(
+            (c) =>
+              typeof (c as { parentPaymentId?: { not?: unknown } }).parentPaymentId === 'object' &&
+              (c as { parentPaymentId?: { not?: unknown } }).parentPaymentId?.not !== undefined,
+          );
+          expect(hasParentNull).toBe(false);
+          expect(hasParentNotNull).toBe(false);
+        });
+      });
     });
 
     // ── Cursor helper pure-function tests ──

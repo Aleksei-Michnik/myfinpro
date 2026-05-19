@@ -7,6 +7,7 @@ import type { PaymentSummary } from '@/lib/payment/types';
 
 const mockGetPayment = vi.fn();
 const mockGetSchedule = vi.fn();
+const mockListOccurrences = vi.fn();
 const mockListComments = vi.fn();
 const mockPostComment = vi.fn();
 const mockEditComment = vi.fn();
@@ -60,6 +61,7 @@ vi.mock('@/lib/payment/payment-context', () => ({
   usePayments: () => ({
     getPayment: mockGetPayment,
     getSchedule: mockGetSchedule,
+    listOccurrences: mockListOccurrences,
     listComments: mockListComments,
     postComment: mockPostComment,
     editComment: mockEditComment,
@@ -104,6 +106,8 @@ describe('PaymentDetailClient', () => {
     mockGetPayment.mockReset();
     mockGetSchedule.mockReset();
     mockGetSchedule.mockResolvedValue(null);
+    mockListOccurrences.mockReset();
+    mockListOccurrences.mockResolvedValue({ data: [], nextCursor: null, hasMore: false });
     mockListComments.mockReset();
     mockListComments.mockResolvedValue({ data: [], nextCursor: null, hasMore: false });
     mockPostComment.mockReset();
@@ -342,5 +346,37 @@ describe('PaymentDetailClient', () => {
     render(<PaymentDetailClient paymentId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-date')).toBeInTheDocument());
     expect(screen.getByTestId('detail-date').textContent).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  // ── Phase 6 · Iteration 6.18.1.3 — <RecurringOccurrencesSection> mount rules ──
+
+  it('RECURRING parent renders the <RecurringOccurrencesSection>', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('recurring-occurrences-section')).toBeInTheDocument(),
+    );
+    expect(mockListOccurrences).toHaveBeenCalledWith(
+      'p-1',
+      expect.objectContaining({ limit: 20, sort: 'date_desc' }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('RECURRING child occurrence does NOT render the section', async () => {
+    mockGetPayment.mockResolvedValueOnce(
+      makePayment({ type: 'RECURRING', parentPaymentId: 'parent-1' }),
+    );
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+    expect(screen.queryByTestId('recurring-occurrences-section')).not.toBeInTheDocument();
+  });
+
+  it('ONE_TIME payment does NOT render the section', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'ONE_TIME' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+    expect(screen.queryByTestId('recurring-occurrences-section')).not.toBeInTheDocument();
+    expect(mockListOccurrences).not.toHaveBeenCalled();
   });
 });

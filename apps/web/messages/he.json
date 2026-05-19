@@ -701,7 +701,13 @@
         "unsupportedType": "עריכת תשלום מסוג זה אינה נתמכת עדיין."
       },
       "edited": "נערך",
-      "deletedToast": "התשלום נמחק."
+      "deletedToast": "התשלום נמחק.",
+      "occurrences": {
+        "title": "מופעים",
+        "countSingular": "מופע אחד",
+        "countPlural": "{n} מופעים",
+        "empty": "עדיין אין מופעים — הם יופיעו כאן ככל שלוח הזמנים יפעל."
+      }
     },
     "comments": {
       "title": "תגובות",

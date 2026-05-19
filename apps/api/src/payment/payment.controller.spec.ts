@@ -152,6 +152,44 @@ describe('PaymentController', () => {
     });
   });
 
+  // ── iteration 6.18.1.3: GET /payments/:paymentId/occurrences ──
+
+  describe('listOccurrences()', () => {
+    it('forces parentPaymentId from the path param and ignores any conflicting query keys', async () => {
+      const payload = { data: [], nextCursor: null, hasMore: false };
+      serviceMock.list.mockResolvedValue(payload);
+
+      const r = await controller.listOccurrences(user, 'parent-1', {
+        // Caller tries to override or sneak in conflicting filters; the
+        // alias must wash them out so the contract stays identity-clean.
+        parentPaymentId: 'attacker-id',
+        withParent: 'true',
+        limit: 10,
+      } as ListPaymentsQueryDto);
+
+      expect(serviceMock.list).toHaveBeenCalledWith('user-1', {
+        parentPaymentId: 'parent-1',
+        withParent: undefined,
+        limit: 10,
+      });
+      expect(r).toBe(payload);
+    });
+
+    it('propagates 404 NotFoundException from the service (visibility leak-free)', async () => {
+      serviceMock.list.mockRejectedValue(new NotFoundException('not found'));
+      await expect(
+        controller.listOccurrences(user, 'parent-1', {} as ListPaymentsQueryDto),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('applies 120/min rate limit metadata', () => {
+      const reflector = new Reflector();
+      const handler = Object.getPrototypeOf(controller).listOccurrences as () => unknown;
+      expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(120);
+      expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
+    });
+  });
+
   // ── iteration 6.7: GET/:id + PATCH/:id ──
 
   describe('findOne()', () => {

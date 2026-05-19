@@ -377,6 +377,26 @@ export class PaymentService {
     if (q.categoryId) andClauses.push({ categoryId: q.categoryId });
     if (q.type) andClauses.push({ type: q.type });
 
+    // ── 2a. Recurring-occurrences filters (iteration 6.18.1.3) ──
+    //
+    // `parentPaymentId` narrows to the children of a single parent. We
+    // enforce visibility on the **parent** before listing — without this,
+    // a non-member could enumerate child ids by guessing a parent uuid.
+    // Fail closed with the same `PAYMENT_NOT_FOUND` code findByIdForUser
+    // uses, preserving the no-existence-leak rule.
+    if (q.parentPaymentId) {
+      await this.assertVisible(userId, q.parentPaymentId);
+      andClauses.push({ parentPaymentId: q.parentPaymentId });
+    }
+
+    // `withParent=true` → only parents (no parentPaymentId).
+    // `withParent=false` → only occurrences (parentPaymentId !== null).
+    if (q.withParent === 'true') {
+      andClauses.push({ parentPaymentId: null });
+    } else if (q.withParent === 'false') {
+      andClauses.push({ parentPaymentId: { not: null } });
+    }
+
     if (q.from || q.to) {
       const range: Prisma.DateTimeFilter = {};
       if (q.from) range.gte = new Date(q.from);

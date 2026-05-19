@@ -76,6 +76,7 @@ describe('lib/payment/filters', () => {
       to: undefined,
       search: undefined,
       sort: 'date_desc',
+      childScope: undefined,
     });
   });
 
@@ -92,6 +93,7 @@ describe('lib/payment/filters', () => {
       to: '2026-04-30',
       search: 'tea',
       sort: 'amount_asc',
+      childScope: undefined,
     });
   });
 
@@ -140,6 +142,7 @@ describe('lib/payment/filters', () => {
       to: '2026-12-31',
       search: 'coffee',
       sort: 'amount_desc',
+      childScope: undefined,
     });
   });
 
@@ -156,6 +159,7 @@ describe('lib/payment/filters', () => {
       to: undefined,
       search: undefined,
       sort: 'date_desc',
+      childScope: undefined,
     });
   });
 
@@ -187,5 +191,50 @@ describe('lib/payment/filters', () => {
     expect(clearFilters('personal')).toEqual({ scope: 'personal', sort: 'date_desc' });
     expect(clearFilters('group:g-9')).toEqual({ scope: 'group:g-9', sort: 'date_desc' });
     expect(clearFilters()).toEqual({ scope: 'all', sort: 'date_desc' });
+  });
+
+  // ── childScope (iteration 6.18.1.3) ─────────────────────────────────────
+
+  describe('childScope round-trip', () => {
+    it('serialises childScope=parents through the URL', () => {
+      const f: PaymentFilters = { ...defaultFilters(), childScope: 'parents' };
+      expect(filtersToQuery(f).toString()).toBe('childScope=parents');
+    });
+
+    it('serialises childScope=occurrences through the URL', () => {
+      const f: PaymentFilters = { ...defaultFilters(), childScope: 'occurrences' };
+      expect(filtersToQuery(f).toString()).toBe('childScope=occurrences');
+    });
+
+    it('omits childScope=all (default) from the URL', () => {
+      expect(filtersToQuery({ ...defaultFilters(), childScope: 'all' }).toString()).toBe('');
+    });
+
+    it('parses childScope from the URL', () => {
+      expect(filtersFromQuery(new URLSearchParams('childScope=parents')).childScope).toBe(
+        'parents',
+      );
+      expect(filtersFromQuery(new URLSearchParams('childScope=occurrences')).childScope).toBe(
+        'occurrences',
+      );
+    });
+
+    it('drops invalid childScope values', () => {
+      expect(
+        filtersFromQuery(new URLSearchParams('childScope=garbage')).childScope,
+      ).toBeUndefined();
+    });
+
+    it('round-trips a representative filter object that includes childScope', () => {
+      const f: PaymentFilters = { ...defaultFilters(), childScope: 'occurrences' };
+      const round = filtersFromQuery(filtersToQuery(f));
+      expect(round.childScope).toBe('occurrences');
+    });
+
+    it('isFiltersDirty flips to true when childScope is non-default', () => {
+      expect(isFiltersDirty({ ...defaultFilters(), childScope: 'parents' })).toBe(true);
+      expect(isFiltersDirty({ ...defaultFilters(), childScope: 'occurrences' })).toBe(true);
+      expect(isFiltersDirty({ ...defaultFilters(), childScope: 'all' })).toBe(false);
+    });
   });
 });

@@ -683,6 +683,31 @@ Paginated under the parent payment; all bodies use a simple `{ content: string (
 
 `POST /payments` with `type=RECURRING|LIMITED_PERIOD` creates the schedule atomically — these endpoints are for post-hoc edits.
 
+#### Recurring occurrences listing (iteration 6.18.1.3)
+
+Two ways to enumerate the occurrences generated from a recurring parent:
+
+1. **Query filter on `/payments`** — `?parentPaymentId=<uuid>` narrows the
+   listing to occurrences whose `parentPaymentId === <uuid>`. Visibility on
+   the parent is enforced (404 leak-free) so a non-member cannot probe child
+   ids by guessing a parent uuid.
+2. **Ergonomic alias** — `GET /payments/:paymentId/occurrences` is a thin
+   wrapper that forces the parent filter from the path param. Same
+   visibility rules; same cursor pagination + sort knobs as the main list
+   endpoint.
+
+The filter UI control for "occurrences only / parents only / both" lands in
+iteration 6.18.3. The wire shape of the partition is already public:
+
+| Param        | Values           | Effect                                                                                                                       |
+| ------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `withParent` | `true` / `false` | `true` → only parents (`parentPaymentId === null`); `false` → only occurrences (`parentPaymentId !== null`); omitted → both. |
+
+Combined with `parentPaymentId` it is a no-op (the identity filter wins).
+URL state on `/payments` carries a `childScope=parents|occurrences` key
+(default `all`, omitted from the URL) which the frontend translates into
+the API's `withParent` partition.
+
 ### 5.6 Plans
 
 | Method | Endpoint             | Description                                                                          |

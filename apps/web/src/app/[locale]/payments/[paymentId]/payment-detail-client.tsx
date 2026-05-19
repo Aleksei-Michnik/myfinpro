@@ -20,6 +20,7 @@ import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
 import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
 import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
 import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
+import { RecurringOccurrencesSection } from '@/components/payment/RecurringOccurrencesSection';
 import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -243,6 +244,8 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
       />
 
       {isRecurringParent && schedule && <ScheduleBadge schedule={schedule} locale={locale} />}
+
+      {isRecurringParent && <RecurringOccurrencesSection paymentId={payment.id} />}
 
       <PaymentDocumentsPlaceholder />
 

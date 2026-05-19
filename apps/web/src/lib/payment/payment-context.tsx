@@ -15,6 +15,7 @@ import type {
   CreatePaymentInput,
   ListCategoriesParams,
   ListCommentsParams,
+  ListOccurrencesParams,
   ListPaymentsParams,
   PaymentListResponse,
   PaymentSummary,
@@ -43,6 +44,20 @@ interface PaymentContextValue {
   ): Promise<PaymentSummary | null>;
   removePayment(id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult>;
   toggleStar(id: string, signal?: AbortSignal): Promise<ToggleStarResult>;
+
+  /**
+   * Iteration 6.18.1.3 — list child occurrences of a recurring parent.
+   *
+   * Thin wrapper over `GET /payments/:paymentId/occurrences`. The response
+   * shape is identical to the existing `fetchList` (cursor + hasMore). The
+   * server enforces visibility on the parent and returns 404 if the caller
+   * cannot see it (no existence leak).
+   */
+  listOccurrences(
+    parentPaymentId: string,
+    query?: ListOccurrencesParams,
+    signal?: AbortSignal,
+  ): Promise<PaymentListResponse>;
 
   // Comments
   listComments(
@@ -269,6 +284,24 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const listOccurrences = useCallback(
+    (
+      parentPaymentId: string,
+      query?: ListOccurrencesParams,
+      signal?: AbortSignal,
+    ): Promise<PaymentListResponse> =>
+      run(async () => {
+        const qs = buildQuery(query as Record<string, unknown> | undefined);
+        const res = await fetch(
+          `${API_BASE}/payments/${encodeURIComponent(parentPaymentId)}/occurrences${qs}`,
+          { method: 'GET', headers: authHeaders(), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to load occurrences');
+        return (await res.json()) as PaymentListResponse;
+      }),
+    [authHeaders, run],
+  );
+
   // ── Comments ───────────────────────────────────────────────────────────
 
   const listComments = useCallback(
@@ -428,6 +461,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       updatePayment,
       removePayment,
       toggleStar,
+      listOccurrences,
       listComments,
       postComment,
       editComment,
@@ -448,6 +482,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       updatePayment,
       removePayment,
       toggleStar,
+      listOccurrences,
       listComments,
       postComment,
       editComment,

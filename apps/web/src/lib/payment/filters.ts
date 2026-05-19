@@ -15,8 +15,26 @@
 
 import type { PaymentsFiltersValue } from '@/components/payment/PaymentsFilters';
 
-/** Re-export under a name closer to how it's discussed in the design doc. */
-export type PaymentFilters = PaymentsFiltersValue;
+/**
+ * Iteration 6.18.1.3 — partition the visible payments by parent/child.
+ *
+ * - `'all'` (default): both parents and occurrences. No API constraint.
+ * - `'parents'`: parents only — `withParent=true` on the API.
+ * - `'occurrences'`: generated children only — `withParent=false`.
+ *
+ * The UI control for this filter ships in iteration 6.18.3; right now we
+ * only thread the field through the URL so deep-links stay stable.
+ */
+export type ChildScope = 'all' | 'parents' | 'occurrences';
+
+/**
+ * Re-export under a name closer to how it's discussed in the design doc,
+ * extended with the iteration 6.18.1.3 `childScope` partition.
+ */
+export type PaymentFilters = PaymentsFiltersValue & {
+  /** Default `'all'`. */
+  childScope?: ChildScope;
+};
 
 /** Scope filter shape — `'all'` means no API constraint. */
 export type FiltersScope = 'all' | 'personal' | string;
@@ -33,6 +51,12 @@ function isSort(v: string | null | undefined): v is Sort {
 
 function isDirection(v: string | null | undefined): v is Direction {
   return !!v && (DIRECTION_VALUES as readonly string[]).includes(v);
+}
+
+const CHILD_SCOPE_VALUES = ['all', 'parents', 'occurrences'] as const;
+
+function isChildScope(v: string | null | undefined): v is ChildScope {
+  return !!v && (CHILD_SCOPE_VALUES as readonly string[]).includes(v);
 }
 
 /** Canonical empty filter state. Scope defaults to `'all'`. */
@@ -56,6 +80,9 @@ export function filtersToQuery(filters: PaymentFilters): URLSearchParams {
   if (filters.to) params.set('to', filters.to);
   if (filters.search) params.set('q', filters.search);
   if (filters.sort && filters.sort !== 'date_desc') params.set('sort', filters.sort);
+  if (filters.childScope && filters.childScope !== 'all') {
+    params.set('childScope', filters.childScope);
+  }
   return params;
 }
 
@@ -77,6 +104,7 @@ export function filtersFromQuery(searchParams: FilterQueryReader): PaymentFilter
   const rawDirection = searchParams.get('direction');
   const rawSort = searchParams.get('sort');
   const q = searchParams.get('q');
+  const rawChildScope = searchParams.get('childScope');
 
   return {
     scope,
@@ -87,6 +115,7 @@ export function filtersFromQuery(searchParams: FilterQueryReader): PaymentFilter
     to: searchParams.get('to') ?? undefined,
     search: q ?? undefined,
     sort: isSort(rawSort) ? rawSort : 'date_desc',
+    childScope: isChildScope(rawChildScope) ? rawChildScope : undefined,
   };
 }
 
@@ -102,7 +131,8 @@ export function isFiltersDirty(filters: PaymentFilters): boolean {
     filters.from ||
     filters.to ||
     (filters.search && filters.search.length > 0) ||
-    (filters.sort && filters.sort !== 'date_desc'),
+    (filters.sort && filters.sort !== 'date_desc') ||
+    (filters.childScope && filters.childScope !== 'all'),
   );
 }
 

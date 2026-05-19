@@ -95,6 +95,51 @@ export class PaymentController {
     return this.service.list(user.sub, query);
   }
 
+  /**
+   * Iteration 6.18.1.3 — ergonomic alias over `GET /payments?parentPaymentId=:id`.
+   *
+   * Returns the occurrences (`parentPaymentId === :paymentId`) generated
+   * from a recurring parent. The web client's `<RecurringOccurrencesSection>`
+   * uses this alias rather than constructing the query manually so the call
+   * site stays free of filter knowledge.
+   *
+   * Visibility on the parent is enforced (404 leak-free) by the underlying
+   * `service.list` filter handling. Cursor pagination + sort accept the
+   * same query knobs as the main list endpoint, minus `parentPaymentId`
+   * itself (set from the route param) and `withParent` (would conflict).
+   */
+  @CustomThrottle({ limit: 120, ttl: 60000 }) // design §5.8 — 120/min read
+  @UseGuards(JwtAuthGuard)
+  @Get(':paymentId/occurrences')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List child occurrences of a recurring parent payment',
+    description:
+      'Thin alias for `GET /payments?parentPaymentId=:paymentId`. Returns the ' +
+      'generated occurrences for a recurring parent. Visibility on the parent ' +
+      'is enforced (404 leak-free).',
+  })
+  @ApiOkResponse({ description: 'Paginated occurrences envelope', type: PaymentListResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid query parameters or cursor' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiNotFoundResponse({ description: 'Parent not found or not visible to the caller' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (120/min)' })
+  async listOccurrences(
+    @CurrentUser() user: JwtPayload,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Query() query: ListPaymentsQueryDto,
+  ): Promise<PaymentListResponseDto> {
+    // Force the parent filter from the path param; ignore conflicting
+    // `parentPaymentId` / `withParent` query keys to keep the alias's
+    // contract identity-clean.
+    const merged: ListPaymentsQueryDto = {
+      ...query,
+      parentPaymentId: paymentId,
+      withParent: undefined,
+    };
+    return this.service.list(user.sub, merged);
+  }
+
   @CustomThrottle({ limit: 120, ttl: 60000 }) // design §5.8 — 120/min read
   @UseGuards(JwtAuthGuard)
   @Get(':id')

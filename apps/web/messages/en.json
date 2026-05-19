@@ -701,7 +701,13 @@
         "unsupportedType": "Editing this payment type isn't supported yet."
       },
       "edited": "edited",
-      "deletedToast": "Payment removed."
+      "deletedToast": "Payment removed.",
+      "occurrences": {
+        "title": "Occurrences",
+        "countSingular": "1 occurrence",
+        "countPlural": "{n} occurrences",
+        "empty": "No occurrences yet — they will appear here as the schedule runs."
+      }
     },
     "comments": {
       "title": "Comments",

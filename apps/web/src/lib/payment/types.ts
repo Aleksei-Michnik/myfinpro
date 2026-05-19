@@ -254,6 +254,17 @@ export interface ListPaymentsParams {
   sort?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
   limit?: number;
   cursor?: string;
+  /** Iteration 6.18.1.3 — narrow to a single parent's occurrences. */
+  parentPaymentId?: string;
+  /** Iteration 6.18.1.3 — `true` parents only, `false` occurrences only. */
+  withParent?: boolean;
+}
+
+/** Query knobs accepted by `usePayments().listOccurrences()`. */
+export interface ListOccurrencesParams {
+  cursor?: string;
+  limit?: number;
+  sort?: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 }
 
 export interface AttributionChangeResult {

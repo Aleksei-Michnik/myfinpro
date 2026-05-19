@@ -66,6 +66,38 @@ export class ListPaymentsQueryDto {
   @IsIn([...PAYMENT_TYPES])
   type?: 'ONE_TIME' | 'RECURRING' | 'LIMITED_PERIOD' | 'INSTALLMENT' | 'LOAN' | 'MORTGAGE';
 
+  /**
+   * Iteration 6.18.1.3 — narrow to occurrences of a single recurring parent.
+   *
+   * When set, the listing is filtered to `parentPaymentId === <uuid>`.
+   * Visibility on the **parent** is enforced (404 leak-free) so a non-member
+   * can't enumerate children. Combined with `?withParent` it has no effect:
+   * `parentPaymentId` is a strict identity filter, `withParent` is a
+   * boolean partition.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Narrow to occurrences of a single recurring parent. Caller must be able to see the parent; otherwise 404.',
+  })
+  @IsOptional()
+  @IsUUID()
+  parentPaymentId?: string;
+
+  /**
+   * Iteration 6.18.1.3 — partition the visible set into parents (`true`)
+   * vs. occurrences (`false`). Omitted = both. Used by the /payments page
+   * filter UI shipping in 6.18.3 (`childScope`). Forward-compatible with
+   * existing callers — when omitted, behaviour is unchanged.
+   */
+  @ApiPropertyOptional({
+    description:
+      'true → only parents (parentPaymentId === null); false → only occurrences (parentPaymentId !== null); omitted → both.',
+    example: 'true',
+  })
+  @IsOptional()
+  @IsBooleanString()
+  withParent?: string;
+
   /** Free-text search against note (case-insensitive substring match). */
   @ApiPropertyOptional()
   @IsOptional()

@@ -305,4 +305,109 @@ describe('GET /payments (integration)', () => {
     const { body } = await listPayments(alice.accessToken, { sort: 'amount_desc' });
     expect(body.data.map((r) => r.amountCents)).toEqual([2000, 900, 500]);
   });
+
+  // ── 15-19. parentPaymentId / withParent filters + /occurrences alias (6.18.1.3) ──
+
+  /**
+   * Synthesise a parent + N children directly via Prisma (avoids waiting on
+   * the BullMQ scheduler in unit-style integration tests). The API tests in
+   * `payment-occurrence.integration.spec.ts` cover the happy-path pipeline
+   * end-to-end; here we only need the row shape.
+   */
+  const seedParentWithChildren = async (
+    creatorId: string,
+    childCount: number,
+  ): Promise<{ parentId: string; childIds: string[] }> => {
+    const parent = await prisma.payment.create({
+      data: {
+        direction: 'OUT',
+        type: 'RECURRING',
+        amountCents: 1500,
+        currency: 'USD',
+        occurredAt: new Date('2026-04-25T00:00:00Z'),
+        status: 'POSTED',
+        categoryId: outCategoryId,
+        createdById: creatorId,
+        attributions: { create: [{ scopeType: 'personal', userId: creatorId }] },
+      },
+    });
+    const childIds: string[] = [];
+    for (let i = 0; i < childCount; i++) {
+      const child = await prisma.payment.create({
+        data: {
+          direction: 'OUT',
+          type: 'RECURRING',
+          amountCents: 1500,
+          currency: 'USD',
+          occurredAt: new Date(`2026-05-${String(1 + i).padStart(2, '0')}T00:00:00Z`),
+          status: 'POSTED',
+          categoryId: outCategoryId,
+          createdById: creatorId,
+          parentPaymentId: parent.id,
+          attributions: { create: [{ scopeType: 'personal', userId: creatorId }] },
+        },
+      });
+      childIds.push(child.id);
+    }
+    return { parentId: parent.id, childIds };
+  };
+
+  it('15. /payments/:id/occurrences returns children only (parent excluded)', async () => {
+    const { parentId, childIds } = await seedParentWithChildren(alice.user.id, 3);
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/payments/${parentId}/occurrences`)
+      .set('Authorization', `Bearer ${alice.accessToken}`)
+      .expect(200);
+
+    const ids = (res.body.data as Array<{ id: string }>).map((r) => r.id);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids)).toEqual(new Set(childIds));
+    expect(ids).not.toContain(parentId);
+  });
+
+  it('16. /payments?parentPaymentId=<id> returns the same set as the alias', async () => {
+    const { parentId, childIds } = await seedParentWithChildren(alice.user.id, 2);
+
+    const { body } = await listPayments(alice.accessToken, { parentPaymentId: parentId });
+    const ids = body.data.map((r) => r.id as string);
+    expect(new Set(ids)).toEqual(new Set(childIds));
+  });
+
+  it('17. /payments/:id/occurrences for a caller who cannot see the parent → 404 (no leak)', async () => {
+    const { parentId } = await seedParentWithChildren(alice.user.id, 2);
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/payments/${parentId}/occurrences`)
+      .set('Authorization', `Bearer ${bob.accessToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.errorCode).toBe('PAYMENT_NOT_FOUND');
+  });
+
+  it('18. withParent=true returns parents only; withParent=false returns occurrences only', async () => {
+    // 1 parent + 2 children + 1 unrelated ONE_TIME owned by Alice.
+    await seedParentWithChildren(alice.user.id, 2);
+    await createPayment(alice.accessToken, basePayload({ amountCents: 999 }));
+
+    const onlyParents = await listPayments(alice.accessToken, { withParent: 'true' });
+    const parentTypes = onlyParents.body.data.map((r) => r.parentPaymentId);
+    expect(parentTypes.every((p) => p === null)).toBe(true);
+    expect(onlyParents.body.data).toHaveLength(2); // RECURRING parent + ONE_TIME
+
+    const onlyChildren = await listPayments(alice.accessToken, { withParent: 'false' });
+    expect(onlyChildren.body.data).toHaveLength(2);
+    expect(onlyChildren.body.data.every((r) => r.parentPaymentId !== null)).toBe(true);
+  });
+
+  it('19. /payments/:id/occurrences for a one-time payment returns an empty list (200, not 404)', async () => {
+    const created = await createPayment(alice.accessToken, basePayload());
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/payments/${created.id}/occurrences`)
+      .set('Authorization', `Bearer ${alice.accessToken}`)
+      .expect(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.hasMore).toBe(false);
+    expect(res.body.nextCursor).toBeNull();
+  });
 });
