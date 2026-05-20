@@ -15,6 +15,7 @@ import { MailModule } from './mail/mail.module';
 import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { QueueModule } from './queue/queue.module';
     GroupModule,
     PaymentModule,
     CategoryModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

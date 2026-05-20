@@ -15,6 +15,7 @@ import { AuthProvider } from '@/lib/auth/auth-context';
 import { CategoryProvider } from '@/lib/category/category-context';
 import { GroupProvider } from '@/lib/group/group-context';
 import { PaymentProvider } from '@/lib/payment/payment-context';
+import { AuthenticatedRealtimeProvider } from '@/lib/realtime/AuthenticatedRealtimeProvider';
 import { UIStatusProvider } from '@/lib/ui';
 
 import '../globals.css';
@@ -52,20 +53,22 @@ export default async function LocaleLayout({ children, params }: Props) {
           <UIStatusProvider>
             <PageProgressBar />
             <AuthProvider>
-              <GroupProvider>
-                <PaymentProvider>
-                  <CategoryProvider>
-                    <ToastProvider>
-                      <Header />
-                      <VerificationBanner />
-                      <TimezoneDetector />
-                      <ErrorBoundary>{children}</ErrorBoundary>
-                      <Footer />
-                      <ToastContainer />
-                    </ToastProvider>
-                  </CategoryProvider>
-                </PaymentProvider>
-              </GroupProvider>
+              <AuthenticatedRealtimeProvider>
+                <GroupProvider>
+                  <PaymentProvider>
+                    <CategoryProvider>
+                      <ToastProvider>
+                        <Header />
+                        <VerificationBanner />
+                        <TimezoneDetector />
+                        <ErrorBoundary>{children}</ErrorBoundary>
+                        <Footer />
+                        <ToastContainer />
+                      </ToastProvider>
+                    </CategoryProvider>
+                  </PaymentProvider>
+                </GroupProvider>
+              </AuthenticatedRealtimeProvider>
             </AuthProvider>
           </UIStatusProvider>
         </NextIntlClientProvider>

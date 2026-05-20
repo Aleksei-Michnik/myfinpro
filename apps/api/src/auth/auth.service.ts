@@ -20,6 +20,7 @@ import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { TokenService } from './services/token.service';
+import { clearAuthCookie, setAuthCookie } from './utils/auth-cookie';
 
 export interface GoogleProfile {
   googleId: string;
@@ -108,6 +109,10 @@ export class AuthService {
 
     // Set refresh token as httpOnly cookie
     this.tokenService.setRefreshTokenCookie(response, refreshToken);
+
+    // Phase 6 · 6.18.1.4 — also set the access-token cookie so the browser can
+    // open the SSE stream (EventSource cannot send Authorization headers).
+    setAuthCookie(response, accessToken);
 
     // Fire-and-forget: send verification email (don't let failure break registration)
     try {
@@ -230,6 +235,9 @@ export class AuthService {
     // Set refresh token as httpOnly cookie
     this.tokenService.setRefreshTokenCookie(response, refreshToken);
 
+    // Phase 6 · 6.18.1.4 — access-token cookie for SSE.
+    setAuthCookie(response, accessToken);
+
     return {
       user: {
         id: user.id,
@@ -271,6 +279,9 @@ export class AuthService {
     // Set new refresh token cookie
     this.tokenService.setRefreshTokenCookie(response, newRefreshToken);
 
+    // Phase 6 · 6.18.1.4 — refresh the access-token cookie too.
+    setAuthCookie(response, accessToken);
+
     this.logger.log(`Tokens refreshed for user: ${user.email} (${user.id})`);
 
     return {
@@ -295,6 +306,9 @@ export class AuthService {
 
     // Clear the refresh token cookie
     this.tokenService.clearRefreshTokenCookie(response);
+
+    // Phase 6 · 6.18.1.4 — clear the access-token cookie too.
+    clearAuthCookie(response);
 
     // Log audit event
     await this.prisma.auditLog.create({
