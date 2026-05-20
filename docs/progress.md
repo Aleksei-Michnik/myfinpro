@@ -6298,3 +6298,207 @@ iteration 6.18.1).
 
 **Next** — 6.18.1.3 (recurring detail page lists child occurrences
 via `<PaymentsList>` + Load more), then 6.18.2 (lifecycle UI).
+
+### Iteration 6.18.1.3 — Recurring occurrences section on detail page (2026-05-19)
+
+**What.** A `<RecurringOccurrencesSection>` mounts under the
+[`<ScheduleBadge>`](apps/web/src/components/payment/ScheduleBadge.tsx:1)
+on the detail page of any RECURRING parent (`payment.type === 'RECURRING' && parentPaymentId === null`).
+The section reuses the existing
+[`<PaymentsList>`](apps/web/src/components/payment/PaymentsList.tsx:1)
+in orchestrator mode, so each child row uses the standard
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1)
+component and inherits the disabled-Edit/Delete tooltip behaviour
+from 6.18.1.2 — no row design drift.
+
+**API contract additions.** Three forward-compatible endpoints
+under `/api/v1/payments`:
+
+| What                                         | Where                                                                                | Notes                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `?parentPaymentId=<uuid>` filter             | [`GET /payments`](apps/api/src/payment/payment.controller.ts:91)                     | Visibility on parent enforced first → 404 leak-free if caller can't see parent.            |
+| `?withParent=true\|false` filter             | [`GET /payments`](apps/api/src/payment/payment.controller.ts:91)                     | `true` parents only / `false` occurrences only / omitted both. Used by 6.18.3's filter UI. |
+| `GET /payments/:paymentId/occurrences` alias | [`PaymentController.listOccurrences`](apps/api/src/payment/payment.controller.ts:99) | Thin wrapper that forces `parentPaymentId` from the path; ignores conflicting query keys.  |
+
+**Frontend additions.**
+
+- [`usePayments().listOccurrences(parentPaymentId, query, signal)`](apps/web/src/lib/payment/payment-context.tsx:1)
+  — thin `AbortSignal`-aware wrapper over the alias.
+- [`<RecurringOccurrencesSection>`](apps/web/src/components/payment/RecurringOccurrencesSection.tsx:1)
+  — orchestrator: container-scope `useAsyncOperation` for the
+  initial fetch (`<LoadingOverlay>` debounced 150 ms), holds
+  `items + cursor + hasMore`, delegates to `<PaymentsList>` for
+  rendering + Load more, inline `<InlineErrorBanner>` with retry,
+  collapsible `<details>` (open by default), `aria-live="polite"`
+  count line, and a friendly empty-state.
+- [`PaymentFilters.childScope`](apps/web/src/lib/payment/filters.ts:1)
+  — `'all' | 'parents' | 'occurrences'`, round-trips through the
+  URL via `filtersToQuery` / `filtersFromQuery`. The UI control
+  lands in 6.18.3.
+
+**Decision: filter UI control deferred to 6.18.3.** The DTO,
+service, alias, and the `childScope` URL helper all ship now so
+6.18.3 only needs to wire a control into
+[`<PaymentsFilters>`](apps/web/src/components/payment/PaymentsFilters.tsx:1).
+
+**i18n.** `payments.detail.occurrences.{title,countSingular,countPlural,empty}`
+in en + he. RTL-safe; no double-prefix; the count line uses
+plural variants (`1 occurrence` vs `{n} occurrences`) so the
+translator controls singular/plural separately.
+
+**A11y.** `aria-live="polite"` on the count so AT announces
+additions; `<details>`/`<summary>` is keyboard-operable by
+default; row-level affordances stay identical to the rest of the
+app.
+
+**Files added / modified.**
+
+| File                                                                       | Change   |
+| -------------------------------------------------------------------------- | -------- |
+| `apps/api/src/payment/dto/list-payments-query.dto.ts`                      | modified |
+| `apps/api/src/payment/payment.service.ts`                                  | modified |
+| `apps/api/src/payment/payment.controller.ts`                               | modified |
+| `apps/api/src/payment/payment.service.spec.ts`                             | modified |
+| `apps/api/src/payment/payment.controller.spec.ts`                          | modified |
+| `apps/api/test/integration/payments-list.integration.spec.ts`              | modified |
+| `apps/web/src/lib/payment/payment-context.tsx`                             | modified |
+| `apps/web/src/lib/payment/types.ts`                                        | modified |
+| `apps/web/src/lib/payment/filters.ts`                                      | modified |
+| `apps/web/src/lib/payment/__tests__/filters.test.ts`                       | modified |
+| `apps/web/src/components/payment/RecurringOccurrencesSection.tsx`          | added    |
+| `apps/web/src/components/payment/RecurringOccurrencesSection.spec.tsx`     | added    |
+| `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx` | modified |
+| `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
+| `apps/web/messages/en.json`                                                | modified |
+| `apps/web/messages/he.json`                                                | modified |
+| `docs/phase-6-payments-design.md`                                          | modified |
+
+**Tests.** ~21 new cases:
+
+- 5 in [`payment.service.spec.ts`](apps/api/src/payment/payment.service.spec.ts:1) — `parentPaymentId` filter, parent-visibility 404 (no leak), `withParent=true|false`, omitted partition is forward-compat.
+- 3 in [`payment.controller.spec.ts`](apps/api/src/payment/payment.controller.spec.ts:1) — alias forces `parentPaymentId` from path + scrubs conflicting keys, propagates 404, throttle metadata.
+- 5 in [`payments-list.integration.spec.ts`](apps/api/test/integration/payments-list.integration.spec.ts:1) — alias returns occurrences only, query filter parity, 404 leak-free, `withParent` partition, alias on a one-time payment returns empty 200.
+- 9 in [`RecurringOccurrencesSection.spec.tsx`](apps/web/src/components/payment/RecurringOccurrencesSection.spec.tsx:1) — title + count, empty-state, Load more affordance, error banner + retry, container-scope overlay, `<PaymentRow>` rendering parity, collapsibility, query knobs, RTL render in he.
+- 3 in `payment-detail.spec.tsx` — section mount rules per type / parent state.
+- 6 in [`filters.test.ts`](apps/web/src/lib/payment/__tests__/filters.test.ts:1) — `childScope` URL round-trip, defaults dropping, isFiltersDirty flip.
+
+All suites green: API 171/171, integration 19/19 on `payments-list`, web 952/952.
+
+**Constraints honoured.** No new npm dependency. DRY (one
+`<PaymentsList>` rendering everywhere, one `<PaymentRow>` per
+row). A11y (live region, keyboard-operable details/summary).
+Visibility (the API enforces visibility on the parent + on each
+occurrence; the UI never leaks anything the user can't see).
+Backward-compat (the new query keys are optional; existing
+callers unchanged).
+
+**Phase 6 status: 17 / 21** (still — sub-iteration of 6.18).
+
+**Commits.** Feat: `5726aea`. Docs (this entry):
+`docs(phase-6.18.1.3)`.
+
+**Next** — 6.18.1.4 (realtime updates infra via SSE so the
+occurrences list ticks in without a page refresh), then 6.18.2
+(lifecycle UI: pause / resume / cancel).
+
+### Iteration 6.18.1.3 — Recurring occurrences section on detail page (2026-05-19)
+
+**What.** A `<RecurringOccurrencesSection>` mounts under the
+[`<ScheduleBadge>`](apps/web/src/components/payment/ScheduleBadge.tsx:1)
+on the detail page of any RECURRING parent (`payment.type === 'RECURRING' && parentPaymentId === null`).
+The section reuses the existing
+[`<PaymentsList>`](apps/web/src/components/payment/PaymentsList.tsx:1)
+in orchestrator mode, so each child row uses the standard
+[`<PaymentRow>`](apps/web/src/components/payment/PaymentRow.tsx:1)
+component and inherits the disabled-Edit/Delete tooltip behaviour
+from 6.18.1.2 — no row design drift.
+
+**API contract additions.** Three forward-compatible endpoints
+under `/api/v1/payments`:
+
+| What                                         | Where                                                                                | Notes                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `?parentPaymentId=<uuid>` filter             | [`GET /payments`](apps/api/src/payment/payment.controller.ts:91)                     | Visibility on parent enforced first → 404 leak-free if caller can't see parent.            |
+| `?withParent=true\|false` filter             | [`GET /payments`](apps/api/src/payment/payment.controller.ts:91)                     | `true` parents only / `false` occurrences only / omitted both. Used by 6.18.3's filter UI. |
+| `GET /payments/:paymentId/occurrences` alias | [`PaymentController.listOccurrences`](apps/api/src/payment/payment.controller.ts:99) | Thin wrapper that forces `parentPaymentId` from the path; ignores conflicting query keys.  |
+
+**Frontend additions.**
+
+- [`usePayments().listOccurrences(parentPaymentId, query, signal)`](apps/web/src/lib/payment/payment-context.tsx:1)
+  — thin `AbortSignal`-aware wrapper over the alias.
+- [`<RecurringOccurrencesSection>`](apps/web/src/components/payment/RecurringOccurrencesSection.tsx:1)
+  — orchestrator: container-scope `useAsyncOperation` for the
+  initial fetch (`<LoadingOverlay>` debounced 150 ms), holds
+  `items + cursor + hasMore`, delegates to `<PaymentsList>` for
+  rendering + Load more, inline `<InlineErrorBanner>` with retry,
+  collapsible `<details>` (open by default), `aria-live="polite"`
+  count line, and a friendly empty-state.
+- [`PaymentFilters.childScope`](apps/web/src/lib/payment/filters.ts:1)
+  — `'all' | 'parents' | 'occurrences'`, round-trips through the
+  URL via `filtersToQuery` / `filtersFromQuery`. The UI control
+  lands in 6.18.3.
+
+**Decision: filter UI control deferred to 6.18.3.** The DTO,
+service, alias, and the `childScope` URL helper all ship now so
+6.18.3 only needs to wire a control into
+[`<PaymentsFilters>`](apps/web/src/components/payment/PaymentsFilters.tsx:1).
+
+**i18n.** `payments.detail.occurrences.{title,countSingular,countPlural,empty}`
+in en + he. RTL-safe; no double-prefix; the count line uses
+plural variants (`1 occurrence` vs `{n} occurrences`) so the
+translator controls singular/plural separately.
+
+**A11y.** `aria-live="polite"` on the count so AT announces
+additions; `<details>`/`<summary>` is keyboard-operable by
+default; row-level affordances stay identical to the rest of the
+app.
+
+**Files added / modified.**
+
+| File                                                                       | Change   |
+| -------------------------------------------------------------------------- | -------- |
+| `apps/api/src/payment/dto/list-payments-query.dto.ts`                      | modified |
+| `apps/api/src/payment/payment.service.ts`                                  | modified |
+| `apps/api/src/payment/payment.controller.ts`                               | modified |
+| `apps/api/src/payment/payment.service.spec.ts`                             | modified |
+| `apps/api/src/payment/payment.controller.spec.ts`                          | modified |
+| `apps/api/test/integration/payments-list.integration.spec.ts`              | modified |
+| `apps/web/src/lib/payment/payment-context.tsx`                             | modified |
+| `apps/web/src/lib/payment/types.ts`                                        | modified |
+| `apps/web/src/lib/payment/filters.ts`                                      | modified |
+| `apps/web/src/lib/payment/__tests__/filters.test.ts`                       | modified |
+| `apps/web/src/components/payment/RecurringOccurrencesSection.tsx`          | added    |
+| `apps/web/src/components/payment/RecurringOccurrencesSection.spec.tsx`     | added    |
+| `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx` | modified |
+| `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
+| `apps/web/messages/en.json`                                                | modified |
+| `apps/web/messages/he.json`                                                | modified |
+| `docs/phase-6-payments-design.md`                                          | modified |
+
+**Tests.** ~21 new cases:
+
+- 5 in [`payment.service.spec.ts`](apps/api/src/payment/payment.service.spec.ts:1) — `parentPaymentId` filter, parent-visibility 404 (no leak), `withParent=true|false`, omitted partition is forward-compat.
+- 3 in [`payment.controller.spec.ts`](apps/api/src/payment/payment.controller.spec.ts:1) — alias forces `parentPaymentId` from path + scrubs conflicting keys, propagates 404, throttle metadata.
+- 5 in [`payments-list.integration.spec.ts`](apps/api/test/integration/payments-list.integration.spec.ts:1) — alias returns occurrences only, query filter parity, 404 leak-free, `withParent` partition, alias on a one-time payment returns empty 200.
+- 9 in [`RecurringOccurrencesSection.spec.tsx`](apps/web/src/components/payment/RecurringOccurrencesSection.spec.tsx:1) — title + count, empty-state, Load more affordance, error banner + retry, container-scope overlay, `<PaymentRow>` rendering parity, collapsibility, query knobs, RTL render in he.
+- 3 in `payment-detail.spec.tsx` — section mount rules per type / parent state.
+- 6 in [`filters.test.ts`](apps/web/src/lib/payment/__tests__/filters.test.ts:1) — `childScope` URL round-trip, defaults dropping, isFiltersDirty flip.
+
+All suites green: API 171/171, integration 19/19 on `payments-list`, web 952/952.
+
+**Constraints honoured.** No new npm dependency. DRY (one
+`<PaymentsList>` rendering everywhere, one `<PaymentRow>` per
+row). A11y (live region, keyboard-operable details/summary).
+Visibility (the API enforces visibility on the parent + on each
+occurrence; the UI never leaks anything the user can't see).
+Backward-compat (the new query keys are optional; existing
+callers unchanged).
+
+**Phase 6 status: 17 / 21** (still — sub-iteration of 6.18).
+
+**Commits.** Feat: `5726aea`. Docs (this entry):
+`docs(phase-6.18.1.3)`.
+
+**Next** — 6.18.1.4 (realtime updates infra via SSE so the
+occurrences list ticks in without a page refresh), then 6.18.2
+(lifecycle UI: pause / resume / cancel).
