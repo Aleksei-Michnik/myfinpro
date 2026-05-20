@@ -6502,3 +6502,93 @@ callers unchanged).
 **Next** — 6.18.1.4 (realtime updates infra via SSE so the
 occurrences list ticks in without a page refresh), then 6.18.2
 (lifecycle UI: pause / resume / cancel).
+
+### Iteration 6.18.1.4 — SSE realtime infrastructure (no consumers yet) (2026-05-20)
+
+**Foundation layer for live UI updates.** Ships the wiring (server → cookie auth → SSE endpoint → React provider → typed hook) without subscribing any producer service. The next sub-iterations (6.18.1.4.1+) will plug payment / comment / schedule emitters into the bus and wire concrete UI listeners. **No visible UI changes** in this iteration.
+
+**Backend.**
+
+- New module [`apps/api/src/realtime/`](../apps/api/src/realtime/):
+  - [`events.types.ts`](../apps/api/src/realtime/events.types.ts:1) — discriminated union (`payment.*`, `payment_attribution.*`, `comment.*`, `occurrence.*`, `schedule.*`) with `userIds[]` per event for fan-out.
+  - [`event-bus.service.ts`](../apps/api/src/realtime/event-bus.service.ts:1) — single chokepoint built on a pure `rxjs` `Subject<RealtimeEvent>` (no new npm dep). `subscribeForUser()` returns a filtered Observable.
+  - [`realtime-auth.guard.ts`](../apps/api/src/realtime/realtime-auth.guard.ts:1) — verifies JWT from the `access_token` cookie first, falls back to `Authorization: Bearer`, raises 401 otherwise.
+  - [`events.controller.ts`](../apps/api/src/realtime/events.controller.ts:1) — `@Sse('stream')` endpoint at `GET /api/v1/events/stream`, 30s `{ type: 'ping' }` heartbeat, monotonic `id:` for `Last-Event-ID` resumption, `OnApplicationShutdown` closes every open stream cleanly.
+  - [`realtime.module.ts`](../apps/api/src/realtime/realtime.module.ts:1) — wires JwtModule (mirrors AuthModule) so cookie verification works without going through Passport.
+- DRY auth-cookie helper [`apps/api/src/auth/utils/auth-cookie.ts`](../apps/api/src/auth/utils/auth-cookie.ts:1) called from [`AuthService.login`](../apps/api/src/auth/auth.service.ts:1) / `register` / `refreshTokens` / `logout`. Cookie attributes: `httpOnly; SameSite=Lax; Path=/; Secure` (only in `NODE_ENV=production`); `maxAge` defaults to 15 min. The existing `Authorization: Bearer` flow is **unchanged** — the cookie is purely additive (EventSource cannot send custom headers).
+
+**Frontend.**
+
+- New module [`apps/web/src/lib/realtime/`](../apps/web/src/lib/realtime/):
+  - [`realtime-types.ts`](../apps/web/src/lib/realtime/realtime-types.ts:1) — wire-level mirror of the backend union (no `userIds`).
+  - [`realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx:1) — `RealtimeProvider` opens a single `EventSource('/api/v1/events/stream', { withCredentials: true })`, exponential backoff `1s → 30s`, Page Visibility suspend/resume, exposes `connectionStatus`.
+  - [`use-realtime-events.ts`](../apps/web/src/lib/realtime/use-realtime-events.ts:1) — single hook for all subscriptions; filters by `type` plus optional `paymentId` / `parentPaymentId` / `commentId`; ref pattern keeps latest handler closure without re-subscribing.
+  - [`AuthenticatedRealtimeProvider.tsx`](../apps/web/src/lib/realtime/AuthenticatedRealtimeProvider.tsx:1) — gates `enabled` on `useAuth().isAuthenticated`. Mounted inside `<AuthProvider>` in [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/%5Blocale%5D/layout.tsx:1).
+
+**Nginx.** Added a dedicated `location /api/v1/events/stream` block to both [`default.conf`](../infrastructure/nginx/conf.d/default.conf:1) and [`ssl.conf.template`](../infrastructure/nginx/conf.d/ssl.conf.template:1). Disables `proxy_buffering`, sets `proxy_read_timeout 86400s`, forces HTTP/1.1 with an empty `Connection` header. **The path uses the canonical `/api/v1/` prefix** used by every other endpoint — `API_GLOBAL_PREFIX` in [`apps/api/src/main.ts`](../apps/api/src/main.ts:110) defaults to `api/v1`; the dedicated location is required only to override buffering, not because the URL is special.
+
+**Docs.** [`docs/ui-realtime-conventions.md`](ui-realtime-conventions.md:1) covers when to use realtime (read-only freshness only, never source of truth), idempotency rules (events may duplicate on reconnect), per-component subscription pattern, cookie + heartbeat policy, and flags Redis Pub/Sub multi-instance fan-out as future / non-blocking work.
+
+**Tests.** 6 new test files, ~27 new cases (4 backend suites + 2 frontend suites). All API 764/764 + web 952/952 tests green.
+
+**Staging smoke (commit `3c76859`, 2026-05-20).** Verified live:
+
+```
+curl --cookie "access_token=<valid>" -i .../api/v1/events/stream → HTTP/2 200, content-type: text/event-stream, id: 2 / data: {"type":"ping"} after 30s
+curl --cookie "access_token=invalid" .../api/v1/events/stream → HTTP 401
+```
+
+Heartbeat fires after ~30s, `id:` increments, request hangs idle without buffering — nginx config honoured end-to-end.
+
+**Constraints honoured.** No new npm dependency (used the `rxjs` already in [`apps/api/package.json`](../apps/api/package.json:62)). DRY (single `EventBus` chokepoint server-side, single `useRealtimeEvents` hook client-side, single `auth-cookie` helper). `Secure` cookie strictly gated on `NODE_ENV === 'production'`. Backward compat: existing Bearer flow unchanged.
+
+**Phase 6 status: 17 / 21** (sub-iteration of 6.18; producers ship in 6.18.1.4.1+).
+
+**Commits.** Feat: `3c76859`. CI run: [`26186950740`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950740) ✓. Deploy Staging: [`26186950738`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950738) ✓ (1m31s, blue-green). Docs (this entry): `docs(phase-6.18.1.4)`.
+
+**Next** — 6.18.1.4.1+ (wire payment / comment / schedule services to emit on `EventBus`; wire `useRealtimeEvents` calls in list / detail / occurrences views), then 6.18.2 (lifecycle UI: pause / resume / cancel).
+
+### Iteration 6.18.1.4 — SSE realtime infrastructure (no consumers yet) (2026-05-20)
+
+**Foundation layer for live UI updates.** Ships the wiring (server → cookie auth → SSE endpoint → React provider → typed hook) without subscribing any producer service. The next sub-iterations (6.18.1.4.1+) will plug payment / comment / schedule emitters into the bus and wire concrete UI listeners. **No visible UI changes** in this iteration.
+
+**Backend.**
+
+- New module [`apps/api/src/realtime/`](../apps/api/src/realtime/):
+  - [`events.types.ts`](../apps/api/src/realtime/events.types.ts:1) — discriminated union (`payment.*`, `payment_attribution.*`, `comment.*`, `occurrence.*`, `schedule.*`) with `userIds[]` per event for fan-out.
+  - [`event-bus.service.ts`](../apps/api/src/realtime/event-bus.service.ts:1) — single chokepoint built on a pure `rxjs` `Subject<RealtimeEvent>` (no new npm dep). `subscribeForUser()` returns a filtered Observable.
+  - [`realtime-auth.guard.ts`](../apps/api/src/realtime/realtime-auth.guard.ts:1) — verifies JWT from the `access_token` cookie first, falls back to `Authorization: Bearer`, raises 401 otherwise.
+  - [`events.controller.ts`](../apps/api/src/realtime/events.controller.ts:1) — `@Sse('stream')` endpoint at `GET /api/v1/events/stream`, 30s `{ type: 'ping' }` heartbeat, monotonic `id:` for `Last-Event-ID` resumption, `OnApplicationShutdown` closes every open stream cleanly.
+  - [`realtime.module.ts`](../apps/api/src/realtime/realtime.module.ts:1) — wires JwtModule (mirrors AuthModule) so cookie verification works without going through Passport.
+- DRY auth-cookie helper [`apps/api/src/auth/utils/auth-cookie.ts`](../apps/api/src/auth/utils/auth-cookie.ts:1) called from [`AuthService.login`](../apps/api/src/auth/auth.service.ts:1) / `register` / `refreshTokens` / `logout`. Cookie attributes: `httpOnly; SameSite=Lax; Path=/; Secure` (only in `NODE_ENV=production`); `maxAge` defaults to 15 min. The existing `Authorization: Bearer` flow is **unchanged** — the cookie is purely additive (EventSource cannot send custom headers).
+
+**Frontend.**
+
+- New module [`apps/web/src/lib/realtime/`](../apps/web/src/lib/realtime/):
+  - [`realtime-types.ts`](../apps/web/src/lib/realtime/realtime-types.ts:1) — wire-level mirror of the backend union (no `userIds`).
+  - [`realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx:1) — `RealtimeProvider` opens a single `EventSource('/api/v1/events/stream', { withCredentials: true })`, exponential backoff `1s → 30s`, Page Visibility suspend/resume, exposes `connectionStatus`.
+  - [`use-realtime-events.ts`](../apps/web/src/lib/realtime/use-realtime-events.ts:1) — single hook for all subscriptions; filters by `type` plus optional `paymentId` / `parentPaymentId` / `commentId`; ref pattern keeps latest handler closure without re-subscribing.
+  - [`AuthenticatedRealtimeProvider.tsx`](../apps/web/src/lib/realtime/AuthenticatedRealtimeProvider.tsx:1) — gates `enabled` on `useAuth().isAuthenticated`. Mounted inside `<AuthProvider>` in [`apps/web/src/app/[locale]/layout.tsx`](../apps/web/src/app/%5Blocale%5D/layout.tsx:1).
+
+**Nginx.** Added a dedicated `location /api/v1/events/stream` block to both [`default.conf`](../infrastructure/nginx/conf.d/default.conf:1) and [`ssl.conf.template`](../infrastructure/nginx/conf.d/ssl.conf.template:1). Disables `proxy_buffering`, sets `proxy_read_timeout 86400s`, forces HTTP/1.1 with an empty `Connection` header. **The path uses the canonical `/api/v1/` prefix** used by every other endpoint — `API_GLOBAL_PREFIX` in [`apps/api/src/main.ts`](../apps/api/src/main.ts:110) defaults to `api/v1`; the dedicated location is required only to override buffering, not because the URL is special.
+
+**Docs.** [`docs/ui-realtime-conventions.md`](ui-realtime-conventions.md:1) covers when to use realtime (read-only freshness only, never source of truth), idempotency rules (events may duplicate on reconnect), per-component subscription pattern, cookie + heartbeat policy, and flags Redis Pub/Sub multi-instance fan-out as future / non-blocking work.
+
+**Tests.** 6 new test files, ~27 new cases (4 backend suites + 2 frontend suites). All API 764/764 + web 952/952 tests green.
+
+**Staging smoke (commit `3c76859`, 2026-05-20).** Verified live:
+
+```
+curl --cookie "access_token=<valid>" -i .../api/v1/events/stream → HTTP/2 200, content-type: text/event-stream, id: 2 / data: {"type":"ping"} after 30s
+curl --cookie "access_token=invalid" .../api/v1/events/stream → HTTP 401
+```
+
+Heartbeat fires after ~30s, `id:` increments, request hangs idle without buffering — nginx config honoured end-to-end.
+
+**Constraints honoured.** No new npm dependency (used the `rxjs` already in [`apps/api/package.json`](../apps/api/package.json:62)). DRY (single `EventBus` chokepoint server-side, single `useRealtimeEvents` hook client-side, single `auth-cookie` helper). `Secure` cookie strictly gated on `NODE_ENV === 'production'`. Backward compat: existing Bearer flow unchanged.
+
+**Phase 6 status: 17 / 21** (sub-iteration of 6.18; producers ship in 6.18.1.4.1+).
+
+**Commits.** Feat: `3c76859`. CI run: [`26186950740`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950740) ✓. Deploy Staging: [`26186950738`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950738) ✓ (1m31s, blue-green). Docs (this entry): `docs(phase-6.18.1.4)`.
+
+**Next** — 6.18.1.4.1+ (wire payment / comment / schedule services to emit on `EventBus`; wire `useRealtimeEvents` calls in list / detail / occurrences views), then 6.18.2 (lifecycle UI: pause / resume / cancel).
