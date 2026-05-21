@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import type { JobsOptions, Queue, RepeatOptions } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import {
   CreateScheduleDto,
@@ -20,6 +21,10 @@ import { ScheduleResponseDto } from './dto/schedule-response.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { PaymentService } from './payment.service';
 import { computeNextRunAt } from './utils/next-run-at';
+import {
+  computePaymentRecipients,
+  type RecipientAttribution,
+} from './utils/payment-event-recipients';
 import { buildSchedulerId, removeScheduleForPayment } from './utils/schedule-cascade';
 
 /**
@@ -83,6 +88,7 @@ export class PaymentScheduleService {
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
     @InjectQueue(PAYMENT_OCCURRENCES_QUEUE) private readonly queue: Queue,
+    private readonly eventBus: EventBus,
   ) {}
 
   /** POST /payments/:paymentId/schedule */
@@ -158,7 +164,13 @@ export class PaymentScheduleService {
         `(${dto.cron ? `cron=${dto.cron}` : `everyMs=${dto.everyMs}`})`,
     );
 
-    return mapScheduleRowToDto(created);
+    const out = mapScheduleRowToDto(created);
+    await this.publishScheduleEvent({
+      type: 'schedule.created',
+      paymentId: parent.id,
+      schedule: out,
+    });
+    return out;
   }
 
   /** GET /payments/:paymentId/schedule */
@@ -247,7 +259,13 @@ export class PaymentScheduleService {
       `Schedule ${row.id} ${existing ? 'updated' : 'created'} via PUT for payment ${parent.id} by user ${userId}`,
     );
 
-    return mapScheduleRowToDto(row);
+    const out = mapScheduleRowToDto(row);
+    await this.publishScheduleEvent({
+      type: existing ? 'schedule.updated' : 'schedule.created',
+      paymentId: parent.id,
+      schedule: out,
+    });
+    return out;
   }
 
   /** DELETE /payments/:paymentId/schedule */
@@ -280,6 +298,8 @@ export class PaymentScheduleService {
       scheduleId: existing.id,
     });
     this.logger.log(`Schedule ${existing.id} for payment ${paymentId} deleted by user ${userId}`);
+
+    await this.publishScheduleEvent({ type: 'schedule.deleted', paymentId });
   }
 
   /**
@@ -328,7 +348,9 @@ export class PaymentScheduleService {
       scheduleId: existing.id,
     });
     this.logger.log(`Schedule ${existing.id} for payment ${paymentId} paused by user ${userId}`);
-    return mapScheduleRowToDto(updated);
+    const out = mapScheduleRowToDto(updated);
+    await this.publishScheduleEvent({ type: 'schedule.paused', paymentId, schedule: out });
+    return out;
   }
 
   /**
@@ -399,7 +421,9 @@ export class PaymentScheduleService {
       scheduleId: existing.id,
     });
     this.logger.log(`Schedule ${existing.id} for payment ${paymentId} resumed by user ${userId}`);
-    return mapScheduleRowToDto(updated);
+    const out = mapScheduleRowToDto(updated);
+    await this.publishScheduleEvent({ type: 'schedule.resumed', paymentId, schedule: out });
+    return out;
   }
 
   /**
@@ -440,7 +464,9 @@ export class PaymentScheduleService {
       scheduleId: existing.id,
     });
     this.logger.log(`Schedule ${existing.id} for payment ${paymentId} cancelled by user ${userId}`);
-    return mapScheduleRowToDto(updated);
+    const out = mapScheduleRowToDto(updated);
+    await this.publishScheduleEvent({ type: 'schedule.cancelled', paymentId, schedule: out });
+    return out;
   }
 
   // Re-export the cascade helper bound to this service's prisma + queue, so
@@ -580,6 +606,56 @@ export class PaymentScheduleService {
     } catch (err) {
       this.logger.warn(
         `Failed to write audit log for ${action} ${paymentId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Resolve the multicast recipient list for the schedule's parent payment
+   * and publish on the EventBus. POST-commit, best-effort: a Redis blip
+   * never breaks the user-facing schedule operation. Mirrors the pattern in
+   * [`PaymentCommentService.publishCommentEvent`](./payment-comment.service.ts:265).
+   */
+  private async publishScheduleEvent(
+    payload:
+      | { type: 'schedule.created'; paymentId: string; schedule: ScheduleResponseDto }
+      | { type: 'schedule.updated'; paymentId: string; schedule: ScheduleResponseDto }
+      | { type: 'schedule.paused'; paymentId: string; schedule: ScheduleResponseDto }
+      | { type: 'schedule.resumed'; paymentId: string; schedule: ScheduleResponseDto }
+      | { type: 'schedule.cancelled'; paymentId: string; schedule: ScheduleResponseDto }
+      | { type: 'schedule.deleted'; paymentId: string },
+  ): Promise<void> {
+    try {
+      const parent = await this.prisma.payment.findUnique({
+        where: { id: payload.paymentId },
+        select: {
+          createdById: true,
+          attributions: { select: { scopeType: true, userId: true, groupId: true } },
+        },
+      });
+      if (!parent) return;
+      const userIds = await computePaymentRecipients(
+        this.prisma,
+        parent.attributions as RecipientAttribution[],
+        parent.createdById,
+      );
+      if (payload.type === 'schedule.deleted') {
+        this.eventBus.publish({
+          type: 'schedule.deleted',
+          userIds,
+          paymentId: payload.paymentId,
+        });
+      } else {
+        this.eventBus.publish({
+          type: payload.type,
+          userIds,
+          paymentId: payload.paymentId,
+          schedule: payload.schedule,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish ${payload.type} for payment ${payload.paymentId}: ${(err as Error).message}`,
       );
     }
   }

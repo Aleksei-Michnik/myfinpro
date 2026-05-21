@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentDetailClient } from './payment-detail-client';
-import type { PaymentSummary } from '@/lib/payment/types';
+import type { PaymentSummary, ScheduleResponse } from '@/lib/payment/types';
+import { RealtimeContext } from '@/lib/realtime/realtime-context';
+import type { RealtimeEvent } from '@/lib/realtime/realtime-types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -378,5 +380,153 @@ describe('PaymentDetailClient', () => {
     await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
     expect(screen.queryByTestId('recurring-occurrences-section')).not.toBeInTheDocument();
     expect(mockListOccurrences).not.toHaveBeenCalled();
+  });
+
+  // ── Phase 6 · Iteration 6.18.1.4.3 — schedule realtime echo ────────────
+
+  describe('schedule realtime events', () => {
+    function makeSchedule(over: Partial<ScheduleResponse> = {}): ScheduleResponse {
+      return {
+        id: 's-1',
+        paymentId: 'p-1',
+        cron: null,
+        everyMs: 86_400_000,
+        startsAt: '2026-04-25T00:00:00Z',
+        endsAt: null,
+        limit: null,
+        nextRunAt: '2026-04-26T00:00:00Z',
+        lastRunAt: null,
+        pausedAt: null,
+        cancelledAt: null,
+        createdAt: '2026-04-25T00:00:00Z',
+        updatedAt: '2026-04-25T00:00:00Z',
+        ...over,
+      };
+    }
+
+    function renderWithRealtime() {
+      // PaymentDetailClient registers many `useRealtimeEvents` listeners
+      // (payment.*, attribution, schedule.*) — collect them all so emit()
+      // fans out, matching the production EventBus semantics.
+      const listeners = new Set<(e: RealtimeEvent) => void>();
+      const subscribe = (l: (e: RealtimeEvent) => void) => {
+        listeners.add(l);
+        return () => {
+          listeners.delete(l);
+        };
+      };
+      const utils = render(
+        <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+          <PaymentDetailClient paymentId="p-1" />
+        </RealtimeContext.Provider>,
+      );
+      return {
+        ...utils,
+        emit: (e: RealtimeEvent) =>
+          act(() => {
+            listeners.forEach((l) => l(e));
+          }),
+      };
+    }
+
+    it('schedule.paused → badge re-renders with paused state', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule());
+
+      const { emit } = renderWithRealtime();
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active'),
+      );
+
+      emit({
+        type: 'schedule.paused',
+        paymentId: 'p-1',
+        schedule: makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('paused'),
+      );
+    });
+
+    it('schedule.resumed → badge re-renders with active state', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }));
+
+      const { emit } = renderWithRealtime();
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('paused'),
+      );
+
+      emit({
+        type: 'schedule.resumed',
+        paymentId: 'p-1',
+        schedule: makeSchedule({ pausedAt: null, nextRunAt: '2026-05-02T00:00:00Z' }),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active'),
+      );
+    });
+
+    it('schedule.cancelled → badge shows cancelled pill', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule());
+
+      const { emit } = renderWithRealtime();
+      await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
+
+      emit({
+        type: 'schedule.cancelled',
+        paymentId: 'p-1',
+        schedule: makeSchedule({ cancelledAt: '2026-05-01T00:00:00Z' }),
+      });
+
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('cancelled'),
+      );
+    });
+
+    it('schedule.deleted → badge is removed from the page', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule());
+
+      const { emit } = renderWithRealtime();
+      await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
+
+      emit({ type: 'schedule.deleted', paymentId: 'p-1' });
+
+      await waitFor(() => expect(screen.queryByTestId('schedule-badge')).not.toBeInTheDocument());
+    });
+
+    it('schedule.* events for a different payment are ignored', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule());
+
+      const { emit } = renderWithRealtime();
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active'),
+      );
+
+      emit({ type: 'schedule.deleted', paymentId: 'p-OTHER' });
+
+      // Badge still present + still active.
+      expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active');
+    });
+
+    it('badge carries aria-live="polite" for screen-reader announcements', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(makeSchedule());
+
+      render(<PaymentDetailClient paymentId="p-1" />);
+      const badge = await screen.findByTestId('schedule-badge');
+      expect(badge.getAttribute('aria-live')).toBe('polite');
+    });
   });
 });

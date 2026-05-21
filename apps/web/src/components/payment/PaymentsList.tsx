@@ -245,6 +245,19 @@ export function PaymentsList({
     applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.paymentId));
   });
 
+  // Phase 6 · Iteration 6.18.1.4.3 — when a recurring schedule fires a new
+  // occurrence (a child Payment), the producer emits `occurrence.created`
+  // (NOT `payment.created`) so detail pages can react with a dedicated
+  // affordance. Dashboard / list views that show all payments still need
+  // the row to appear — handle it here so RecentActivity & friends stay
+  // live without each widget re-implementing the dispatch.
+  useRealtimeEvents({ type: 'occurrence.created' }, (event) => {
+    if (!paymentMatchesFilters(event.payment, filters)) return;
+    applyRowsUpdate((prev) =>
+      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+    );
+  });
+
   // ── Self-fetch on filter change (skipped in orchestrator mode) ────────
   const fetchPage = useCallback(
     async (reset: boolean): Promise<void> => {

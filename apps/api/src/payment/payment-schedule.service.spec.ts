@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { EventBus } from '../realtime/event-bus.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import {
   buildSchedulerId,
@@ -30,6 +31,7 @@ describe('PaymentScheduleService', () => {
     upsertJobScheduler: jest.Mock;
     removeJobScheduler: jest.Mock;
   };
+  let eventBus: { publish: jest.Mock };
 
   const userId = 'user-1';
   const paymentId = 'payment-1';
@@ -58,6 +60,16 @@ describe('PaymentScheduleService', () => {
       upsertJobScheduler: jest.fn().mockResolvedValue({}),
       removeJobScheduler: jest.fn().mockResolvedValue(true),
     };
+    eventBus = { publish: jest.fn() };
+
+    // Default parent payment for `publishScheduleEvent` lookups; individual
+    // tests can override `prisma.payment.findUnique` if needed.
+    prisma.payment.findUnique.mockImplementation(async () => ({
+      id: paymentId,
+      type: 'RECURRING',
+      createdById: userId,
+      attributions: [{ scopeType: 'personal', userId, groupId: null }],
+    }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -65,6 +77,7 @@ describe('PaymentScheduleService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PaymentService, useValue: paymentService },
         { provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE), useValue: queue },
+        { provide: EventBus, useValue: eventBus },
       ],
     }).compile();
     service = module.get(PaymentScheduleService);
@@ -393,6 +406,116 @@ describe('PaymentScheduleService', () => {
       });
       expect(opts).toMatchObject({ pattern: '0 9 * * *', limit: 5 });
       expect((opts as { endDate: Date }).endDate).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('realtime EventBus emission', () => {
+    // The default mock-impl already returns a fully shaped parent payment so
+    // `computePaymentRecipients` resolves to `[userId]`.
+
+    it('create emits schedule.created with userIds + schedule payload', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      prisma.paymentSchedule.create.mockResolvedValue(rowFor());
+
+      await service.create(userId, paymentId, { everyMs: 60_000 });
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'schedule.created',
+          paymentId,
+          userIds: [userId],
+          schedule: expect.objectContaining({ id: scheduleId, paymentId }),
+        }),
+      );
+    });
+
+    it('replace emits schedule.updated when row already exists', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.upsert.mockResolvedValue(rowFor({ cron: '0 9 * * *', everyMs: null }));
+
+      await service.replace(userId, paymentId, { cron: '0 9 * * *' });
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'schedule.updated', paymentId, userIds: [userId] }),
+      );
+    });
+
+    it('replace emits schedule.created when no prior row existed', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      prisma.paymentSchedule.upsert.mockResolvedValue(rowFor({ cron: '0 9 * * *', everyMs: null }));
+
+      await service.replace(userId, paymentId, { cron: '0 9 * * *' });
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'schedule.created', paymentId, userIds: [userId] }),
+      );
+    });
+
+    it('pause emits schedule.paused', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+
+      await service.pause(userId, paymentId);
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'schedule.paused', paymentId, userIds: [userId] }),
+      );
+    });
+
+    it('resume emits schedule.resumed', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor({ pausedAt: new Date() }));
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ pausedAt: null }));
+
+      await service.resume(userId, paymentId);
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'schedule.resumed', paymentId, userIds: [userId] }),
+      );
+    });
+
+    it('cancel emits schedule.cancelled', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.update.mockResolvedValue(rowFor({ cancelledAt: new Date() }));
+
+      await service.cancel(userId, paymentId);
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'schedule.cancelled', paymentId, userIds: [userId] }),
+      );
+    });
+
+    it('remove emits schedule.deleted with no schedule payload', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(rowFor());
+      prisma.paymentSchedule.delete.mockResolvedValue(rowFor());
+
+      await service.remove(userId, paymentId);
+
+      expect(eventBus.publish).toHaveBeenCalledWith({
+        type: 'schedule.deleted',
+        paymentId,
+        userIds: [userId],
+      });
+    });
+
+    it('publish failures are swallowed and never break the user-facing op', async () => {
+      eventBus.publish.mockImplementation(() => {
+        throw new Error('bus down');
+      });
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      prisma.paymentSchedule.create.mockResolvedValue(rowFor());
+
+      await expect(service.create(userId, paymentId, { everyMs: 60_000 })).resolves.toBeDefined();
+    });
+
+    it('does NOT emit when the lifecycle op throws (validation rejects)', async () => {
+      prisma.paymentSchedule.findUnique.mockResolvedValue(null);
+      // Force the parent-recurring guard to fail.
+      prisma.payment.findUnique.mockResolvedValueOnce({ id: paymentId, type: 'ONE_TIME' });
+
+      await expect(service.create(userId, paymentId, { everyMs: 60_000 })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(eventBus.publish).not.toHaveBeenCalled();
     });
   });
 });

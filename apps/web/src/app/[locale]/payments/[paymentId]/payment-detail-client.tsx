@@ -129,6 +129,29 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
       });
   });
 
+  // Phase 6 · Iteration 6.18.1.4.3 — schedule lifecycle echo. The badge is
+  // purely presentational, so subscriptions live here and update the
+  // `schedule` state that flows down as a prop. All five non-delete events
+  // carry the latest `ScheduleResponseDto`, so we just replace the state.
+  useRealtimeEvents({ type: 'schedule.created', paymentId }, (event) => {
+    setSchedule(event.schedule);
+  });
+  useRealtimeEvents({ type: 'schedule.updated', paymentId }, (event) => {
+    setSchedule(event.schedule);
+  });
+  useRealtimeEvents({ type: 'schedule.paused', paymentId }, (event) => {
+    setSchedule(event.schedule);
+  });
+  useRealtimeEvents({ type: 'schedule.resumed', paymentId }, (event) => {
+    setSchedule(event.schedule);
+  });
+  useRealtimeEvents({ type: 'schedule.cancelled', paymentId }, (event) => {
+    setSchedule(event.schedule);
+  });
+  useRealtimeEvents({ type: 'schedule.deleted', paymentId }, () => {
+    setSchedule(null);
+  });
+
   const handleStarToggled = useCallback((starred: boolean) => {
     setPayment((prev) => (prev ? { ...prev, starredByMe: starred } : prev));
   }, []);

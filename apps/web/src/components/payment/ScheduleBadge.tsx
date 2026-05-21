@@ -56,6 +56,12 @@ export function ScheduleBadge({ schedule, locale = 'en' }: ScheduleBadgeProps) {
     <section
       className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
       aria-labelledby="schedule-badge-title"
+      // Realtime schedule lifecycle updates (created / paused / resumed /
+      // cancelled / deleted) re-render this section. `aria-live=polite`
+      // lets screen readers announce the change without interrupting the
+      // user (Phase 6 · Iteration 6.18.1.4.3 a11y).
+      aria-live="polite"
+      aria-atomic="true"
       data-testid="schedule-badge"
       data-status={status}
     >
