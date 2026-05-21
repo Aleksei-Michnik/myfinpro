@@ -9,12 +9,17 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { CommentListResponseDto, CommentResponseDto } from './dto/comment-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { ListCommentsQueryDto } from './dto/list-comments-query.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { PaymentService } from './payment.service';
+import {
+  computePaymentRecipients,
+  type RecipientAttribution,
+} from './utils/payment-event-recipients';
 
 /** Shape the service needs from a PaymentComment row + its author relation. */
 type CommentRow = {
@@ -37,6 +42,12 @@ type CommentCursor = { c: string; id: string };
  * `PaymentService.assertVisible`). Authorship: only the author can edit or
  * soft-delete their comment — group-admin override is deferred (design §2.6).
  * Soft-delete preserves the row for cascade + audit but zeroes `content`.
+ *
+ * Iteration 6.18.1.4.2 wires the realtime EventBus: every successful
+ * create / update / soft-delete fans a `comment.*` event out to the same
+ * recipient set as the parent payment (creator ∪ personal attribution
+ * users ∪ group-attribution members). Emission is POST-commit and
+ * best-effort; a failed publish never breaks the user-facing operation.
  */
 @Injectable()
 export class PaymentCommentService {
@@ -45,6 +56,7 @@ export class PaymentCommentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly eventBus: EventBus,
   ) {}
 
   async list(
@@ -111,7 +123,19 @@ export class PaymentCommentService {
     this.logger.log(
       `PaymentComment ${created.id} created by user ${userId} on payment ${paymentId}`,
     );
-    return this.toDto(created as CommentRow, userId);
+
+    // The DTO is shaped for the author (`isMine: true`); recipients other
+    // than the author will see it as "not mine" once their client patches
+    // the row in. We emit one event with the author's view because every
+    // browser computes `isMine` locally from `author.id` against its own
+    // session anyway — frontend logic doesn't read this flag off the wire.
+    const dtoOut = this.toDto(created as CommentRow, userId);
+    await this.publishCommentEvent({
+      type: 'comment.created',
+      paymentId,
+      comment: dtoOut,
+    });
+    return dtoOut;
   }
 
   async update(
@@ -160,7 +184,14 @@ export class PaymentCommentService {
     });
 
     this.logger.log(`PaymentComment ${commentId} updated by user ${userId}`);
-    return this.toDto(updated as CommentRow, userId);
+
+    const dtoOut = this.toDto(updated as CommentRow, userId);
+    await this.publishCommentEvent({
+      type: 'comment.updated',
+      paymentId,
+      comment: dtoOut,
+    });
+    return dtoOut;
   }
 
   async remove(userId: string, paymentId: string, commentId: string): Promise<void> {
@@ -201,6 +232,12 @@ export class PaymentCommentService {
     });
 
     this.logger.log(`PaymentComment ${commentId} soft-deleted by user ${userId}`);
+
+    await this.publishCommentEvent({
+      type: 'comment.deleted',
+      paymentId,
+      commentId,
+    });
   }
 
   // ── helpers ──
@@ -216,6 +253,59 @@ export class PaymentCommentService {
       deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
       isMine: row.userId === viewerId,
     };
+  }
+
+  /**
+   * Resolve the multicast recipient list for the comment's parent payment
+   * and publish on the EventBus. Failures are swallowed + logged so a
+   * Redis/queue blip never breaks the user-facing comment operation —
+   * comments stay durable in MySQL; clients re-sync via polling / refetch
+   * on reconnect (see `docs/ui-realtime-conventions.md`).
+   */
+  private async publishCommentEvent(
+    payload:
+      | { type: 'comment.created'; paymentId: string; comment: CommentResponseDto }
+      | { type: 'comment.updated'; paymentId: string; comment: CommentResponseDto }
+      | { type: 'comment.deleted'; paymentId: string; commentId: string },
+  ): Promise<void> {
+    try {
+      const parent = await this.prisma.payment.findUnique({
+        where: { id: payload.paymentId },
+        select: {
+          createdById: true,
+          attributions: { select: { scopeType: true, userId: true, groupId: true } },
+        },
+      });
+      if (!parent) {
+        // Defensive — `assertVisible` ran earlier in the public methods, so
+        // the parent should always exist here.
+        return;
+      }
+      const userIds = await computePaymentRecipients(
+        this.prisma,
+        parent.attributions as RecipientAttribution[],
+        parent.createdById,
+      );
+      if (payload.type === 'comment.deleted') {
+        this.eventBus.publish({
+          type: 'comment.deleted',
+          userIds,
+          paymentId: payload.paymentId,
+          commentId: payload.commentId,
+        });
+      } else {
+        this.eventBus.publish({
+          type: payload.type,
+          userIds,
+          paymentId: payload.paymentId,
+          comment: payload.comment,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish ${payload.type} for payment ${payload.paymentId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   private async writeAudit(

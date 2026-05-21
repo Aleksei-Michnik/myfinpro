@@ -1,7 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentCommentList } from './PaymentCommentList';
 import type { Comment, CommentListResponse } from '@/lib/payment/types';
+import { RealtimeContext } from '@/lib/realtime/realtime-context';
+import type { RealtimeEvent } from '@/lib/realtime/realtime-types';
 
 const mockListComments = vi.fn();
 const mockEditComment = vi.fn();
@@ -19,6 +22,28 @@ vi.mock('@/lib/payment/payment-context', () => ({
     deleteComment: mockDeleteComment,
   }),
 }));
+
+/**
+ * Lightweight RealtimeProvider for tests — exposes an `emit()` capture
+ * via the returned tuple so test cases can fan synthetic events to every
+ * mounted subscriber without spinning up a real EventSource.
+ */
+function makeRealtimeHarness() {
+  const listeners = new Set<(e: RealtimeEvent) => void>();
+  const subscribe = (listener: (e: RealtimeEvent) => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const emit = (event: RealtimeEvent) => {
+    for (const l of listeners) l(event);
+  };
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+      {children}
+    </RealtimeContext.Provider>
+  );
+  return { Wrapper, emit };
+}
 
 function makeComment(p: Partial<Comment> = {}): Comment {
   return {
@@ -208,5 +233,127 @@ describe('PaymentCommentList', () => {
     // poll may be truthy due to jsdom, but our prop didn't schedule one.
     void poll;
     setIntervalSpy.mockRestore();
+  });
+
+  // ── Realtime sync (Phase 6 · Iteration 6.18.1.4.2) ──
+
+  describe('realtime subscriptions', () => {
+    it('comment.created appends a new row from a different author', async () => {
+      mockListComments.mockResolvedValueOnce(resp([makeComment({ id: 'c-1' })]));
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-row-c-1')).toBeInTheDocument());
+
+      act(() => {
+        emit({
+          type: 'comment.created',
+          paymentId: 'p-1',
+          comment: makeComment({
+            id: 'c-2',
+            content: 'incoming',
+            author: { id: 'u-9', name: 'Bob' },
+            isMine: false,
+          }),
+        });
+      });
+
+      expect(screen.getByTestId('comment-row-c-2')).toBeInTheDocument();
+      expect(screen.getByTestId('comment-content-c-2')).toHaveTextContent('incoming');
+    });
+
+    it('comment.created is idempotent when the same id arrives twice', async () => {
+      mockListComments.mockResolvedValueOnce(resp([]));
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-list-empty')).toBeInTheDocument());
+
+      const incoming = makeComment({ id: 'c-9', content: 'once' });
+      act(() => {
+        emit({ type: 'comment.created', paymentId: 'p-1', comment: incoming });
+        emit({ type: 'comment.created', paymentId: 'p-1', comment: incoming });
+      });
+
+      expect(screen.getAllByTestId(/^comment-row-/)).toHaveLength(1);
+    });
+
+    it('ignores comment.created for a different paymentId', async () => {
+      mockListComments.mockResolvedValueOnce(resp([]));
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-list-empty')).toBeInTheDocument());
+
+      act(() => {
+        emit({
+          type: 'comment.created',
+          paymentId: 'p-OTHER',
+          comment: makeComment({ id: 'c-x' }),
+        });
+      });
+
+      expect(screen.queryByTestId('comment-row-c-x')).not.toBeInTheDocument();
+    });
+
+    it('comment.updated patches the matching row in place', async () => {
+      mockListComments.mockResolvedValueOnce(resp([makeComment({ id: 'c-1', content: 'old' })]));
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-row-c-1')).toBeInTheDocument());
+
+      act(() => {
+        emit({
+          type: 'comment.updated',
+          paymentId: 'p-1',
+          comment: makeComment({
+            id: 'c-1',
+            content: 'edited remotely',
+            updatedAt: '2026-04-25T00:01:00Z',
+          }),
+        });
+      });
+
+      expect(screen.getByTestId('comment-content-c-1')).toHaveTextContent('edited remotely');
+    });
+
+    it('comment.updated for an unknown id is a no-op', async () => {
+      mockListComments.mockResolvedValueOnce(resp([makeComment({ id: 'c-1' })]));
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-row-c-1')).toBeInTheDocument());
+
+      act(() => {
+        emit({
+          type: 'comment.updated',
+          paymentId: 'p-1',
+          comment: makeComment({ id: 'c-ghost', content: 'nope' }),
+        });
+      });
+
+      expect(screen.queryByTestId('comment-row-c-ghost')).not.toBeInTheDocument();
+      expect(screen.getAllByTestId(/^comment-row-/)).toHaveLength(1);
+    });
+
+    it('comment.deleted removes the row', async () => {
+      mockListComments.mockResolvedValueOnce(
+        resp([makeComment({ id: 'c-1' }), makeComment({ id: 'c-2' })]),
+      );
+      const { Wrapper, emit } = makeRealtimeHarness();
+      render(<PaymentCommentList paymentId="p-1" />, { wrapper: Wrapper });
+      await waitFor(() => expect(screen.getByTestId('comment-row-c-2')).toBeInTheDocument());
+
+      act(() => {
+        emit({ type: 'comment.deleted', paymentId: 'p-1', commentId: 'c-1' });
+      });
+
+      expect(screen.queryByTestId('comment-row-c-1')).not.toBeInTheDocument();
+      expect(screen.getByTestId('comment-row-c-2')).toBeInTheDocument();
+    });
+
+    it('list container exposes aria-live="polite" for assistive tech', async () => {
+      mockListComments.mockResolvedValueOnce(resp([]));
+      render(<PaymentCommentList paymentId="p-1" />);
+      await waitFor(() => expect(screen.getByTestId('comment-list-empty')).toBeInTheDocument());
+      const list = screen.getByTestId('payment-comment-list');
+      expect(list.getAttribute('aria-live')).toBe('polite');
+    });
   });
 });

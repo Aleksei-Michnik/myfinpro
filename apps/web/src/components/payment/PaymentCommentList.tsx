@@ -19,6 +19,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { Comment, CommentListResponse } from '@/lib/payment/types';
+import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentCommentListProps {
@@ -142,11 +143,54 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
       ref,
       () => ({
         appendComment(c: Comment) {
-          setItems((prev) => [...prev, c]);
+          setItems((prev) => (prev.some((x) => x.id === c.id) ? prev : [...prev, c]));
         },
       }),
       [],
     );
+
+    // ── Realtime sync (Phase 6 · Iteration 6.18.1.4.2) ──────────────────
+    //
+    // Subscribe to the three comment events scoped to this payment. The
+    // wire `CommentResponse` is structurally compatible with the local
+    // `Comment` type except `deletedAt` is optional on the wire; we
+    // normalise to `null` on ingest so downstream filtering / rendering
+    // can treat the field as required.
+    //
+    // Idempotency: every handler dedupes by `commentId`. The author who
+    // produced the mutation already has the row locally (added by the
+    // optimistic create / save flow), so the realtime echo would
+    // otherwise create a duplicate. Reconnect-time replay of buffered
+    // events is also covered by the same dedupe.
+    useRealtimeEvents({ type: 'comment.created', paymentId }, (event) => {
+      const incoming: Comment = {
+        ...event.comment,
+        deletedAt: event.comment.deletedAt ?? null,
+      };
+      setItems((prev) => (prev.some((x) => x.id === incoming.id) ? prev : [...prev, incoming]));
+    });
+
+    useRealtimeEvents({ type: 'comment.updated', paymentId }, (event) => {
+      const incoming: Comment = {
+        ...event.comment,
+        deletedAt: event.comment.deletedAt ?? null,
+      };
+      setItems((prev) => {
+        const idx = prev.findIndex((x) => x.id === incoming.id);
+        if (idx === -1) return prev;
+        const next = prev.slice();
+        next[idx] = { ...next[idx], ...incoming };
+        return next;
+      });
+    });
+
+    useRealtimeEvents({ type: 'comment.deleted', paymentId }, (event) => {
+      // Match the optimistic-delete path in confirmDelete(): drop the
+      // row entirely. Soft-deleted rows that arrive via the initial
+      // fetch are also filtered out below in `visible`, keeping the two
+      // ingestion paths consistent.
+      setItems((prev) => prev.filter((x) => x.id !== event.commentId));
+    });
 
     const beginEdit = (c: Comment) => {
       setEditingId(c.id);

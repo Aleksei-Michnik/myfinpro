@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventBus } from '../realtime/event-bus.service';
 import {
   decodeCommentCursor,
   encodeCommentCursor,
@@ -24,18 +25,30 @@ describe('PaymentCommentService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    payment: { findUnique: jest.fn() },
+    groupMembership: { findMany: jest.fn() },
     auditLog: { create: jest.fn() },
   };
   const paymentService = { assertVisible: jest.fn() };
+  const eventBus = { publish: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma.auditLog.create.mockResolvedValue({});
+    // Default parent-payment lookup → creator-only attribution. Individual
+    // tests can override `prisma.payment.findUnique` to inject group/personal
+    // attributions when they want to assert on the recipient set.
+    prisma.payment.findUnique.mockResolvedValue({
+      createdById: 'u1',
+      attributions: [{ scopeType: 'personal', userId: 'u1', groupId: null }],
+    });
+    prisma.groupMembership.findMany.mockResolvedValue([]);
     const mod: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentCommentService,
         { provide: PrismaService, useValue: prisma },
         { provide: PaymentService, useValue: paymentService },
+        { provide: EventBus, useValue: eventBus },
       ],
     }).compile();
     service = mod.get(PaymentCommentService);
@@ -311,6 +324,85 @@ describe('PaymentCommentService', () => {
     it('29. decode returns null when c is not a date', () => {
       const bad = Buffer.from(JSON.stringify({ c: 'nope', id: 'x' })).toString('base64url');
       expect(decodeCommentCursor(bad)).toBeNull();
+    });
+  });
+
+  // ── realtime emission (iteration 6.18.1.4.2) ──
+
+  describe('realtime EventBus fan-out', () => {
+    it('30. create() publishes comment.created with multicast userIds', async () => {
+      // Parent payment is shared between Alice (creator/personal) and the
+      // "house" group (g1) whose membership is { u1, u2, u3 }.
+      prisma.payment.findUnique.mockResolvedValueOnce({
+        createdById: 'u1',
+        attributions: [
+          { scopeType: 'personal', userId: 'u1', groupId: null },
+          { scopeType: 'group', userId: null, groupId: 'g1' },
+        ],
+      });
+      prisma.groupMembership.findMany.mockResolvedValueOnce([
+        { userId: 'u1' },
+        { userId: 'u2' },
+        { userId: 'u3' },
+      ]);
+      prisma.paymentComment.create.mockResolvedValue(row({ id: 'cNew' }));
+
+      await service.create('u1', 'p1', { content: 'hi' });
+
+      expect(eventBus.publish).toHaveBeenCalledTimes(1);
+      const arg = eventBus.publish.mock.calls[0][0];
+      expect(arg.type).toBe('comment.created');
+      expect(arg.paymentId).toBe('p1');
+      expect(arg.comment.id).toBe('cNew');
+      expect([...arg.userIds].sort()).toEqual(['u1', 'u2', 'u3']);
+    });
+
+    it('31. update() publishes comment.updated with the fresh DTO', async () => {
+      prisma.paymentComment.findFirst.mockResolvedValue(row());
+      const newRow = { ...row(), content: 'edited' };
+      prisma.paymentComment.update.mockResolvedValue(newRow);
+
+      await service.update('u1', 'p1', 'c1', { content: 'edited' });
+
+      expect(eventBus.publish).toHaveBeenCalledTimes(1);
+      const arg = eventBus.publish.mock.calls[0][0];
+      expect(arg.type).toBe('comment.updated');
+      expect(arg.paymentId).toBe('p1');
+      expect(arg.comment.content).toBe('edited');
+      expect(arg.userIds).toEqual(['u1']);
+    });
+
+    it('32. remove() publishes comment.deleted with paymentId + commentId', async () => {
+      prisma.paymentComment.findFirst.mockResolvedValue(row());
+      prisma.paymentComment.update.mockResolvedValue(row());
+
+      await service.remove('u1', 'p1', 'c1');
+
+      expect(eventBus.publish).toHaveBeenCalledTimes(1);
+      expect(eventBus.publish.mock.calls[0][0]).toEqual({
+        type: 'comment.deleted',
+        userIds: ['u1'],
+        paymentId: 'p1',
+        commentId: 'c1',
+      });
+    });
+
+    it('33. publish failure is swallowed (best-effort)', async () => {
+      prisma.payment.findUnique.mockRejectedValueOnce(new Error('parent lookup down'));
+      prisma.paymentComment.create.mockResolvedValue(row({ id: 'cNew' }));
+
+      await expect(service.create('u1', 'p1', { content: 'hi' })).resolves.toMatchObject({
+        id: 'cNew',
+      });
+      expect(eventBus.publish).not.toHaveBeenCalled();
+    });
+
+    it('34. failed authoring (404 / 410 / 403) does NOT publish anything', async () => {
+      prisma.paymentComment.findFirst.mockResolvedValue(null);
+      await expect(service.update('u1', 'p1', 'cX', { content: 'y' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(eventBus.publish).not.toHaveBeenCalled();
     });
   });
 });
