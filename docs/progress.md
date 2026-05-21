@@ -6683,3 +6683,101 @@ End-to-end "comment in tab A → SSE delivers `comment.created` to tab B" was no
 **Commits.** Feat: `c151819`. CI run: [`26245048518`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26245048518) ✓ (2m04s). Deploy Staging: [`26245048524`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26245048524) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.2)`.
 
 **Next** — 6.18.1.4.3 (wire `schedule.*` producers in `payment-schedule.service.ts` + dashboard widget consumers if applicable), then 6.18.2 (lifecycle UI: pause / resume / cancel).
+
+---
+
+## Phase 6 · Sub-iteration 6.18.1.4.3 — schedule lifecycle events on the realtime EventBus (2026-05-21)
+
+**Goal.** Close the realtime gap on the schedule sub-resource: every server-side schedule lifecycle change (create / update / pause / resume / cancel / delete) now fans out to the same recipient set as the parent payment, and the payment-detail page patches its `<ScheduleBadge>` in place — no refresh required when another tab or device toggles a schedule. Also wire `occurrence.created` into the shared `<PaymentsList>` so dashboard tickers (`<RecentActivity>`, `<StarredPayments>`) prepend newly-fired recurring children live.
+
+**Backend.** [`PaymentScheduleService`](../apps/api/src/payment/payment-schedule.service.ts:1) now injects the [`EventBus`](../apps/api/src/realtime/event-bus.service.ts:1) and emits one of the six [`schedule.*`](../apps/api/src/realtime/events.types.ts:52) events at the very tail of each lifecycle method:
+
+- `create()` → `schedule.created`
+- `replace()` → `schedule.created` if no row existed, else `schedule.updated`
+- `pause()` → `schedule.paused`
+- `resume()` → `schedule.resumed`
+- `cancel()` → `schedule.cancelled`
+- `remove()` → `schedule.deleted` (no `schedule` payload — just `{ paymentId }`)
+
+A single private `publishScheduleEvent()` helper resolves the recipients via the shared [`computePaymentRecipients()`](../apps/api/src/payment/utils/payment-event-recipients.ts:26) against the parent payment's attributions (creator ∪ personal-attribution users ∪ group-attribution members) and calls `eventBus.publish()`. The whole helper is wrapped in `try/catch + logger.warn`, mirroring [`PaymentCommentService.publishCommentEvent`](../apps/api/src/payment/payment-comment.service.ts:265): a Redis blip never breaks the user-facing operation, the DB row stays the source of truth, and clients re-sync on reconnect (per `docs/ui-realtime-conventions.md`).
+
+Emission lives **after** the DB commit and **after** the BullMQ scheduler mutation — never inside the open `$transaction`. For `pause / resume / cancel`, the queue mutation lives inside `$transaction` so a Redis failure rolls back the DB write, but the event publish runs strictly after the transaction returns; this matches the design rule that producers never publish from inside an open transaction.
+
+**Frontend.** [`payment-detail-client.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx:1) subscribes to all six `schedule.*` event types, filtered tightly by the displayed `paymentId`. Since [`<ScheduleBadge>`](../apps/web/src/components/payment/ScheduleBadge.tsx:1) is purely presentational (it accepts `schedule` as a prop), the subscriptions live one level up and update the local `schedule` state that flows down. `schedule.deleted` clears it (the badge unmounts via the existing `{schedule && <ScheduleBadge … />}` guard); the five non-delete events replace the state with the fresh `ScheduleResponseDto` carried on the wire.
+
+**Dashboard tickers.** [`<PaymentsList>`](../apps/web/src/components/payment/PaymentsList.tsx:1) gains an `occurrence.created` subscription — when a recurring schedule fires a child `Payment`, the producer in [`PaymentOccurrenceProcessor`](../apps/api/src/payment/payment-occurrence.processor.ts:236) emits `occurrence.created` (NOT `payment.created`, by design — the detail page distinguishes them). The dashboard widgets `<RecentActivity>` and `<StarredPayments>` are thin wrappers around `<PaymentsList>`, so handling `occurrence.created` once at the list level lights up every consumer DRY-style: the new occurrence is prepended iff it matches the active filter set, and dedup-by-id avoids double-inserts on reconnect-replay.
+
+**A11y.** [`<ScheduleBadge>`](../apps/web/src/components/payment/ScheduleBadge.tsx:55) gains `aria-live="polite"` + `aria-atomic="true"` so screen readers announce status flips (active → paused → resumed → cancelled) without interrupting the user. The badge re-renders on every realtime patch, so the live region picks up the full new pill text + next-run line on each transition.
+
+**Tests.**
+
+- **Backend**: +9 cases in [`payment-schedule.service.spec.ts`](../apps/api/src/payment/payment-schedule.service.spec.ts:1) — happy-path emission for all six lifecycle methods, the `replace()` create-vs-update branch (correct event type per pre-existing row), `schedule.deleted` shape (no `schedule` payload), publish-failure swallowing, and the no-emit contract on validation rejection. EventBus is mocked at a single `jest.fn()` chokepoint.
+- **Frontend**: +6 cases in [`payment-detail.spec.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx:1) — `schedule.paused` → `data-status` flips to `paused`, `schedule.resumed` → flips back to `active`, `schedule.cancelled` → flips to `cancelled`, `schedule.deleted` → badge unmounts, `paymentId` mismatch is ignored, and `aria-live="polite"` is asserted on the badge. A `renderWithRealtime()` harness sets up a fan-out `RealtimeContext.Provider` so every `useRealtimeEvents` registration receives the synthesised event (the production `EventBus` calls every subscriber and the hook does the type+filter dispatch).
+
+Grand total post-merge: **792** API tests pass (was 783), **975** web tests pass (was 969).
+
+**Staging smoke (commit `d256af0`, 2026-05-21).** Deploy Staging run [`26251081174`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081174) ✓ blue-green (1m34s). SSE guard intact:
+
+```
+curl -sN .../api/v1/events/stream                            → HTTP 401  (no cookie)
+curl -sN --cookie "access_token=invalid" .../api/v1/events/stream → HTTP 401  (bad token)
+```
+
+A live tab-A → tab-B schedule pause/resume verification was not browser-driven in this iteration; the unit tests exercise every contract surface (server emits the right shape; client patches state correctly) and the SSE pipe was browser-verified back in 6.18.1.4.1 / 6.18.1.4.2.
+
+**Constraints honoured.** No new npm dependency. DRY: one `eventBus.publish()` chokepoint, recipient list reuses `computePaymentRecipients()`, the dashboard ticker wiring lives in `<PaymentsList>` instead of being copy-pasted into every widget. All emissions strictly POST-commit. Backward compat: events are purely additive — no existing endpoint shape, status code, or schedule lifecycle behaviour changed.
+
+**Phase 6 status: 19 / 21**.
+
+**Commits.** Feat: `d256af0`. CI run: [`26251081129`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081129) ✓ (2m05s). Deploy Staging: [`26251081174`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081174) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.3)`.
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel buttons on the schedule badge, posting to the just-wired endpoints; the realtime echo from this iteration means the local optimistic patch is now belt-and-braces).
+
+---
+
+## Phase 6 · Sub-iteration 6.18.1.4.3 — schedule lifecycle events on the realtime EventBus (2026-05-21)
+
+**Goal.** Close the realtime gap on the schedule sub-resource: every server-side schedule lifecycle change (create / update / pause / resume / cancel / delete) now fans out to the same recipient set as the parent payment, and the payment-detail page patches its `<ScheduleBadge>` in place — no refresh required when another tab or device toggles a schedule. Also wire `occurrence.created` into the shared `<PaymentsList>` so dashboard tickers (`<RecentActivity>`, `<StarredPayments>`) prepend newly-fired recurring children live.
+
+**Backend.** [`PaymentScheduleService`](../apps/api/src/payment/payment-schedule.service.ts:1) now injects the [`EventBus`](../apps/api/src/realtime/event-bus.service.ts:1) and emits one of the six [`schedule.*`](../apps/api/src/realtime/events.types.ts:52) events at the very tail of each lifecycle method:
+
+- `create()` → `schedule.created`
+- `replace()` → `schedule.created` if no row existed, else `schedule.updated`
+- `pause()` → `schedule.paused`
+- `resume()` → `schedule.resumed`
+- `cancel()` → `schedule.cancelled`
+- `remove()` → `schedule.deleted` (no `schedule` payload — just `{ paymentId }`)
+
+A single private `publishScheduleEvent()` helper resolves the recipients via the shared [`computePaymentRecipients()`](../apps/api/src/payment/utils/payment-event-recipients.ts:26) against the parent payment's attributions (creator ∪ personal-attribution users ∪ group-attribution members) and calls `eventBus.publish()`. The whole helper is wrapped in `try/catch + logger.warn`, mirroring [`PaymentCommentService.publishCommentEvent`](../apps/api/src/payment/payment-comment.service.ts:265): a Redis blip never breaks the user-facing operation, the DB row stays the source of truth, and clients re-sync on reconnect (per `docs/ui-realtime-conventions.md`).
+
+Emission lives **after** the DB commit and **after** the BullMQ scheduler mutation — never inside the open `$transaction`. For `pause / resume / cancel`, the queue mutation lives inside `$transaction` so a Redis failure rolls back the DB write, but the event publish runs strictly after the transaction returns; this matches the design rule that producers never publish from inside an open transaction.
+
+**Frontend.** [`payment-detail-client.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx:1) subscribes to all six `schedule.*` event types, filtered tightly by the displayed `paymentId`. Since [`<ScheduleBadge>`](../apps/web/src/components/payment/ScheduleBadge.tsx:1) is purely presentational (it accepts `schedule` as a prop), the subscriptions live one level up and update the local `schedule` state that flows down. `schedule.deleted` clears it (the badge unmounts via the existing `{schedule && <ScheduleBadge … />}` guard); the five non-delete events replace the state with the fresh `ScheduleResponseDto` carried on the wire.
+
+**Dashboard tickers.** [`<PaymentsList>`](../apps/web/src/components/payment/PaymentsList.tsx:1) gains an `occurrence.created` subscription — when a recurring schedule fires a child `Payment`, the producer in [`PaymentOccurrenceProcessor`](../apps/api/src/payment/payment-occurrence.processor.ts:236) emits `occurrence.created` (NOT `payment.created`, by design — the detail page distinguishes them). The dashboard widgets `<RecentActivity>` and `<StarredPayments>` are thin wrappers around `<PaymentsList>`, so handling `occurrence.created` once at the list level lights up every consumer DRY-style: the new occurrence is prepended iff it matches the active filter set, and dedup-by-id avoids double-inserts on reconnect-replay.
+
+**A11y.** [`<ScheduleBadge>`](../apps/web/src/components/payment/ScheduleBadge.tsx:55) gains `aria-live="polite"` + `aria-atomic="true"` so screen readers announce status flips (active → paused → resumed → cancelled) without interrupting the user. The badge re-renders on every realtime patch, so the live region picks up the full new pill text + next-run line on each transition.
+
+**Tests.**
+
+- **Backend**: +9 cases in [`payment-schedule.service.spec.ts`](../apps/api/src/payment/payment-schedule.service.spec.ts:1) — happy-path emission for all six lifecycle methods, the `replace()` create-vs-update branch (correct event type per pre-existing row), `schedule.deleted` shape (no `schedule` payload), publish-failure swallowing, and the no-emit contract on validation rejection. EventBus is mocked at a single `jest.fn()` chokepoint.
+- **Frontend**: +6 cases in [`payment-detail.spec.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx:1) — `schedule.paused` → `data-status` flips to `paused`, `schedule.resumed` → flips back to `active`, `schedule.cancelled` → flips to `cancelled`, `schedule.deleted` → badge unmounts, `paymentId` mismatch is ignored, and `aria-live="polite"` is asserted on the badge. A `renderWithRealtime()` harness sets up a fan-out `RealtimeContext.Provider` so every `useRealtimeEvents` registration receives the synthesised event (the production `EventBus` calls every subscriber and the hook does the type+filter dispatch).
+
+Grand total post-merge: **792** API tests pass (was 783), **975** web tests pass (was 969).
+
+**Staging smoke (commit `d256af0`, 2026-05-21).** Deploy Staging run [`26251081174`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081174) ✓ blue-green (1m34s). SSE guard intact:
+
+```
+curl -sN .../api/v1/events/stream                            → HTTP 401  (no cookie)
+curl -sN --cookie "access_token=invalid" .../api/v1/events/stream → HTTP 401  (bad token)
+```
+
+A live tab-A → tab-B schedule pause/resume verification was not browser-driven in this iteration; the unit tests exercise every contract surface (server emits the right shape; client patches state correctly) and the SSE pipe was browser-verified back in 6.18.1.4.1 / 6.18.1.4.2.
+
+**Constraints honoured.** No new npm dependency. DRY: one `eventBus.publish()` chokepoint, recipient list reuses `computePaymentRecipients()`, the dashboard ticker wiring lives in `<PaymentsList>` instead of being copy-pasted into every widget. All emissions strictly POST-commit. Backward compat: events are purely additive — no existing endpoint shape, status code, or schedule lifecycle behaviour changed.
+
+**Phase 6 status: 19 / 21**.
+
+**Commits.** Feat: `d256af0`. CI run: [`26251081129`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081129) ✓ (2m05s). Deploy Staging: [`26251081174`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081174) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.3)`.
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel buttons on the schedule badge, posting to the just-wired endpoints; the realtime echo from this iteration means the local optimistic patch is now belt-and-braces).
