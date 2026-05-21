@@ -40,7 +40,7 @@ interface RealtimeContextValue {
   subscribe(listener: Listener): () => void;
 }
 
-const RealtimeContext = createContext<RealtimeContextValue | null>(null);
+export const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 
 export interface RealtimeProviderProps {
   children: ReactNode;

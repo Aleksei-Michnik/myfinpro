@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecurringOccurrencesSection } from './RecurringOccurrencesSection';
 import type { PaymentSummary } from '@/lib/payment/types';
+import { RealtimeContext } from '@/lib/realtime/realtime-context';
+import type { RealtimeEvent } from '@/lib/realtime/realtime-types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -214,5 +216,86 @@ describe('RecurringOccurrencesSection', () => {
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-empty')).toBeInTheDocument(),
     );
+  });
+
+  it('prepends a row when an occurrence.created realtime event arrives for this parent', async () => {
+    mockListOccurrences.mockResolvedValueOnce({
+      data: [makeChild({ id: 'c-1' })],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    let listener: ((e: RealtimeEvent) => void) | null = null;
+    const subscribe = (l: (e: RealtimeEvent) => void) => {
+      listener = l;
+      return () => {
+        listener = null;
+      };
+    };
+
+    render(
+      <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+        <RecurringOccurrencesSection paymentId="parent-1" />
+      </RealtimeContext.Provider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('recurring-occurrences-count').textContent).toMatch(
+        /countSingular/,
+      ),
+    );
+
+    act(() => {
+      listener?.({
+        type: 'occurrence.created',
+        parentPaymentId: 'parent-1',
+        payment: makeChild({ id: 'c-2' }),
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('recurring-occurrences-count').textContent).toMatch(
+        /countPlural:2/,
+      ),
+    );
+  });
+
+  it('ignores occurrence.created events that target a different parent', async () => {
+    mockListOccurrences.mockResolvedValueOnce({
+      data: [makeChild({ id: 'c-1' })],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    let listener: ((e: RealtimeEvent) => void) | null = null;
+    const subscribe = (l: (e: RealtimeEvent) => void) => {
+      listener = l;
+      return () => {
+        listener = null;
+      };
+    };
+
+    render(
+      <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+        <RecurringOccurrencesSection paymentId="parent-1" />
+      </RealtimeContext.Provider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('recurring-occurrences-count').textContent).toMatch(
+        /countSingular/,
+      ),
+    );
+
+    act(() => {
+      listener?.({
+        type: 'occurrence.created',
+        parentPaymentId: 'other-parent',
+        payment: makeChild({ id: 'c-99' }),
+      });
+    });
+
+    // Count remains at 1.
+    expect(screen.getByTestId('recurring-occurrences-count').textContent).toMatch(/countSingular/);
   });
 });

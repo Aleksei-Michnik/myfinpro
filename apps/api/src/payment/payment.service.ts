@@ -13,6 +13,7 @@ import type { Queue } from 'bullmq';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
 import { AttributionDto } from './dto/attribution.dto';
@@ -27,6 +28,10 @@ import {
 } from './dto/payment-summary.dto';
 import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import {
+  computePaymentRecipients,
+  type RecipientAttribution,
+} from './utils/payment-event-recipients';
 import { removeScheduleForPayment } from './utils/schedule-cascade';
 
 /** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
@@ -164,6 +169,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly categoryService: CategoryService,
     @InjectQueue(PAYMENT_OCCURRENCES_QUEUE) private readonly queue: Queue,
+    private readonly eventBus: EventBus,
   ) {}
 
   /**
@@ -328,7 +334,22 @@ export class PaymentService {
     );
 
     // 10. Serialize.
-    return mapPaymentToSummary(created as PaymentWithRelations, { starredByMe: false });
+    const summary = mapPaymentToSummary(created as PaymentWithRelations, { starredByMe: false });
+
+    // 11. Realtime fan-out — POST commit. Recipients = creator + all
+    // members of any attributed group + every personal-attribution user.
+    const recipients = await computePaymentRecipients(
+      this.prisma,
+      created.attributions as RecipientAttribution[],
+      created.createdById,
+    );
+    this.eventBus.publish({
+      type: 'payment.created',
+      userIds: recipients,
+      payment: summary,
+    });
+
+    return summary;
   }
 
   /**
@@ -767,7 +788,67 @@ export class PaymentService {
       `Payment ${paymentId} updated by user ${userId} — scalars=${hasScalarField}, attrDiff=${attrDiff ? `+${attrDiff.toAdd.length}/-${attrDiff.toDelete.length}` : 'none'}, deleted=${txResult.paymentDeleted}`,
     );
 
-    // 14. Return.
+    // 14. Realtime fan-out — POST commit.
+    //
+    // For attribution events we union pre + post recipients so a user who
+    // *lost* visibility still gets a chance to drop the row from their
+    // local list. The payment-level events (updated / deleted) follow the
+    // same union for symmetry.
+    const preAttrs: RecipientAttribution[] = existingAttrs.map((a) => ({
+      scopeType: a.scopeType,
+      userId: a.userId,
+      groupId: a.groupId,
+    }));
+    const postAttrs: RecipientAttribution[] = attrDiff
+      ? [
+          ...existingAttrs
+            .filter((a) => !attrDiff!.toDelete.some((d) => d.id === a.id))
+            .map((a) => ({ scopeType: a.scopeType, userId: a.userId, groupId: a.groupId })),
+          ...attrDiff.toAdd.map((a) => ({
+            scopeType: a.scopeType,
+            userId: a.userId,
+            groupId: a.groupId,
+          })),
+        ]
+      : preAttrs;
+    const unionAttrs: RecipientAttribution[] = [...preAttrs, ...postAttrs];
+    const recipients = await computePaymentRecipients(
+      this.prisma,
+      unionAttrs,
+      existing.createdById,
+    );
+
+    if (txResult.paymentDeleted) {
+      this.eventBus.publish({
+        type: 'payment.deleted',
+        userIds: recipients,
+        paymentId,
+      });
+    }
+    if (attrDiff) {
+      for (const removed of attrDiff.removedForAudit) {
+        this.eventBus.publish({
+          type: 'payment_attribution.removed',
+          userIds: recipients,
+          paymentId,
+          scope: removed.scope,
+          ...(removed.scope === 'personal' ? { userId } : {}),
+          ...(removed.groupId ? { groupId: removed.groupId } : {}),
+        });
+      }
+      for (const added of attrDiff.addedForAudit) {
+        this.eventBus.publish({
+          type: 'payment_attribution.added',
+          userIds: recipients,
+          paymentId,
+          scope: added.scope,
+          ...(added.scope === 'personal' ? { userId } : {}),
+          ...(added.groupId ? { groupId: added.groupId } : {}),
+        });
+      }
+    }
+
+    // 15. Return.
     if (txResult.paymentDeleted) return null;
 
     const fresh = await this.prisma.payment.findUnique({
@@ -775,11 +856,28 @@ export class PaymentService {
       include: buildDetailInclude(userId),
     });
     if (!fresh) return null; // defensive; shouldn't happen
-    return mapPaymentToSummary(fresh as unknown as PaymentWithRelations, {
+    const freshSummary = mapPaymentToSummary(fresh as unknown as PaymentWithRelations, {
       starredByMe: fresh.stars.length > 0,
       commentCount: fresh._count.comments,
       hasDocuments: fresh._count.documents > 0,
     });
+
+    // Emit payment.updated whenever any scalar OR attribution change actually
+    // landed. The frontend treats it as a patch-in-place so emitting on
+    // attribution-only edits keeps every viewer's row in sync without
+    // needing them to also listen to the per-attribution events.
+    if (
+      hasScalarField ||
+      (attrDiff && (attrDiff.toAdd.length > 0 || attrDiff.toDelete.length > 0))
+    ) {
+      this.eventBus.publish({
+        type: 'payment.updated',
+        userIds: recipients,
+        payment: freshSummary,
+      });
+    }
+
+    return freshSummary;
   }
 
   /**
@@ -944,6 +1042,44 @@ export class PaymentService {
           starredByMe: fresh.stars.length > 0,
           commentCount: fresh._count.comments,
           hasDocuments: fresh._count.documents > 0,
+        });
+      }
+    }
+
+    // 7. Realtime fan-out — POST commit. Recipients = pre-delete viewers
+    // (so users who lost visibility still receive the removal event and
+    // can drop the row from their local lists).
+    const recipients = await computePaymentRecipients(
+      this.prisma,
+      existingAttrs.map((a) => ({
+        scopeType: a.scopeType,
+        userId: a.userId,
+        groupId: a.groupId,
+      })),
+      payment.createdById,
+    );
+    if (paymentDeleted) {
+      this.eventBus.publish({
+        type: 'payment.deleted',
+        userIds: recipients,
+        paymentId,
+      });
+    } else {
+      for (const t of targets) {
+        this.eventBus.publish({
+          type: 'payment_attribution.removed',
+          userIds: recipients,
+          paymentId,
+          scope: t.scopeType as 'personal' | 'group',
+          ...(t.scopeType === 'personal' && t.userId ? { userId: t.userId } : {}),
+          ...(t.groupId ? { groupId: t.groupId } : {}),
+        });
+      }
+      if (summary) {
+        this.eventBus.publish({
+          type: 'payment.updated',
+          userIds: recipients,
+          payment: summary,
         });
       }
     }

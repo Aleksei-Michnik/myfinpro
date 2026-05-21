@@ -4,9 +4,16 @@ import { Prisma } from '@prisma/client';
 import type { Job, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { buildSchedulerId } from './payment-schedule.service';
+import {
+  mapPaymentToSummary,
+  PAYMENT_DETAIL_INCLUDE,
+  type PaymentWithRelations,
+} from './payment.service';
 import { computeNextRunAt } from './utils/next-run-at';
+import { computePaymentRecipients } from './utils/payment-event-recipients';
 
 /**
  * Job-data contract written by the producer in
@@ -55,6 +62,7 @@ export class PaymentOccurrenceProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(PAYMENT_OCCURRENCES_QUEUE) private readonly queue: Queue,
+    private readonly eventBus: EventBus,
   ) {
     super();
   }
@@ -198,6 +206,45 @@ export class PaymentOccurrenceProcessor extends WorkerHost {
       occurrenceId,
       firedAt: firedAtIso,
     });
+
+    // 9. Realtime fan-out — POST commit. Emit `occurrence.created` to the
+    // same set of users who have visibility on the parent (which by
+    // definition matches the new child since attributions were cloned).
+    // Best-effort: failures must never break the worker — the row is
+    // already persisted and the next page-load will catch up.
+    try {
+      const childWithRelations = await this.prisma.payment.findUnique({
+        where: { id: occurrenceId },
+        include: {
+          category: PAYMENT_DETAIL_INCLUDE.category,
+          attributions: PAYMENT_DETAIL_INCLUDE.attributions,
+        },
+      });
+      if (childWithRelations) {
+        const summary = mapPaymentToSummary(childWithRelations as unknown as PaymentWithRelations, {
+          starredByMe: false,
+        });
+        const recipients = await computePaymentRecipients(
+          this.prisma,
+          parent.attributions.map((a) => ({
+            scopeType: a.scopeType,
+            userId: a.userId,
+            groupId: a.groupId,
+          })),
+          parent.createdById,
+        );
+        this.eventBus.publish({
+          type: 'occurrence.created',
+          userIds: recipients,
+          parentPaymentId: parent.id,
+          payment: summary,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish occurrence.created for ${occurrenceId}: ${(err as Error).message}`,
+      );
+    }
 
     return { created: true, occurrenceId, firedAt: firedAtIso };
   }

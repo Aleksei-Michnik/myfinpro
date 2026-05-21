@@ -22,20 +22,20 @@ export interface PaymentSummary {
     id: string;
     slug: string;
     name: string;
-    icon?: string | null;
-    color?: string | null;
+    icon: string | null;
+    color: string | null;
   };
   attributions: Array<{
     scope: 'personal' | 'group';
-    userId?: string | null;
-    groupId?: string | null;
-    groupName?: string | null;
+    userId: string | null;
+    groupId: string | null;
+    groupName: string | null;
   }>;
-  note?: string | null;
+  note: string | null;
   commentCount: number;
   starredByMe: boolean;
   hasDocuments: boolean;
-  parentPaymentId?: string | null;
+  parentPaymentId: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;

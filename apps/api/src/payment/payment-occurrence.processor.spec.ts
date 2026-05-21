@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { Job, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventBus } from '../realtime/event-bus.service';
 import { PaymentOccurrenceProcessor } from './payment-occurrence.processor';
 
 /**
@@ -83,12 +84,14 @@ describe('PaymentOccurrenceProcessor', () => {
     queue: jest.Mocked<Pick<Queue, 'removeJobScheduler'>>;
     txCalls: Array<Record<string, unknown>>;
     auditCreate: jest.Mock;
+    eventBus: { publish: jest.Mock };
   };
 
   function buildMocks(): Mocks {
     const auditCreate = jest.fn().mockResolvedValue(undefined);
     const findUniqueSchedule = jest.fn();
     const findUniquePayment = jest.fn();
+    const findManyMembership = jest.fn().mockResolvedValue([]);
     const txCalls: Array<Record<string, unknown>> = [];
 
     const txClient = {
@@ -107,6 +110,7 @@ describe('PaymentOccurrenceProcessor', () => {
     const prisma = {
       paymentSchedule: { findUnique: findUniqueSchedule },
       payment: { findUnique: findUniquePayment },
+      groupMembership: { findMany: findManyMembership },
       auditLog: { create: auditCreate },
       $transaction,
       _tx: txClient,
@@ -116,13 +120,16 @@ describe('PaymentOccurrenceProcessor', () => {
       removeJobScheduler: jest.fn().mockResolvedValue(true),
     } as unknown as Mocks['queue'];
 
-    return { prisma, queue, txCalls, auditCreate };
+    const eventBus = { publish: jest.fn() };
+
+    return { prisma, queue, txCalls, auditCreate, eventBus };
   }
 
   function build(mocks: Mocks): PaymentOccurrenceProcessor {
     return new PaymentOccurrenceProcessor(
       mocks.prisma as unknown as PrismaService,
       mocks.queue as unknown as Queue,
+      mocks.eventBus as unknown as EventBus,
     );
   }
 

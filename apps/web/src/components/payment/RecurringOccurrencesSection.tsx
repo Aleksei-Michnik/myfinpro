@@ -22,6 +22,7 @@ import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { PaymentListResponse, PaymentSummary } from '@/lib/payment/types';
+import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface RecurringOccurrencesSectionProps {
@@ -73,6 +74,13 @@ export function RecurringOccurrencesSection({ paymentId }: RecurringOccurrencesS
     setCursor(next.cursor);
     setHasMore(next.hasMore);
   }, []);
+
+  // Realtime: prepend newly created occurrences for this parent.
+  useRealtimeEvents({ type: 'occurrence.created', parentPaymentId: paymentId }, (event) => {
+    setItems((prev) =>
+      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+    );
+  });
 
   const data: PaymentsListData = { rows: items, cursor, hasMore };
 

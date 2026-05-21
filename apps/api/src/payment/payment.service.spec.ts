@@ -9,6 +9,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
@@ -77,6 +78,10 @@ describe('PaymentService', () => {
     removeJobScheduler: jest.fn().mockResolvedValue(true),
   };
 
+  const eventBusMock = {
+    publish: jest.fn(),
+  };
+
   const now = new Date('2026-05-01T00:00:00Z');
 
   /** Factory for the relation-loaded payment returned by prisma.payment.create(). */
@@ -139,6 +144,7 @@ describe('PaymentService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: CategoryService, useValue: categoryServiceMock },
         { provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE), useValue: queueMock },
+        { provide: EventBus, useValue: eventBusMock },
       ],
     }).compile();
     service = mod.get(PaymentService);
@@ -2187,6 +2193,147 @@ describe('PaymentService', () => {
       await expect(service.remove('user-1', 'pay-1', { scope: 'all' })).resolves.toBeDefined();
       expect(queueMock.removeJobScheduler).not.toHaveBeenCalled();
       expect(prismaMock.paymentSchedule.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.18.1.4.1 — realtime EventBus emission
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('realtime emission', () => {
+    /** Capture all eventBus.publish() calls that match a given type. */
+    const emittedOf = (type: string): Array<Record<string, unknown>> =>
+      eventBusMock.publish.mock.calls
+        .map((c) => c[0] as Record<string, unknown>)
+        .filter((e) => e.type === type);
+
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+    });
+
+    it('create(): emits payment.created with creator in userIds', async () => {
+      prismaMock.payment.create.mockResolvedValue(makePersistedPayment());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+
+      await service.create('user-1', baseDto());
+
+      const evt = emittedOf('payment.created')[0] as
+        | { userIds: string[]; payment: { id: string } }
+        | undefined;
+      expect(evt).toBeDefined();
+      expect(evt!.userIds).toContain('user-1');
+      expect(evt!.payment.id).toBe('pay-1');
+    });
+
+    it('create() with a group attribution: userIds includes every group member', async () => {
+      prismaMock.groupMembership.findMany.mockResolvedValue([
+        { groupId: 'g1', userId: 'm-1' },
+        { groupId: 'g1', userId: 'm-2' },
+      ]);
+      prismaMock.payment.create.mockResolvedValue(
+        makePersistedPayment({
+          attributions: [
+            { scopeType: 'group', userId: null, groupId: 'g1', group: { name: 'Fam' } },
+          ],
+        }),
+      );
+
+      await service.create(
+        'user-1',
+        baseDto({ attributions: [{ scope: 'group', groupId: 'g1' }] }),
+      );
+
+      const evt = emittedOf('payment.created')[0] as { userIds: string[] };
+      expect(new Set(evt.userIds)).toEqual(new Set(['user-1', 'm-1', 'm-2']));
+    });
+
+    it('update() scalar edit: emits payment.updated', async () => {
+      const row = makeFullRow();
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.payment.update.mockImplementation(async ({ data }: { data: unknown }) => {
+        const merged = { ...row, ...(data as Record<string, unknown>) };
+        prismaMock.payment.findUnique.mockResolvedValue(merged);
+        return merged;
+      });
+
+      await service.update('user-1', 'pay-1', { note: 'edited' });
+
+      expect(emittedOf('payment.updated')).toHaveLength(1);
+    });
+
+    it('update() empty body: does NOT emit payment.updated', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      await service.update('user-1', 'pay-1', {});
+      expect(emittedOf('payment.updated')).toHaveLength(0);
+    });
+
+    it('update() that empties accessible attributions: emits payment.deleted, NOT payment.updated', async () => {
+      const row = makeFullRow();
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+
+      const r = await service.update('user-1', 'pay-1', { attributions: [] });
+      expect(r).toBeNull();
+      expect(emittedOf('payment.deleted')).toHaveLength(1);
+      expect(emittedOf('payment.updated')).toHaveLength(0);
+    });
+
+    it('update() with attribution add: emits payment_attribution.added + payment.updated', async () => {
+      const row = makeFullRow();
+      prismaMock.payment.findFirst.mockResolvedValue(row);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(2);
+      prismaMock.payment.findUnique.mockResolvedValue(row);
+
+      await service.update('user-1', 'pay-1', {
+        attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }],
+      });
+
+      const added = emittedOf('payment_attribution.added');
+      expect(added).toHaveLength(1);
+      expect((added[0] as { scope: string; groupId?: string }).scope).toBe('group');
+      expect((added[0] as { groupId?: string }).groupId).toBe('g1');
+      expect(emittedOf('payment.updated')).toHaveLength(1);
+    });
+
+    it('remove() final hard-delete: emits payment.deleted only', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeRawRow());
+      prismaMock.groupMembership.findMany.mockResolvedValue([]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(0);
+      prismaMock.paymentSchedule.findUnique.mockResolvedValue(null);
+
+      await service.remove('user-1', 'pay-1', { scope: 'all' });
+
+      expect(emittedOf('payment.deleted')).toHaveLength(1);
+      expect(emittedOf('payment_attribution.removed')).toHaveLength(0);
+      expect(emittedOf('payment.updated')).toHaveLength(0);
+    });
+
+    it('remove() partial scope: emits payment_attribution.removed + payment.updated, NOT payment.deleted', async () => {
+      prismaMock.payment.findUnique.mockResolvedValueOnce(
+        makeRawRow({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+            },
+            { id: 'attr-g', paymentId: 'pay-1', scopeType: 'group', userId: null, groupId: 'g1' },
+          ],
+        }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1' }]);
+      prismaMock.paymentAttribution.count.mockResolvedValue(1);
+      prismaMock.payment.findUnique.mockResolvedValueOnce(makeFullRow());
+
+      await service.remove('user-1', 'pay-1', { scope: 'personal' });
+
+      expect(emittedOf('payment.deleted')).toHaveLength(0);
+      expect(emittedOf('payment_attribution.removed')).toHaveLength(1);
+      expect(emittedOf('payment.updated')).toHaveLength(1);
     });
   });
 });

@@ -31,6 +31,7 @@ import type {
   PaymentSummary,
   ScheduleResponse,
 } from '@/lib/payment/types';
+import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 interface PaymentDetailClientProps {
@@ -104,6 +105,28 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   // error from the previous render.
   useResetOnLocaleChange(() => {
     void load();
+  });
+
+  // Realtime: keep the displayed payment in sync with server-side edits and
+  // react to deletions by sending the user back to the dashboard.
+  useRealtimeEvents({ type: 'payment.updated' }, (event) => {
+    if (event.payment.id !== paymentId) return;
+    setPayment(event.payment);
+  });
+
+  useRealtimeEvents({ type: 'payment.deleted', paymentId }, () => {
+    addToast('success', tDetail('deletedToast'));
+    router.replace('/dashboard');
+  });
+
+  useRealtimeEvents({ type: 'payment_attribution.removed', paymentId }, () => {
+    // We may have lost visibility — refetch to confirm; if 404, redirect.
+    void getPayment(paymentId)
+      .then((fresh) => setPayment(fresh))
+      .catch(() => {
+        addToast('success', tDetail('deletedToast'));
+        router.replace('/dashboard');
+      });
   });
 
   const handleStarToggled = useCallback((starred: boolean) => {

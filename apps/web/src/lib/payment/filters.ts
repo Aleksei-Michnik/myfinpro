@@ -140,3 +140,72 @@ export function isFiltersDirty(filters: PaymentFilters): boolean {
 export function clearFilters(scope: FiltersScope = 'all'): PaymentFilters {
   return defaultFilters(scope);
 }
+
+// ── Realtime support (Phase 6 · Iteration 6.18.1.4.1) ───────────────────────
+
+/**
+ * Minimal payment shape required to evaluate filter membership. Mirrors the
+ * client-facing `PaymentSummary` but kept structural so realtime event payloads
+ * (which already match this shape) can be tested without a cast.
+ */
+export interface FilterablePayment {
+  direction: 'IN' | 'OUT';
+  category: { id: string };
+  occurredAt: string;
+  starredByMe: boolean;
+  note?: string | null;
+  parentPaymentId?: string | null;
+  attributions: Array<{
+    scope: 'personal' | 'group';
+    userId?: string | null;
+    groupId?: string | null;
+  }>;
+}
+
+/**
+ * Decide whether a payment should be visible under the active filters. Used
+ * by realtime subscribers (`payment.created` / `payment.updated`) to decide
+ * whether to inject the row into the local list before the user issues a
+ * fresh fetch. Server-side authoritative filtering still happens on the next
+ * pagination call; this is a best-effort optimistic predicate so the user
+ * sees their own (and collaborators') changes without a refresh.
+ *
+ * Caller must already have applied any cross-cutting visibility filter (the
+ * SSE stream only delivers events for payments the user can see, so we don't
+ * re-check membership here).
+ */
+export function paymentMatchesFilters(p: FilterablePayment, f: PaymentFilters): boolean {
+  // Scope.
+  const scope = f.scope ?? 'all';
+  if (scope === 'personal') {
+    if (!p.attributions.some((a) => a.scope === 'personal')) return false;
+  } else if (typeof scope === 'string' && scope.startsWith('group:')) {
+    const gid = scope.slice('group:'.length);
+    if (!p.attributions.some((a) => a.scope === 'group' && a.groupId === gid)) return false;
+  }
+
+  // Child scope.
+  const childScope = f.childScope ?? 'all';
+  if (childScope === 'parents' && p.parentPaymentId) return false;
+  if (childScope === 'occurrences' && !p.parentPaymentId) return false;
+
+  if (f.direction && p.direction !== f.direction) return false;
+  if (f.categoryId && p.category.id !== f.categoryId) return false;
+  if (f.starred && !p.starredByMe) return false;
+
+  if (f.from) {
+    const fromMs = new Date(f.from).getTime();
+    if (Number.isFinite(fromMs) && new Date(p.occurredAt).getTime() < fromMs) return false;
+  }
+  if (f.to) {
+    const toMs = new Date(f.to).getTime();
+    if (Number.isFinite(toMs) && new Date(p.occurredAt).getTime() >= toMs) return false;
+  }
+
+  if (f.search) {
+    const needle = f.search.toLowerCase();
+    if (!(p.note ?? '').toLowerCase().includes(needle)) return false;
+  }
+
+  return true;
+}

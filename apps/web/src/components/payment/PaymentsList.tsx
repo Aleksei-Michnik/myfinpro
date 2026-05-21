@@ -27,7 +27,7 @@ import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
 import { Button } from '@/components/ui/Button';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { useRouter } from '@/i18n/navigation';
-import { defaultFilters } from '@/lib/payment/filters';
+import { defaultFilters, paymentMatchesFilters } from '@/lib/payment/filters';
 import { usePayments } from '@/lib/payment/payment-context';
 import type {
   AttributionChangeResult,
@@ -36,6 +36,7 @@ import type {
   PaymentListResponse,
   PaymentSummary,
 } from '@/lib/payment/types';
+import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentsListData {
@@ -183,6 +184,67 @@ export function PaymentsList({
   const loading = isOrchestratorMode ? !!orchestratorLoading : fetchOp.isLoading;
   const error = isOrchestratorMode ? (orchestratorError ?? null) : (fetchOp.error?.message ?? null);
 
+  // ── Realtime sync (Phase 6 · Iteration 6.18.1.4.1) ───────────────────
+  //
+  // Apply a transform to whichever data source owns the current rows.
+  // Self-fetch mode mutates `selfRows`; orchestrator mode bubbles the new
+  // shape up via `onAppendData`.
+  const applyRowsUpdate = useCallback(
+    (updater: (prev: PaymentSummary[]) => PaymentSummary[]) => {
+      if (isOrchestratorMode) {
+        const next = updater(orchestratorData?.rows ?? []);
+        onAppendData?.({
+          rows: next,
+          cursor: orchestratorData?.cursor ?? null,
+          hasMore: orchestratorData?.hasMore ?? false,
+        });
+      } else {
+        setSelfRows((prev) => updater(prev));
+      }
+    },
+    [
+      isOrchestratorMode,
+      onAppendData,
+      orchestratorData?.rows,
+      orchestratorData?.cursor,
+      orchestratorData?.hasMore,
+    ],
+  );
+
+  useRealtimeEvents({ type: 'payment.created' }, (event) => {
+    if (!paymentMatchesFilters(event.payment, filters)) return;
+    applyRowsUpdate((prev) =>
+      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+    );
+  });
+
+  useRealtimeEvents({ type: 'payment.updated' }, (event) => {
+    applyRowsUpdate((prev) => {
+      const idx = prev.findIndex((r) => r.id === event.payment.id);
+      if (idx === -1) {
+        // Newly visible due to the update: prepend if it now matches filters.
+        return paymentMatchesFilters(event.payment, filters) ? [event.payment, ...prev] : prev;
+      }
+      // Already in the list — drop it if it no longer matches, otherwise patch.
+      if (!paymentMatchesFilters(event.payment, filters)) {
+        return prev.filter((r) => r.id !== event.payment.id);
+      }
+      const next = prev.slice();
+      next[idx] = event.payment;
+      return next;
+    });
+  });
+
+  useRealtimeEvents({ type: 'payment.deleted' }, (event) => {
+    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.paymentId));
+  });
+
+  useRealtimeEvents({ type: 'payment_attribution.removed' }, (event) => {
+    // The server may emit this to the user even when they no longer have
+    // visibility — treat as a hard remove so stale rows don't linger.
+    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.paymentId));
+  });
+
   // ── Self-fetch on filter change (skipped in orchestrator mode) ────────
   const fetchPage = useCallback(
     async (reset: boolean): Promise<void> => {
@@ -308,7 +370,7 @@ export function PaymentsList({
   const showAddButton = showControls !== false && !disableInternalAdd;
 
   return (
-    <div className="space-y-4" data-testid="payments-list">
+    <div className="space-y-4" data-testid="payments-list" aria-live="polite">
       {(showFilters || showAddButton) && (
         <div className="flex flex-wrap items-end justify-between gap-2">
           {showFilters ? (

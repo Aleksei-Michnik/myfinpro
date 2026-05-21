@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CategoryModule } from '../category/category.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { PaymentCommentController } from './payment-comment.controller';
 import { PaymentCommentService } from './payment-comment.service';
 import { PaymentOccurrenceProcessor } from './payment-occurrence.processor';
@@ -25,7 +26,7 @@ import { SystemCategoriesBootstrap } from './system-categories.bootstrap';
  * extra imports are needed here.
  */
 @Module({
-  imports: [PrismaModule, CategoryModule],
+  imports: [PrismaModule, CategoryModule, RealtimeModule],
   providers: [
     PaymentService,
     PaymentCommentService,

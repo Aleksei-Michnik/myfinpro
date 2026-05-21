@@ -10,8 +10,8 @@
 //   - keeping the latest handler reference without re-subscribing on every
 //     render.
 
-import { useEffect, useRef } from 'react';
-import { useRealtime } from './realtime-context';
+import { useContext, useEffect, useRef } from 'react';
+import { RealtimeContext } from './realtime-context';
 import type { RealtimeEvent, RealtimeEventType } from './realtime-types';
 
 type Handler<T extends RealtimeEventType> = (event: Extract<RealtimeEvent, { type: T }>) => void;
@@ -46,7 +46,12 @@ export function useRealtimeEvents<T extends RealtimeEventType>(
   filter: RealtimeFilter<T>,
   handler: Handler<T>,
 ): void {
-  const { subscribe } = useRealtime();
+  // The hook degrades to a no-op when no provider is mounted. This keeps
+  // unit tests that focus on a single feature from having to wrap every
+  // render in a RealtimeProvider — the real authenticated layout always
+  // mounts one.
+  const ctx = useContext(RealtimeContext);
+  const subscribe = ctx?.subscribe;
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
@@ -55,6 +60,7 @@ export function useRealtimeEvents<T extends RealtimeEventType>(
   const { type, paymentId, parentPaymentId, commentId } = filter;
 
   useEffect(() => {
+    if (!subscribe) return;
     const f: RealtimeFilter<T> = { type, paymentId, parentPaymentId, commentId };
     const unsub = subscribe((event) => {
       if (eventMatches(event, f)) {
