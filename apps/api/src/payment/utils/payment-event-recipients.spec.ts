@@ -1,5 +1,5 @@
-import { computePaymentRecipients } from './payment-event-recipients';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { computePaymentRecipients } from './payment-event-recipients';
 
 describe('computePaymentRecipients()', () => {
   const makePrisma = (memberships: Array<{ userId: string }>) =>
