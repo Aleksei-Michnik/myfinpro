@@ -6592,3 +6592,46 @@ Heartbeat fires after ~30s, `id:` increments, request hangs idle without bufferi
 **Commits.** Feat: `3c76859`. CI run: [`26186950740`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950740) ✓. Deploy Staging: [`26186950738`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26186950738) ✓ (1m31s, blue-green). Docs (this entry): `docs(phase-6.18.1.4)`.
 
 **Next** — 6.18.1.4.1+ (wire payment / comment / schedule services to emit on `EventBus`; wire `useRealtimeEvents` calls in list / detail / occurrences views), then 6.18.2 (lifecycle UI: pause / resume / cancel).
+
+## Sub-iteration 6.18.1.4.1 — Wire payment events to realtime EventBus + frontend subscriptions (commit `01368ed`, 2026-05-21)
+
+**Goal.** Now that the realtime SSE bus exists (6.18.1.4), wire the actual producers (payment service, occurrence processor) and consumers (payments list, detail page, occurrences section) so that creating / editing / deleting a payment in one tab updates every other tab/device of every user with visibility on that payment — without a refresh.
+
+**Backend producers.**
+
+- New helper [`apps/api/src/payment/utils/payment-event-recipients.ts`](../apps/api/src/payment/utils/payment-event-recipients.ts:1) exposes `computePaymentRecipients(prisma, { creatorId, attributions })` which fans the recipient list out to: the payment creator + every user with a personal attribution + every member of every group with a group attribution. One `groupMembership.findMany({ where: { groupId: { in: [...] } } })` query covers all groups (no N+1). 6 unit tests cover personal-only, group-only, multi-group, dedup, empty-attributions, and creator-already-in-group.
+- [`apps/api/src/payment/payment.service.ts`](../apps/api/src/payment/payment.service.ts:1) injects `EventBus` and emits **after the Prisma transaction commits**:
+  - `create()` → `payment.created`
+  - `editPayment()` (renamed callsite: `update`) → `payment.updated` (always) + `payment_attribution.added` / `payment_attribution.removed` (one event per attribution diff). Recipients are the post-change union (creator ∪ old recipients ∪ new recipients) so users who lose visibility still get the removal signal.
+  - `deleteWithScope()` (`remove`) → `payment.deleted` for hard delete, otherwise `payment_attribution.removed` for the scope being detached + `payment.updated` for the still-visible recipients.
+- [`apps/api/src/payment/payment-occurrence.processor.ts`](../apps/api/src/payment/payment-occurrence.processor.ts:1) emits `occurrence.created` after a recurring child Payment row is persisted, fanning out to the same audience the parent payment has (via the cloned attributions).
+- All emissions sit in a `try { … } catch (err) { logger.warn(…) }` so a publish failure never breaks the request / worker.
+- [`apps/api/src/payment/payment.module.ts`](../apps/api/src/payment/payment.module.ts:1) imports `RealtimeModule` (which exports `EventBus`).
+
+**Frontend subscribers.**
+
+- [`apps/web/src/components/payment/PaymentsList.tsx`](../apps/web/src/components/payment/PaymentsList.tsx:1) subscribes to `payment.created` / `payment.updated` / `payment.deleted` / `payment_attribution.removed`. A new helper [`paymentMatchesFilters()`](../apps/web/src/lib/payment/filters.ts:1) is the optimistic predicate that decides whether a freshly arrived payment fits the active filter set. Both the orchestrator-driven mode (PaymentContext) and the self-fetch mode share one `applyRowsUpdate` reducer.
+- [`apps/web/src/components/payment/RecurringOccurrencesSection.tsx`](../apps/web/src/components/payment/RecurringOccurrencesSection.tsx:1) subscribes to `occurrence.created` filtered by the parent `paymentId` and prepends the new child to the locally rendered occurrences list.
+- [`apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx:1) subscribes per active `paymentId`: `payment.updated` patches the displayed details in place, `payment.deleted` redirects to `/dashboard` with a toast, `payment_attribution.removed` triggers a re-fetch (and redirects out if the detail GET 404s).
+- [`apps/web/src/lib/realtime/use-realtime-events.ts`](../apps/web/src/lib/realtime/use-realtime-events.ts:1) was relaxed to degrade to a no-op when no `RealtimeProvider` is mounted (e.g. in unit tests), so the existing 22 payment-detail spec tests keep passing without rewriting their `render()` calls. `RealtimeContext` is now exported from [`realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx:1) for tests that want to inject a fake subscriber.
+- The realtime-side `PaymentSummary` type was tightened (nullable instead of optional fields) to match the canonical `apps/web/src/lib/payment/types.PaymentSummary`, so wire payloads flow straight into list state.
+
+**A11y.** [`PaymentsList.tsx`](../apps/web/src/components/payment/PaymentsList.tsx:1) wraps its row container in `aria-live="polite"` so realtime additions / removals are announced. `RecurringOccurrencesSection` already exposed `aria-live="polite"` on its count line.
+
+**Tests.** 14 new backend cases (computePaymentRecipients ×6 + PaymentService realtime emission ×8) and 10 new frontend cases (paymentMatchesFilters ×8 + RecurringOccurrencesSection realtime ×2). Grand total: **778** API tests pass, **962** web tests pass. The realtime publish call is mocked in every spec — the contract is "after `prisma.X` resolves, `eventBus.publish` was called with the right `type` / `userIds` / payload shape", never a coupled DB-and-bus round-trip.
+
+**Staging smoke (commit `01368ed`, 2026-05-21).** Deploy Staging run [`26243388730`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26243388730) ✓ blue-green. SSE endpoint reachable end-to-end:
+
+```
+curl -i .../api/v1/events/stream  → HTTP/2 401  (no cookie → guard rejects, expected)
+```
+
+Auth guard still works post-deploy; nginx passthrough and HSTS / CSP headers intact.
+
+**Constraints honoured.** No new npm dependency. DRY (one `eventBus.publish()` chokepoint, one `computePaymentRecipients()` helper, one `paymentMatchesFilters()` predicate, one `applyRowsUpdate` reducer). All emissions strictly **after** `prisma.$transaction` resolves. No existing behaviour changed — events are purely additive. Backward compat: when an EventSource is not mounted (server-side render, signed-out session, unit tests), the producers still fire but no client receives them, and the consumers no-op.
+
+**Phase 6 status: 17 / 21** (sub-iteration of 6.18; comment / schedule producers and dashboard widget consumers will follow in 6.18.1.4.2+).
+
+**Commits.** Feat: `01368ed`. CI run: [`26243388727`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26243388727) ✓ (2m04s). Deploy Staging: [`26243388730`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26243388730) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.1)`.
+
+**Next** — 6.18.1.4.2 (wire `comment.*` and `payment_schedule.*` producers + dashboard `RecentActivity` / `StarredPayments` consumers if they exist), then 6.18.2 (lifecycle UI: pause / resume / cancel).
