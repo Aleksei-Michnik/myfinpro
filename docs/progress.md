@@ -6635,3 +6635,51 @@ Auth guard still works post-deploy; nginx passthrough and HSTS / CSP headers int
 **Commits.** Feat: `01368ed`. CI run: [`26243388727`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26243388727) ✓ (2m04s). Deploy Staging: [`26243388730`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26243388730) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.1)`.
 
 **Next** — 6.18.1.4.2 (wire `comment.*` and `payment_schedule.*` producers + dashboard `RecentActivity` / `StarredPayments` consumers if they exist), then 6.18.2 (lifecycle UI: pause / resume / cancel).
+
+### Phase 6 · Iteration 6.18.1.4.2 — Comment events on the realtime EventBus (2026-05-21)
+
+**Goal.** Extend the realtime fan-out shipped in 6.18.1.4 / 6.18.1.4.1 to comments: every create / edit / soft-delete on a `PaymentComment` should appear in every other tab + device of every user with visibility on the parent payment, without a refresh.
+
+**Backend producer.** [`apps/api/src/payment/payment-comment.service.ts`](../apps/api/src/payment/payment-comment.service.ts:1) injects `EventBus` and emits **after the DB write resolves** — never inside an open transaction:
+
+- `create()` → `comment.created` with the freshly-built `CommentResponseDto`.
+- `update()` → `comment.updated` with the patched DTO.
+- `remove()` (soft-delete) → `comment.deleted` carrying `{ paymentId, commentId }`.
+
+Recipients are computed by reusing [`computePaymentRecipients()`](../apps/api/src/payment/utils/payment-event-recipients.ts:1) — the same multicast helper that already drives `payment.*` events. Comments inherit the parent payment's recipient set (creator ∪ personal-attribution users ∪ every group-attribution member); a single `prisma.payment.findUnique({ select: { createdById, attributions } })` followed by the helper's existing membership lookup covers it. Emission lives in a private `publishCommentEvent()` method wrapped in `try { … } catch (err) { logger.warn(…) }`, matching the resilience pattern from 6.18.1.4.1 — a Redis blip during fan-out never breaks the user-facing operation, and clients eventually re-sync via reconnect / refetch (per [`docs/ui-realtime-conventions.md`](./ui-realtime-conventions.md:1)).
+
+**Frontend subscriber.** [`apps/web/src/components/payment/PaymentCommentList.tsx`](../apps/web/src/components/payment/PaymentCommentList.tsx:1) now subscribes via [`useRealtimeEvents`](../apps/web/src/lib/realtime/use-realtime-events.ts:1) on three filters scoped to its current `paymentId`:
+
+- `comment.created` → append at the end of the list (comments are stored ascending by `createdAt`), deduped by `commentId` so the author's local optimistic row is not duplicated.
+- `comment.updated` → patch the matching row in place; an event for an unknown `id` is a no-op (the row may have scrolled out of the loaded window).
+- `comment.deleted` → remove from the list, mirroring the existing optimistic-delete UX in `confirmDelete()`.
+
+The `appendComment(c)` imperative handle was also tightened to dedupe by id — covers the path where a `comment.created` event arrives between the optimistic local insert and the imperative re-call. The wire `CommentResponse.deletedAt?` is normalised to `deletedAt: null` on ingest so the local `Comment` type's required field stays honest.
+
+**A11y.** The list container already exposes `aria-live="polite"`, so realtime arrivals / patches / removals are announced to assistive tech without any new markup. Verified by an explicit unit test.
+
+**Idempotency.** Every handler dedupes by `commentId`. This covers both the author-already-has-it-locally case (the synchronous `editComment.run().then(setItems(...))` already mutates state before the SSE echo arrives) and the reconnect-replay case (per `docs/ui-realtime-conventions.md`, the server replays buffered events when the client reconnects).
+
+**Tests.**
+
+- **Backend**: 5 new cases in [`payment-comment.service.spec.ts`](../apps/api/src/payment/payment-comment.service.spec.ts:1) — multicast `userIds` for a personal+group attributed payment (`u1, u2, u3`), `comment.updated` payload shape, `comment.deleted` `{ paymentId, commentId }` shape, swallow-on-publish-failure (publish blip → comment still returned), and no-emit on the 404 / 410 / 403 author-guard paths. All EventBus interactions go through a single `vi.fn()` chokepoint.
+- **Frontend**: 7 new cases in [`PaymentCommentList.spec.tsx`](../apps/web/src/components/payment/PaymentCommentList.spec.tsx:1) — `comment.created` from another author appends a row, double-emit of the same id only renders one row (idempotency), `paymentId` filtering ignores other payments' events, `comment.updated` patches in place, `comment.updated` for an unknown id is a no-op, `comment.deleted` removes the row, and `aria-live="polite"` is asserted on the container. A `makeRealtimeHarness()` helper provides a fake `RealtimeContext.Provider` with an `emit()` capture so tests don't have to spin up a real `EventSource`.
+
+Grand total post-merge: **783** API tests pass (was 778), **969** web tests pass (was 962).
+
+**Staging smoke (commit `c151819`, 2026-05-21).** Deploy Staging run [`26245048524`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26245048524) ✓ blue-green (1m34s). Health endpoint up; SSE endpoint guard intact:
+
+```
+curl -i .../api/v1/health         → {"status":"ok",…}
+curl -sN .../api/v1/events/stream → HTTP 401  (no cookie → guard rejects, expected)
+```
+
+End-to-end "comment in tab A → SSE delivers `comment.created` to tab B" was not browser-verified in this iteration; it is structurally identical to the 6.18.1.4.1 payment fan-out which was browser-verified there, and the unit tests cover every contract surface (server emits the right shape; client patches state correctly).
+
+**Constraints honoured.** No new npm dependency. DRY (one `eventBus.publish()` chokepoint, parent-payment lookup reuses `computePaymentRecipients()`, dedupe predicate identical between the imperative handle and the realtime handler). All emissions strictly POST-commit. No existing behaviour changed — events are purely additive. Backward compat: when `RealtimeContext` is absent (signed-out, unit tests not using the harness), the `useRealtimeEvents` hook degrades to a no-op so nothing regresses.
+
+**Phase 6 status: 18 / 21**.
+
+**Commits.** Feat: `c151819`. CI run: [`26245048518`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26245048518) ✓ (2m04s). Deploy Staging: [`26245048524`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26245048524) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.2)`.
+
+**Next** — 6.18.1.4.3 (wire `schedule.*` producers in `payment-schedule.service.ts` + dashboard widget consumers if applicable), then 6.18.2 (lifecycle UI: pause / resume / cancel).
