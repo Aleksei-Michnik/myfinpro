@@ -63,9 +63,26 @@ Rules:
   cookie** set on every login / register / refresh / OAuth callback.
   EventSource cannot send `Authorization` headers, hence the cookie path.
   See [`apps/api/src/auth/utils/auth-cookie.ts`](../apps/api/src/auth/utils/auth-cookie.ts).
+  Cookie writes happen at the **controller layer** only — the auth
+  service returns pure data (`{ user, accessToken, refreshToken }`) and
+  the controller is the single place that touches the `Response`
+  object. See [`apps/api/src/auth/auth.controller.ts`](../apps/api/src/auth/auth.controller.ts).
 - The existing **`Authorization: Bearer` header flow is unchanged** — the
   cookie is purely additive. Programmatic clients (curl, tests, future
   non-browser consumers) keep using the header.
+- **Two refresh paths keep both the cookie and the Bearer token fresh:**
+  1. **Proactive interval** in `auth-context.tsx` — calls
+     `POST /auth/refresh` every 12 minutes (≈ 80% of the 15-minute JWT
+     TTL). Updates both stored tokens; the response also rewrites the
+     `access_token` cookie so the SSE connection stays valid.
+  2. **Reactive 401-retry interceptor** in
+     [`apps/web/src/lib/api-client.ts`](../apps/web/src/lib/api-client.ts).
+     Any HTTP call that returns 401 triggers one refresh attempt
+     (single-flight: concurrent 401s share the same in-flight refresh
+     promise) and the original request is retried with the new token.
+     On success the interceptor posts `{ type: 'token-refreshed' }` on
+     `BroadcastChannel('auth')` so other tabs and the realtime provider
+     can react.
 - The server emits a **30-second `{ type: 'ping' }` heartbeat** to keep
   idle proxies (Cloudflare, nginx) from dropping the connection. The
   client ignores pings except as a liveness signal.
@@ -91,6 +108,25 @@ disable proxy buffering — the URL itself is not special.
 - `connectionStatus` is exposed via `useRealtime()` for UI affordances
   (e.g. a subtle "reconnecting…" indicator). Don't gate any required
   workflow on `connected`.
+- **Failure cap.** After **5 consecutive `error` events** (without a
+  successful `open` in between) the provider stops scheduling reconnects
+  and stays quiet. The app keeps working via regular HTTP fetches —
+  realtime is best-effort. The counter resets on a successful reconnect
+  and on every visibility-resume so a returning user gets a fresh
+  budget. See `MAX_CONSECUTIVE_FAILURES_FOR_TESTS` in
+  [`apps/web/src/lib/realtime/realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx).
+- **No independent token refresh.** The realtime provider does **not**
+  call `/auth/refresh` on its own. When the SSE stream is rejected (most
+  likely a 401 because the cookie expired) the provider just stops and
+  waits. The first regular fetch that hits a 401 triggers the api-client
+  interceptor, which refreshes the cookie and posts
+  `{ type: 'token-refreshed' }` on `BroadcastChannel('auth')`. The
+  realtime provider listens on that channel and reconnects (with a
+  reset failure counter) the moment it sees the message. This keeps
+  refresh logic in one place — the api-client — and avoids the 10×
+  401-storm we used to see when both layers retried independently. See
+  [`docs/phase-6.18.1.4-rca.md`](./phase-6.18.1.4-rca.md) for the
+  original incident.
 
 ## Future work (not blocking)
 

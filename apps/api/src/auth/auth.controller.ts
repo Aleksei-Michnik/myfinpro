@@ -52,6 +52,7 @@ import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { TokenService } from './services/token.service';
+import { clearAuthCookie, setAuthCookie } from './utils/auth-cookie';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -67,6 +68,25 @@ export class AuthController {
     private readonly passwordResetService: PasswordResetService,
     private readonly tokenService: TokenService,
   ) {}
+
+  /**
+   * Phase 6 · 6.18.1.4-hotfix — central place where the controller
+   * writes the auth cookies the service no longer touches. Called from
+   * register / login / refresh / OAuth-callback paths after the service
+   * returns a fresh `{ accessToken, refreshToken }` pair. The controller
+   * never echoes `refreshToken` back to the client — only `accessToken`
+   * appears in the JSON body (the refresh token lives in an httpOnly
+   * cookie).
+   */
+  private issueAuthCookies<T extends { accessToken: string; refreshToken: string }>(
+    response: Response,
+    result: T,
+  ): Omit<T, 'refreshToken'> {
+    this.tokenService.setRefreshTokenCookie(response, result.refreshToken);
+    setAuthCookie(response, result.accessToken);
+    const { refreshToken: _rt, ...rest } = result;
+    return rest;
+  }
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
   @Post('register')
@@ -86,7 +106,8 @@ export class AuthController {
   ) {
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
-    return this.authService.register(registerDto, response, ip, userAgent);
+    const result = await this.authService.register(registerDto, ip, userAgent);
+    return this.issueAuthCookies(response, result);
   }
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -114,7 +135,8 @@ export class AuthController {
     }
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
-    return this.authService.login(user, response, ip, userAgent);
+    const result = await this.authService.login(user, ip, userAgent);
+    return this.issueAuthCookies(response, result);
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })
@@ -137,7 +159,8 @@ export class AuthController {
 
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
-    return this.authService.refreshTokens(refreshToken, response, ip, userAgent);
+    const result = await this.authService.refreshTokens(refreshToken, ip, userAgent);
+    return this.issueAuthCookies(response, result);
   }
 
   @CustomThrottle({ limit: 10, ttl: 60000 })
@@ -150,13 +173,10 @@ export class AuthController {
   })
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: Request) {
     const refreshToken = request.cookies?.refresh_token;
-
-    if (refreshToken) {
-      return this.authService.logout(refreshToken, response);
-    }
-
-    // Even without a cookie, clear it and return success
-    return this.authService.logout('', response);
+    const result = await this.authService.logout(refreshToken ?? '');
+    this.tokenService.clearRefreshTokenCookie(response);
+    clearAuthCookie(response);
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)
@@ -336,7 +356,10 @@ export class AuthController {
     // Use the existing login flow to generate tokens, set cookie, update lastLoginAt
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
-    const { accessToken } = await this.authService.login(user, response, ip, userAgent);
+    const loginResult = await this.authService.login(user, ip, userAgent);
+    this.tokenService.setRefreshTokenCookie(response, loginResult.refreshToken);
+    setAuthCookie(response, loginResult.accessToken);
+    const { accessToken } = loginResult;
 
     // Redirect to frontend with access token (derive from SERVER_NAME)
     const serverName = this.configService.get<string>('SERVER_NAME', '');
@@ -399,7 +422,8 @@ export class AuthController {
 
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
-    return this.authService.login(user, response, ip, userAgent);
+    const result = await this.authService.login(user, ip, userAgent);
+    return this.issueAuthCookies(response, result);
   }
 
   @UseGuards(JwtAuthGuard)

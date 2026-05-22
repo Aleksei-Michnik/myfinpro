@@ -156,3 +156,231 @@ describe('RealtimeProvider', () => {
     expect(MockEventSource.instances[0]!.closed).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6 · 6.18.1.4-hotfix — failure cap + BroadcastChannel reconnect.
+// ─────────────────────────────────────────────────────────────────────
+
+import { AUTH_BROADCAST_CHANNEL, TOKEN_REFRESHED_MESSAGE } from '../../api-client';
+import { MAX_CONSECUTIVE_FAILURES_FOR_TESTS } from '../realtime-context';
+
+describe('RealtimeProvider — reconnect policy (Phase 6 · 6.18.1.4-hotfix)', () => {
+  beforeEach(() => {
+    MockEventSource.instances.length = 0;
+    (Probe as unknown as { _subbed?: boolean })._subbed = false;
+    vi.useFakeTimers();
+    (globalThis as unknown as { EventSource: typeof MockEventSource }).EventSource =
+      MockEventSource;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as unknown as { EventSource?: unknown }).EventSource;
+  });
+
+  it('exposes a 5-failure cap', () => {
+    expect(MAX_CONSECUTIVE_FAILURES_FOR_TESTS).toBe(5);
+  });
+
+  it('stops reconnecting after MAX_CONSECUTIVE_FAILURES consecutive errors', () => {
+    render(
+      <RealtimeProvider enabled>
+        <Probe />
+      </RealtimeProvider>,
+    );
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    // Each error → close → schedule reconnect (capped 30s backoff).
+    // After 5 errors total there should be no further connect.
+    for (let i = 0; i < MAX_CONSECUTIVE_FAILURES_FOR_TESTS; i++) {
+      act(() => {
+        MockEventSource.instances[i]!.emitError();
+      });
+      // Drain the backoff timer.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+    }
+
+    // At most MAX_CONSECUTIVE_FAILURES instances were created.
+    expect(MockEventSource.instances.length).toBeLessThanOrEqual(
+      MAX_CONSECUTIVE_FAILURES_FOR_TESTS,
+    );
+
+    // Advancing time further does NOT spin up a new connection — the
+    // provider is now silently disconnected.
+    const before = MockEventSource.instances.length;
+    act(() => {
+      vi.advanceTimersByTime(120_000);
+    });
+    expect(MockEventSource.instances.length).toBe(before);
+  });
+
+  it('reconnects on a token-refreshed broadcast even after the failure cap', () => {
+    // Capture broadcast listeners installed by the provider.
+    const listeners = new Set<(ev: MessageEvent) => void>();
+    let observedName: string | null = null;
+    class TestChannel {
+      constructor(name: string) {
+        observedName = name;
+      }
+      addEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.add(fn);
+      }
+      removeEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.delete(fn);
+      }
+      postMessage(_d: unknown) {}
+      close() {}
+    }
+    const original = global.BroadcastChannel;
+    global.BroadcastChannel = TestChannel as unknown as typeof BroadcastChannel;
+
+    try {
+      render(
+        <RealtimeProvider enabled>
+          <Probe />
+        </RealtimeProvider>,
+      );
+      expect(observedName).toBe(AUTH_BROADCAST_CHANNEL);
+
+      // Exhaust the failure cap.
+      for (let i = 0; i < MAX_CONSECUTIVE_FAILURES_FOR_TESTS; i++) {
+        act(() => {
+          MockEventSource.instances[i]!.emitError();
+        });
+        act(() => {
+          vi.advanceTimersByTime(60_000);
+        });
+      }
+      const beforeBroadcast = MockEventSource.instances.length;
+
+      // A token-refreshed broadcast should reconnect immediately.
+      act(() => {
+        for (const fn of listeners) {
+          fn({
+            data: { type: TOKEN_REFRESHED_MESSAGE, accessToken: 'fresh' },
+          } as MessageEvent);
+        }
+      });
+
+      expect(MockEventSource.instances.length).toBe(beforeBroadcast + 1);
+    } finally {
+      global.BroadcastChannel = original;
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6 · 6.18.1.4-hotfix — failure cap + BroadcastChannel reconnect.
+// ─────────────────────────────────────────────────────────────────────
+
+import { AUTH_BROADCAST_CHANNEL, TOKEN_REFRESHED_MESSAGE } from '../../api-client';
+import { MAX_CONSECUTIVE_FAILURES_FOR_TESTS } from '../realtime-context';
+
+describe('RealtimeProvider — reconnect policy (Phase 6 · 6.18.1.4-hotfix)', () => {
+  beforeEach(() => {
+    MockEventSource.instances.length = 0;
+    (Probe as unknown as { _subbed?: boolean })._subbed = false;
+    vi.useFakeTimers();
+    (globalThis as unknown as { EventSource: typeof MockEventSource }).EventSource =
+      MockEventSource;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as unknown as { EventSource?: unknown }).EventSource;
+  });
+
+  it('exposes a 5-failure cap', () => {
+    expect(MAX_CONSECUTIVE_FAILURES_FOR_TESTS).toBe(5);
+  });
+
+  it('stops reconnecting after MAX_CONSECUTIVE_FAILURES consecutive errors', () => {
+    render(
+      <RealtimeProvider enabled>
+        <Probe />
+      </RealtimeProvider>,
+    );
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    // Each error → close → schedule reconnect (capped 30s backoff).
+    // After 5 errors total there should be no further connect.
+    for (let i = 0; i < MAX_CONSECUTIVE_FAILURES_FOR_TESTS; i++) {
+      act(() => {
+        MockEventSource.instances[i]!.emitError();
+      });
+      // Drain the backoff timer.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+    }
+
+    // At most MAX_CONSECUTIVE_FAILURES instances were created.
+    expect(MockEventSource.instances.length).toBeLessThanOrEqual(
+      MAX_CONSECUTIVE_FAILURES_FOR_TESTS,
+    );
+
+    // Advancing time further does NOT spin up a new connection — the
+    // provider is now silently disconnected.
+    const before = MockEventSource.instances.length;
+    act(() => {
+      vi.advanceTimersByTime(120_000);
+    });
+    expect(MockEventSource.instances.length).toBe(before);
+  });
+
+  it('reconnects on a token-refreshed broadcast even after the failure cap', () => {
+    // Capture broadcast listeners installed by the provider.
+    const listeners = new Set<(ev: MessageEvent) => void>();
+    let observedName: string | null = null;
+    class TestChannel {
+      constructor(name: string) {
+        observedName = name;
+      }
+      addEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.add(fn);
+      }
+      removeEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.delete(fn);
+      }
+      postMessage(_d: unknown) {}
+      close() {}
+    }
+    const original = global.BroadcastChannel;
+    global.BroadcastChannel = TestChannel as unknown as typeof BroadcastChannel;
+
+    try {
+      render(
+        <RealtimeProvider enabled>
+          <Probe />
+        </RealtimeProvider>,
+      );
+      expect(observedName).toBe(AUTH_BROADCAST_CHANNEL);
+
+      // Exhaust the failure cap.
+      for (let i = 0; i < MAX_CONSECUTIVE_FAILURES_FOR_TESTS; i++) {
+        act(() => {
+          MockEventSource.instances[i]!.emitError();
+        });
+        act(() => {
+          vi.advanceTimersByTime(60_000);
+        });
+      }
+      const beforeBroadcast = MockEventSource.instances.length;
+
+      // A token-refreshed broadcast should reconnect immediately.
+      act(() => {
+        for (const fn of listeners) {
+          fn({
+            data: { type: TOKEN_REFRESHED_MESSAGE, accessToken: 'fresh' },
+          } as MessageEvent);
+        }
+      });
+
+      expect(MockEventSource.instances.length).toBe(beforeBroadcast + 1);
+    } finally {
+      global.BroadcastChannel = original;
+    }
+  });
+});

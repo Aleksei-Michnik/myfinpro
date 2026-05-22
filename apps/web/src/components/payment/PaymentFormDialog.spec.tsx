@@ -20,6 +20,7 @@ const removePaymentMock = vi.fn();
 const listCategoriesMock = vi.fn();
 const createScheduleMock = vi.fn();
 const replaceScheduleMock = vi.fn();
+const getPaymentMock = vi.fn();
 
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me', defaultCurrency: 'USD' } }),
@@ -39,6 +40,7 @@ vi.mock('@/lib/payment/payment-context', () => ({
     listCategories: listCategoriesMock,
     createSchedule: createScheduleMock,
     replaceSchedule: replaceScheduleMock,
+    getPayment: getPaymentMock,
   }),
 }));
 
@@ -137,6 +139,14 @@ describe('PaymentFormDialog', () => {
     listCategoriesMock.mockResolvedValue(DEFAULT_CATS);
     createScheduleMock.mockReset();
     replaceScheduleMock.mockReset();
+    getPaymentMock.mockReset();
+    // Default: synchronous throw mirrors the previous "not implemented"
+    // behaviour and keeps tests that don't care about the refetch
+    // straightforward — the dialog falls back to the prop instantly.
+    // Tests that exercise the refetch path override this.
+    getPaymentMock.mockImplementation(() => {
+      throw new Error('not configured');
+    });
     localStorage.clear();
   });
 
@@ -539,5 +549,87 @@ describe('PaymentFormDialog', () => {
     fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
     expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
     expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
+  });
+
+  // ── Phase 6 · 6.18.1.4-hotfix — edit-mode refetch ─────────────────────────
+  // The dialog must request a fresh copy of the payment when it opens
+  // in edit mode so users don't see (and submit) values that have gone
+  // stale in another tab/device.
+
+  describe('edit refetch', () => {
+    it('calls getPayment with the prop id when opening in edit mode', () => {
+      getPaymentMock.mockResolvedValueOnce(makePayment({ id: 'p-1', note: 'fresh' }));
+      renderEdit(makePayment({ id: 'p-1', note: 'stale' }));
+      expect(getPaymentMock).toHaveBeenCalledTimes(1);
+      expect(getPaymentMock.mock.calls[0][0]).toBe('p-1');
+      // Second arg is an AbortSignal so the dialog can cancel mid-flight.
+      const signal = getPaymentMock.mock.calls[0][1];
+      expect(signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('does NOT call getPayment in create mode', () => {
+      renderCreate();
+      expect(getPaymentMock).not.toHaveBeenCalled();
+    });
+
+    it('shows a loading state while the refetch is in flight', () => {
+      // Resolve never — the loading banner stays visible.
+      getPaymentMock.mockReturnValueOnce(new Promise(() => {}));
+      renderEdit(makePayment({ id: 'p-1' }));
+      expect(screen.getByTestId('payment-form-loading')).toBeInTheDocument();
+    });
+
+    it('repopulates the form with the freshly fetched payment data', async () => {
+      // Server has a different note than the prop → form should show the
+      // server value, not the stale prop.
+      getPaymentMock.mockResolvedValueOnce(makePayment({ id: 'p-1', note: 'fresh-from-server' }));
+      renderEdit(makePayment({ id: 'p-1', note: 'stale-prop' }));
+      await waitFor(() => {
+        expect((screen.getByTestId('form-note') as HTMLTextAreaElement).value).toBe(
+          'fresh-from-server',
+        );
+      });
+    });
+
+    it('falls back to the prop and surfaces a soft warning when the refetch fails', async () => {
+      getPaymentMock.mockRejectedValueOnce(new Error('boom'));
+      renderEdit(makePayment({ id: 'p-1', note: 'prop-note' }));
+      await waitFor(() => {
+        expect(screen.getByTestId('payment-form-load-error')).toBeInTheDocument();
+      });
+      // Prop value still drives the form so the user can keep editing.
+      expect((screen.getByTestId('form-note') as HTMLTextAreaElement).value).toBe('prop-note');
+    });
+
+    it('aborts the in-flight fetch when the dialog is closed', () => {
+      let capturedSignal: AbortSignal | undefined;
+      getPaymentMock.mockImplementationOnce((_id: string, signal?: AbortSignal) => {
+        capturedSignal = signal;
+        return new Promise(() => {});
+      });
+      const { rerender } = render(
+        <PaymentFormDialog
+          open
+          mode="edit"
+          payment={makePayment({ id: 'p-1' })}
+          categories={DEFAULT_CATS}
+          onClose={() => {}}
+          onSaved={() => {}}
+        />,
+      );
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal!.aborted).toBe(false);
+      rerender(
+        <PaymentFormDialog
+          open={false}
+          mode="edit"
+          payment={makePayment({ id: 'p-1' })}
+          categories={DEFAULT_CATS}
+          onClose={() => {}}
+          onSaved={() => {}}
+        />,
+      );
+      expect(capturedSignal!.aborted).toBe(true);
+    });
   });
 });

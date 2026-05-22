@@ -622,6 +622,8 @@
       "cancel": "Cancel",
       "close": "Close",
       "saving": "Saving…",
+      "loading": "Loading payment…",
+      "loadError": "Could not refresh payment data. Showing the last known values.",
       "discardChanges": "Discard changes?",
       "discard": "Discard",
       "keepEditing": "Keep editing",

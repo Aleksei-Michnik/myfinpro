@@ -6,7 +6,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -20,7 +19,6 @@ import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { TokenService } from './services/token.service';
-import { clearAuthCookie, setAuthCookie } from './utils/auth-cookie';
 
 export interface GoogleProfile {
   googleId: string;
@@ -38,6 +36,27 @@ export interface TelegramProfile {
   photoUrl?: string;
 }
 
+/**
+ * Service-layer auth result. Carries both tokens to the controller, which
+ * is the only layer that touches `Response` (sets cookies + decides what
+ * to expose in the JSON body). Phase 6 · 6.18.1.4-hotfix moved all
+ * cookie writes out of the service so the service stays pure.
+ */
+export interface AuthTokensResult {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    defaultCurrency: string | null;
+    locale: string | null;
+    timezone: string | null;
+    emailVerified: boolean;
+    hasPassword: boolean;
+  };
+  accessToken: string;
+  refreshToken: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -52,7 +71,7 @@ export class AuthService {
     private readonly accountDeletionService: AccountDeletionService,
   ) {}
 
-  async register(dto: RegisterDto, response: Response, ip?: string, userAgent?: string) {
+  async register(dto: RegisterDto, ip?: string, userAgent?: string): Promise<AuthTokensResult> {
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -107,13 +126,6 @@ export class AuthService {
       },
     });
 
-    // Set refresh token as httpOnly cookie
-    this.tokenService.setRefreshTokenCookie(response, refreshToken);
-
-    // Phase 6 · 6.18.1.4 — also set the access-token cookie so the browser can
-    // open the SSE stream (EventSource cannot send Authorization headers).
-    setAuthCookie(response, accessToken);
-
     // Fire-and-forget: send verification email (don't let failure break registration)
     try {
       this.emailVerificationService
@@ -141,6 +153,7 @@ export class AuthService {
         hasPassword: user.passwordHash !== null,
       },
       accessToken,
+      refreshToken,
     };
   }
 
@@ -198,7 +211,7 @@ export class AuthService {
     return { ...result, hasPassword: passwordHash !== null };
   }
 
-  async login(user: ValidatedUser, response: Response, ip?: string, userAgent?: string) {
+  async login(user: ValidatedUser, ip?: string, userAgent?: string): Promise<AuthTokensResult> {
     // Update last login time
     await this.prisma.user.update({
       where: { id: user.id },
@@ -232,12 +245,6 @@ export class AuthService {
       },
     });
 
-    // Set refresh token as httpOnly cookie
-    this.tokenService.setRefreshTokenCookie(response, refreshToken);
-
-    // Phase 6 · 6.18.1.4 — access-token cookie for SSE.
-    setAuthCookie(response, accessToken);
-
     return {
       user: {
         id: user.id,
@@ -250,10 +257,15 @@ export class AuthService {
         hasPassword: user.hasPassword,
       },
       accessToken,
+      refreshToken,
     };
   }
 
-  async refreshTokens(refreshToken: string, response: Response, ip?: string, userAgent?: string) {
+  async refreshTokens(
+    refreshToken: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<AuthTokensResult> {
     // Rotate: validate old token, revoke it, create new one
     const { userId, newRefreshToken } = await this.refreshTokenService.rotateRefreshToken(
       refreshToken,
@@ -276,12 +288,6 @@ export class AuthService {
     // Generate new access token
     const accessToken = this.tokenService.generateAccessToken(user);
 
-    // Set new refresh token cookie
-    this.tokenService.setRefreshTokenCookie(response, newRefreshToken);
-
-    // Phase 6 · 6.18.1.4 — refresh the access-token cookie too.
-    setAuthCookie(response, accessToken);
-
     this.logger.log(`Tokens refreshed for user: ${user.email} (${user.id})`);
 
     return {
@@ -296,19 +302,16 @@ export class AuthService {
         hasPassword: user.passwordHash !== null,
       },
       accessToken,
+      refreshToken: newRefreshToken,
     };
   }
 
-  async logout(refreshToken: string, response: Response, userId?: string) {
+  async logout(refreshToken: string, userId?: string): Promise<{ message: string }> {
     // Revoke the refresh token in DB
-    const tokenHash = this.tokenService.hashToken(refreshToken);
-    await this.refreshTokenService.revokeToken(tokenHash);
-
-    // Clear the refresh token cookie
-    this.tokenService.clearRefreshTokenCookie(response);
-
-    // Phase 6 · 6.18.1.4 — clear the access-token cookie too.
-    clearAuthCookie(response);
+    if (refreshToken) {
+      const tokenHash = this.tokenService.hashToken(refreshToken);
+      await this.refreshTokenService.revokeToken(tokenHash);
+    }
 
     // Log audit event
     await this.prisma.auditLog.create({

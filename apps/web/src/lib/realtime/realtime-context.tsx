@@ -1,19 +1,23 @@
 'use client';
 
 // Phase 6 · Iteration 6.18.1.4 — RealtimeProvider.
+// Phase 6 · 6.18.1.4-hotfix — reconnect policy aligned with the auth
+// refresh path:
 //
-// Owns the single EventSource connection for the authenticated user and
-// fans events out to subscribers (`useRealtimeEvents`). The provider:
-//   1. Opens `/api/v1/events/stream` with `withCredentials: true` so the
-//      `access_token` cookie is sent. EventSource cannot set custom
-//      headers — the cookie is the auth channel.
-//   2. Reconnects with exponential backoff on errors (1s → 30s).
-//   3. Suspends the connection while `document.hidden`, resumes on
-//      visibility change. Page Visibility API saves a stream on every
-//      open background tab.
-//   4. Exposes `connectionStatus` for UI affordances.
+//   * After MAX_CONSECUTIVE_FAILURES (5) consecutive `onerror` events
+//     the provider stops retrying. The app stays usable via regular
+//     fetches; the SSE channel just goes silent until something
+//     re-mounts the provider or a token-refresh broadcast arrives.
 //
-// The provider is mounted only when authenticated (see [`apps/web/src/app/[locale]/layout.tsx`](../../app/%5Blocale%5D/layout.tsx)).
+//   * The provider listens on `BroadcastChannel('auth')` for
+//     `{ type: 'token-refreshed' }`. Receiving that message resets the
+//     failure counter and reconnects immediately — the cookie is fresh,
+//     so the next stream open should succeed.
+//
+//   * The provider does NOT call `/auth/refresh` itself. Refreshing is
+//     owned by `auth-context` (proactive interval) and the api-client
+//     401 interceptor (reactive). Keeping a single refresh path
+//     prevents double-refreshes / token reuse races.
 
 import {
   createContext,
@@ -25,12 +29,23 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {
+  AUTH_BROADCAST_CHANNEL,
+  TOKEN_REFRESHED_MESSAGE,
+  type AuthBroadcastMessage,
+} from '@/lib/api-client';
 import type { ConnectionStatus, RealtimeEvent } from './realtime-types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 const STREAM_URL = `${API_BASE}/events/stream`;
 const MIN_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
+/**
+ * After this many consecutive failures (without a successful `onopen`
+ * in between) the provider stops scheduling new reconnects. A
+ * `token-refreshed` broadcast resets the counter.
+ */
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 type Listener = (event: RealtimeEvent) => void;
 
@@ -54,6 +69,7 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef<number>(MIN_BACKOFF_MS);
+  const failureCountRef = useRef<number>(0);
 
   const subscribe = useCallback((listener: Listener) => {
     listenersRef.current.add(listener);
@@ -93,6 +109,7 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
 
     es.onopen = () => {
       backoffRef.current = MIN_BACKOFF_MS;
+      failureCountRef.current = 0;
       setStatus('connected');
     };
 
@@ -111,6 +128,17 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
       // status reflects reality and the timer is testable.
       es.close();
       sourceRef.current = null;
+
+      failureCountRef.current += 1;
+      // Stop retrying after the cap — we expect a token-refresh
+      // broadcast to bring us back. EventSource cannot expose the HTTP
+      // status of the failed request, so we use the failure count as a
+      // proxy for "the server keeps rejecting us, probably 401".
+      if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        setStatus('disconnected');
+        return;
+      }
+
       setStatus('reconnecting');
       const delay = backoffRef.current;
       backoffRef.current = Math.min(delay * 2, MAX_BACKOFF_MS);
@@ -121,11 +149,37 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
     };
   }, [dispatch]);
 
+  // Reconnect immediately on a cross-tab/intra-tab token-refresh
+  // broadcast. This is the *only* path that resets the failure counter
+  // automatically — without it, a session that hits the 5-failure cap
+  // would stay disconnected until the user navigated.
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return;
+
+    const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+    const onMessage = (ev: MessageEvent<AuthBroadcastMessage>) => {
+      if (ev.data?.type !== TOKEN_REFRESHED_MESSAGE) return;
+      // Token rotated — clear the cap and the pending backoff, then
+      // re-open with the fresh cookie.
+      failureCountRef.current = 0;
+      backoffRef.current = MIN_BACKOFF_MS;
+      close();
+      connect();
+    };
+    channel.addEventListener('message', onMessage);
+    return () => {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+    };
+  }, [enabled, close, connect]);
+
   // Lifecycle: start / stop based on `enabled` and document visibility.
   useEffect(() => {
     if (!enabled) {
       close();
       setStatus('disconnected');
+      failureCountRef.current = 0;
       return;
     }
 
@@ -135,6 +189,9 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
         close();
         setStatus('disconnected');
       } else {
+        // Resuming from a hidden tab is a fresh chance — reset the
+        // failure counter so the cap doesn't bite mid-session.
+        failureCountRef.current = 0;
         connect();
       }
     };
@@ -168,3 +225,6 @@ export function useRealtime(): RealtimeContextValue {
   }
   return ctx;
 }
+
+/** Test-only — mirror of the cap so the test file stays in sync. */
+export const MAX_CONSECUTIVE_FAILURES_FOR_TESTS = MAX_CONSECUTIVE_FAILURES;
