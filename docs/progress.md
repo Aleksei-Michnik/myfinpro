@@ -6781,3 +6781,199 @@ A live tab-A → tab-B schedule pause/resume verification was not browser-driven
 **Commits.** Feat: `d256af0`. CI run: [`26251081129`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081129) ✓ (2m05s). Deploy Staging: [`26251081174`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/26251081174) ✓ blue-green. Docs (this entry): `docs(phase-6.18.1.4.3)`.
 
 **Next** — 6.18.2 (lifecycle UI: pause / resume / cancel buttons on the schedule badge, posting to the just-wired endpoints; the realtime echo from this iteration means the local optimistic patch is now belt-and-braces).
+
+---
+
+## Phase 6 · 6.18.1.4-hotfix — Realtime cross-tab sync end-to-end (2026-06-12 / 2026-06-13)
+
+After 6.18.1.4 / 6.18.1.4.1 / 6.18.1.4.2 / 6.18.1.4.3 the realtime stack
+existed on paper — SSE infrastructure plus producers in payment, comment,
+schedule, and occurrence services — but staging smoke tests still showed
+zero cross-tab propagation. This hotfix iteration is the post-mortem +
+fixes that finally made it work end-to-end.
+
+### Phase A / B — auth and reconnect storm (commits `7cb7b4f` RCA,
+
+`a629b4a` fix, `a6fcf79` lint)
+
+**Symptoms.** Users were silently signed out after ~15 min on staging.
+Refreshing succeeded but the SSE connection went into a tight reconnect
+loop the moment the JWT expired — every tab's `EventSource` looped
+401 → close → reconnect → 401 dozens of times per minute. The edit
+dialog kept stale data after the user reopened it.
+
+**RCA.** Three coupled root causes documented in
+[`docs/phase-6.18.1.4-rca.md`](phase-6.18.1.4-rca.md):
+
+1. **No proactive refresh.** [`auth-context.tsx`](../apps/web/src/lib/auth/auth-context.tsx)
+   ran `silentRefresh` exactly once on mount; after the 15-min
+   access-token TTL elapsed every API call returned 401 with no
+   recovery. The api client wrapper had no 401 interceptor either.
+2. **Stale token in SSE.** Each tab opened its own `EventSource`. When
+   the cookie / token rolled over, SSE didn't know, so it reconnected
+   forever with the old credentials.
+3. **Edit-dialog cache.** The edit dialog captured the row at open
+   time; if another tab updated the same row, the dialog kept showing
+   the pre-update values until manually closed and reopened.
+
+**Fix (Phase B, commit `a629b4a`).**
+
+- Proactive token refresh on a 13-min interval (TTL minus headroom),
+  cancelable on logout.
+- 401-retry interceptor in `api-client.ts` that performs a single
+  silent refresh + retry per request before propagating the error.
+- Single-leader `BroadcastChannel('myfin-realtime')` in
+  [`realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx)
+  so only the most-recently-active tab holds an `EventSource` and
+  broadcasts a `reconnect` message after refresh; followers reopen
+  on hearing it. Fixed the storm at its source.
+- Edit dialog refetches the latest row on open via the standard
+  `useAsyncOperation` chokepoint.
+- Lint cleanup in commit `a6fcf79` — hoisted test-file imports and
+  dropped an unused `afterEach`.
+
+That landed and CI / Deploy Staging both went green.
+
+### Phase C2 — but cross-tab sync still didn't work (commit `4a72aec` RCA)
+
+Smoke tested it after Phase B: tab A creates a payment, tab B never
+sees it. Time to dig deeper. RCA documented in
+[`docs/phase-6.18.1.4-realtime-rca.md`](phase-6.18.1.4-realtime-rca.md).
+
+**Hypothesis disproved first.** Initial guess was "no producers wired"
+referencing the original 6.18.1.4 commit. Wrong: a `rg` for
+`eventBus.publish` in `apps/api/src` returned 6 producer sites
+covering every event type (payment, attribution, comment, schedule,
+occurrence). The audience-scoping helper
+[`computePaymentRecipients()`](../apps/api/src/payment/utils/payment-event-recipients.ts)
+correctly fans events to creator ∪ personal-attribution users ∪ every
+group-attribution member. Backend was fine.
+
+**Confirmed root causes (all frontend).**
+
+- **RC1 — Hidden tabs lose every event.** The visibility handler in
+  [`realtime-context.tsx`](../apps/web/src/lib/realtime/realtime-context.tsx:186)
+  deliberately closes the `EventSource` when `document.hidden` flips
+  true (battery / connection budget) and reconnects on refocus. The
+  in-memory rxjs `Subject` has no buffer and no `Last-Event-ID`
+  replay, so every event published while a tab was hidden is lost
+  forever. After refocus the tab stays stale until manually
+  refreshed.
+- **RC2 — Dashboard never subscribed.**
+  [`dashboard-client.tsx`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)
+  and its widgets only refreshed via the local `refreshKey` bumped
+  by quick-add. There was zero realtime subscription on the
+  dashboard. Creating a payment in another tab never reached it.
+- **RC3 — Network reconnect drops events** for the same no-replay
+  reason as RC1.
+
+### Phase D — fix (commits `6e86e58`, `ad907d8`)
+
+**Fix 1 — `resyncToken` chokepoint in realtime-context.**
+
+Added a `resyncToken: number` to `RealtimeContextValue`. Every time
+`onopen` fires after a previous close (visibility hidden→visible,
+error→backoff, broadcast-driven reconnect), we bump the token. Skipped
+on the first connection of a session (no gap to recover from).
+
+```ts
+// realtime-context.tsx
+const isReconnectAfterGap = hadStreamRef.current;
+hadStreamRef.current = true;
+es.onopen = () => {
+  if (isReconnectAfterGap) setResyncToken((t) => t + 1);
+  // …
+};
+```
+
+The token is the single chokepoint: every subscribed view rehydrates
+on the same signal instead of each shipping its own buffer. Per
+[`docs/ui-realtime-conventions.md`](ui-realtime-conventions.md)
+realtime is advisory — the refetch-on-reconnect is what makes it
+correct.
+
+**Fix 2 — shared `useRealtimeResync(refetch)` hook + 4 view migrations.**
+
+DRY: instead of copy-pasting "watch the token, refetch on change"
+four times, created
+[`apps/web/src/lib/realtime/use-realtime-resync.ts`](../apps/web/src/lib/realtime/use-realtime-resync.ts).
+Reads `RealtimeContext`, skips the first effect run (views own their
+initial fetch), runs the latest refetch ref on every later token
+change so there are no stale closures, and is a no-op when no
+provider is mounted (component-only tests).
+
+Wired into:
+
+- [`PaymentsList`](../apps/web/src/components/payment/PaymentsList.tsx) — calls its `fetchPage(true)` when not in orchestrator mode.
+- [`payments-list-client`](../apps/web/src/app/[locale]/payments/payments-list-client.tsx) — calls `commit(committedFiltersRef.current)` (orchestrator path).
+- [`payment-detail-client`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx) — calls `load()`.
+- [`PaymentCommentList`](../apps/web/src/components/payment/PaymentCommentList.tsx) — calls `load('initial')`.
+- [`RecurringOccurrencesSection`](../apps/web/src/components/payment/RecurringOccurrencesSection.tsx) — calls its loader via a ref.
+
+Refetches are inherently idempotent: first-page-from-server
+overwrites local state, so echoes of a tab's own mutations are
+harmless.
+
+**Fix 3 — Dashboard realtime subscription.**
+
+[`dashboard-client.tsx`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)
+subscribes once via `useRealtimeEvents` to the five payment-relevant
+event types: `payment.created`, `payment.updated`, `payment.deleted`,
+`payment_attribution.removed`, `occurrence.created`. Each event
+schedules a `refreshKey` bump after a 500 ms debounce, coalescing
+event bursts (e.g. cascade deletes) into a single refresh.
+`resyncToken` changes bump `refreshKey` immediately — gap recovery
+should be prompt, not delayed. Comment events explicitly do NOT
+trigger a dashboard refresh.
+
+**Docs.**
+[`docs/ui-realtime-conventions.md`](ui-realtime-conventions.md)
+gained a "Gap recovery — `resyncToken`" section documenting the
+contract: realtime is advisory; any reconnect-after-gap bumps the
+token; every subscribed view MUST refetch on token change. Also
+documented the dashboard 500 ms debounce policy.
+
+**Tests.**
+
+- **Realtime context**: 5 new cases proving `resyncToken` does NOT
+  bump on first connect, bumps on hidden→visible reconnect, on
+  error→backoff reconnect, on broadcast-driven reconnect, and stays
+  monotonic across multiple cycles.
+- **Shared hook**: 5 new cases — first-mount no-op (token 0 and
+  non-zero), refetch on increment, latest-ref usage (no stale
+  closure), no-op without provider.
+- **Dashboard**: 5 new cases — burst coalesces into one debounced
+  refresh, single payment event refreshes after 500 ms,
+  `occurrence.created` refreshes, comment events do NOT refresh,
+  `resyncToken` change refreshes immediately (and not via the
+  debounce timer).
+- **PaymentsList**: 2 new cases — refetches on resyncToken change in
+  self-fetch mode, does NOT self-refetch in orchestrator mode.
+
+Plus a follow-up in commit `ad907d8`: three pre-existing spec files
+(payment-detail, PaymentCommentList, RecurringOccurrencesSection)
+built `RealtimeContextValue` inline without `resyncToken`. Vitest
+doesn't typecheck spec files but `tsc --noEmit` does, so CI's
+typecheck step rejected the first push. Added `resyncToken: 0` to
+each inline value; types-only fix.
+
+**Final test counts**: web 1011/1011, api 792/792, all green.
+
+**Commits.**
+
+- `6e86e58` — `fix(phase-6.18.1.4-hotfix): resync-on-reconnect for realtime gaps + dashboard realtime subscription` (CI run [`27466017937`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/27466017937) ❌ — typecheck failure on three legacy spec files).
+- `ad907d8` — `fix(phase-6.18.1.4-hotfix): add resyncToken to remaining inline RealtimeContext values in test specs` (CI run [`27466592264`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/27466592264) ✅, Deploy Staging [`27466592254`](https://github.com/Aleksei-Michnik/myfinpro/actions/runs/27466592254) ✅ blue-green).
+
+**Constraints honoured.** Frontend-only — backend producers, EventBus,
+guard, and nginx all untouched. No new npm dependency. DRY: single
+gap-recovery chokepoint (`resyncToken`), single dashboard
+subscription chokepoint, shared hook instead of copy-paste. No
+product semantics changed — only made existing realtime actually
+deliver.
+
+**Phase 6 status: 19 / 21** (unchanged — this is a hotfix on top of
+6.18.1.4.3, not a new card; the realtime stack is now actually
+end-to-end functional).
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel buttons on
+the schedule badge).
