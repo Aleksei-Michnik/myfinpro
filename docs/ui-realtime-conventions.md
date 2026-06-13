@@ -108,6 +108,59 @@ disable proxy buffering — the URL itself is not special.
 - `connectionStatus` is exposed via `useRealtime()` for UI affordances
   (e.g. a subtle "reconnecting…" indicator). Don't gate any required
   workflow on `connected`.
+
+## Gap recovery — `resyncToken` (Phase 6 · 6.18.1.4-hotfix part 2)
+
+**The realtime channel is advisory.** The in-memory server bus has no
+buffer and no `Last-Event-ID` replay, so every event published while
+this tab's stream was closed (hidden tab, backoff window, broadcast
+reconnect) is **lost forever**. Without a recovery mechanism the
+close-on-hidden policy makes a backgrounded tab go silently stale.
+
+To make this correct, the provider exposes `resyncToken: number` on the
+context value. It increments on every **reconnect-after-gap** — i.e.,
+any `onopen` that follows a previously created EventSource (visibility
+hide→show, error→backoff reconnect, broadcast-driven reconnect). The
+very first open of a session does **not** bump (no gap to recover; the
+view has just fetched on mount).
+
+**Contract**: every view that subscribes to realtime events MUST refetch
+its data when `resyncToken` changes. Use the shared hook so it stays
+DRY:
+
+```tsx
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+
+useRealtimeResync(() => {
+  void load(); // your idempotent loader — overwrites local state
+});
+```
+
+Refetch-on-resync is inherently idempotent: it overwrites local state
+with server truth, so echoes of the tab's own mutations are harmless.
+
+The hook skips the very first effect run — views fetch on mount via
+their own effect, the hook only reacts to subsequent token changes.
+
+### Dashboard debounce policy
+
+The dashboard subscribes once at the top level
+([`apps/web/src/app/[locale]/dashboard/dashboard-client.tsx`](../apps/web/src/app/%5Blocale%5D/dashboard/dashboard-client.tsx))
+to the payment events that touch any of its widgets:
+
+- `payment.created`
+- `payment.updated`
+- `payment.deleted`
+- `payment_attribution.removed`
+- `occurrence.created`
+
+Each event schedules a `refreshKey` bump after a **500 ms** debounce
+window — a single edit on /payments typically emits update + attribution
+add + attribution remove, and we want one refresh, not three. The bump
+re-mounts every section so each widget re-fetches with its own existing
+loader. `resyncToken` changes also bump `refreshKey` (immediately, no
+debounce).
+
 - **Failure cap.** After **5 consecutive `error` events** (without a
   successful `open` in between) the provider stops scheduling reconnects
   and stays quiet. The app keeps working via regular HTTP fetches —

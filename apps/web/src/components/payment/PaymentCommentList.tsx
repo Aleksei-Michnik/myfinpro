@@ -20,6 +20,7 @@ import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { Comment, CommentListResponse } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentCommentListProps {
@@ -190,6 +191,15 @@ export const PaymentCommentList = forwardRef<PaymentCommentListHandle, PaymentCo
       // fetch are also filtered out below in `visible`, keeping the two
       // ingestion paths consistent.
       setItems((prev) => prev.filter((x) => x.id !== event.commentId));
+    });
+
+    // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. Refetch the
+    // first page on every realtime reconnect-after-gap. The 'initial'
+    // load replaces `items` with server truth, so any comment events
+    // missed during the gap (added/edited/deleted in another tab) are
+    // reconciled in one round-trip.
+    useRealtimeResync(() => {
+      void load('initial');
     });
 
     const beginEdit = (c: Comment) => {

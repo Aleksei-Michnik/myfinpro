@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentsList } from './PaymentsList';
 import { defaultFilters } from '@/lib/payment/filters';
 import type { PaymentSummary } from '@/lib/payment/types';
+import { RealtimeContext } from '@/lib/realtime/realtime-context';
 
 // jsdom does not apply Tailwind's `hidden md:block` / `md:hidden` responsive
 // rules, so both desktop and mobile variants render simultaneously. Always
@@ -419,5 +420,53 @@ describe('PaymentsList', () => {
     expect(mockRouterPush).toHaveBeenCalledTimes(1);
     const arg = mockRouterPush.mock.calls[0][0];
     expect(arg).toBe('/payments/abc-123');
+  });
+
+  // ── Phase 6 · 6.18.1.4-hotfix part 2 — gap recovery (resyncToken) ────────
+
+  it('refetches the first page when resyncToken changes (reconnect-after-gap)', async () => {
+    mockFetchList.mockResolvedValue(listResp([makePayment()]));
+    const ctxValue = (resyncToken: number) => ({
+      connectionStatus: 'connected' as const,
+      resyncToken,
+      subscribe: () => () => {},
+    });
+    const { rerender } = render(
+      <RealtimeContext.Provider value={ctxValue(0)}>
+        <PaymentsList showFilters={false} />
+      </RealtimeContext.Provider>,
+    );
+    await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <RealtimeContext.Provider value={ctxValue(1)}>
+        <PaymentsList showFilters={false} />
+      </RealtimeContext.Provider>,
+    );
+    await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(2));
+    // Resync is a reset fetch — first page, no cursor.
+    expect(mockFetchList.mock.calls[1][0].cursor).toBeUndefined();
+  });
+
+  it('does NOT self-refetch on resyncToken change in orchestrator mode', async () => {
+    mockFetchList.mockResolvedValue(listResp([]));
+    const ctxValue = (resyncToken: number) => ({
+      connectionStatus: 'connected' as const,
+      resyncToken,
+      subscribe: () => () => {},
+    });
+    const data = { rows: [makePayment()], cursor: null, hasMore: false };
+    const { rerender } = render(
+      <RealtimeContext.Provider value={ctxValue(0)}>
+        <PaymentsList showFilters={false} data={data} />
+      </RealtimeContext.Provider>,
+    );
+    rerender(
+      <RealtimeContext.Provider value={ctxValue(1)}>
+        <PaymentsList showFilters={false} data={data} />
+      </RealtimeContext.Provider>,
+    );
+    // The orchestrator owns the loader; the list must not fetch on its own.
+    expect(mockFetchList).not.toHaveBeenCalled();
   });
 });

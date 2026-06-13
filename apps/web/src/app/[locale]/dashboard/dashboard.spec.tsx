@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DashboardClient } from './dashboard-client';
 import DashboardPage from './page';
+import { RealtimeContext } from '@/lib/realtime/realtime-context';
 
 const mockPush = vi.fn();
 const totalsMounts = vi.fn();
@@ -153,5 +156,179 @@ describe('DashboardPage', () => {
   it('quick-add button receives onPaymentCreated handler from the parent', () => {
     render(<DashboardPage />);
     expect(savedHandler).not.toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6 · 6.18.1.4-hotfix part 2 — dashboard realtime subscription.
+// ─────────────────────────────────────────────────────────────────────
+
+type Listener = (event: { type: string; [k: string]: unknown }) => void;
+interface Controller {
+  emit: (event: { type: string; [k: string]: unknown }) => void;
+  setToken: (n: number) => void;
+}
+function makeController(): Controller {
+  return { emit: () => {}, setToken: () => {} };
+}
+
+function ProgrammableProvider({
+  initialToken = 0,
+  controllerRef,
+  children,
+}: {
+  initialToken?: number;
+  controllerRef: Controller;
+  children: ReactNode;
+}) {
+  const [token, setToken] = useState(initialToken);
+  const [listeners] = useState<Set<Listener>>(() => new Set());
+  controllerRef.emit = (event) => {
+    for (const l of listeners) l(event);
+  };
+  controllerRef.setToken = (n) => setToken(n);
+  return (
+    <RealtimeContext.Provider
+      value={{
+        connectionStatus: 'connected',
+        resyncToken: token,
+        subscribe: (l) => {
+          listeners.add(l as Listener);
+          return () => {
+            listeners.delete(l as Listener);
+          };
+        },
+      }}
+    >
+      {children}
+    </RealtimeContext.Provider>
+  );
+}
+
+describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix part 2)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    totalsMounts.mockClear();
+    scopesMounts.mockClear();
+    recentMounts.mockClear();
+    starredMounts.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('debounces a burst of payment events into a single refresh after 500 ms', () => {
+    const ctrl = makeController();
+    render(
+      <ProgrammableProvider controllerRef={ctrl}>
+        <DashboardClient />
+      </ProgrammableProvider>,
+    );
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      ctrl.emit({ type: 'payment.updated', payment: { id: 'p1' } });
+      ctrl.emit({ type: 'payment_attribution.removed', paymentId: 'p1' });
+      ctrl.emit({ type: 'payment.created', payment: { id: 'p1' } });
+    });
+    // Still no refresh until the debounce window elapses.
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(2);
+    expect(scopesMounts).toHaveBeenCalledTimes(2);
+    expect(recentMounts).toHaveBeenCalledTimes(2);
+    expect(starredMounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('a single payment.created event refreshes after the debounce window', () => {
+    const ctrl = makeController();
+    render(
+      <ProgrammableProvider controllerRef={ctrl}>
+        <DashboardClient />
+      </ProgrammableProvider>,
+    );
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      ctrl.emit({ type: 'payment.created', payment: { id: 'p1' } });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('occurrence.created bumps refreshKey (debounced)', () => {
+    const ctrl = makeController();
+    render(
+      <ProgrammableProvider controllerRef={ctrl}>
+        <DashboardClient />
+      </ProgrammableProvider>,
+    );
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      ctrl.emit({
+        type: 'occurrence.created',
+        parentPaymentId: 'p1',
+        payment: { id: 'p2' },
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('comment events do NOT refresh the dashboard', () => {
+    const ctrl = makeController();
+    render(
+      <ProgrammableProvider controllerRef={ctrl}>
+        <DashboardClient />
+      </ProgrammableProvider>,
+    );
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      ctrl.emit({ type: 'comment.created', paymentId: 'p1', comment: { id: 'c1' } });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+  });
+
+  it('resyncToken change bumps refreshKey immediately (no debounce)', () => {
+    const ctrl = makeController();
+    render(
+      <ProgrammableProvider initialToken={0} controllerRef={ctrl}>
+        <DashboardClient />
+      </ProgrammableProvider>,
+    );
+    expect(totalsMounts).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      ctrl.setToken(1);
+    });
+    // setToken re-renders the provider subtree (render 2), then the
+    // resync effect bumps refreshKey → key change remounts the widget
+    // (render 3). The remount is what matters: data is refetched.
+    expect(totalsMounts).toHaveBeenCalledTimes(3);
+
+    // No further refreshes without another token change — no debounce
+    // timer is involved in the resync path.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(totalsMounts).toHaveBeenCalledTimes(3);
   });
 });

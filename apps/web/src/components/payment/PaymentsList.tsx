@@ -37,6 +37,7 @@ import type {
   PaymentSummary,
 } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentsListData {
@@ -285,6 +286,15 @@ export function PaymentsList({
     if (isOrchestratorMode) return;
     void fetchPageRef.current(true);
   }, [filters, isOrchestratorMode]);
+
+  // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. On a realtime
+  // reconnect-after-gap the in-memory bus has no replay; refetch the
+  // first page to re-establish authoritative state. Orchestrator mode
+  // handles its own resync upstream (in payments-list-client).
+  useRealtimeResync(() => {
+    if (isOrchestratorMode) return;
+    void fetchPageRef.current(true);
+  });
 
   // ── Row interactions ──────────────────────────────────────────────────
 

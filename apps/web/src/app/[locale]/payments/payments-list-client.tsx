@@ -35,6 +35,7 @@ import {
 } from '@/lib/payment/filters';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { PaymentListResponse } from '@/lib/payment/types';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 const PAGE_LIMIT = 20;
@@ -151,6 +152,17 @@ export function PaymentsListClient() {
     setShowErrorDialog(false);
     if (noAccess) return;
     void commit(committedFilters);
+  });
+
+  // Phase 6 · 6.18.1.4-hotfix (part 2) — re-issue the committed fetch on
+  // every realtime reconnect-after-gap. Events published while this tab's
+  // SSE was down are lost (no server-side replay), so a full refetch is
+  // the only way to make the list authoritative again.
+  const committedFiltersRef = useRef(committedFilters);
+  committedFiltersRef.current = committedFilters;
+  useRealtimeResync(() => {
+    if (noAccess) return;
+    void commit(committedFiltersRef.current);
   });
 
   // ── Filter change handlers — all funnel into commit() ─────────────────

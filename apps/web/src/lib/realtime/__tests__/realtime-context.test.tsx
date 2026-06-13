@@ -43,12 +43,15 @@ class MockEventSource {
 function Probe({
   onStatus,
   onEvent,
+  onResync,
 }: {
   onStatus?: (s: ConnectionStatus) => void;
   onEvent?: (e: RealtimeEvent) => void;
+  onResync?: (token: number) => void;
 }) {
-  const { connectionStatus, subscribe } = useRealtime();
+  const { connectionStatus, subscribe, resyncToken } = useRealtime();
   if (onStatus) onStatus(connectionStatus);
+  if (onResync) onResync(resyncToken);
   // Subscribe once via a stable closure.
   if (onEvent) {
     // Subscribe on first render via a side effect-ish pattern (acceptable
@@ -270,5 +273,202 @@ describe('RealtimeProvider — reconnect policy (Phase 6 · 6.18.1.4-hotfix)', (
     } finally {
       global.BroadcastChannel = original;
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6 · 6.18.1.4-hotfix part 2 — resyncToken on reconnect-after-gap.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('RealtimeProvider — resyncToken (Phase 6 · 6.18.1.4-hotfix part 2)', () => {
+  let originalDescriptor: PropertyDescriptor | undefined;
+  let hidden = false;
+
+  beforeEach(() => {
+    MockEventSource.instances.length = 0;
+    (Probe as unknown as { _subbed?: boolean })._subbed = false;
+    vi.useFakeTimers();
+    (globalThis as unknown as { EventSource: typeof MockEventSource }).EventSource =
+      MockEventSource;
+    // Override `document.hidden` so the visibility handler can simulate
+    // hide/show transitions deterministically.
+    hidden = false;
+    originalDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden');
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as unknown as { EventSource?: unknown }).EventSource;
+    if (originalDescriptor) {
+      Object.defineProperty(Document.prototype, 'hidden', originalDescriptor);
+    } else {
+      // jsdom owns the original descriptor on the prototype; deleting our
+      // override falls through to it.
+      delete (document as unknown as { hidden?: boolean }).hidden;
+    }
+  });
+
+  function emitVisibilityChange() {
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  it('does NOT bump resyncToken on the very first connect', () => {
+    const tokens: number[] = [];
+    render(
+      <RealtimeProvider enabled>
+        <Probe onResync={(t) => tokens.push(t)} />
+      </RealtimeProvider>,
+    );
+    expect(MockEventSource.instances).toHaveLength(1);
+    act(() => {
+      MockEventSource.instances[0]!.emitOpen();
+    });
+    // Initial open observed; never bumped past 0.
+    expect(tokens.every((t) => t === 0)).toBe(true);
+  });
+
+  it('bumps resyncToken on hidden→visible reconnect', () => {
+    const tokens: number[] = [];
+    render(
+      <RealtimeProvider enabled>
+        <Probe onResync={(t) => tokens.push(t)} />
+      </RealtimeProvider>,
+    );
+    expect(MockEventSource.instances).toHaveLength(1);
+    act(() => {
+      MockEventSource.instances[0]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(0);
+
+    // Hide the tab → close the stream.
+    hidden = true;
+    act(() => {
+      emitVisibilityChange();
+    });
+    expect(MockEventSource.instances[0]!.closed).toBe(true);
+
+    // Re-show → reconnect; new EventSource opens.
+    hidden = false;
+    act(() => {
+      emitVisibilityChange();
+    });
+    expect(MockEventSource.instances).toHaveLength(2);
+    act(() => {
+      MockEventSource.instances[1]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(1);
+  });
+
+  it('bumps resyncToken on error→backoff reconnect', () => {
+    const tokens: number[] = [];
+    render(
+      <RealtimeProvider enabled>
+        <Probe onResync={(t) => tokens.push(t)} />
+      </RealtimeProvider>,
+    );
+    act(() => {
+      MockEventSource.instances[0]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(0);
+
+    act(() => {
+      MockEventSource.instances[0]!.emitError();
+    });
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(MockEventSource.instances).toHaveLength(2);
+    act(() => {
+      MockEventSource.instances[1]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(1);
+  });
+
+  it('bumps resyncToken on a token-refreshed broadcast reconnect', () => {
+    const listeners = new Set<(ev: MessageEvent) => void>();
+    class TestChannel {
+      addEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.add(fn);
+      }
+      removeEventListener(_t: string, fn: (ev: MessageEvent) => void) {
+        listeners.delete(fn);
+      }
+      postMessage(_d: unknown) {}
+      close() {}
+    }
+    const original = global.BroadcastChannel;
+    global.BroadcastChannel = TestChannel as unknown as typeof BroadcastChannel;
+    try {
+      const tokens: number[] = [];
+      render(
+        <RealtimeProvider enabled>
+          <Probe onResync={(t) => tokens.push(t)} />
+        </RealtimeProvider>,
+      );
+      act(() => {
+        MockEventSource.instances[0]!.emitOpen();
+      });
+      expect(tokens[tokens.length - 1]).toBe(0);
+
+      act(() => {
+        for (const fn of listeners) {
+          fn({
+            data: { type: TOKEN_REFRESHED_MESSAGE, accessToken: 'fresh' },
+          } as MessageEvent);
+        }
+      });
+      expect(MockEventSource.instances).toHaveLength(2);
+      act(() => {
+        MockEventSource.instances[1]!.emitOpen();
+      });
+      expect(tokens[tokens.length - 1]).toBe(1);
+    } finally {
+      global.BroadcastChannel = original;
+    }
+  });
+
+  it('bumps resyncToken once per reconnect cycle (multiple cycles → monotonically increasing)', () => {
+    const tokens: number[] = [];
+    render(
+      <RealtimeProvider enabled>
+        <Probe onResync={(t) => tokens.push(t)} />
+      </RealtimeProvider>,
+    );
+    act(() => {
+      MockEventSource.instances[0]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(0);
+
+    // Cycle 1: hide → show.
+    hidden = true;
+    act(() => {
+      emitVisibilityChange();
+    });
+    hidden = false;
+    act(() => {
+      emitVisibilityChange();
+    });
+    act(() => {
+      MockEventSource.instances[1]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(1);
+
+    // Cycle 2.
+    hidden = true;
+    act(() => {
+      emitVisibilityChange();
+    });
+    hidden = false;
+    act(() => {
+      emitVisibilityChange();
+    });
+    act(() => {
+      MockEventSource.instances[2]!.emitOpen();
+    });
+    expect(tokens[tokens.length - 1]).toBe(2);
   });
 });

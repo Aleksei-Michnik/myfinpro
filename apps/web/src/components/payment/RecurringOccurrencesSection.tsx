@@ -23,6 +23,7 @@ import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { PaymentListResponse, PaymentSummary } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface RecurringOccurrencesSectionProps {
@@ -80,6 +81,13 @@ export function RecurringOccurrencesSection({ paymentId }: RecurringOccurrencesS
     setItems((prev) =>
       prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
     );
+  });
+
+  // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. On a realtime
+  // reconnect-after-gap, refetch the first page so any occurrences
+  // created while we were disconnected are reconciled with server truth.
+  useRealtimeResync(() => {
+    void loadRef.current();
   });
 
   const data: PaymentsListData = { rows: items, cursor, hasMore };

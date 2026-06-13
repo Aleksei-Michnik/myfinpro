@@ -18,6 +18,19 @@
 //     owned by `auth-context` (proactive interval) and the api-client
 //     401 interceptor (reactive). Keeping a single refresh path
 //     prevents double-refreshes / token reuse races.
+//
+// Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery via `resyncToken`:
+//
+//   The SSE channel is live-only: the in-memory server bus has no buffer
+//   and no `Last-Event-ID` replay, so every event published while this
+//   tab's stream was closed (hidden tab, backoff window, broadcast-driven
+//   reconnect) is lost forever. To make the close-on-hidden policy
+//   correct, the provider exposes `resyncToken` — a counter bumped on
+//   every reconnect-after-gap (an `onopen` that follows a previously
+//   created EventSource). Subscribed views MUST refetch their data when
+//   the token changes (see `useRealtimeResync`). The very first open of
+//   a session does not bump — there is no gap to recover and views have
+//   just fetched on mount.
 
 import {
   createContext,
@@ -51,6 +64,13 @@ type Listener = (event: RealtimeEvent) => void;
 
 interface RealtimeContextValue {
   connectionStatus: ConnectionStatus;
+  /**
+   * Increments on every reconnect-after-gap (an `onopen` following a
+   * previously created EventSource). Stays 0 until the first gap.
+   * Subscribed views MUST refetch their data when this changes — events
+   * published while the stream was down are lost (no server-side replay).
+   */
+  resyncToken: number;
   /** Subscribe to every event on the stream. Returns an unsubscribe fn. */
   subscribe(listener: Listener): () => void;
 }
@@ -65,11 +85,16 @@ export interface RealtimeProviderProps {
 
 export function RealtimeProvider({ children, enabled = true }: RealtimeProviderProps) {
   const [connectionStatus, setStatus] = useState<ConnectionStatus>('disconnected');
+  const [resyncToken, setResyncToken] = useState(0);
   const listenersRef = useRef(new Set<Listener>());
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef<number>(MIN_BACKOFF_MS);
   const failureCountRef = useRef<number>(0);
+  // True once any EventSource has been created this session. Used to tell
+  // a first connect (no gap — don't bump resyncToken) from a reconnect
+  // after the previous stream was torn down (gap — bump on open).
+  const hadStreamRef = useRef(false);
 
   const subscribe = useCallback((listener: Listener) => {
     listenersRef.current.add(listener);
@@ -104,12 +129,21 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
     if (sourceRef.current) return;
     setStatus((prev) => (prev === 'connected' ? prev : 'reconnecting'));
 
+    // Any EventSource created after a previous one existed means events
+    // may have been published into the gap — flag it so `onopen` bumps
+    // `resyncToken` and subscribed views refetch.
+    const isReconnectAfterGap = hadStreamRef.current;
+    hadStreamRef.current = true;
+
     const es = new EventSource(STREAM_URL, { withCredentials: true });
     sourceRef.current = es;
 
     es.onopen = () => {
       backoffRef.current = MIN_BACKOFF_MS;
       failureCountRef.current = 0;
+      if (isReconnectAfterGap) {
+        setResyncToken((t) => t + 1);
+      }
       setStatus('connected');
     };
 
@@ -180,6 +214,9 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
       close();
       setStatus('disconnected');
       failureCountRef.current = 0;
+      // A disabled provider (logged out) starts a fresh session on
+      // re-enable — its first open is not a gap to recover.
+      hadStreamRef.current = false;
       return;
     }
 
@@ -211,8 +248,8 @@ export function RealtimeProvider({ children, enabled = true }: RealtimeProviderP
   }, [enabled, connect, close]);
 
   const value = useMemo<RealtimeContextValue>(
-    () => ({ connectionStatus, subscribe }),
-    [connectionStatus, subscribe],
+    () => ({ connectionStatus, resyncToken, subscribe }),
+    [connectionStatus, resyncToken, subscribe],
   );
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;

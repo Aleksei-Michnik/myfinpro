@@ -32,6 +32,7 @@ import type {
   ScheduleResponse,
 } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 interface PaymentDetailClientProps {
@@ -104,6 +105,15 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   // (en ↔ he) and re-fetch quietly so we don't briefly flash a "no access"
   // error from the previous render.
   useResetOnLocaleChange(() => {
+    void load();
+  });
+
+  // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. Refetch the payment
+  // (and, transitively via the schedule effect, its schedule) on every
+  // realtime reconnect-after-gap. A 404 inside `load()` already becomes
+  // an error state with a friendly "not found" branch — no extra wiring
+  // needed here.
+  useRealtimeResync(() => {
     void load();
   });
 
