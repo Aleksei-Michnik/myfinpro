@@ -38,7 +38,7 @@ function makeRealtimeHarness() {
     for (const l of listeners) l(event);
   };
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+    <RealtimeContext.Provider value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}>
       {children}
     </RealtimeContext.Provider>
   );

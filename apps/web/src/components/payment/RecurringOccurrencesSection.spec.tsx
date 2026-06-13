@@ -234,7 +234,9 @@ describe('RecurringOccurrencesSection', () => {
     };
 
     render(
-      <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+      <RealtimeContext.Provider
+        value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
+      >
         <RecurringOccurrencesSection paymentId="parent-1" />
       </RealtimeContext.Provider>,
     );
@@ -276,7 +278,9 @@ describe('RecurringOccurrencesSection', () => {
     };
 
     render(
-      <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+      <RealtimeContext.Provider
+        value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
+      >
         <RecurringOccurrencesSection paymentId="parent-1" />
       </RealtimeContext.Provider>,
     );

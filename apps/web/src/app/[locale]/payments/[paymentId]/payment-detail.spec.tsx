@@ -416,7 +416,9 @@ describe('PaymentDetailClient', () => {
         };
       };
       const utils = render(
-        <RealtimeContext.Provider value={{ connectionStatus: 'connected', subscribe }}>
+        <RealtimeContext.Provider
+          value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
+        >
           <PaymentDetailClient paymentId="p-1" />
         </RealtimeContext.Provider>,
       );
