@@ -7046,3 +7046,48 @@ lifecycle UI, 6.19/6.20 plans, 6.21 closing pass).
 
 **Next** — 6.18.2 (lifecycle UI: pause / resume / cancel on the schedule
 badge/detail page, posting to the endpoints wired in 6.17.4).
+
+---
+
+## Phase 6 · Iteration 6.18.2 — Schedule lifecycle UI: pause / resume / cancel (2026-07-04)
+
+**Goal.** Surface the lifecycle endpoints wired in 6.17.4 (pause / resume /
+cancel + BullMQ mirror + realtime events from 6.18.1.4.3) as buttons on the
+schedule badge, closing the recurring-payments UI loop.
+
+### What shipped
+
+- **[`payment-context`](../apps/web/src/lib/payment/payment-context.tsx)** —
+  `pauseSchedule` / `resumeSchedule` / `cancelSchedule`, funnelled through a
+  single `POST /payments/:id/schedule/<action>` helper (DRY), each returning
+  the authoritative `ScheduleResponse`.
+- **[`ScheduleBadge`](../apps/web/src/components/payment/ScheduleBadge.tsx)** —
+  stays presentational. New props: `canManage` (creator-only, mirroring
+  `PaymentDetailHeader` edit gating), `pending`, `onPause/onResume/onCancel`.
+  Active → Pause + Cancel; paused → Resume + Cancel; cancelled → terminal,
+  no actions row. Cancel goes through an inline two-step confirm
+  (`cancel → "permanently?" → Yes / Keep`) since the API treats cancellation
+  as terminal (409 on any transition out).
+- **[`payment-detail-client`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx)** —
+  control-scope `useAsyncOperation` per action; response replaces `schedule`
+  state directly (the realtime echo is belt-and-braces for other tabs);
+  success toast per action; failures (409 races, network) surface an error
+  toast and leave local state for the echo to correct.
+- **i18n** — 10 new `payments.schedule.badge.*` keys in EN + HE.
+
+### Tests
+
+- `ScheduleBadge.spec` +7: no row without `canManage`, per-status buttons,
+  two-step cancel, Keep dismissal, pending disables. 15 total.
+- `payment-detail.spec` +6: pause/resume/cancel happy paths incl. toasts and
+  badge state, non-creator sees no actions, failed action toasts an error
+  and preserves state. 35 total.
+- Web suite **1041 green**; typecheck + lint clean.
+
+**Commits.** Feat: `476ac33`.
+
+**Phase 6 status: 20 / 21 cards in flight** — remaining: 6.19/6.20 (plans +
+amortisation), 6.21 (closing pass; production merge deliberately held for
+manual trigger).
+
+**Next** — 6.19 (Plans API + amortisation util).
