@@ -6981,3 +6981,68 @@ end-to-end functional).
 
 **Next** — 6.18.2 (lifecycle UI: pause / resume / cancel buttons on
 the schedule badge).
+
+---
+
+## Phase 6 · Sub-iteration 6.18.1.5 — Cascade edit for recurring parents (2026-07-03)
+
+**Goal.** Editing a RECURRING parent's non-period fields (amount, currency,
+category, note, direction, attributions) should optionally propagate to its
+already-generated child occurrences instead of silently diverging from them.
+
+### API
+
+`PATCH /payments/:id?propagate=self|future|all` (new
+[`UpdatePaymentQueryDto`](../apps/api/src/payment/dto/update-payment.query.dto.ts)).
+`self` preserves the existing single-row semantics; `future` applies the
+diff to children with `occurredAt >= now`; `all` to every child. The whole
+cascade runs in one transaction. Children carrying an attribution to a
+group the editor does not control are **skipped, not failed** — the response
+envelope ([`CascadeEditResponseDto`](../apps/api/src/payment/dto/cascade-edit-response.dto.ts))
+reports `{ payment, affectedChildrenCount, skippedChildrenCount }` so the
+UI can be honest about partial reach.
+
+### Web
+
+- Opening the edit dialog for a RECURRING parent probes `listOccurrences(id, { limit: 1 })`
+  to learn whether children exist (presence only; counts come from the
+  cascade response).
+- On save, if the validated diff touches a cascadeable field and children
+  exist, the submit is stashed and
+  [`PropagationChoiceDialog`](../apps/web/src/components/payment/PropagationChoiceDialog.tsx)
+  opens: self / future / all radio choice, ESC + backdrop cancel, pending
+  spinner, forward-looking `destructive` prop for 6.18.1.5.2 (period-change
+  regeneration warnings).
+- Confirm submits through a dedicated `cascadeOp` (`useAsyncOperation`,
+  control scope) → `editPaymentWithPropagation()` in
+  [`payment-context`](../apps/web/src/lib/payment/payment-context.tsx).
+  Success surfaces a success toast with the affected-children count and, when
+  `skippedChildrenCount > 0`, a second info toast.
+- `occurredAt` and `type` changes are deliberately **not** cascadeable —
+  period/schedule editing stays parent-only until 6.18.2 — so they bypass
+  the dialog.
+
+### Tests
+
+- **API**: payment service + controller unit specs extended to 202 tests
+  (propagate parsing, per-mode child selection, skip semantics, transaction
+  envelope); new 5-case Testcontainers integration spec
+  ([`payments-cascade-edit`](../apps/api/test/integration/payments-cascade-edit.integration.spec.ts))
+  exercising self/future/all against real MySQL incl. the skipped-group case.
+- **Web**: `PaymentFormDialog.spec` gained the Toast-module mock (the new
+  `useToast` call had broken all 39 renders) + 7 propagation cases
+  (dialog-open gating, mode submission, skip toast, cancel-returns-to-form,
+  occurredAt bypass, no-children direct save, ONE_TIME never probes).
+  New 10-case `PropagationChoiceDialog.spec`. `PaymentsList.spec` gained the
+  same Toast mock (it mounts the form dialog on Add/Edit).
+- Full suites green: **api 815 unit + 5 integration, web 1028**. Not
+  browser-verified in this iteration; contract surfaces are covered by the
+  integration spec (real DB) and component specs on both sides of the seam.
+
+**Commits.** Feat: `e193562`.
+
+**Phase 6 status: 19 / 21** (sub-iteration of 6.18; remaining: 6.18.2
+lifecycle UI, 6.19/6.20 plans, 6.21 closing pass).
+
+**Next** — 6.18.2 (lifecycle UI: pause / resume / cancel on the schedule
+badge/detail page, posting to the endpoints wired in 6.17.4).
