@@ -604,6 +604,29 @@
       "deleted": "Payment removed.",
       "deletedFromScope": "Removed from {scope}."
     },
+    "propagate": {
+      "title": "Apply changes to occurrences?",
+      "description": "This recurring payment has generated occurrences. Choose how far this change should reach.",
+      "destructiveWarning": "This change rebuilds future occurrences and may discard their comments and attachments.",
+      "mode": {
+        "self": {
+          "label": "This payment only",
+          "description": "Update just this recurring payment. Occurrences stay as they are."
+        },
+        "future": {
+          "label": "This and future occurrences",
+          "description": "Update this payment and every occurrence dated from now onward."
+        },
+        "all": {
+          "label": "All occurrences",
+          "description": "Update this payment and every occurrence, past and future."
+        }
+      },
+      "confirm": "Apply",
+      "cancel": "Cancel",
+      "resultUpdated": "Updated payment and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
+      "resultSkipped": "{count, plural, =1 {# occurrence in a group you don't manage was} other {# occurrences in groups you don't manage were}} left unchanged."
+    },
     "form": {
       "createTitle": "Add payment",
       "editTitle": "Edit payment",

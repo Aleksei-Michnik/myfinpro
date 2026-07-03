@@ -22,9 +22,11 @@ import {
 } from './PaymentScheduleSubForm';
 import { PaymentScopeSelector } from './PaymentScopeSelector';
 import { PaymentTypeSelector } from './PaymentTypeSelector';
+import { PropagationChoiceDialog } from './PropagationChoiceDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
@@ -37,9 +39,11 @@ import {
 } from '@/lib/payment/remember';
 import type {
   AttributionScope,
+  CascadeEditResult,
   CategoryDto,
   CreatePaymentInput,
   PaymentDirection,
+  PaymentPropagateMode,
   PaymentSummary,
   PaymentType,
   ScheduleResponse,
@@ -247,15 +251,19 @@ export function PaymentFormDialog({
   const tValidation = useTranslations('payments.form.validation');
   const tSchedule = useTranslations('payments.schedule.form');
   const tScheduleValidation = useTranslations('payments.schedule.form.validation');
+  const tPropagate = useTranslations('payments.propagate');
+  const { addToast } = useToast();
   const { user } = useAuth();
   const { groups } = useGroups();
   const {
     createPayment,
     updatePayment,
+    editPaymentWithPropagation,
     removePayment,
     createSchedule,
     replaceSchedule,
     getPayment,
+    listOccurrences,
   } = usePayments();
 
   // Phase 6 · 6.18.1.4-hotfix — refetch the freshest copy of the payment
@@ -315,7 +323,21 @@ export function PaymentFormDialog({
 
   // Save flow runs through the universal control-scope async hook.
   const saveOp = useAsyncOperation<PaymentSummary | null>({ scope: 'control' });
-  const isLoading = saveOp.isLoading;
+  // Cascade-edit flow (Phase 6 · 6.18.1.5) — its own control-scope op so the
+  // confirm spinner in <PropagationChoiceDialog> is independent of saveOp.
+  const cascadeOp = useAsyncOperation<CascadeEditResult>({ scope: 'control' });
+  const isLoading = saveOp.isLoading || cascadeOp.isLoading;
+
+  // Whether the parent (edit mode, RECURRING) has ≥1 child occurrence. Drives
+  // the decision to show <PropagationChoiceDialog> on save.
+  const [hasChildren, setHasChildren] = useState(false);
+  const [showPropagation, setShowPropagation] = useState(false);
+  // The validated edit payload, stashed while the propagation dialog is open.
+  const pendingEditRef = useRef<{
+    diff: UpdatePaymentInput;
+    scheduleBuild: ReturnType<typeof buildScheduleSpec> | null;
+    willBeRecurring: boolean;
+  } | null>(null);
 
   // Reset when reopened.
   useEffect(() => {
@@ -351,6 +373,32 @@ export function PaymentFormDialog({
     // refetchOp / getPayment identities are stable; the only dependencies
     // that should re-fire the fetch are open / mode / payment.id.
   }, [open, mode, payment?.id]);
+
+  // Phase 6 · 6.18.1.5 — detect whether a RECURRING parent has ≥1 child
+  // occurrence. Drives whether Save opens the propagation dialog. Probe with
+  // limit=1 (we only need presence; the exact counts come from the cascade
+  // response). Non-recurring payments never have children → skip.
+  useEffect(() => {
+    if (!open || mode !== 'edit' || !payment) {
+      setHasChildren(false);
+      return;
+    }
+    if (payment.type !== 'RECURRING') {
+      setHasChildren(false);
+      return;
+    }
+    let cancelled = false;
+    void listOccurrences(payment.id, { limit: 1 })
+      .then((res) => {
+        if (!cancelled) setHasChildren(res.data.length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setHasChildren(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mode, payment?.id, payment?.type, listOccurrences]);
 
   // Focus direction button on open.
   const directionRef = useRef<HTMLButtonElement | null>(null);
@@ -516,6 +564,29 @@ export function PaymentFormDialog({
     if (!ok) return;
     if (willBeRecurring && scheduleBuild && !scheduleBuild.ok) return;
 
+    // Phase 6 · 6.18.1.5 — when editing a RECURRING parent that has children,
+    // and the diff touches a cascadeable non-period field, defer the submit
+    // and open <PropagationChoiceDialog> so the user picks self/future/all.
+    // occurredAt and type are NOT cascadeable (period/schedule stays read-only,
+    // deferred to 6.18.2), so they don't trigger the dialog on their own.
+    if (mode === 'edit' && effectivePayment) {
+      const diff = computeDiff(effectivePayment, state, amountCents, occurredAtIso);
+      const isTypeChange =
+        state.type !== effectivePayment.type &&
+        (state.type === 'ONE_TIME' || state.type === 'RECURRING');
+      if (isTypeChange) diff.type = state.type as 'ONE_TIME' | 'RECURRING';
+      const isRecurringParent =
+        effectivePayment.type === 'RECURRING' && state.type === 'RECURRING';
+      const cascadeableKeys = Object.keys(diff).filter(
+        (k) => k !== 'occurredAt' && k !== 'type',
+      );
+      if (isRecurringParent && hasChildren && cascadeableKeys.length > 0) {
+        pendingEditRef.current = { diff, scheduleBuild, willBeRecurring };
+        setShowPropagation(true);
+        return;
+      }
+    }
+
     void saveOp
       .run(async (signal) => {
         try {
@@ -599,6 +670,56 @@ export function PaymentFormDialog({
         onSaved(result);
         onClose();
       });
+  }
+
+  // Phase 6 · 6.18.1.5 — submit the stashed edit with the chosen propagation
+  // mode. Runs through the dedicated cascadeOp (control scope). On success a
+  // result toast summarises the affected + skipped child counts.
+  function submitWithPropagation(propagate: PaymentPropagateMode) {
+    const pending = pendingEditRef.current;
+    if (!pending || !effectivePayment) return;
+    void cascadeOp
+      .run(async (signal) => {
+        try {
+          const result = await editPaymentWithPropagation(
+            effectivePayment.id,
+            pending.diff,
+            propagate,
+            signal,
+          );
+          // Schedule editing stays on the parent only (untouched here; the
+          // period spec is deferred to 6.18.2). Replace it if the sub-form
+          // produced a new spec.
+          if (pending.willBeRecurring && pending.scheduleBuild) {
+            await replaceSchedule(result.payment.id, pending.scheduleBuild.spec, signal);
+          }
+          return result;
+        } catch (e) {
+          if (applyDomainError(e)) {
+            throw new DOMException('domain', 'AbortError');
+          }
+          throw e;
+        }
+      })
+      .then((result) => {
+        if (result === undefined) return; // error / abort / domain-error
+        addToast('success', tPropagate('resultUpdated', { count: result.affectedChildrenCount }));
+        if (result.skippedChildrenCount > 0) {
+          addToast('info', tPropagate('resultSkipped', { count: result.skippedChildrenCount }));
+        }
+        pendingEditRef.current = null;
+        setShowPropagation(false);
+        onSaved(result.payment);
+        onClose();
+      });
+  }
+
+  // Cancel the propagation dialog: abort the in-flight cascade (if any) and
+  // return to the form with the user's edits intact (form state untouched).
+  function cancelPropagation() {
+    cascadeOp.cancel();
+    pendingEditRef.current = null;
+    setShowPropagation(false);
   }
 
   function handleCancel() {
@@ -1031,6 +1152,18 @@ export function PaymentFormDialog({
           </div>
         )}
       </div>
+
+      {/* Phase 6 · 6.18.1.5 — propagation choice for RECURRING-parent edits
+          with children. Non-period edits are non-destructive this iteration,
+          so `destructive` stays false (the warning block is reserved for the
+          period-change regenerate path in 6.18.1.5.2). */}
+      <PropagationChoiceDialog
+        open={showPropagation}
+        destructive={false}
+        pending={cascadeOp.isLoading}
+        onConfirm={submitWithPropagation}
+        onCancel={cancelPropagation}
+      />
     </div>
   );
 }

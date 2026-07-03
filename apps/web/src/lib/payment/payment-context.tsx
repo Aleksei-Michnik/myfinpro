@@ -9,6 +9,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {
   AttributionChangeResult,
+  CascadeEditResult,
   CategoryDto,
   Comment,
   CommentListResponse,
@@ -18,6 +19,7 @@ import type {
   ListOccurrencesParams,
   ListPaymentsParams,
   PaymentListResponse,
+  PaymentPropagateMode,
   PaymentSummary,
   ScheduleResponse,
   ScheduleSpec,
@@ -42,6 +44,18 @@ interface PaymentContextValue {
     input: UpdatePaymentInput,
     signal?: AbortSignal,
   ): Promise<PaymentSummary | null>;
+  /**
+   * Iteration 6.18.1.5 — edit a RECURRING parent's non-period fields and
+   * cascade the deltas to its child occurrences per `propagate`. Returns the
+   * cascade-edit envelope (updated parent + affected/skipped child counts).
+   * For `self` the parent is edited with zero children touched.
+   */
+  editPaymentWithPropagation(
+    id: string,
+    input: UpdatePaymentInput,
+    propagate: PaymentPropagateMode,
+    signal?: AbortSignal,
+  ): Promise<CascadeEditResult>;
   removePayment(id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult>;
   toggleStar(id: string, signal?: AbortSignal): Promise<ToggleStarResult>;
 
@@ -255,6 +269,27 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const editPaymentWithPropagation = useCallback(
+    (
+      id: string,
+      input: UpdatePaymentInput,
+      propagate: PaymentPropagateMode,
+      signal?: AbortSignal,
+    ): Promise<CascadeEditResult> =>
+      run(async () => {
+        const qs = buildQuery({ propagate });
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}${qs}`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to update payment');
+        return (await res.json()) as CascadeEditResult;
+      }),
+    [authHeaders, run],
+  );
+
   const removePayment = useCallback(
     (id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult> =>
       run(async () => {
@@ -459,6 +494,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       getPayment,
       createPayment,
       updatePayment,
+      editPaymentWithPropagation,
       removePayment,
       toggleStar,
       listOccurrences,
@@ -480,6 +516,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       getPayment,
       createPayment,
       updatePayment,
+      editPaymentWithPropagation,
       removePayment,
       toggleStar,
       listOccurrences,

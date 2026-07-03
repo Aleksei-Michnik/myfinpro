@@ -6,12 +6,15 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import type { Response } from 'express';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { UpdatePaymentQueryDto } from './dto/update-payment.query.dto';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 
@@ -34,6 +37,7 @@ describe('PaymentController', () => {
     list: jest.fn(),
     findByIdForUser: jest.fn(),
     update: jest.fn(),
+    editPaymentWithPropagation: jest.fn(),
     remove: jest.fn(),
     toggleStar: jest.fn(),
   };
@@ -218,22 +222,69 @@ describe('PaymentController', () => {
 
   describe('update()', () => {
     const updateDto: UpdatePaymentDto = { note: 'updated' };
+    const noProp: UpdatePaymentQueryDto = {};
 
-    it('delegates to service.update with user.sub + id + dto', async () => {
+    it('propagate OMITTED → legacy single-edit path (service.update, back-compat)', async () => {
       const payload = { id: 'pay-1', note: 'updated' };
       serviceMock.update.mockResolvedValue(payload);
       const res = makeResMock();
 
-      const r = await controller.update(user, 'pay-1', updateDto, res);
+      const r = await controller.update(user, 'pay-1', updateDto, noProp, res);
 
       expect(serviceMock.update).toHaveBeenCalledWith('user-1', 'pay-1', updateDto);
+      expect(serviceMock.editPaymentWithPropagation).not.toHaveBeenCalled();
       expect(r).toBe(payload);
     });
+
+    it('explicit propagate=self routes to editPaymentWithPropagation (permits RECURRING parents)', async () => {
+      const envelope = {
+        payment: { id: 'pay-1' },
+        affectedChildrenCount: 0,
+        skippedChildrenCount: 0,
+      };
+      serviceMock.editPaymentWithPropagation.mockResolvedValue(envelope);
+      const res = makeResMock();
+
+      const r = await controller.update(user, 'pay-1', updateDto, { propagate: 'self' }, res);
+
+      expect(serviceMock.editPaymentWithPropagation).toHaveBeenCalledWith(
+        'user-1',
+        'pay-1',
+        updateDto,
+        'self',
+      );
+      expect(serviceMock.update).not.toHaveBeenCalled();
+      expect(r).toBe(envelope);
+    });
+
+    it.each(['future', 'all'] as const)(
+      'propagate=%s routes to service.editPaymentWithPropagation and returns the envelope',
+      async (mode) => {
+        const envelope = {
+          payment: { id: 'pay-1' },
+          affectedChildrenCount: 3,
+          skippedChildrenCount: 1,
+        };
+        serviceMock.editPaymentWithPropagation.mockResolvedValue(envelope);
+        const res = makeResMock();
+
+        const r = await controller.update(user, 'pay-1', updateDto, { propagate: mode }, res);
+
+        expect(serviceMock.editPaymentWithPropagation).toHaveBeenCalledWith(
+          'user-1',
+          'pay-1',
+          updateDto,
+          mode,
+        );
+        expect(serviceMock.update).not.toHaveBeenCalled();
+        expect(r).toBe(envelope);
+      },
+    );
 
     it('propagates ForbiddenException from the service', async () => {
       serviceMock.update.mockRejectedValue(new ForbiddenException('not owner'));
       const res = makeResMock();
-      await expect(controller.update(user, 'pay-1', updateDto, res)).rejects.toThrow(
+      await expect(controller.update(user, 'pay-1', updateDto, noProp, res)).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -241,7 +292,7 @@ describe('PaymentController', () => {
     it('returns 204 when service returns null (paymentDeleted)', async () => {
       serviceMock.update.mockResolvedValue(null);
       const res = makeResMock();
-      const r = await controller.update(user, 'pay-1', { attributions: [] }, res);
+      const r = await controller.update(user, 'pay-1', { attributions: [] }, noProp, res);
       expect(r).toBeUndefined();
       expect(res.statusCode).toBe(HttpStatus.NO_CONTENT);
     });
@@ -252,6 +303,32 @@ describe('PaymentController', () => {
       expect(reflector.get<number>('THROTTLER:LIMITdefault', handler)).toBe(30);
       expect(reflector.get<number>('THROTTLER:TTLdefault', handler)).toBe(60000);
     });
+  });
+
+  // ── iteration 6.18.1.5: UpdatePaymentQueryDto.propagate enum validation ──
+
+  describe('UpdatePaymentQueryDto propagate validation', () => {
+    it.each(['self', 'future', 'all'] as const)('accepts propagate=%s', async (mode) => {
+      const instance = plainToInstance(UpdatePaymentQueryDto, { propagate: mode });
+      const errors = await validate(instance);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('accepts an omitted propagate (optional)', async () => {
+      const instance = plainToInstance(UpdatePaymentQueryDto, {});
+      const errors = await validate(instance);
+      expect(errors).toHaveLength(0);
+    });
+
+    it.each(['parent', 'children', 'SELF', '', 'everything'])(
+      'rejects invalid propagate=%s with an IsIn violation',
+      async (bad) => {
+        const instance = plainToInstance(UpdatePaymentQueryDto, { propagate: bad });
+        const errors = await validate(instance);
+        expect(errors).toHaveLength(1);
+        expect(errors[0].constraints).toHaveProperty('isIn');
+      },
+    );
   });
 
   // ── iteration 6.8: DELETE /:id ──

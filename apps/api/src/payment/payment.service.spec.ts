@@ -2336,4 +2336,315 @@ describe('PaymentService', () => {
       expect(emittedOf('payment.updated')).toHaveLength(1);
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Iteration 6.18.1.5 — editPaymentWithPropagation() cascade edit
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('editPaymentWithPropagation()', () => {
+    /** RECURRING parent loaded by findFirst (buildDetailInclude shape). */
+    const recurringParent = (over: Record<string, unknown> = {}) =>
+      makeFullRow({
+        type: 'RECURRING',
+        attributions: [
+          {
+            id: 'attr-p',
+            paymentId: 'pay-1',
+            scopeType: 'personal',
+            userId: 'user-1',
+            groupId: null,
+            group: null,
+          },
+        ],
+        ...over,
+      });
+
+    /** Child occurrence row returned by payment.findMany (attributions include). */
+    const childRow = (over: Record<string, unknown> = {}) => ({
+      id: 'child-1',
+      direction: 'OUT',
+      type: 'ONE_TIME',
+      amountCents: 1250,
+      currency: 'USD',
+      occurredAt: new Date('2026-06-01T00:00:00Z'),
+      status: 'POSTED',
+      categoryId: 'cat-1',
+      note: null,
+      parentPaymentId: 'pay-1',
+      createdById: 'user-1',
+      createdAt: now,
+      updatedAt: now,
+      attributions: [
+        {
+          id: 'cattr-1',
+          paymentId: 'child-1',
+          scopeType: 'personal',
+          userId: 'user-1',
+          groupId: null,
+        },
+      ] as Array<{
+        id: string;
+        paymentId: string;
+        scopeType: string;
+        userId: string | null;
+        groupId: string | null;
+      }>,
+      ...over,
+    });
+
+    const emitted = (type: string): Array<Record<string, unknown>> =>
+      eventBusMock.publish.mock.calls
+        .map((c) => c[0] as Record<string, unknown>)
+        .filter((e) => e.type === type);
+
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.payment.update.mockResolvedValue({});
+      prismaMock.paymentAttribution.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.paymentAttribution.createMany.mockResolvedValue({ count: 0 });
+      // Reload path: every findUnique returns a row keyed to the requested id.
+      prismaMock.payment.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+        makeFullRow({ id: where.id, createdById: 'user-1' }),
+      );
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1', userId: 'user-1' }]);
+    });
+
+    it('404 PAYMENT_NOT_FOUND when the parent is not visible', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      try {
+        await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 1 }, 'all');
+      } catch (err) {
+        expect(err).toBeInstanceOf(NotFoundException);
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_FOUND);
+      }
+    });
+
+    it('403 PAYMENT_NOT_OWNER when caller is not the creator', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent({ createdById: 'user-other' }));
+      try {
+        await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 1 }, 'all');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_NOT_OWNER);
+      }
+    });
+
+    it('400 PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE for a child (parentPaymentId set)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(
+        recurringParent({ parentPaymentId: 'parent-x' }),
+      );
+      try {
+        await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 1 }, 'all');
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE);
+      }
+    });
+
+    it('propagate=self: never loads children; updates only the parent', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+
+      const r = await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { amountCents: 5000 },
+        'self',
+      );
+
+      expect(prismaMock.payment.findMany).not.toHaveBeenCalled();
+      expect(r.affectedChildrenCount).toBe(0);
+      expect(r.skippedChildrenCount).toBe(0);
+      expect(prismaMock.payment.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { amountCents: 5000 },
+      });
+    });
+
+    it('propagate=future: filters children by occurredAt >= now and updates them', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.payment.findMany.mockResolvedValue([childRow({ id: 'child-future' })]);
+
+      const r = await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { amountCents: 5000 },
+        'future',
+      );
+
+      const findManyArg = prismaMock.payment.findMany.mock.calls[0][0] as {
+        where: { parentPaymentId: string; occurredAt?: { gte: Date } };
+      };
+      expect(findManyArg.where.parentPaymentId).toBe('pay-1');
+      expect(findManyArg.where.occurredAt?.gte).toBeInstanceOf(Date);
+      expect(r.affectedChildrenCount).toBe(1);
+      expect(prismaMock.payment.update).toHaveBeenCalledWith({
+        where: { id: 'child-future' },
+        data: { amountCents: 5000 },
+      });
+    });
+
+    it('propagate=all: selects every child (no occurredAt cutoff) and updates them', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.payment.findMany.mockResolvedValue([
+        childRow({ id: 'c1' }),
+        childRow({ id: 'c2' }),
+      ]);
+
+      const r = await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { amountCents: 7000 },
+        'all',
+      );
+
+      const findManyArg = prismaMock.payment.findMany.mock.calls[0][0] as {
+        where: { occurredAt?: unknown };
+      };
+      expect(findManyArg.where.occurredAt).toBeUndefined();
+      expect(r.affectedChildrenCount).toBe(2);
+      expect(r.skippedChildrenCount).toBe(0);
+    });
+
+    it('scope-guard: skips children attributed to a non-member group and reports the count', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.payment.findMany.mockResolvedValue([
+        childRow({ id: 'c-ok' }),
+        childRow({
+          id: 'c-skip',
+          attributions: [
+            {
+              id: 'cattr-out',
+              paymentId: 'c-skip',
+              scopeType: 'group',
+              userId: null,
+              groupId: 'g-out',
+            },
+          ],
+        }),
+      ]);
+      // Editor is a member of g1 only; g-out is out of scope.
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1', userId: 'user-1' }]);
+
+      const r = await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { amountCents: 9000 },
+        'all',
+      );
+
+      expect(r.affectedChildrenCount).toBe(1);
+      expect(r.skippedChildrenCount).toBe(1);
+      const updatedIds = prismaMock.payment.update.mock.calls.map(
+        (c) => (c[0] as { where: { id: string } }).where.id,
+      );
+      expect(updatedIds).toContain('c-ok');
+      expect(updatedIds).not.toContain('c-skip');
+    });
+
+    it('preserves out-of-scope attributions on a target (never removes what the editor cannot control)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(
+        recurringParent({
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+              group: null,
+            },
+            {
+              id: 'attr-gout',
+              paymentId: 'pay-1',
+              scopeType: 'group',
+              userId: null,
+              groupId: 'g-out',
+              group: { name: 'Other' },
+            },
+          ],
+        }),
+      );
+      prismaMock.payment.findMany.mockResolvedValue([]);
+      prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1', userId: 'user-1' }]);
+
+      await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { attributions: [{ scope: 'personal' }] },
+        'all',
+      );
+
+      const deletedIds = prismaMock.paymentAttribution.deleteMany.mock.calls.flatMap(
+        (c) => (c[0] as { where: { id: { in: string[] } } }).where.id.in,
+      );
+      expect(deletedIds).not.toContain('attr-gout');
+    });
+
+    it('non-recurring (ONE_TIME) parent ignores propagate — no children loaded, affected=0', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(
+        makeFullRow({
+          type: 'ONE_TIME',
+          attributions: [
+            {
+              id: 'attr-p',
+              paymentId: 'pay-1',
+              scopeType: 'personal',
+              userId: 'user-1',
+              groupId: null,
+              group: null,
+            },
+          ],
+        }),
+      );
+
+      const r = await service.editPaymentWithPropagation(
+        'user-1',
+        'pay-1',
+        { amountCents: 1111 },
+        'all',
+      );
+
+      expect(prismaMock.payment.findMany).not.toHaveBeenCalled();
+      expect(r.affectedChildrenCount).toBe(0);
+    });
+
+    it('emits payment.updated for the parent AND each updated child, after the transaction commits', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.payment.findMany.mockResolvedValue([
+        childRow({ id: 'c1' }),
+        childRow({ id: 'c2' }),
+      ]);
+
+      await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 3000 }, 'all');
+
+      const updated = emitted('payment.updated');
+      expect(updated).toHaveLength(3); // parent + 2 children
+      const ids = updated.map((e) => (e.payment as { id: string }).id);
+      expect(ids).toEqual(expect.arrayContaining(['pay-1', 'c1', 'c2']));
+      for (const e of updated) {
+        expect(e.userIds as string[]).toContain('user-1');
+      }
+
+      // Post-commit ordering: the first publish happens AFTER the $transaction.
+      const txOrder = prismaMock.$transaction.mock.invocationCallOrder[0];
+      const firstPublishOrder = eventBusMock.publish.mock.invocationCallOrder[0];
+      expect(firstPublishOrder).toBeGreaterThan(txOrder);
+    });
+
+    it('writes a PAYMENT_UPDATED audit row per affected payment with the propagate detail', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.payment.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
+
+      await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 2222 }, 'all');
+      await new Promise((res) => setImmediate(res));
+
+      const updates = prismaMock.auditLog.create.mock.calls
+        .map((c) => c[0] as { data: { action: string; entityId: string; details: { propagate?: string } } })
+        .filter((a) => a.data.action === 'PAYMENT_UPDATED');
+      const auditedIds = updates.map((a) => a.data.entityId);
+      expect(auditedIds).toEqual(expect.arrayContaining(['pay-1', 'c1']));
+      for (const a of updates) {
+        expect(a.data.details.propagate).toBe('all');
+      }
+    });
+  });
 });

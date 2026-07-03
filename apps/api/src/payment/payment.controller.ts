@@ -35,6 +35,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
+import { CascadeEditResponseDto } from './dto/cascade-edit-response.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
@@ -42,6 +43,7 @@ import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import { PaymentSummaryDto } from './dto/payment-summary.dto';
 import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { UpdatePaymentQueryDto } from './dto/update-payment.query.dto';
 import { PaymentService } from './payment.service';
 
 @ApiTags('Payments')
@@ -172,10 +174,27 @@ export class PaymentController {
       'The optional `attributions` array replaces the caller-accessible subset; other users\u2019 ' +
       'personal attributions and non-member groups are never touched. An empty array clears all ' +
       'accessible attributions \u2014 if that leaves the payment with zero attributions, the ' +
-      'payment is hard-deleted and the response is 204 No Content. Empty body is a no-op.',
+      'payment is hard-deleted and the response is 204 No Content. Empty body is a no-op. ' +
+      'For RECURRING parents, pass `?propagate=future|all` to cascade the non-period field ' +
+      'deltas (amount/currency/category/note/direction/attributions) to child occurrences; ' +
+      '`propagate=self` (default) edits the parent only. The schedule/period spec stays ' +
+      'read-only here (deferred to 6.18.2).',
+  })
+  @ApiQuery({
+    name: 'propagate',
+    required: false,
+    enum: ['self', 'future', 'all'],
+    description:
+      'Cascade scope for RECURRING parents. self=parent only (default), ' +
+      'future=parent + children with occurredAt >= now, all=parent + every child. ' +
+      'Ignored for non-RECURRING / childless payments.',
   })
   @ApiBody({ type: UpdatePaymentDto })
-  @ApiOkResponse({ description: 'Updated payment summary', type: PaymentSummaryDto })
+  @ApiOkResponse({
+    description:
+      'Updated payment summary (self) or cascade-edit result envelope (future/all)',
+    type: PaymentSummaryDto,
+  })
   @ApiNoContentResponse({
     description: 'Payment hard-deleted because the attribution edit left zero attributions.',
   })
@@ -188,8 +207,18 @@ export class PaymentController {
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePaymentDto,
+    @Query() query: UpdatePaymentQueryDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<PaymentSummaryDto | undefined> {
+  ): Promise<PaymentSummaryDto | CascadeEditResponseDto | undefined> {
+    // When `propagate` is EXPLICITLY provided (self/future/all), route to the
+    // cascade-aware edit path. This is the only path that permits editing a
+    // RECURRING parent's non-period fields; for `self` it simply edits the
+    // parent with zero children. When `propagate` is OMITTED we preserve the
+    // legacy single-edit semantics (incl. attribution-empty → 204 delete and
+    // the generated-occurrence guard) for full back-compat.
+    if (query.propagate !== undefined) {
+      return this.service.editPaymentWithPropagation(user.sub, id, dto, query.propagate);
+    }
     const result = await this.service.update(user.sub, id, dto);
     if (result === null) {
       res.status(HttpStatus.NO_CONTENT);

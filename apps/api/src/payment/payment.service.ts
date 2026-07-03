@@ -17,9 +17,11 @@ import { EventBus } from '../realtime/event-bus.service';
 import { PAYMENT_ERRORS } from './constants/payment-errors';
 import { AttributionChangeResultDto } from './dto/attribution-change-result.dto';
 import { AttributionDto } from './dto/attribution.dto';
+import { CascadeEditResponseDto } from './dto/cascade-edit-response.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { PaymentPropagateMode } from './dto/update-payment.query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import {
   PaymentAttributionSummary,
@@ -881,6 +883,311 @@ export class PaymentService {
   }
 
   /**
+   * Edit a payment's non-period fields and (optionally) cascade the same
+   * field deltas to its child occurrences. Phase 6 · Iteration 6.18.1.5.
+   *
+   * In-scope fields (this iteration): `direction`, `amountCents`, `currency`,
+   * `categoryId`, `note`, and `attributions`. The schedule / period spec
+   * (cron / everyMs / startsAt / endsAt / limit) is NOT editable here — it
+   * stays read-only until 6.18.2 — and the child-recalculation engine
+   * (add/remove occurrences on interval change) is a separate iteration
+   * (6.18.1.5.2). `occurredAt` and `type` are intentionally ignored by the
+   * cascade path (the single-edit `update()` path owns those).
+   *
+   * Propagation:
+   *  - `self`   handled by the controller via the existing `update()` path.
+   *  - `future` parent + children with `occurredAt >= now` (server time).
+   *  - `all`    parent + every child.
+   *
+   * Scope guard: a child is only updated when EVERY one of its attributions
+   * is controllable by the editor (their personal scope, or a group they are
+   * a member of). Children carrying an attribution to a group the editor is
+   * NOT a member of are SKIPPED entirely (never partially edited) and counted
+   * in `skippedChildrenCount`. Out-of-scope attributions are never removed.
+   *
+   * The per-field delta application is a single helper (`applyFieldDeltas`)
+   * reused for the parent and every child (DRY). All DB writes run in one
+   * transaction; realtime `payment.updated` events fan out AFTER commit.
+   */
+  async editPaymentWithPropagation(
+    userId: string,
+    paymentId: string,
+    dto: UpdatePaymentDto,
+    propagate: PaymentPropagateMode,
+  ): Promise<CascadeEditResponseDto> {
+    // 1. Fetch parent with visibility guard.
+    const existing = await this.prisma.payment.findFirst({
+      where: { AND: [{ id: paymentId }, this.buildVisibilityWhere(userId)] },
+      include: buildDetailInclude(userId),
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_FOUND,
+      });
+    }
+
+    // 2. Creator check.
+    if (existing.createdById !== userId) {
+      throw new ForbiddenException({
+        message: 'Only the creator of a payment may edit it',
+        errorCode: PAYMENT_ERRORS.PAYMENT_NOT_OWNER,
+      });
+    }
+
+    // 3. Edit eligibility — must be an editable parent (ONE_TIME / RECURRING),
+    //    never a generated occurrence.
+    if (
+      existing.parentPaymentId !== null ||
+      (existing.type !== 'ONE_TIME' && existing.type !== 'RECURRING')
+    ) {
+      throw new BadRequestException({
+        message:
+          'Generated occurrences / schedule-derived payments cannot be edited via this endpoint',
+        errorCode: PAYMENT_ERRORS.PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE,
+      });
+    }
+
+    const existingAttrs = existing.attributions as unknown as AttributionRow[];
+
+    // 4. Determine which non-period fields actually change.
+    const hasScalarField =
+      dto.direction !== undefined ||
+      dto.amountCents !== undefined ||
+      dto.currency !== undefined ||
+      dto.categoryId !== undefined ||
+      dto.note !== undefined;
+    const hasAttributionField = dto.attributions !== undefined;
+
+    // 5. Validate scalar fields (reuse the single-edit validators).
+    const effectiveDirection = dto.direction ?? (existing.direction as 'IN' | 'OUT');
+    const categoryChanging = dto.categoryId !== undefined && dto.categoryId !== existing.categoryId;
+    let nextCategoryId = existing.categoryId;
+    if (categoryChanging) {
+      const cat = await this.loadCategoryOrThrow(userId, dto.categoryId as string);
+      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+      nextCategoryId = dto.categoryId as string;
+    } else if (dto.direction !== undefined && dto.direction !== existing.direction) {
+      const cat = await this.loadCategoryOrThrow(userId, existing.categoryId);
+      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+    }
+    if (dto.amountCents !== undefined) this.validateAmount(dto.amountCents);
+    if (dto.currency !== undefined && !(CURRENCY_CODES as readonly string[]).includes(dto.currency)) {
+      throw new BadRequestException({
+        message: `Unsupported currency '${dto.currency}'`,
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CURRENCY,
+      });
+    }
+
+    // 6. Validate desired attributions (non-empty, in editor scope).
+    const desired = dto.attributions ?? [];
+    if (hasAttributionField) {
+      await this.validateAttributions(userId, desired);
+    }
+
+    // 7. Build the reusable scalar delta payload (parent + each child).
+    const scalarData: Prisma.PaymentUpdateInput = {};
+    if (dto.direction !== undefined) scalarData.direction = dto.direction;
+    if (dto.amountCents !== undefined) scalarData.amountCents = dto.amountCents;
+    if (dto.currency !== undefined) scalarData.currency = dto.currency;
+    if (categoryChanging) scalarData.category = { connect: { id: nextCategoryId } };
+    if (dto.note !== undefined) scalarData.note = dto.note === '' ? null : dto.note;
+
+    // Nothing to do — return the current parent summary with zero counts.
+    if (!hasScalarField && !hasAttributionField) {
+      return {
+        payment: mapPaymentToSummary(existing as unknown as PaymentWithRelations, {
+          starredByMe: existing.stars.length > 0,
+          commentCount: existing._count.comments,
+          hasDocuments: existing._count.documents > 0,
+        }),
+        affectedChildrenCount: 0,
+        skippedChildrenCount: 0,
+      };
+    }
+
+    // 8. Select target children (only when cascading + parent is RECURRING).
+    const now = new Date();
+    const cascading = propagate !== 'self' && existing.type === 'RECURRING';
+    const children = cascading
+      ? await this.prisma.payment.findMany({
+          where: {
+            parentPaymentId: paymentId,
+            ...(propagate === 'future' ? { occurredAt: { gte: now } } : {}),
+          },
+          include: { attributions: true },
+        })
+      : [];
+
+    // 9. Editor's member-group set across every referenced group (one query).
+    const referencedGroupIds = new Set<string>();
+    for (const a of existingAttrs) if (a.groupId) referencedGroupIds.add(a.groupId);
+    for (const d of desired) if (d.groupId) referencedGroupIds.add(d.groupId);
+    for (const c of children) {
+      for (const a of c.attributions) if (a.groupId) referencedGroupIds.add(a.groupId);
+    }
+    let memberGroups = new Set<string>();
+    if (referencedGroupIds.size > 0) {
+      const memberships = await this.prisma.groupMembership.findMany({
+        where: { userId, groupId: { in: Array.from(referencedGroupIds) } },
+        select: { groupId: true },
+      });
+      memberGroups = new Set(memberships.map((m) => m.groupId));
+    }
+
+    // 10. Partition children: controllable (every attribution in editor scope)
+    //     vs. skipped (any attribution targets a non-member group).
+    const controllableChildren: typeof children = [];
+    let skippedChildrenCount = 0;
+    for (const c of children) {
+      const controllable = c.attributions.every(
+        (a) =>
+          (a.scopeType === 'personal' && a.userId === userId) ||
+          (a.scopeType === 'group' && a.groupId !== null && memberGroups.has(a.groupId)),
+      );
+      if (controllable) controllableChildren.push(c);
+      else skippedChildrenCount += 1;
+    }
+
+    // 11. Plan attribution replacement for parent + each controllable child.
+    const attrPlanFor = hasAttributionField
+      ? (attrs: AttributionRow[]) => planAttributionReplace(attrs, desired, userId, memberGroups)
+      : null;
+
+    // 12. Transaction — apply deltas to parent + every controllable child.
+    await this.prisma.$transaction(async (tx) => {
+      await this.applyFieldDeltas(tx, paymentId, existingAttrs, scalarData, attrPlanFor);
+      for (const c of controllableChildren) {
+        await this.applyFieldDeltas(
+          tx,
+          c.id,
+          c.attributions as unknown as AttributionRow[],
+          scalarData,
+          attrPlanFor,
+        );
+      }
+    });
+
+    // 13. Audit — fire-and-forget, one row per affected payment.
+    const changed = Object.keys(dto)
+      .filter((k) => (dto as Record<string, unknown>)[k] !== undefined)
+      .sort();
+    void this.writeAudit(userId, paymentId, 'PAYMENT_UPDATED', { changed, propagate });
+    for (const c of controllableChildren) {
+      void this.writeAudit(userId, c.id, 'PAYMENT_UPDATED', {
+        changed,
+        propagate,
+        cascadedFrom: paymentId,
+      });
+    }
+
+    this.logger.log(
+      `Payment ${paymentId} cascade-edited by ${userId} — propagate=${propagate}, ` +
+        `children affected=${controllableChildren.length}, skipped=${skippedChildrenCount}`,
+    );
+
+    // 14. Realtime fan-out — POST commit. One payment.updated per affected
+    //     payment, each with its own multicast recipients (union pre + post
+    //     attributions so users who lost visibility can drop the row).
+    const parentFresh = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: buildDetailInclude(userId),
+    });
+    let parentSummary: PaymentSummaryDto;
+    if (parentFresh) {
+      parentSummary = mapPaymentToSummary(parentFresh as unknown as PaymentWithRelations, {
+        starredByMe: parentFresh.stars.length > 0,
+        commentCount: parentFresh._count.comments,
+        hasDocuments: parentFresh._count.documents > 0,
+      });
+      const parentRecipients = await computePaymentRecipients(
+        this.prisma,
+        unionAttributions(existingAttrs, attrPlanFor ? attrPlanFor(existingAttrs).postAttrs : null),
+        existing.createdById,
+      );
+      this.eventBus.publish({
+        type: 'payment.updated',
+        userIds: parentRecipients,
+        payment: parentSummary,
+      });
+    } else {
+      // Defensive — shouldn't happen since we only update, never delete here.
+      parentSummary = mapPaymentToSummary(existing as unknown as PaymentWithRelations, {
+        starredByMe: existing.stars.length > 0,
+        commentCount: existing._count.comments,
+        hasDocuments: existing._count.documents > 0,
+      });
+    }
+
+    for (const c of controllableChildren) {
+      const childFresh = await this.prisma.payment.findUnique({
+        where: { id: c.id },
+        include: buildDetailInclude(userId),
+      });
+      if (!childFresh) continue;
+      const childSummary = mapPaymentToSummary(childFresh as unknown as PaymentWithRelations, {
+        starredByMe: childFresh.stars.length > 0,
+        commentCount: childFresh._count.comments,
+        hasDocuments: childFresh._count.documents > 0,
+      });
+      const childAttrs = c.attributions as unknown as AttributionRow[];
+      const recipients = await computePaymentRecipients(
+        this.prisma,
+        unionAttributions(childAttrs, attrPlanFor ? attrPlanFor(childAttrs).postAttrs : null),
+        childFresh.createdById,
+      );
+      this.eventBus.publish({
+        type: 'payment.updated',
+        userIds: recipients,
+        payment: childSummary,
+      });
+    }
+
+    return {
+      payment: parentSummary,
+      affectedChildrenCount: controllableChildren.length,
+      skippedChildrenCount,
+    };
+  }
+
+  /**
+   * Apply a non-period field delta to a single payment inside a transaction.
+   * Reused for the parent and every controllable child (DRY — Phase 6 ·
+   * Iteration 6.18.1.5). Scalars are a plain update; attributions replace the
+   * editor-controllable subset with `desired`, preserving any out-of-scope
+   * attribution the editor cannot control.
+   */
+  private async applyFieldDeltas(
+    tx: Prisma.TransactionClient,
+    targetId: string,
+    targetAttrs: AttributionRow[],
+    scalarData: Prisma.PaymentUpdateInput,
+    attrPlanFor:
+      | ((attrs: AttributionRow[]) => ReturnType<typeof planAttributionReplace>)
+      | null,
+  ): Promise<void> {
+    if (Object.keys(scalarData).length > 0) {
+      await tx.payment.update({ where: { id: targetId }, data: scalarData });
+    }
+    if (attrPlanFor) {
+      const plan = attrPlanFor(targetAttrs);
+      if (plan.toDeleteIds.length > 0) {
+        await tx.paymentAttribution.deleteMany({ where: { id: { in: plan.toDeleteIds } } });
+      }
+      if (plan.toCreate.length > 0) {
+        await tx.paymentAttribution.createMany({
+          data: plan.toCreate.map((a) => ({
+            paymentId: targetId,
+            scopeType: a.scopeType,
+            userId: a.userId,
+            groupId: a.groupId,
+          })),
+        });
+      }
+    }
+  }
+
+  /**
    * Scoped-delete (DELETE /payments/:id). See design §2.4 + §5.2.
    *
    * The `scope` query narrows what is removed. When the caller ends up with
@@ -1365,6 +1672,77 @@ export class PaymentService {
 
 /** Re-export for symmetry with other services that keep currency types local. */
 export type { CurrencyCode };
+
+// ── Cascade-edit attribution helpers (Phase 6 · Iteration 6.18.1.5) ──
+
+/** Stable identity key for an attribution by (scopeType|groupId). */
+function attributionKey(scopeType: string, groupId: string | null | undefined): string {
+  return `${scopeType}|${groupId ?? ''}`;
+}
+
+/** A single attribution row to create as part of a delta apply. */
+interface AttributionCreate {
+  scopeType: 'personal' | 'group';
+  userId: string | null;
+  groupId: string | null;
+}
+
+/**
+ * Compute the attribution replacement plan for one payment: delete the
+ * editor-controllable rows, (re)create the `desired` set, and preserve any
+ * out-of-scope attribution the editor cannot control. Also returns the
+ * post-apply attribution set (for realtime recipient computation).
+ */
+function planAttributionReplace(
+  targetAttrs: AttributionRow[],
+  desired: AttributionDto[],
+  userId: string,
+  memberGroups: Set<string>,
+): {
+  toDeleteIds: string[];
+  toCreate: AttributionCreate[];
+  postAttrs: RecipientAttribution[];
+} {
+  const controllable = (a: AttributionRow): boolean =>
+    (a.scopeType === 'personal' && a.userId === userId) ||
+    (a.scopeType === 'group' && a.groupId !== null && memberGroups.has(a.groupId));
+
+  const keep = targetAttrs.filter((a) => !controllable(a));
+  const remove = targetAttrs.filter((a) => controllable(a));
+  const keepKeys = new Set(keep.map((a) => attributionKey(a.scopeType, a.groupId)));
+
+  const toCreate: AttributionCreate[] = desired
+    .filter((d) => !keepKeys.has(attributionKey(d.scope, d.groupId ?? null)))
+    .map((d) => ({
+      scopeType: d.scope,
+      userId: d.scope === 'personal' ? userId : null,
+      groupId: d.scope === 'group' ? (d.groupId ?? null) : null,
+    }));
+
+  const postAttrs: RecipientAttribution[] = [
+    ...keep.map((a) => ({ scopeType: a.scopeType, userId: a.userId, groupId: a.groupId })),
+    ...toCreate.map((a) => ({ scopeType: a.scopeType, userId: a.userId, groupId: a.groupId })),
+  ];
+
+  return { toDeleteIds: remove.map((a) => a.id), toCreate, postAttrs };
+}
+
+/**
+ * Union the pre-change attribution rows with the post-change set (when
+ * attributions changed) so realtime recipients include users who *lost*
+ * visibility and need to drop the row.
+ */
+function unionAttributions(
+  preAttrs: AttributionRow[],
+  postAttrs: RecipientAttribution[] | null,
+): RecipientAttribution[] {
+  const pre: RecipientAttribution[] = preAttrs.map((a) => ({
+    scopeType: a.scopeType,
+    userId: a.userId,
+    groupId: a.groupId,
+  }));
+  return postAttrs ? [...pre, ...postAttrs] : pre;
+}
 
 // ── Cursor helpers (co-located per iteration 6.6 spec) ──
 

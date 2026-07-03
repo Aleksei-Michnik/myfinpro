@@ -21,6 +21,13 @@ const listCategoriesMock = vi.fn();
 const createScheduleMock = vi.fn();
 const replaceScheduleMock = vi.fn();
 const getPaymentMock = vi.fn();
+const editPaymentWithPropagationMock = vi.fn();
+const listOccurrencesMock = vi.fn();
+const addToastMock = vi.fn();
+
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({ addToast: addToastMock }),
+}));
 
 vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me', defaultCurrency: 'USD' } }),
@@ -41,6 +48,8 @@ vi.mock('@/lib/payment/payment-context', () => ({
     createSchedule: createScheduleMock,
     replaceSchedule: replaceScheduleMock,
     getPayment: getPaymentMock,
+    editPaymentWithPropagation: editPaymentWithPropagationMock,
+    listOccurrences: listOccurrencesMock,
   }),
 }));
 
@@ -147,6 +156,12 @@ describe('PaymentFormDialog', () => {
     getPaymentMock.mockImplementation(() => {
       throw new Error('not configured');
     });
+    editPaymentWithPropagationMock.mockReset();
+    listOccurrencesMock.mockReset();
+    addToastMock.mockReset();
+    // Default: no children → edits of RECURRING parents submit directly.
+    // Propagation tests override with a non-empty page.
+    listOccurrencesMock.mockResolvedValue({ data: [], cursor: null, hasMore: false });
     localStorage.clear();
   });
 
@@ -549,6 +564,161 @@ describe('PaymentFormDialog', () => {
     fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
     expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
     expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
+  });
+
+  // ── Phase 6 · 6.18.1.5 — cascade edit with propagation choice ─────────────
+
+  describe('propagation (6.18.1.5)', () => {
+    const SCHEDULE_FIXTURE = {
+      id: 's-1',
+      paymentId: 'p-rec',
+      cron: null,
+      everyMs: 86_400_000,
+      startsAt: '2026-04-25T00:00:00Z',
+      endsAt: null,
+      limit: null,
+      nextRunAt: null,
+      lastRunAt: null,
+      pausedAt: null,
+      cancelledAt: null,
+      createdAt: '2026-04-25T00:00:00Z',
+      updatedAt: '2026-04-25T00:00:00Z',
+    };
+
+    function renderRecurringEdit(payment: PaymentSummary) {
+      const onClose = vi.fn();
+      const onSaved = vi.fn();
+      render(
+        <PaymentFormDialog
+          open
+          mode="edit"
+          payment={payment}
+          existingSchedule={{ ...SCHEDULE_FIXTURE, paymentId: payment.id }}
+          onClose={onClose}
+          onSaved={onSaved}
+          categories={DEFAULT_CATS}
+        />,
+      );
+      return { onClose, onSaved };
+    }
+
+    /** Render a RECURRING parent that HAS children and wait for the probe. */
+    async function renderParentWithChildren() {
+      listOccurrencesMock.mockResolvedValue({
+        data: [{ id: 'occ-1' }],
+        cursor: null,
+        hasMore: false,
+      });
+      const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
+      const handlers = renderRecurringEdit(payment);
+      await waitFor(() =>
+        expect(listOccurrencesMock).toHaveBeenCalledWith('p-rec', { limit: 1 }),
+      );
+      // Flush the probe's .then() so hasChildren lands before we save.
+      await act(async () => {});
+      return { payment, ...handlers };
+    }
+
+    it('editing a cascadeable field on a parent with children opens the choice dialog', async () => {
+      await renderParentWithChildren();
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '99.00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      expect(await screen.findByTestId('propagation-choice-dialog')).toBeInTheDocument();
+      // Deferred submit: nothing hits the API until a mode is confirmed.
+      expect(updatePaymentMock).not.toHaveBeenCalled();
+      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
+    });
+
+    it('confirming a mode submits the stashed diff with that propagate value', async () => {
+      const { payment, onSaved, onClose } = await renderParentWithChildren();
+      editPaymentWithPropagationMock.mockResolvedValueOnce({
+        payment,
+        affectedChildrenCount: 3,
+        skippedChildrenCount: 0,
+      });
+      replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '99.00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await screen.findByTestId('propagation-choice-dialog');
+      fireEvent.click(screen.getByTestId('propagation-mode-future'));
+      fireEvent.click(screen.getByTestId('propagation-confirm'));
+      await waitFor(() => expect(editPaymentWithPropagationMock).toHaveBeenCalled());
+      const [id, diff, propagate, signal] = editPaymentWithPropagationMock.mock.calls[0];
+      expect(id).toBe('p-rec');
+      expect(diff.amountCents).toBe(9900);
+      expect(propagate).toBe('future');
+      expect(signal).toBeInstanceOf(AbortSignal);
+      // Plain PATCH path must not fire — the cascade endpoint owns the edit.
+      expect(updatePaymentMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(onSaved).toHaveBeenCalledWith(payment));
+      expect(onClose).toHaveBeenCalled();
+      expect(addToastMock).toHaveBeenCalledWith('success', 'resultUpdated:3');
+    });
+
+    it('skipped children surface a second info toast', async () => {
+      const { payment } = await renderParentWithChildren();
+      editPaymentWithPropagationMock.mockResolvedValueOnce({
+        payment,
+        affectedChildrenCount: 2,
+        skippedChildrenCount: 1,
+      });
+      replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '50.00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await screen.findByTestId('propagation-choice-dialog');
+      fireEvent.click(screen.getByTestId('propagation-confirm'));
+      await waitFor(() =>
+        expect(addToastMock).toHaveBeenCalledWith('success', 'resultUpdated:2'),
+      );
+      expect(addToastMock).toHaveBeenCalledWith('info', 'resultSkipped:1');
+    });
+
+    it('cancelling the choice dialog returns to the form without submitting', async () => {
+      const { onClose } = await renderParentWithChildren();
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '99.00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await screen.findByTestId('propagation-choice-dialog');
+      fireEvent.click(screen.getByTestId('propagation-cancel'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument(),
+      );
+      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
+      expect(updatePaymentMock).not.toHaveBeenCalled();
+      // Form stays open with the user's edits intact.
+      expect(onClose).not.toHaveBeenCalled();
+      expect((screen.getByTestId('form-amount') as HTMLInputElement).value).toBe('99.00');
+    });
+
+    it('occurredAt-only change is not cascadeable → direct PATCH, no dialog', async () => {
+      const { payment } = await renderParentWithChildren();
+      updatePaymentMock.mockResolvedValueOnce(payment);
+      replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+      fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-26T00:00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
+      expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument();
+      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
+    });
+
+    it('parent without children saves directly (no dialog)', async () => {
+      // beforeEach default: listOccurrences resolves an empty page.
+      const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
+      updatePaymentMock.mockResolvedValueOnce(payment);
+      replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
+      renderRecurringEdit(payment);
+      await waitFor(() => expect(listOccurrencesMock).toHaveBeenCalled());
+      await act(async () => {});
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '99.00' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
+      expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument();
+    });
+
+    it('ONE_TIME payments never probe for children', async () => {
+      renderEdit(makePayment({ id: 'p-1', type: 'ONE_TIME' }));
+      await act(async () => {});
+      expect(listOccurrencesMock).not.toHaveBeenCalled();
+    });
   });
 
   // ── Phase 6 · 6.18.1.4-hotfix — edit-mode refetch ─────────────────────────

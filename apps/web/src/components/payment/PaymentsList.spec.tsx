@@ -49,6 +49,11 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
 }));
 
+// <PaymentFormDialog> (mounted on Add/Edit) reads the toast context.
+vi.mock('@/components/ui/Toast', () => ({
+  useToast: () => ({ addToast: vi.fn() }),
+}));
+
 vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => ({
     groups: [

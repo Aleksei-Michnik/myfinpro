@@ -240,6 +240,31 @@ export interface UpdatePaymentInput {
   attributions?: AttributionScope[];
 }
 
+/**
+ * Propagation mode for editing a RECURRING parent's non-period fields
+ * (Phase 6 · Iteration 6.18.1.5).
+ *
+ * - `self`   — update the parent record only.
+ * - `future` — update the parent + every child occurrence with
+ *              `occurredAt >= now` (server-evaluated).
+ * - `all`    — update the parent + every child occurrence (past + future).
+ */
+export type PaymentPropagateMode = 'self' | 'future' | 'all';
+
+export const PAYMENT_PROPAGATE_MODES: readonly PaymentPropagateMode[] = ['self', 'future', 'all'];
+
+/**
+ * Envelope returned by `PATCH /payments/:id?propagate=...` (the cascade-edit
+ * path). `affectedChildrenCount` is the number of child occurrences updated
+ * in place; `skippedChildrenCount` is the number left untouched because they
+ * carry an attribution to a group the editor does not control.
+ */
+export interface CascadeEditResult {
+  payment: PaymentSummary;
+  affectedChildrenCount: number;
+  skippedChildrenCount: number;
+}
+
 export interface ListPaymentsParams {
   /** `'all'`, `'personal'`, or `'group:<groupId>'`. */
   scope?: string;
