@@ -21,6 +21,9 @@ const mockCreatePayment = vi.fn();
 const mockCreateSchedule = vi.fn();
 const mockReplaceSchedule = vi.fn();
 const mockListCategories = vi.fn();
+const mockPauseSchedule = vi.fn();
+const mockResumeSchedule = vi.fn();
+const mockCancelSchedule = vi.fn();
 
 const mockRouterReplace = vi.fn();
 const mockRouterPush = vi.fn();
@@ -75,6 +78,9 @@ vi.mock('@/lib/payment/payment-context', () => ({
     createSchedule: mockCreateSchedule,
     replaceSchedule: mockReplaceSchedule,
     listCategories: mockListCategories,
+    pauseSchedule: mockPauseSchedule,
+    resumeSchedule: mockResumeSchedule,
+    cancelSchedule: mockCancelSchedule,
   }),
 }));
 
@@ -123,6 +129,9 @@ describe('PaymentDetailClient', () => {
     mockReplaceSchedule.mockReset();
     mockListCategories.mockReset();
     mockListCategories.mockResolvedValue([]);
+    mockPauseSchedule.mockReset();
+    mockResumeSchedule.mockReset();
+    mockCancelSchedule.mockReset();
     mockRouterReplace.mockReset();
     mockRouterPush.mockReset();
     mockAddToast.mockReset();
@@ -529,6 +538,100 @@ describe('PaymentDetailClient', () => {
       render(<PaymentDetailClient paymentId="p-1" />);
       const badge = await screen.findByTestId('schedule-badge');
       expect(badge.getAttribute('aria-live')).toBe('polite');
+    });
+  });
+
+  // ── Phase 6 · Iteration 6.18.2 — schedule lifecycle actions ────────────
+
+  describe('schedule lifecycle actions (6.18.2)', () => {
+    function makeSchedule(over: Partial<ScheduleResponse> = {}): ScheduleResponse {
+      return {
+        id: 's-1',
+        paymentId: 'p-1',
+        cron: null,
+        everyMs: 86_400_000,
+        startsAt: '2026-04-25T00:00:00Z',
+        endsAt: null,
+        limit: null,
+        nextRunAt: '2026-04-26T00:00:00Z',
+        lastRunAt: null,
+        pausedAt: null,
+        cancelledAt: null,
+        createdAt: '2026-04-25T00:00:00Z',
+        updatedAt: '2026-04-25T00:00:00Z',
+        ...over,
+      };
+    }
+
+    async function renderRecurring(over: Partial<PaymentSummary> = {}, schedule = makeSchedule()) {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING', ...over }));
+      mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
+      mockGetSchedule.mockResolvedValueOnce(schedule);
+      render(<PaymentDetailClient paymentId="p-1" />);
+      await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
+    }
+
+    it('creator sees the actions row; pause posts and patches the badge', async () => {
+      await renderRecurring();
+      expect(screen.getByTestId('schedule-actions')).toBeInTheDocument();
+      mockPauseSchedule.mockResolvedValueOnce(makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }));
+      fireEvent.click(screen.getByTestId('schedule-action-pause'));
+      await waitFor(() => expect(mockPauseSchedule).toHaveBeenCalled());
+      expect(mockPauseSchedule.mock.calls[0][0]).toBe('p-1');
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('paused'),
+      );
+      expect(mockAddToast).toHaveBeenCalledWith('success', 'pausedToast');
+    });
+
+    it('paused schedule offers resume; resume reactivates', async () => {
+      await renderRecurring({}, makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }));
+      expect(screen.queryByTestId('schedule-action-pause')).not.toBeInTheDocument();
+      mockResumeSchedule.mockResolvedValueOnce(makeSchedule({ pausedAt: null }));
+      fireEvent.click(screen.getByTestId('schedule-action-resume'));
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active'),
+      );
+      expect(mockAddToast).toHaveBeenCalledWith('success', 'resumedToast');
+    });
+
+    it('cancel requires the inline confirm; confirming cancels terminally', async () => {
+      await renderRecurring();
+      fireEvent.click(screen.getByTestId('schedule-action-cancel'));
+      // First click only reveals the confirm strip — no API call yet.
+      expect(mockCancelSchedule).not.toHaveBeenCalled();
+      mockCancelSchedule.mockResolvedValueOnce(
+        makeSchedule({ cancelledAt: '2026-05-01T00:00:00Z' }),
+      );
+      fireEvent.click(screen.getByTestId('schedule-cancel-confirm-yes'));
+      await waitFor(() =>
+        expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('cancelled'),
+      );
+      // Terminal state → the whole actions row is gone.
+      expect(screen.queryByTestId('schedule-actions')).not.toBeInTheDocument();
+      expect(mockAddToast).toHaveBeenCalledWith('success', 'cancelledToast');
+    });
+
+    it('keep dismisses the confirm strip without cancelling', async () => {
+      await renderRecurring();
+      fireEvent.click(screen.getByTestId('schedule-action-cancel'));
+      fireEvent.click(screen.getByTestId('schedule-cancel-confirm-keep'));
+      expect(screen.queryByTestId('schedule-cancel-confirm')).not.toBeInTheDocument();
+      expect(mockCancelSchedule).not.toHaveBeenCalled();
+      expect(screen.getByTestId('schedule-action-cancel')).toBeInTheDocument();
+    });
+
+    it('non-creator sees no actions row', async () => {
+      await renderRecurring({ createdById: 'someone-else' });
+      expect(screen.queryByTestId('schedule-actions')).not.toBeInTheDocument();
+    });
+
+    it('a failed action surfaces an error toast and leaves the badge state', async () => {
+      await renderRecurring();
+      mockPauseSchedule.mockRejectedValueOnce(new Error('conflict'));
+      fireEvent.click(screen.getByTestId('schedule-action-pause'));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('error', expect.any(String)));
+      expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active');
     });
   });
 });

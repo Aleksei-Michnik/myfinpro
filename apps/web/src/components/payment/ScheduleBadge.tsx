@@ -1,9 +1,15 @@
 'use client';
 
-// Phase 6 · Iteration 6.18.1 — read-only schedule badge for the payment
-// detail page. Lifecycle controls (pause / resume / cancel) ship in 6.18.2.
+// Phase 6 · Iteration 6.18.1 — schedule badge for the payment detail page.
+// Iteration 6.18.2 adds the lifecycle controls (pause / resume / cancel):
+// the badge stays presentational — the async submit and the resulting
+// schedule state live in the caller; `pending` drives the disabled state.
+// Cancel is terminal on the API, so it goes through an inline two-step
+// confirm before `onCancel` fires.
 
 import { useTranslations } from 'next-intl';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { humanReadableRepeat } from '@/lib/payment/schedule-formatters';
 import { deriveScheduleStatus, type ScheduleResponse } from '@/lib/payment/types';
 
@@ -11,6 +17,16 @@ export interface ScheduleBadgeProps {
   schedule: ScheduleResponse;
   /** Locale code, used by `Intl.DateTimeFormat` for the relative-run text. */
   locale?: string;
+  /**
+   * Lifecycle controls render only when true (the API is creator-only —
+   * mirroring `PaymentDetailHeader`'s edit gating).
+   */
+  canManage?: boolean;
+  /** Disables the lifecycle buttons while an action is in flight. */
+  pending?: boolean;
+  onPause?(): void;
+  onResume?(): void;
+  onCancel?(): void;
 }
 
 /** Format an ISO datetime → localised "Apr 25, 2026, 9:00 AM" style string. */
@@ -42,9 +58,25 @@ const STATUS_DOT: Record<'active' | 'paused' | 'cancelled', string> = {
   cancelled: '⚫',
 };
 
-export function ScheduleBadge({ schedule, locale = 'en' }: ScheduleBadgeProps) {
+export function ScheduleBadge({
+  schedule,
+  locale = 'en',
+  canManage = false,
+  pending = false,
+  onPause,
+  onResume,
+  onCancel,
+}: ScheduleBadgeProps) {
   const t = useTranslations('payments.schedule.badge');
   const status = deriveScheduleStatus(schedule) ?? 'active';
+  // Inline two-step confirm for the terminal cancel action.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+
+  // Leaving the manageable state (action completed elsewhere, realtime echo,
+  // permissions flip) discards a half-open confirm strip.
+  useEffect(() => {
+    if (!canManage || status === 'cancelled') setConfirmingCancel(false);
+  }, [canManage, status]);
 
   const statusKey =
     status === 'active' ? 'statusActive' : status === 'paused' ? 'statusPaused' : 'statusCancelled';
@@ -122,6 +154,81 @@ export function ScheduleBadge({ schedule, locale = 'en' }: ScheduleBadgeProps) {
         >
           {t('runsLimit', { n: schedule.limit })}
         </p>
+      )}
+
+      {/* Phase 6 · Iteration 6.18.2 — lifecycle controls. Cancelled is
+          terminal, so the row disappears entirely in that state. */}
+      {canManage && status !== 'cancelled' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="schedule-actions">
+          {status === 'active' && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onPause}
+              disabled={pending}
+              data-testid="schedule-action-pause"
+            >
+              {t('pause')}
+            </Button>
+          )}
+          {status === 'paused' && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={onResume}
+              disabled={pending}
+              data-testid="schedule-action-resume"
+            >
+              {t('resume')}
+            </Button>
+          )}
+          {!confirmingCancel ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmingCancel(true)}
+              disabled={pending}
+              data-testid="schedule-action-cancel"
+            >
+              {t('cancelAction')}
+            </Button>
+          ) : (
+            <span
+              className="inline-flex flex-wrap items-center gap-2"
+              data-testid="schedule-cancel-confirm"
+            >
+              <span className="text-xs text-gray-600 dark:text-gray-300">
+                {t('cancelConfirmBody')}
+              </span>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  setConfirmingCancel(false);
+                  onCancel?.();
+                }}
+                disabled={pending}
+                data-testid="schedule-cancel-confirm-yes"
+              >
+                {t('cancelConfirmYes')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmingCancel(false)}
+                disabled={pending}
+                data-testid="schedule-cancel-confirm-keep"
+              >
+                {t('cancelConfirmKeep')}
+              </Button>
+            </span>
+          )}
+        </div>
       )}
     </section>
   );

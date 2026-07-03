@@ -843,7 +843,17 @@
         "lastRun": "הפעלה אחרונה: {when}",
         "cancelledAt": "בוטל ב-{when}",
         "runsLimit": "תקרה: {n} הפעלות",
-        "fromRecurring": "→ מתשלום חוזר"
+        "fromRecurring": "→ מתשלום חוזר",
+        "pause": "השהיה",
+        "resume": "חידוש",
+        "cancelAction": "ביטול תזמון",
+        "cancelConfirmBody": "לבטל את התזמון לצמיתות? מופעים קיימים יישמרו; מופעים חדשים לא ייווצרו.",
+        "cancelConfirmYes": "כן, לבטל",
+        "cancelConfirmKeep": "להשאיר את התזמון",
+        "pausedToast": "התזמון הושהה",
+        "resumedToast": "התזמון חודש",
+        "cancelledToast": "התזמון בוטל",
+        "actionFailed": "פעולת התזמון נכשלה"
       }
     }
   },

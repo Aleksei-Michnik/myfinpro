@@ -92,10 +92,7 @@ interface PaymentContextValue {
   listCategories(query?: ListCategoriesParams, signal?: AbortSignal): Promise<CategoryDto[]>;
 
   // Schedules (Phase 6 · Iteration 6.18.1)
-  /**
-   * Create the schedule attached to a RECURRING payment. Lifecycle endpoints
-   * (pause / resume / cancel) ship in 6.18.2.
-   */
+  /** Create the schedule attached to a RECURRING payment. */
   createSchedule(
     paymentId: string,
     spec: ScheduleSpec,
@@ -115,6 +112,13 @@ interface PaymentContextValue {
   ): Promise<ScheduleResponse>;
   /** Remove the schedule + its BullMQ scheduler entry. */
   removeSchedule(paymentId: string, signal?: AbortSignal): Promise<void>;
+
+  // Schedule lifecycle (Phase 6 · Iteration 6.18.2). Creator-only on the
+  // API side (404 for everyone else). `cancel` is terminal — the API
+  // answers 409 for any transition out of the cancelled state.
+  pauseSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+  resumeSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+  cancelSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
 
   // Transient state
   isLoading: boolean;
@@ -486,6 +490,43 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  // ── Schedule lifecycle (Phase 6 · Iteration 6.18.2) ────────────────────
+  // All three share the same POST /payments/:id/schedule/<action> shape and
+  // return the updated ScheduleResponse, so they funnel through one helper.
+  const scheduleLifecycle = useCallback(
+    (
+      paymentId: string,
+      action: 'pause' | 'resume' | 'cancel',
+      signal?: AbortSignal,
+    ): Promise<ScheduleResponse> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule/${action}`,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            signal,
+          },
+        );
+        if (!res.ok) await throwApiError(res, `Failed to ${action} schedule`);
+        return (await res.json()) as ScheduleResponse;
+      }),
+    [authHeaders, run],
+  );
+
+  const pauseSchedule = useCallback(
+    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'pause', signal),
+    [scheduleLifecycle],
+  );
+  const resumeSchedule = useCallback(
+    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'resume', signal),
+    [scheduleLifecycle],
+  );
+  const cancelSchedule = useCallback(
+    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'cancel', signal),
+    [scheduleLifecycle],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<PaymentContextValue>(
@@ -507,6 +548,9 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       getSchedule,
       replaceSchedule,
       removeSchedule,
+      pauseSchedule,
+      resumeSchedule,
+      cancelSchedule,
       isLoading,
       error,
       clearError,
@@ -529,6 +573,9 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       getSchedule,
       replaceSchedule,
       removeSchedule,
+      pauseSchedule,
+      resumeSchedule,
+      cancelSchedule,
       isLoading,
       error,
       clearError,

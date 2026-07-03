@@ -843,7 +843,17 @@
         "lastRun": "Last run: {when}",
         "cancelledAt": "Cancelled {when}",
         "runsLimit": "Limit: {n} run(s)",
-        "fromRecurring": "← from recurring payment"
+        "fromRecurring": "← from recurring payment",
+        "pause": "Pause",
+        "resume": "Resume",
+        "cancelAction": "Cancel schedule",
+        "cancelConfirmBody": "Cancel this schedule permanently? Existing occurrences are kept; no new ones will be generated.",
+        "cancelConfirmYes": "Yes, cancel",
+        "cancelConfirmKeep": "Keep schedule",
+        "pausedToast": "Schedule paused",
+        "resumedToast": "Schedule resumed",
+        "cancelledToast": "Schedule cancelled",
+        "actionFailed": "Schedule action failed"
       }
     }
   },

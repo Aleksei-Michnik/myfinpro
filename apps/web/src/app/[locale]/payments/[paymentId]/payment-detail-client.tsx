@@ -25,6 +25,7 @@ import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
 import { usePayments } from '@/lib/payment/payment-context';
 import type {
   AttributionChangeResult,
@@ -50,8 +51,9 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   const tComments = useTranslations('payments.comments');
   const tBadge = useTranslations('payments.schedule.badge');
   const locale = useLocale();
-  const { getPayment, getSchedule } = usePayments();
+  const { getPayment, getSchedule, pauseSchedule, resumeSchedule, cancelSchedule } = usePayments();
   const { addToast } = useToast();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [payment, setPayment] = useState<PaymentSummary | null>(null);
@@ -161,6 +163,44 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   useRealtimeEvents({ type: 'schedule.deleted', paymentId }, () => {
     setSchedule(null);
   });
+
+  // Phase 6 · Iteration 6.18.2 — schedule lifecycle actions. Control-scope
+  // op so the badge buttons disable while a request is in flight. The
+  // response is authoritative and replaces the schedule state directly;
+  // the realtime echo (6.18.1.4.3) is belt-and-braces for other tabs.
+  const lifecycleOp = useAsyncOperation<ScheduleResponse>({ scope: 'control' });
+  const runLifecycle = useCallback(
+    (action: 'pause' | 'resume' | 'cancel') => {
+      if (!payment) return;
+      const call =
+        action === 'pause' ? pauseSchedule : action === 'resume' ? resumeSchedule : cancelSchedule;
+      void lifecycleOp
+        .run((signal) => call(payment.id, signal))
+        .then((s) => {
+          if (s === undefined) return; // error or abort — surfaced below
+          setSchedule(s);
+          addToast(
+            'success',
+            action === 'pause'
+              ? tBadge('pausedToast')
+              : action === 'resume'
+                ? tBadge('resumedToast')
+                : tBadge('cancelledToast'),
+          );
+        });
+    },
+    // lifecycleOp identity is stable (useAsyncOperation contract).
+    [payment?.id, pauseSchedule, resumeSchedule, cancelSchedule, addToast, tBadge],
+  );
+
+  // Lifecycle failures (e.g. 409 when another tab already paused/cancelled)
+  // surface as an error toast; the realtime echo brings the true state.
+  // Aborts (dialog closed / route change) are user-initiated — no toast.
+  useEffect(() => {
+    if (lifecycleOp.error && lifecycleOp.error.reason !== 'aborted') {
+      addToast('error', lifecycleOp.error.message || tBadge('actionFailed'));
+    }
+  }, [lifecycleOp.error, addToast, tBadge]);
 
   const handleStarToggled = useCallback((starred: boolean) => {
     setPayment((prev) => (prev ? { ...prev, starredByMe: starred } : prev));
@@ -299,7 +339,17 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         onStarToggled={handleStarToggled}
       />
 
-      {isRecurringParent && schedule && <ScheduleBadge schedule={schedule} locale={locale} />}
+      {isRecurringParent && schedule && (
+        <ScheduleBadge
+          schedule={schedule}
+          locale={locale}
+          canManage={!!user && user.id === payment.createdById}
+          pending={lifecycleOp.isLoading}
+          onPause={() => runLifecycle('pause')}
+          onResume={() => runLifecycle('resume')}
+          onCancel={() => runLifecycle('cancel')}
+        />
+      )}
 
       {isRecurringParent && <RecurringOccurrencesSection paymentId={payment.id} />}
 
