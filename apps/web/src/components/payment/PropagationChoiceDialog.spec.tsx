@@ -30,9 +30,7 @@ describe('PropagationChoiceDialog', () => {
     renderDialog();
     expect(screen.getByTestId('propagation-choice-dialog')).toBeInTheDocument();
     expect((screen.getByTestId('propagation-mode-self') as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByTestId('propagation-mode-future') as HTMLInputElement).checked).toBe(
-      false,
-    );
+    expect((screen.getByTestId('propagation-mode-future') as HTMLInputElement).checked).toBe(false);
     expect((screen.getByTestId('propagation-mode-all') as HTMLInputElement).checked).toBe(false);
   });
 

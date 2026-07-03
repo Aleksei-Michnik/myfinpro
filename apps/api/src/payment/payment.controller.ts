@@ -191,8 +191,7 @@ export class PaymentController {
   })
   @ApiBody({ type: UpdatePaymentDto })
   @ApiOkResponse({
-    description:
-      'Updated payment summary (self) or cascade-edit result envelope (future/all)',
+    description: 'Updated payment summary (self) or cascade-edit result envelope (future/all)',
     type: PaymentSummaryDto,
   })
   @ApiNoContentResponse({

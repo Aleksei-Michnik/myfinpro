@@ -2403,8 +2403,9 @@ describe('PaymentService', () => {
       prismaMock.paymentAttribution.deleteMany.mockResolvedValue({ count: 0 });
       prismaMock.paymentAttribution.createMany.mockResolvedValue({ count: 0 });
       // Reload path: every findUnique returns a row keyed to the requested id.
-      prismaMock.payment.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
-        makeFullRow({ id: where.id, createdById: 'user-1' }),
+      prismaMock.payment.findUnique.mockImplementation(
+        async ({ where }: { where: { id: string } }) =>
+          makeFullRow({ id: where.id, createdById: 'user-1' }),
       );
       prismaMock.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1', userId: 'user-1' }]);
     });
@@ -2420,7 +2421,9 @@ describe('PaymentService', () => {
     });
 
     it('403 PAYMENT_NOT_OWNER when caller is not the creator', async () => {
-      prismaMock.payment.findFirst.mockResolvedValue(recurringParent({ createdById: 'user-other' }));
+      prismaMock.payment.findFirst.mockResolvedValue(
+        recurringParent({ createdById: 'user-other' }),
+      );
       try {
         await service.editPaymentWithPropagation('user-1', 'pay-1', { amountCents: 1 }, 'all');
       } catch (err) {
@@ -2638,7 +2641,10 @@ describe('PaymentService', () => {
       await new Promise((res) => setImmediate(res));
 
       const updates = prismaMock.auditLog.create.mock.calls
-        .map((c) => c[0] as { data: { action: string; entityId: string; details: { propagate?: string } } })
+        .map(
+          (c) =>
+            c[0] as { data: { action: string; entityId: string; details: { propagate?: string } } },
+        )
         .filter((a) => a.data.action === 'PAYMENT_UPDATED');
       const auditedIds = updates.map((a) => a.data.entityId);
       expect(auditedIds).toEqual(expect.arrayContaining(['pay-1', 'c1']));

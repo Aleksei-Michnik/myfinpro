@@ -972,7 +972,10 @@ export class PaymentService {
       this.ensureCategoryDirectionMatches(cat, effectiveDirection);
     }
     if (dto.amountCents !== undefined) this.validateAmount(dto.amountCents);
-    if (dto.currency !== undefined && !(CURRENCY_CODES as readonly string[]).includes(dto.currency)) {
+    if (
+      dto.currency !== undefined &&
+      !(CURRENCY_CODES as readonly string[]).includes(dto.currency)
+    ) {
       throw new BadRequestException({
         message: `Unsupported currency '${dto.currency}'`,
         errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CURRENCY,
@@ -1162,9 +1165,7 @@ export class PaymentService {
     targetId: string,
     targetAttrs: AttributionRow[],
     scalarData: Prisma.PaymentUpdateInput,
-    attrPlanFor:
-      | ((attrs: AttributionRow[]) => ReturnType<typeof planAttributionReplace>)
-      | null,
+    attrPlanFor: ((attrs: AttributionRow[]) => ReturnType<typeof planAttributionReplace>) | null,
   ): Promise<void> {
     if (Object.keys(scalarData).length > 0) {
       await tx.payment.update({ where: { id: targetId }, data: scalarData });

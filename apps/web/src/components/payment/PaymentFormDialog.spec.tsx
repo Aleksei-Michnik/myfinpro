@@ -611,9 +611,7 @@ describe('PaymentFormDialog', () => {
       });
       const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
       const handlers = renderRecurringEdit(payment);
-      await waitFor(() =>
-        expect(listOccurrencesMock).toHaveBeenCalledWith('p-rec', { limit: 1 }),
-      );
+      await waitFor(() => expect(listOccurrencesMock).toHaveBeenCalledWith('p-rec', { limit: 1 }));
       // Flush the probe's .then() so hasChildren lands before we save.
       await act(async () => {});
       return { payment, ...handlers };
@@ -667,9 +665,7 @@ describe('PaymentFormDialog', () => {
       fireEvent.click(screen.getByTestId('form-save'));
       await screen.findByTestId('propagation-choice-dialog');
       fireEvent.click(screen.getByTestId('propagation-confirm'));
-      await waitFor(() =>
-        expect(addToastMock).toHaveBeenCalledWith('success', 'resultUpdated:2'),
-      );
+      await waitFor(() => expect(addToastMock).toHaveBeenCalledWith('success', 'resultUpdated:2'));
       expect(addToastMock).toHaveBeenCalledWith('info', 'resultSkipped:1');
     });
 

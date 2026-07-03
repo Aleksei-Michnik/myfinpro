@@ -575,11 +575,8 @@ export function PaymentFormDialog({
         state.type !== effectivePayment.type &&
         (state.type === 'ONE_TIME' || state.type === 'RECURRING');
       if (isTypeChange) diff.type = state.type as 'ONE_TIME' | 'RECURRING';
-      const isRecurringParent =
-        effectivePayment.type === 'RECURRING' && state.type === 'RECURRING';
-      const cascadeableKeys = Object.keys(diff).filter(
-        (k) => k !== 'occurredAt' && k !== 'type',
-      );
+      const isRecurringParent = effectivePayment.type === 'RECURRING' && state.type === 'RECURRING';
+      const cascadeableKeys = Object.keys(diff).filter((k) => k !== 'occurredAt' && k !== 'type');
       if (isRecurringParent && hasChildren && cascadeableKeys.length > 0) {
         pendingEditRef.current = { diff, scheduleBuild, willBeRecurring };
         setShowPropagation(true);
