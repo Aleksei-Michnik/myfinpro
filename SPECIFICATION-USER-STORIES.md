@@ -31,12 +31,26 @@
 - As a user, I can upload a PDF of a receipt so that the system can automatically extract expense information from it.
 - As a user, I can add a URL to an online receipt so that the system can automatically extract expense information from it.
 - As a user, I can send a receipt photo via Telegram bot so that I can quickly add expenses while on the go.
+- As a user, when a receipt is processed, the system extracts the place (merchant), date/time, and every line item with its name, quantity, applied discounts, and price, so that I don't type anything manually.
+- As a user, extracted receipt items are automatically classified into my existing expense categories, and I can correct the classification during review.
+- As a user, after a receipt is extracted I am guided through each line item, and the system offers me similar existing products (including matches across different names or languages for the same product), so that my purchase history stays consistent.
+- As a user, I can confirm a proposed product match, pick a different product, or create a new product during the item walkthrough; my confirmations teach the system for next time.
+
+#### Product Catalog
+
+- As a user, purchases from my receipts build a product database automatically — new products/services appearing in receipts are added without manual work.
+- As a user, the same product bought under different names or in different languages is recognized as one product via its aliases.
+- As a user, I can scan a product's barcode with my device camera so that the barcode becomes the product's main identifier and future matches are exact.
+- As a user, I can add one picture per product — uploaded in the background — either manually or as part of confirming a product, so that products are easy to recognize.
+- As a user, when I scan an unknown barcode, the system prefills the product's name, brand, and image from an open product database (e.g. Open Food Facts) when available.
+- As a user, I can browse and search my product catalog and see each product's aliases, barcode, image, and purchase history.
 
 #### Purchase Analytics
 
 - As a user, I can view places/stores where I made purchases organized by categories and names so that I can understand my shopping patterns.
 - As a user, I can view a list of goods I've purchased so that I can track what I buy.
 - As a user, I can see price dynamics (price history over time) for goods I've purchased multiple times so that I can track price changes and trends in general or by stores.
+- As a user, I can see where I or my groups (family etc.) buy and how much is spent per category, item, or place — composing configurable combinations of dimensions and filter conditions — and save these views for reuse.
 
 ## Family/Group Owner/Admin (a family is a type of a group entity)
 
@@ -88,3 +102,13 @@
 - As a user, I can ask the AI assistant for details about individual family/group member contributions and expenses.
 - As a user, I can ask the AI assistant for advice on budgeting, saving, or managing expenses based on my financial data and targets.
 - As a user, I want to have an MCP that I can access from my preferred AI assistant (e.g., ChatGPT, Claude, etc.) so that I can manage my finances directly from the assistant. I should have an ability to ask questions, add or remove expenses, incomes, budgets, and targets.
+- As a user, I can connect my AI assistant to the app via a secure, user-scoped MCP connection (OAuth consent) and revoke that connection at any time from settings.
+- As a user, my AI assistant can read my purchase history and habit summaries (e.g. what I buy weekly or monthly) so that it understands my habits and gives quality advice.
+- As a user, I can upload receipts through my AI assistant's chat interface (photo or URL), and they enter the same extraction and review pipeline — the app acts as the database layer while the chat is my UI.
+- As a user, my AI assistant can walk me through product match confirmations conversationally, so that receipts added via chat end up fully classified.
+- As a user, I (and my assistant) can add and read comments on individual purchases so that the context of a purchase is remembered and available when needed.
+
+## WebMCP User (In-Browser Agents)
+
+- As a user with a browser-based AI agent, the web app exposes its actions (search purchases, view stats, add expenses, upload receipts, confirm product matches) as WebMCP tools, so that agents interact with the app directly instead of simulating clicks.
+- As a user, any write action performed by an in-browser agent requires my explicit confirmation in the app UI.

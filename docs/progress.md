@@ -40,26 +40,30 @@
 
 ## 2. Implementation Progress
 
-| Phase | Name                                            | Iterations | Status                 | Completion Date |
-| ----- | ----------------------------------------------- | ---------- | ---------------------- | --------------- |
-| 0     | Foundation                                      | 8/8        | ✅ Complete            | 2026-02-13      |
-| 1     | Basic Authentication                            | 13/13      | ✅ Complete            | 2026-03-14      |
-| 2     | Google Authentication                           | 4/4        | ✅ Complete            | 2026-03-25      |
-| 3     | Telegram Authentication                         | 4/4        | ✅ Complete            | 2026-04-03      |
-| 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete            | —               |
-| 5     | Family/Group Management                         | 9/9        | ✅ Complete            | 2026-04-24      |
-| 6     | Payment Management (unified incomes + expenses) | 16/21      | 🔄 In progress         | —               |
-| 7     | _(subsumed by Phase 6)_                         | —          | ➖ Merged into Phase 6 | 2026-04-25      |
-| 8     | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started         | —               |
-| 9     | Receipt Processing                              | 0/8        | ⬜ Not Started         | —               |
-| 10    | Purchase Analytics                              | 0/8        | ⬜ Not Started         | —               |
-| 11    | Telegram Bot                                    | 0/16       | ⬜ Not Started         | —               |
-| 12    | Telegram Mini App                               | 0/10       | ⬜ Not Started         | —               |
-| 13    | Bot Receipt Processing                          | 0/8        | ⬜ Not Started         | —               |
-| 14    | Bot Analytics                                   | 0/4        | ⬜ Not Started         | —               |
-| 15    | LLM Assistant                                   | 0/8        | ⬜ Not Started         | —               |
+| Phase | Name                                            | Iterations | Status         | Completion Date |
+| ----- | ----------------------------------------------- | ---------- | -------------- | --------------- |
+| 0     | Foundation                                      | 8/8        | ✅ Complete    | 2026-02-13      |
+| 1     | Basic Authentication                            | 13/13      | ✅ Complete    | 2026-03-14      |
+| 2     | Google Authentication                           | 4/4        | ✅ Complete    | 2026-03-25      |
+| 3     | Telegram Authentication                         | 4/4        | ✅ Complete    | 2026-04-03      |
+| 4     | Auth Completion & Legal Pages                   | 23/23      | ✅ Complete    | —               |
+| 5     | Family/Group Management                         | 9/9        | ✅ Complete    | 2026-04-24      |
+| 6     | Payment Management (unified incomes + expenses) | 16/21      | 🔄 In progress | —               |
+| 7     | Receipt Ingestion & LLM Extraction              | 0/10       | ⬜ Not Started | —               |
+| 8     | Product Catalog, Matching & Barcode             | 0/10       | ⬜ Not Started | —               |
+| 9     | Purchase Analytics (configurable)               | 0/8        | ⬜ Not Started | —               |
+| 10    | Budgets & Spending Targets                      | 0/10       | ⬜ Not Started | —               |
+| 11    | MCP Server (LLM access to purchases)            | 0/8        | ⬜ Not Started | —               |
+| 12    | Telegram Bot                                    | 0/16       | ⬜ Not Started | —               |
+| 13    | Telegram Mini App                               | 0/10       | ⬜ Not Started | —               |
+| 14    | Bot Receipt Processing                          | 0/6        | ⬜ Not Started | —               |
+| 15    | Bot Analytics                                   | 0/4        | ⬜ Not Started | —               |
+| 16    | LLM Assistant (in-app)                          | 0/7        | ⬜ Not Started | —               |
+| 17    | WebMCP (in-GUI agent tools)                     | 0/4        | ⬜ Not Started | —               |
 
-**Total iterations:** 140 | **Completed:** 66 | **Remaining:** 74
+**Total iterations:** 171 | **Completed:** 66 | **Remaining:** 105
+
+> **Re-plan (2026-07-03)**: Phases after 6 restructured around receipt ingestion and the product catalog — see the re-plan note in [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) §5. Receipts (with pluggable vision-LLM extraction) now come directly after Phase 6, followed by the two-layer product catalog with barcode scanning, configurable purchase analytics, budgets, and a remote MCP server (OAuth 2.1) exposing user-scoped purchase tools to LLM chat clients. WebMCP added as the final phase. Old → new numbering: Budgets 8→10, Receipts 9→7, Analytics 10→9, Bot 11→12, Mini App 12→13, Bot Receipts 13→14, Bot Analytics 14→15, LLM Assistant 15→16.
 
 ---
 
