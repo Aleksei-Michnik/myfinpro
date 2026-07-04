@@ -1,4 +1,5 @@
 // Phase 6 · Iteration 6.18.1.4 — wire-level types for SSE events.
+import type { ReceiptSummary } from '@/lib/receipt/types';
 //
 // Mirror of the backend discriminated union (see
 // [`apps/api/src/realtime/events.types.ts`](../../../../api/src/realtime/events.types.ts))
@@ -98,6 +99,9 @@ export type RealtimeEvent =
   | { type: 'schedule.resumed'; paymentId: string; schedule: ScheduleResponse }
   | { type: 'schedule.cancelled'; paymentId: string; schedule: ScheduleResponse }
   | { type: 'schedule.deleted'; paymentId: string }
+  // Phase 7.7 — receipt lifecycle (uploader-only fan-out on the server).
+  | { type: 'receipt.updated'; receipt: ReceiptSummary }
+  | { type: 'receipt.deleted'; receiptId: string }
   | { type: 'ping' };
 
 export type RealtimeEventType = RealtimeEvent['type'];

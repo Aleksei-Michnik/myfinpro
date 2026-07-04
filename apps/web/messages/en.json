@@ -44,7 +44,8 @@
     "logout": "Logout",
     "menu": "Menu",
     "closeMenu": "Close menu",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "receipts": "Receipts"
   },
   "home": {
     "title": "Personal & Family Finance Management",
@@ -985,5 +986,41 @@
     },
     "empty": "No custom categories yet.",
     "loading": "Loading categories…"
+  },
+  "receipts": {
+    "title": "Receipts",
+    "status": {
+      "UPLOADED": "Uploaded",
+      "EXTRACTING": "Extracting…",
+      "REVIEW": "Ready for review",
+      "CONFIRMED": "Confirmed",
+      "FAILED": "Failed"
+    },
+    "upload": {
+      "title": "Add a receipt",
+      "dropLabel": "Drop a receipt here or click to browse",
+      "formats": "JPEG, PNG, WebP, HEIC or PDF — up to 10MB",
+      "browse": "Browse files",
+      "camera": "Take a photo",
+      "urlPlaceholder": "https:// link to an online receipt",
+      "urlSubmit": "Add URL",
+      "uploadedToast": "{count, plural, =1 {Receipt uploaded} other {# receipts uploaded}} — extraction started",
+      "urlAddedToast": "Receipt URL added — extraction started",
+      "failedToast": "Upload failed"
+    },
+    "list": {
+      "title": "Your receipts",
+      "empty": "No receipts yet — add your first one above.",
+      "untitled": "Receipt",
+      "itemCount": "{count, plural, =1 {1 item} other {# items}}",
+      "retry": "Retry",
+      "retriedToast": "Extraction restarted",
+      "delete": "Delete",
+      "deleteConfirm": "Confirm delete",
+      "deleteKeep": "Keep",
+      "deletedToast": "Receipt deleted",
+      "loadMore": "Load more",
+      "actionFailed": "Action failed"
+    }
   }
 }

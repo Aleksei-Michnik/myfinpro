@@ -44,7 +44,8 @@
     "logout": "התנתקות",
     "menu": "תפריט",
     "closeMenu": "סגירת תפריט",
-    "skipToContent": "דילוג לתוכן הראשי"
+    "skipToContent": "דילוג לתוכן הראשי",
+    "receipts": "קבלות"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
@@ -985,5 +986,41 @@
     },
     "empty": "אין קטגוריות מותאמות אישית עדיין.",
     "loading": "טוען קטגוריות…"
+  },
+  "receipts": {
+    "title": "קבלות",
+    "status": {
+      "UPLOADED": "הועלתה",
+      "EXTRACTING": "בחילוץ…",
+      "REVIEW": "ממתינה לאישור",
+      "CONFIRMED": "אושרה",
+      "FAILED": "נכשלה"
+    },
+    "upload": {
+      "title": "הוספת קבלה",
+      "dropLabel": "גררו קבלה לכאן או לחצו לבחירת קובץ",
+      "formats": "JPEG, PNG, WebP, HEIC או PDF — עד 10MB",
+      "browse": "בחירת קבצים",
+      "camera": "צילום תמונה",
+      "urlPlaceholder": "קישור https:// לקבלה מקוונת",
+      "urlSubmit": "הוספת קישור",
+      "uploadedToast": "{count, plural, =1 {הקבלה הועלתה} other {# קבלות הועלו}} — החילוץ החל",
+      "urlAddedToast": "קישור הקבלה נוסף — החילוץ החל",
+      "failedToast": "ההעלאה נכשלה"
+    },
+    "list": {
+      "title": "הקבלות שלך",
+      "empty": "אין קבלות עדיין — הוסיפו את הראשונה למעלה.",
+      "untitled": "קבלה",
+      "itemCount": "{count, plural, =1 {פריט אחד} other {# פריטים}}",
+      "retry": "ניסיון חוזר",
+      "retriedToast": "החילוץ הופעל מחדש",
+      "delete": "מחיקה",
+      "deleteConfirm": "אישור מחיקה",
+      "deleteKeep": "ביטול",
+      "deletedToast": "הקבלה נמחקה",
+      "loadMore": "טעינת עוד",
+      "actionFailed": "הפעולה נכשלה"
+    }
   }
 }
