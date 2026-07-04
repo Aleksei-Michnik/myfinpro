@@ -624,7 +624,9 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 
 ### Phase 10: Budgets & Spending Targets
 
-> **Re-plan (2026-07-03)**: Renumbered from original Phase 8, content unchanged; moved after the receipt/product/analytics track.
+> **Re-plan (2026-07-03)**: Renumbered from original Phase 8, content unchanged; moved after the receipt/product/analytics track. Only depends on Phase 6 (payments), so it can run in parallel with Phases 7–9.
+>
+> **Detailed design**: See [`docs/phase-10-budgets-design.md`](docs/phase-10-budgets-design.md) for the full Phase 10 design document (schema, progress semantics, alert workers, API, UI, and iteration-by-iteration plan).
 
 | Iteration | Objective             | Scope                                                                  | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                  |
 | --------- | --------------------- | ---------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
