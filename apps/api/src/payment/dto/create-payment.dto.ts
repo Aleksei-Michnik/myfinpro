@@ -17,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { AttributionDto } from './attribution.dto';
+import { CreatePlanDto } from './create-plan.dto';
 
 /**
  * POST /payments body. Phase 6, iteration 6.5.
@@ -75,10 +76,13 @@ export class CreatePaymentDto {
   schedule?: unknown;
 
   /**
-   * Reserved — plan body for INSTALLMENT / LOAN / MORTGAGE (iteration 6.19).
-   * Rejected in 6.5 with PAYMENT_PLAN_NOT_SUPPORTED when present.
+   * Inline plan body — REQUIRED when `type ∈ {INSTALLMENT, LOAN, MORTGAGE}`
+   * (iteration 6.19), rejected with PAYMENT_PLAN_NOT_SUPPORTED otherwise.
+   * The plan's principal is this payment's `amountCents`; its kind is `type`.
    */
-  @ApiPropertyOptional({ description: 'Reserved — rejected in iteration 6.5.' })
+  @ApiPropertyOptional({ type: CreatePlanDto })
   @IsOptional()
-  plan?: unknown;
+  @ValidateNested()
+  @Type(() => CreatePlanDto)
+  plan?: CreatePlanDto;
 }

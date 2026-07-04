@@ -300,18 +300,22 @@ model PaymentSchedule {
 }
 
 model PaymentPlan {
-  id                 String   @id @default(uuid()) @db.VarChar(36)
-  paymentId          String   @unique @map("payment_id") @db.VarChar(36)
-  payment            Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  kind               String   @db.VarChar(20)
-  principalCents     Int      @map("principal_cents")
-  interestRate       Decimal  @default(0) @map("interest_rate") @db.Decimal(8, 6)
-  paymentsCount      Int      @map("payments_count")
-  frequency          String   @db.VarChar(20)
-  firstDueAt         DateTime @map("first_due_at")
-  amortizationMethod String   @default("french") @map("amortization_method") @db.VarChar(16)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  paymentId          String    @unique @map("payment_id") @db.VarChar(36)
+  payment            Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  kind               String    @db.VarChar(20)
+  principalCents     Int       @map("principal_cents")
+  interestRate       Decimal   @default(0) @map("interest_rate") @db.Decimal(8, 6)
+  paymentsCount      Int       @map("payments_count")
+  frequency          String    @db.VarChar(20)
+  firstDueAt         DateTime  @map("first_due_at")
+  amortizationMethod String    @default("french") @map("amortization_method") @db.VarChar(16)
+  // Soft-cancel (Phase 6, iteration 6.19): cancelling flips the remaining
+  // PENDING child occurrences to CANCELLED (rows are never deleted, for
+  // audit) and stamps this column. Terminal — mirrors PaymentSchedule.
+  cancelledAt        DateTime? @map("cancelled_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@map("payment_plans")
 }

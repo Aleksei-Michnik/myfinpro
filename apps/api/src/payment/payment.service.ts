@@ -1,4 +1,4 @@
-import { CURRENCY_CODES, CurrencyCode } from '@myfinpro/shared';
+import { CURRENCY_CODES, CurrencyCode, isPlanKind, PAYMENT_PLAN_KINDS } from '@myfinpro/shared';
 import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
@@ -21,7 +21,6 @@ import { CascadeEditResponseDto } from './dto/cascade-edit-response.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { DeletePaymentQueryDto } from './dto/delete-payment.query.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
-import { PaymentPropagateMode } from './dto/update-payment.query.dto';
 import { PaymentListResponseDto } from './dto/payment-list-response.dto';
 import {
   PaymentAttributionSummary,
@@ -30,6 +29,8 @@ import {
 } from './dto/payment-summary.dto';
 import { ToggleStarResponseDto } from './dto/toggle-star-response.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { PaymentPropagateMode } from './dto/update-payment.query.dto';
+import { createPlanWithinTransaction, validatePlanAndCompute } from './payment-plan.create';
 import {
   computePaymentRecipients,
   type RecipientAttribution,
@@ -241,26 +242,36 @@ export class PaymentService {
    * See design §5.2 "Payments" for validation rules and §5.7 for error codes.
    */
   async create(userId: string, dto: CreatePaymentDto): Promise<PaymentSummaryDto> {
-    // 1. Type guard — ONE_TIME (6.5) and RECURRING (6.18.1.1) are implemented.
-    //    LIMITED_PERIOD / INSTALLMENT / LOAN / MORTGAGE remain deferred to
-    //    later phases and reject with the same structured error code.
-    if (!(SUPPORTED_CREATE_TYPES as readonly string[]).includes(dto.type)) {
+    // 1. Type guard — ONE_TIME (6.5), RECURRING (6.18.1.1), and the plan
+    //    kinds INSTALLMENT / LOAN / MORTGAGE (6.19) are implemented.
+    //    LIMITED_PERIOD remains deferred.
+    const isPlan = isPlanKind(dto.type);
+    if (!(SUPPORTED_CREATE_TYPES as readonly string[]).includes(dto.type) && !isPlan) {
       throw new BadRequestException({
         message: `Payment type '${dto.type}' is not implemented yet`,
         errorCode: PAYMENT_ERRORS.PAYMENT_TYPE_NOT_IMPLEMENTED,
       });
     }
 
-    // 2. Schedule / plan guards — reserved for iterations 6.17 / 6.19.
+    // 2. Schedule guard — reserved (schedules are a separate sub-resource,
+    //    posted by the client after the parent exists — see 6.18.1).
     if (dto.schedule !== undefined && dto.schedule !== null) {
       throw new BadRequestException({
         message: 'Schedule bodies are not supported yet',
         errorCode: PAYMENT_ERRORS.PAYMENT_SCHEDULE_NOT_SUPPORTED,
       });
     }
-    if (dto.plan !== undefined && dto.plan !== null) {
+    // 2b. Plan body — required for plan kinds (a plan parent without its
+    //     occurrence rows would be a broken invariant), rejected otherwise.
+    if (isPlan && (dto.plan === undefined || dto.plan === null)) {
       throw new BadRequestException({
-        message: 'Plan bodies are not supported yet',
+        message: `Payment type '${dto.type}' requires a plan body`,
+        errorCode: PAYMENT_ERRORS.PAYMENT_PLAN_REQUIRED,
+      });
+    }
+    if (!isPlan && dto.plan !== undefined && dto.plan !== null) {
+      throw new BadRequestException({
+        message: `Plan bodies are only supported for ${PAYMENT_PLAN_KINDS.join(' / ')} payments`,
         errorCode: PAYMENT_ERRORS.PAYMENT_PLAN_NOT_SUPPORTED,
       });
     }
@@ -286,40 +297,57 @@ export class PaymentService {
     // 7. Attributions — non-empty, well-formed, de-duplicated, in-scope.
     await this.validateAttributions(userId, dto.attributions);
 
+    // 7b. Plan kinds (6.19) — validate + compute the amortisation schedule
+    //     BEFORE the transaction so invalid plans never cost a write. The
+    //     plan's principal is the payment's own amountCents.
+    const planComputed =
+      isPlanKind(dto.type) && dto.plan
+        ? validatePlanAndCompute(dto.type, dto.amountCents, dto.plan)
+        : null;
+
     // 8. Transaction — Payment + N attributions. The schedule (for RECURRING)
     //    is intentionally NOT created here; the web client posts it as a
-    //    separate request to /payments/:id/schedule.
-    const created = await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.create({
-        data: {
-          direction: dto.direction,
-          type: dto.type,
-          amountCents: dto.amountCents,
-          currency: dto.currency,
-          occurredAt,
-          status: 'POSTED',
-          categoryId: dto.categoryId,
-          note: dto.note ?? null,
-          createdById: userId,
-          attributions: {
-            create: dto.attributions.map((a) => ({
-              scopeType: a.scope,
-              userId: a.scope === 'personal' ? userId : null,
-              groupId: a.scope === 'group' ? (a.groupId ?? null) : null,
-            })),
+    //    separate request to /payments/:id/schedule. Plan kinds DO create
+    //    their PaymentPlan + pre-generated occurrences here (6.19) — a plan
+    //    parent without its rows would be a broken invariant. The generous
+    //    timeout covers up-to-600-row pre-generation on slow CI runners.
+    const created = await this.prisma.$transaction(
+      async (tx) => {
+        const payment = await tx.payment.create({
+          data: {
+            direction: dto.direction,
+            type: dto.type,
+            amountCents: dto.amountCents,
+            currency: dto.currency,
+            occurredAt,
+            status: 'POSTED',
+            categoryId: dto.categoryId,
+            note: dto.note ?? null,
+            createdById: userId,
+            attributions: {
+              create: dto.attributions.map((a) => ({
+                scopeType: a.scope,
+                userId: a.scope === 'personal' ? userId : null,
+                groupId: a.scope === 'group' ? (a.groupId ?? null) : null,
+              })),
+            },
           },
-        },
-        include: {
-          category: {
-            select: { id: true, slug: true, name: true, icon: true, color: true },
+          include: {
+            category: {
+              select: { id: true, slug: true, name: true, icon: true, color: true },
+            },
+            attributions: {
+              include: { group: { select: { name: true } } },
+            },
           },
-          attributions: {
-            include: { group: { select: { name: true } } },
-          },
-        },
-      });
-      return payment;
-    });
+        });
+        if (planComputed && dto.plan && isPlanKind(dto.type)) {
+          await createPlanWithinTransaction(tx, payment, dto.type, dto.plan, planComputed);
+        }
+        return payment;
+      },
+      { timeout: planComputed ? 30_000 : 5_000 },
+    );
 
     // 9. Audit — fire-and-forget.
     void this.writeAudit(userId, created.id, 'PAYMENT_CREATED', {
@@ -329,6 +357,16 @@ export class PaymentService {
       currency: dto.currency,
       categoryId: dto.categoryId,
       attributions: dto.attributions,
+      ...(planComputed
+        ? {
+            plan: {
+              paymentsCount: dto.plan!.paymentsCount,
+              interestRate: dto.plan!.interestRate,
+              frequency: dto.plan!.frequency,
+              method: planComputed.method,
+            },
+          }
+        : {}),
     });
 
     this.logger.log(

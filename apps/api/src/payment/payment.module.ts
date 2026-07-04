@@ -5,6 +5,8 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { PaymentCommentController } from './payment-comment.controller';
 import { PaymentCommentService } from './payment-comment.service';
 import { PaymentOccurrenceProcessor } from './payment-occurrence.processor';
+import { PaymentPlanController } from './payment-plan.controller';
+import { PaymentPlanService } from './payment-plan.service';
 import { PaymentScheduleController } from './payment-schedule.controller';
 import { PaymentScheduleService } from './payment-schedule.service';
 import { PaymentController } from './payment.controller';
@@ -30,11 +32,17 @@ import { SystemCategoriesBootstrap } from './system-categories.bootstrap';
   providers: [
     PaymentService,
     PaymentCommentService,
+    PaymentPlanService,
     PaymentScheduleService,
     PaymentOccurrenceProcessor,
     SystemCategoriesBootstrap,
   ],
-  controllers: [PaymentController, PaymentCommentController, PaymentScheduleController],
-  exports: [PaymentService, PaymentCommentService, PaymentScheduleService],
+  controllers: [
+    PaymentController,
+    PaymentCommentController,
+    PaymentPlanController,
+    PaymentScheduleController,
+  ],
+  exports: [PaymentService, PaymentCommentService, PaymentPlanService, PaymentScheduleService],
 })
 export class PaymentModule {}

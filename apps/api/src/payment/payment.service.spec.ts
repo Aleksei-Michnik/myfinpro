@@ -63,6 +63,11 @@ describe('PaymentService', () => {
       findUnique: jest.fn().mockResolvedValue(null),
       delete: jest.fn().mockResolvedValue({}),
     },
+    paymentPlan: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
@@ -161,6 +166,7 @@ describe('PaymentService', () => {
         paymentAttribution: prismaMock.paymentAttribution,
         paymentStar: prismaMock.paymentStar,
         paymentSchedule: prismaMock.paymentSchedule,
+        paymentPlan: prismaMock.paymentPlan,
         auditLog: prismaMock.auditLog,
       }),
     );
@@ -174,8 +180,10 @@ describe('PaymentService', () => {
     // Iteration 6.5 introduced the guard as ONE_TIME-only; iteration 6.18.1.1
     // lifted RECURRING out of the deferred set because the recurring
     // infrastructure (schedule CRUD + worker + cascade) shipped in
-    // 6.17.1–6.17.4. The remaining types stay 400 with the same code.
-    it.each(['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE'] as const)(
+    // 6.17.1–6.17.4, and 6.19 lifted the plan kinds (INSTALLMENT / LOAN /
+    // MORTGAGE — they now require an inline plan body instead). Only
+    // LIMITED_PERIOD stays 400 with the not-implemented code.
+    it.each(['LIMITED_PERIOD'] as const)(
       'rejects type=%s with PAYMENT_TYPE_NOT_IMPLEMENTED',
       async (t) => {
         await expect(service.create('user-1', baseDto({ type: t }))).rejects.toThrow(
@@ -185,6 +193,20 @@ describe('PaymentService', () => {
           await service.create('user-1', baseDto({ type: t }));
         } catch (err) {
           expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_TYPE_NOT_IMPLEMENTED);
+        }
+      },
+    );
+
+    it.each(['INSTALLMENT', 'LOAN', 'MORTGAGE'] as const)(
+      'rejects type=%s without a plan body (PAYMENT_PLAN_REQUIRED, 6.19)',
+      async (t) => {
+        await expect(service.create('user-1', baseDto({ type: t }))).rejects.toThrow(
+          BadRequestException,
+        );
+        try {
+          await service.create('user-1', baseDto({ type: t }));
+        } catch (err) {
+          expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_PLAN_REQUIRED);
         }
       },
     );
@@ -230,11 +252,30 @@ describe('PaymentService', () => {
       }
     });
 
-    it('rejects when plan body is present', async () => {
+    it('rejects a plan body on a non-plan type (6.19: only INSTALLMENT/LOAN/MORTGAGE carry plans)', async () => {
       try {
-        await service.create('user-1', baseDto({ plan: { kind: 'INSTALLMENT' } }));
+        await service.create(
+          'user-1',
+          baseDto({
+            type: 'ONE_TIME',
+            plan: {
+              interestRate: 0,
+              paymentsCount: 3,
+              frequency: 'MONTHLY',
+              firstDueAt: '2026-08-01T00:00:00.000Z',
+            },
+          }),
+        );
       } catch (err) {
         expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_PLAN_NOT_SUPPORTED);
+      }
+    });
+
+    it('requires a plan body for plan kinds (6.19)', async () => {
+      try {
+        await service.create('user-1', baseDto({ type: 'INSTALLMENT' }));
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_PLAN_REQUIRED);
       }
     });
   });
@@ -467,6 +508,110 @@ describe('PaymentService', () => {
         expect.objectContaining({ id: 'cat-1', slug: 'groceries', name: 'Groceries' }),
       );
       expect(r.attributions).toHaveLength(1);
+    });
+
+    it('creates an INSTALLMENT parent with plan row + pre-generated PENDING children (6.19)', async () => {
+      prismaMock.payment.create
+        .mockResolvedValueOnce(
+          makePersistedPayment({ id: 'pay-plan', type: 'INSTALLMENT', amountCents: 120_000 }),
+        )
+        .mockResolvedValue(makePersistedPayment({ id: 'child' }));
+      prismaMock.paymentPlan.create.mockResolvedValue({ id: 'plan-1' });
+
+      const r = await service.create(
+        'user-1',
+        baseDto({
+          type: 'INSTALLMENT',
+          amountCents: 120_000,
+          plan: {
+            interestRate: 0,
+            paymentsCount: 12,
+            frequency: 'MONTHLY',
+            firstDueAt: '2026-08-01T00:00:00.000Z',
+          },
+        }),
+      );
+
+      // Plan row: principal is the payment's own amountCents; the method
+      // defaults by kind (INSTALLMENT -> equal).
+      expect(prismaMock.paymentPlan.create).toHaveBeenCalledTimes(1);
+      const planArg = (
+        prismaMock.paymentPlan.create.mock.calls[0][0] as {
+          data: Record<string, unknown>;
+        }
+      ).data;
+      expect(planArg).toEqual(
+        expect.objectContaining({
+          paymentId: 'pay-plan',
+          kind: 'INSTALLMENT',
+          principalCents: 120_000,
+          paymentsCount: 12,
+          frequency: 'MONTHLY',
+          amortizationMethod: 'equal',
+        }),
+      );
+
+      // 1 parent + 12 pre-generated children.
+      expect(prismaMock.payment.create).toHaveBeenCalledTimes(13);
+      const firstChild = (
+        prismaMock.payment.create.mock.calls[1][0] as {
+          data: {
+            type: string;
+            status: string;
+            parentPaymentId: string;
+            amountCents: number;
+            idempotencyKey: string;
+            attributions: { create: unknown };
+          };
+        }
+      ).data;
+      expect(firstChild).toEqual(
+        expect.objectContaining({
+          type: 'ONE_TIME',
+          status: 'PENDING',
+          parentPaymentId: 'pay-plan',
+          amountCents: 10_000,
+          idempotencyKey: 'plan:plan-1:1',
+        }),
+      );
+      // Children clone the parent's attributions.
+      expect(firstChild.attributions.create).toEqual([
+        { scopeType: 'personal', userId: 'user-1', groupId: null },
+      ]);
+      const lastChild = (
+        prismaMock.payment.create.mock.calls[12][0] as {
+          data: { idempotencyKey: string };
+        }
+      ).data;
+      expect(lastChild.idempotencyKey).toBe('plan:plan-1:12');
+
+      // Generous tx timeout for the pre-generation loop.
+      expect(prismaMock.$transaction.mock.calls[0][1]).toEqual({ timeout: 30_000 });
+      expect(r.type).toBe('INSTALLMENT');
+    });
+
+    it('rejects an invalid plan body with PAYMENT_PLAN_INVALID before any write (6.19)', async () => {
+      try {
+        await service.create(
+          'user-1',
+          baseDto({
+            type: 'INSTALLMENT',
+            amountCents: 120_000,
+            plan: {
+              // equal + non-zero rate is contradictory -> RangeError -> 400.
+              interestRate: 0.05,
+              paymentsCount: 12,
+              frequency: 'MONTHLY',
+              firstDueAt: '2026-08-01T00:00:00.000Z',
+              amortizationMethod: 'equal',
+            },
+          }),
+        );
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe(PAYMENT_ERRORS.PAYMENT_PLAN_INVALID);
+      }
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
     });
 
     it('creates a group-only payment when the caller is a member', async () => {

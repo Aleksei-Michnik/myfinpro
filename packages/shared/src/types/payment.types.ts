@@ -49,3 +49,8 @@ export type AmortizationMethod = (typeof AMORTIZATION_METHODS)[number];
 
 export const PAYMENT_PLAN_KINDS = ['INSTALLMENT', 'LOAN', 'MORTGAGE'] as const;
 export type PaymentPlanKind = (typeof PAYMENT_PLAN_KINDS)[number];
+
+/** Type guard: does this payment type carry an amortisation plan? */
+export function isPlanKind(type: string): type is PaymentPlanKind {
+  return (PAYMENT_PLAN_KINDS as readonly string[]).includes(type);
+}
