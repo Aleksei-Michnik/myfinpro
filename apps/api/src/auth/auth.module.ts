@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AccountCleanupService } from './services/account-cleanup.service';
 import { AccountDeletionService } from './services/account-deletion.service';
+import { AccountMergeService } from './services/account-merge.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordResetService } from './services/password-reset.service';
@@ -49,6 +50,7 @@ import { LocalStrategy } from './strategies/local.strategy';
   providers: [
     AccountCleanupService,
     AccountDeletionService,
+    AccountMergeService,
     AuthService,
     EmailVerificationService,
     OAuthService,

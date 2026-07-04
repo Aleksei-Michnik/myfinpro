@@ -41,7 +41,10 @@
     "help": "Help",
     "signIn": "Sign In",
     "signUp": "Sign Up",
-    "logout": "Logout"
+    "logout": "Logout",
+    "menu": "Menu",
+    "closeMenu": "Close menu",
+    "skipToContent": "Skip to main content"
   },
   "home": {
     "title": "Personal & Family Finance Management",
@@ -315,7 +318,6 @@
     "cannotDisconnectLast": "Cannot disconnect your last sign-in method",
     "linkSuccess": "{provider} connected successfully",
     "linkError": "Failed to connect {provider}",
-    "alreadyLinked": "This {provider} account is already linked to another user",
     "account": {
       "title": "Account Settings",
       "deleteAccount": "Delete Account",

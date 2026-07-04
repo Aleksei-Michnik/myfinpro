@@ -38,7 +38,6 @@ vi.mock('next-intl', () => ({
         cannotDisconnectLast: 'Cannot disconnect your last sign-in method',
         linkSuccess: '{provider} connected successfully',
         linkError: 'Failed to connect {provider}',
-        alreadyLinked: 'This {provider} account is already linked to another user',
       },
       common: {
         cancel: 'Cancel',
@@ -376,6 +375,100 @@ describe('ConnectedAccounts', () => {
     });
 
     expect(screen.getByText('Connect Google')).toBeInTheDocument();
+  });
+
+  it('navigates to the Google link flow when Connect Google is clicked', async () => {
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, href: 'http://localhost/en/settings/account', search: '' },
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          hasPassword: true,
+          providers: [],
+        }),
+    });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('connected-accounts')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Connect Google'));
+
+    expect(window.location.href).toContain('/auth/google/link');
+
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  });
+
+  describe('Google link redirect result', () => {
+    const originalLocation = window.location;
+    const mockReplaceState = vi.fn();
+    const originalReplaceState = window.history.replaceState;
+
+    function setSearch(search: string) {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          ...originalLocation,
+          pathname: '/en/settings/account',
+          search,
+          href: `http://localhost/en/settings/account${search}`,
+        },
+      });
+      window.history.replaceState = mockReplaceState;
+    }
+
+    afterEach(() => {
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+      window.history.replaceState = originalReplaceState;
+    });
+
+    it('shows a success toast and cleans the URL after ?googleLinked=1', async () => {
+      setSearch('?googleLinked=1');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(connectedAccountsResponse),
+      });
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith('success', 'Google connected successfully');
+      });
+      expect(mockReplaceState).toHaveBeenCalledWith(null, '', '/en/settings/account');
+    });
+
+    it('shows an error toast after ?googleLinkError=1', async () => {
+      setSearch('?googleLinkError=1');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(connectedAccountsResponse),
+      });
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith('error', 'Failed to connect Google');
+      });
+    });
+
+    it('shows no link toast without result params', async () => {
+      setSearch('');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(connectedAccountsResponse),
+      });
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('connected-accounts')).toBeInTheDocument();
+      });
+      expect(mockAddToast).not.toHaveBeenCalled();
+      expect(mockReplaceState).not.toHaveBeenCalled();
+    });
   });
 
   it('shows Connect Telegram button when Telegram is not connected', async () => {

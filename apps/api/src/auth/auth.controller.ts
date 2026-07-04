@@ -52,7 +52,12 @@ import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { TokenService } from './services/token.service';
-import { clearAuthCookie, setAuthCookie } from './utils/auth-cookie';
+import {
+  clearAuthCookie,
+  clearLinkTokenCookie,
+  setAuthCookie,
+  setLinkTokenCookie,
+} from './utils/auth-cookie';
 import { verifyTelegramAuth } from './utils/telegram-auth.util';
 
 @ApiTags('Authentication')
@@ -86,6 +91,12 @@ export class AuthController {
     setAuthCookie(response, result.accessToken);
     const { refreshToken: _rt, ...rest } = result;
     return rest;
+  }
+
+  /** Frontend origin, derived from SERVER_NAME (dev fallback: localhost). */
+  private frontendBaseUrl(): string {
+    const serverName = this.configService.get<string>('SERVER_NAME', '');
+    return serverName ? `https://${serverName}` : 'http://localhost:3000';
   }
 
   @CustomThrottle({ limit: 5, ttl: 60000 })
@@ -345,12 +356,63 @@ export class AuthController {
     // Guard redirects to Google — this method body is never executed
   }
 
+  /**
+   * Start the "Connect Google" flow from Settings. This is a top-level
+   * browser navigation, so authentication comes from the `access_token`
+   * cookie rather than the Authorization header. A short-lived link
+   * token is stored in an httpOnly cookie and picked up by the OAuth
+   * callback, which then LINKS the Google identity to this user instead
+   * of logging in.
+   */
+  @CustomThrottle({ limit: 10, ttl: 60000 })
+  @Get('google/link')
+  @ApiExcludeEndpoint()
+  googleLinkStart(@Req() request: Request, @Res() response: Response) {
+    const accessToken = request.cookies?.access_token as string | undefined;
+    const payload = accessToken ? this.tokenService.verifyAccessToken(accessToken) : null;
+    if (!payload) {
+      // Session expired mid-navigation — bounce to the login page.
+      response.redirect(`${this.frontendBaseUrl()}/auth/login`);
+      return;
+    }
+
+    setLinkTokenCookie(response, this.tokenService.generateLinkToken(payload.sub));
+    const apiPrefix = this.configService.get<string>('API_GLOBAL_PREFIX', 'api/v1');
+    response.redirect(`/${apiPrefix}/auth/google`);
+  }
+
   @CustomThrottle({ limit: 10, ttl: 60000 })
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
   @ApiExcludeEndpoint()
   async googleCallback(@Req() request: Request, @Res() response: Response) {
     const googleProfile = request.user as GoogleProfile;
+    const frontendUrl = this.frontendBaseUrl();
+
+    // ── Link flow (started from Settings via GET /auth/google/link) ──
+    const linkTokenCookie = request.cookies?.link_token as string | undefined;
+    const linkUserId = linkTokenCookie ? this.tokenService.verifyLinkToken(linkTokenCookie) : null;
+    if (linkUserId) {
+      clearLinkTokenCookie(response);
+      let locale = 'en';
+      try {
+        const linkingUser = await this.authService.getUser(linkUserId);
+        locale = linkingUser.locale || 'en';
+        await this.authService.linkGoogleToUser(linkUserId, googleProfile);
+        this.logger.log(`Google link callback: linked Google account to user ${linkUserId}`);
+        response.redirect(`${frontendUrl}/${locale}/settings/account?googleLinked=1`);
+      } catch (error) {
+        this.logger.warn(
+          `Google link callback failed for user ${linkUserId}: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+        response.redirect(`${frontendUrl}/${locale}/settings/account?googleLinkError=1`);
+      }
+      return;
+    }
+
+    // ── Login flow ──
     const user = await this.authService.findOrCreateGoogleUser(googleProfile);
 
     // Use the existing login flow to generate tokens, set cookie, update lastLoginAt
@@ -361,9 +423,7 @@ export class AuthController {
     setAuthCookie(response, loginResult.accessToken);
     const { accessToken } = loginResult;
 
-    // Redirect to frontend with access token (derive from SERVER_NAME)
-    const serverName = this.configService.get<string>('SERVER_NAME', '');
-    const frontendUrl = serverName ? `https://${serverName}` : 'http://localhost:3000';
+    // Redirect to frontend with access token
     const locale = user.locale || 'en';
     const redirectUrl = `${frontendUrl}/${locale}/auth/callback?token=${accessToken}`;
 
@@ -445,13 +505,15 @@ export class AuthController {
   @Post('link/telegram')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Link a Telegram account to the authenticated user' })
+  @ApiOperation({
+    summary:
+      'Link a Telegram account to the authenticated user (merges the account that owns it, if any)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Telegram account linked successfully',
   })
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
-  @ApiConflictResponse({ description: 'Telegram account already linked to another user' })
   @ApiTooManyRequestsResponse({ description: 'Too many link attempts' })
   async linkTelegram(@CurrentUser() user: JwtPayload, @Body() dto: TelegramAuthDto) {
     const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');

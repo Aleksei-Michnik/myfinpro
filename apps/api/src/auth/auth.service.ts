@@ -14,6 +14,7 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
 import { AccountDeletionService } from './services/account-deletion.service';
+import { AccountMergeService } from './services/account-merge.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
@@ -69,6 +70,7 @@ export class AuthService {
     private readonly oauthService: OAuthService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly accountDeletionService: AccountDeletionService,
+    private readonly accountMergeService: AccountMergeService,
   ) {}
 
   async register(dto: RegisterDto, ip?: string, userAgent?: string): Promise<AuthTokensResult> {
@@ -630,11 +632,13 @@ export class AuthService {
         // Already linked to this user — return success
         return this.getConnectedAccounts(userId);
       }
-      // Linked to a different user — conflict
-      throw new ConflictException({
-        message: 'This Telegram account is already linked to another user',
-        errorCode: AUTH_ERRORS.TELEGRAM_ALREADY_LINKED,
-      });
+      // Linked to a different user — the caller holds an authenticated
+      // session AND just proved control of this Telegram account via the
+      // HMAC-verified widget payload, so both accounts belong to the same
+      // person. Merge the Telegram-owned account into the current one
+      // (the provider record moves across with the merge).
+      await this.accountMergeService.mergeUsers(userId, existing.userId);
+      return this.getConnectedAccounts(userId);
     }
 
     // 2. Create OAuthProvider record
@@ -667,6 +671,78 @@ export class AuthService {
     this.logger.log(`Telegram account ${telegramData.id} linked to user ${userId}`);
 
     // 4. Return updated connected accounts
+    return this.getConnectedAccounts(userId);
+  }
+
+  /**
+   * Link a Google account to the authenticated user (Settings → Connect
+   * Google). Unlike findOrCreateGoogleUser (the login flow), this never
+   * creates or switches accounts — it attaches the Google identity to the
+   * current user, merging any other account that already owns it.
+   */
+  async linkGoogleToUser(userId: string, profile: GoogleProfile) {
+    const { googleId, email, name, picture, emailVerified } = profile;
+
+    // 1. Already linked?
+    const existing = await this.oauthService.findByProvider('google', googleId);
+    if (existing) {
+      if (existing.userId === userId) {
+        return this.getConnectedAccounts(userId);
+      }
+      // Linked to a different user — the caller holds an authenticated
+      // session AND just completed the Google OAuth round-trip for this
+      // identity, so both accounts belong to the same person. Merge the
+      // Google-owned account into the current one (the provider record,
+      // real email, and password hash move across with the merge).
+      await this.accountMergeService.mergeUsers(userId, existing.userId);
+      return this.getConnectedAccounts(userId);
+    }
+
+    // 2. Not linked anywhere. If a user already registered with this
+    //    verified email address, merge that account in before linking.
+    if (email && emailVerified) {
+      const emailUser = await this.prisma.user.findUnique({ where: { email } });
+      if (emailUser && emailUser.id !== userId) {
+        await this.accountMergeService.mergeUsers(userId, emailUser.id);
+      }
+    }
+
+    // 3. Create the provider record on the current user.
+    await this.oauthService.linkToUser('google', googleId, userId, {
+      email,
+      name,
+      avatarUrl: picture,
+    });
+
+    // 4. Telegram-only accounts carry a synthetic address — adopt the
+    //    real, verified Google email so email login and password reset
+    //    become possible.
+    if (email && emailVerified) {
+      const currentUser = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (
+        currentUser &&
+        AccountMergeService.isPlaceholderEmail(currentUser.email) &&
+        currentUser.email !== email
+      ) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { email, emailVerified: true },
+        });
+      }
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'OAUTH_PROVIDER_LINKED',
+        entity: 'OAuthProvider',
+        entityId: userId,
+        details: { provider: 'google', googleId },
+      },
+    });
+
+    this.logger.log(`Google account ${googleId} linked to user ${userId}`);
+
     return this.getConnectedAccounts(userId);
   }
 

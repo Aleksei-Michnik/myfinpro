@@ -37,6 +37,7 @@ describe('AuthController', () => {
     findOrCreateTelegramUser: jest.fn(),
     getConnectedAccounts: jest.fn(),
     linkTelegramToUser: jest.fn(),
+    linkGoogleToUser: jest.fn(),
     unlinkProvider: jest.fn(),
     updateProfile: jest.fn(),
     changePassword: jest.fn(),
@@ -62,6 +63,9 @@ describe('AuthController', () => {
   const mockTokenService = {
     setRefreshTokenCookie: jest.fn(),
     clearRefreshTokenCookie: jest.fn(),
+    verifyAccessToken: jest.fn(),
+    generateLinkToken: jest.fn(),
+    verifyLinkToken: jest.fn(),
   };
 
   const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ';
@@ -426,6 +430,14 @@ describe('AuthController', () => {
   });
 
   describe('googleCallback()', () => {
+    const googleProfile = {
+      googleId: 'google-123',
+      email: 'google@example.com',
+      name: 'Google User',
+      picture: 'https://lh3.googleusercontent.com/photo.jpg',
+      emailVerified: true,
+    };
+
     it('should call findOrCreateGoogleUser and redirect to frontend', async () => {
       const mockUser = {
         id: 'google-user-uuid',
@@ -439,14 +451,6 @@ describe('AuthController', () => {
         lastLoginAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
-
-      const googleProfile = {
-        googleId: 'google-123',
-        email: 'google@example.com',
-        name: 'Google User',
-        picture: 'https://lh3.googleusercontent.com/photo.jpg',
-        emailVerified: true,
       };
 
       const requestWithUser = {
@@ -486,6 +490,151 @@ describe('AuthController', () => {
       expect(redirectResponse.redirect).toHaveBeenCalledWith(
         'https://localhost:3000/en/auth/callback?token=mock-jwt-token',
       );
+    });
+
+    it('should link (not login) and redirect to settings when a valid link_token cookie is present', async () => {
+      const requestWithLinkCookie = {
+        ...mockRequestData,
+        user: googleProfile,
+        cookies: { link_token: 'valid-link-token' },
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      mockTokenService.verifyLinkToken.mockReturnValue('linking-user-uuid');
+      mockAuthService.getUser.mockResolvedValue({ id: 'linking-user-uuid', locale: 'he' });
+      mockAuthService.linkGoogleToUser.mockResolvedValue({ hasPassword: false, providers: [] });
+
+      await controller.googleCallback(requestWithLinkCookie, redirectResponse);
+
+      expect(mockTokenService.verifyLinkToken).toHaveBeenCalledWith('valid-link-token');
+      expect(mockAuthService.linkGoogleToUser).toHaveBeenCalledWith(
+        'linking-user-uuid',
+        googleProfile,
+      );
+      // No login side-effects on the link path.
+      expect(mockAuthService.findOrCreateGoogleUser).not.toHaveBeenCalled();
+      expect(mockAuthService.login).not.toHaveBeenCalled();
+      // The single-use link cookie is cleared.
+      expect(redirectResponse.clearCookie).toHaveBeenCalledWith(
+        'link_token',
+        expect.objectContaining({ httpOnly: true, path: '/' }),
+      );
+      expect(redirectResponse.redirect).toHaveBeenCalledWith(
+        'https://localhost:3000/he/settings/account?googleLinked=1',
+      );
+    });
+
+    it('should redirect to settings with an error flag when linking fails', async () => {
+      const requestWithLinkCookie = {
+        ...mockRequestData,
+        user: googleProfile,
+        cookies: { link_token: 'valid-link-token' },
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      mockTokenService.verifyLinkToken.mockReturnValue('linking-user-uuid');
+      mockAuthService.getUser.mockResolvedValue({ id: 'linking-user-uuid', locale: 'en' });
+      mockAuthService.linkGoogleToUser.mockRejectedValue(new Error('merge failed'));
+
+      await controller.googleCallback(requestWithLinkCookie, redirectResponse);
+
+      expect(redirectResponse.redirect).toHaveBeenCalledWith(
+        'https://localhost:3000/en/settings/account?googleLinkError=1',
+      );
+    });
+
+    it('should fall through to the login flow when the link_token cookie is invalid', async () => {
+      const requestWithBadCookie = {
+        ...mockRequestData,
+        user: googleProfile,
+        cookies: { link_token: 'expired-link-token' },
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      mockTokenService.verifyLinkToken.mockReturnValue(null);
+      mockAuthService.findOrCreateGoogleUser.mockResolvedValue({ id: 'u1', locale: 'en' });
+      mockAuthService.login.mockResolvedValue({
+        user: { id: 'u1' },
+        accessToken: 'token',
+        refreshToken: 'refresh-token',
+      });
+
+      await controller.googleCallback(requestWithBadCookie, redirectResponse);
+
+      expect(mockAuthService.linkGoogleToUser).not.toHaveBeenCalled();
+      expect(mockAuthService.findOrCreateGoogleUser).toHaveBeenCalledWith(googleProfile);
+    });
+  });
+
+  describe('googleLinkStart()', () => {
+    it('should set the link_token cookie and redirect to the Google auth endpoint', () => {
+      const requestWithAccessCookie = {
+        ...mockRequestData,
+        cookies: { access_token: 'valid-access-jwt' },
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      mockTokenService.verifyAccessToken.mockReturnValue({
+        sub: 'user-uuid',
+        email: 'a@b.c',
+        name: 'A',
+      });
+      mockTokenService.generateLinkToken.mockReturnValue('signed-link-token');
+
+      controller.googleLinkStart(requestWithAccessCookie, redirectResponse);
+
+      expect(mockTokenService.verifyAccessToken).toHaveBeenCalledWith('valid-access-jwt');
+      expect(mockTokenService.generateLinkToken).toHaveBeenCalledWith('user-uuid');
+      expect(redirectResponse.cookie).toHaveBeenCalledWith(
+        'link_token',
+        'signed-link-token',
+        expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
+      );
+      expect(redirectResponse.redirect).toHaveBeenCalledWith('/api/v1/auth/google');
+    });
+
+    it('should redirect to the login page when the session cookie is missing or invalid', () => {
+      const requestWithoutCookie = {
+        ...mockRequestData,
+        cookies: {},
+      } as unknown as Request;
+
+      const redirectResponse = {
+        ...mockResponse,
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      controller.googleLinkStart(requestWithoutCookie, redirectResponse);
+
+      expect(mockTokenService.generateLinkToken).not.toHaveBeenCalled();
+      expect(redirectResponse.redirect).toHaveBeenCalledWith('https://localhost:3000/auth/login');
+    });
+
+    it('should have @Throttle metadata with limit 10 and ttl 60000', () => {
+      const limit = Reflect.getMetadata(
+        THROTTLER_LIMIT_KEY,
+        AuthController.prototype.googleLinkStart,
+      );
+      const ttl = Reflect.getMetadata(THROTTLER_TTL_KEY, AuthController.prototype.googleLinkStart);
+
+      expect(limit).toBe(10);
+      expect(ttl).toBe(60000);
     });
   });
 

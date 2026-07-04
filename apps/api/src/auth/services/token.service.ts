@@ -21,6 +21,41 @@ export class TokenService {
     return this.jwtService.sign(payload);
   }
 
+  /** Verify an access-token JWT (e.g. from the `access_token` cookie). */
+  verifyAccessToken(token: string): JwtPayload | null {
+    try {
+      const payload = this.jwtService.verify<JwtPayload & { purpose?: string }>(token);
+      // Reject special-purpose tokens (e.g. provider-link tokens).
+      return payload.purpose ? null : payload;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Short-lived, single-purpose token that carries "link a Google account
+   * to this user" intent across the OAuth redirect round-trip. Stored in
+   * an httpOnly cookie by the controller.
+   */
+  generateLinkToken(userId: string): string {
+    return this.jwtService.sign(
+      { sub: userId, purpose: TokenService.LINK_TOKEN_PURPOSE },
+      { expiresIn: '10m' },
+    );
+  }
+
+  /** Returns the userId when the token is a valid link token, else null. */
+  verifyLinkToken(token: string): string | null {
+    try {
+      const payload = this.jwtService.verify<{ sub: string; purpose?: string }>(token);
+      return payload.purpose === TokenService.LINK_TOKEN_PURPOSE ? payload.sub : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static readonly LINK_TOKEN_PURPOSE = 'link_google';
+
   generateRefreshToken(): string {
     return randomUUID();
   }

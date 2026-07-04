@@ -11,6 +11,7 @@ import { AUTH_ERRORS } from './constants/auth-errors';
 import { RegisterDto } from './dto/register.dto';
 import { ValidatedUser } from './interfaces/validated-user.interface';
 import { AccountDeletionService } from './services/account-deletion.service';
+import { AccountMergeService } from './services/account-merge.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordService } from './services/password.service';
@@ -77,6 +78,10 @@ describe('AuthService', () => {
     reactivateOnLogin: jest.fn(),
   };
 
+  const mockAccountMergeService = {
+    mergeUsers: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -88,6 +93,7 @@ describe('AuthService', () => {
         { provide: OAuthService, useValue: mockOAuthService },
         { provide: EmailVerificationService, useValue: mockEmailVerificationService },
         { provide: AccountDeletionService, useValue: mockAccountDeletionService },
+        { provide: AccountMergeService, useValue: mockAccountMergeService },
       ],
     }).compile();
 
@@ -1225,29 +1231,165 @@ describe('AuthService', () => {
       expect(result.hasPassword).toBe(true);
     });
 
-    it('should throw ConflictException if linked to different user', async () => {
+    it('should merge the owning account when linked to a different user', async () => {
       mockOAuthService.findByProvider.mockResolvedValue({
         id: 'oauth-uuid',
         provider: 'telegram',
         providerId: '123456789',
         userId: 'other-user-uuid',
       });
+      mockAccountMergeService.mergeUsers.mockResolvedValue(undefined);
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
 
-      await expect(service.linkTelegramToUser('user-uuid', telegramDto)).rejects.toThrow(
-        ConflictException,
+      const result = await service.linkTelegramToUser('user-uuid', telegramDto);
+
+      expect(mockAccountMergeService.mergeUsers).toHaveBeenCalledWith(
+        'user-uuid',
+        'other-user-uuid',
       );
+      expect(mockOAuthService.createOAuthProvider).not.toHaveBeenCalled();
+      expect(result.providers).toHaveLength(1);
+    });
+  });
 
-      try {
-        await service.linkTelegramToUser('user-uuid', telegramDto);
-      } catch (error) {
-        const response = (error as ConflictException).getResponse();
-        expect(response).toEqual(
-          expect.objectContaining({
-            message: 'This Telegram account is already linked to another user',
-            errorCode: AUTH_ERRORS.TELEGRAM_ALREADY_LINKED,
-          }),
-        );
-      }
+  describe('linkGoogleToUser()', () => {
+    const googleProfile = {
+      googleId: 'google-123',
+      email: 'real@example.com',
+      name: 'Google User',
+      picture: 'https://lh3.googleusercontent.com/pic.jpg',
+      emailVerified: true,
+    };
+
+    const connectedAccountsUser = {
+      id: 'user-uuid',
+      email: 'telegram_123@telegram.user',
+      passwordHash: null,
+      oauthProviders: [
+        {
+          provider: 'google',
+          name: 'Google User',
+          email: 'real@example.com',
+          avatarUrl: null,
+          createdAt: new Date(),
+        },
+      ],
+    };
+
+    it('should return accounts unchanged when already linked to this user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'google',
+        providerId: 'google-123',
+        userId: 'user-uuid',
+      });
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
+
+      const result = await service.linkGoogleToUser('user-uuid', googleProfile);
+
+      expect(mockOAuthService.linkToUser).not.toHaveBeenCalled();
+      expect(mockAccountMergeService.mergeUsers).not.toHaveBeenCalled();
+      expect(result.providers).toHaveLength(1);
+    });
+
+    it('should merge the owning account when the Google identity belongs to another user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue({
+        id: 'oauth-uuid',
+        provider: 'google',
+        providerId: 'google-123',
+        userId: 'other-user-uuid',
+      });
+      mockAccountMergeService.mergeUsers.mockResolvedValue(undefined);
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
+
+      const result = await service.linkGoogleToUser('user-uuid', googleProfile);
+
+      expect(mockAccountMergeService.mergeUsers).toHaveBeenCalledWith(
+        'user-uuid',
+        'other-user-uuid',
+      );
+      expect(mockOAuthService.linkToUser).not.toHaveBeenCalled();
+      expect(result.providers).toHaveLength(1);
+    });
+
+    it('should merge an email-matching account, then link and adopt the real email', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      const emailUser = { id: 'email-user-uuid', email: 'real@example.com' };
+      const currentUser = { id: 'user-uuid', email: 'telegram_123@telegram.user' };
+      mockPrismaService.user.findUnique.mockImplementation(
+        ({ where }: { where: { email?: string; id?: string } }) => {
+          if (where.email) return Promise.resolve(emailUser);
+          if (where.id === 'user-uuid') {
+            // getConnectedAccounts at the end also queries by id — return
+            // the fuller shape it needs.
+            return Promise.resolve({ ...connectedAccountsUser, ...currentUser });
+          }
+          return Promise.resolve(null);
+        },
+      );
+      mockAccountMergeService.mergeUsers.mockResolvedValue(undefined);
+      mockOAuthService.linkToUser.mockResolvedValue({});
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.linkGoogleToUser('user-uuid', googleProfile);
+
+      expect(mockAccountMergeService.mergeUsers).toHaveBeenCalledWith(
+        'user-uuid',
+        'email-user-uuid',
+      );
+      expect(mockOAuthService.linkToUser).toHaveBeenCalledWith(
+        'google',
+        'google-123',
+        'user-uuid',
+        {
+          email: 'real@example.com',
+          name: 'Google User',
+          avatarUrl: 'https://lh3.googleusercontent.com/pic.jpg',
+        },
+      );
+    });
+
+    it('should link and adopt the verified Google email for a placeholder-email user', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.user.findUnique.mockImplementation(
+        ({ where }: { where: { email?: string; id?: string } }) => {
+          if (where.email) return Promise.resolve(null);
+          return Promise.resolve(connectedAccountsUser);
+        },
+      );
+      mockOAuthService.linkToUser.mockResolvedValue({});
+      mockPrismaService.user.update.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.linkGoogleToUser('user-uuid', googleProfile);
+
+      expect(mockAccountMergeService.mergeUsers).not.toHaveBeenCalled();
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-uuid' },
+        data: { email: 'real@example.com', emailVerified: true },
+      });
+      expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-uuid',
+          action: 'OAUTH_PROVIDER_LINKED',
+          entity: 'OAuthProvider',
+          entityId: 'user-uuid',
+          details: { provider: 'google', googleId: 'google-123' },
+        },
+      });
+    });
+
+    it('should not adopt an unverified Google email', async () => {
+      mockOAuthService.findByProvider.mockResolvedValue(null);
+      mockPrismaService.user.findUnique.mockResolvedValue(connectedAccountsUser);
+      mockOAuthService.linkToUser.mockResolvedValue({});
+      mockPrismaService.auditLog.create.mockResolvedValue({});
+
+      await service.linkGoogleToUser('user-uuid', { ...googleProfile, emailVerified: false });
+
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+      expect(mockOAuthService.linkToUser).toHaveBeenCalled();
     });
   });
 

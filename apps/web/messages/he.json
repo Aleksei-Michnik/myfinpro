@@ -41,7 +41,10 @@
     "help": "עזרה",
     "signIn": "התחברות",
     "signUp": "הרשמה",
-    "logout": "התנתקות"
+    "logout": "התנתקות",
+    "menu": "תפריט",
+    "closeMenu": "סגירת תפריט",
+    "skipToContent": "דילוג לתוכן הראשי"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
@@ -315,7 +318,6 @@
     "cannotDisconnectLast": "לא ניתן לנתק את שיטת ההתחברות האחרונה",
     "linkSuccess": "{provider} חובר בהצלחה",
     "linkError": "חיבור {provider} נכשל",
-    "alreadyLinked": "חשבון {provider} זה כבר מקושר למשתמש אחר",
     "account": {
       "title": "הגדרות חשבון",
       "deleteAccount": "מחיקת חשבון",
