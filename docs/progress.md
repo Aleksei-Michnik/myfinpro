@@ -7310,3 +7310,56 @@ warning (6.18.1.5.2).
 
 **Next** — Phase 7: Receipt Ingestion & LLM Extraction (design doc at
 kickoff, per the 2026-07-03 re-plan).
+
+---
+
+## Phase 7 · Kickoff + Iterations 7.1–7.4 (2026-07-04)
+
+**Design doc**: [`docs/phase-7-receipts-design.md`](phase-7-receipts-design.md)
+— lifecycle (`UPLOADED → EXTRACTING → REVIEW → CONFIRMED` / retryable
+`FAILED`), one-receipt-one-payment, global merchants registry, pluggable
+vision-LLM provider abstraction (env-selected, deterministic `mock` for
+dev/CI), uploader-private visibility, advisory (never blocking) totals
+validation.
+
+### 7.1 — shared types (`53b0e5f`-ish, see log)
+
+`RECEIPT_STATUSES` / sources / MIME whitelist (10MB), `ExtractionResult` +
+`ExtractedItem` contracts, dependency-free structural validator with
+per-path errors + normalization (the worker gate for LLM output), and
+`computeTotalsMismatch`. 31 vitest cases; shared suite 99.
+
+### 7.2 — schema
+
+`merchants` (unique `normalized_name`), `receipts` (lifecycle columns,
+nullable file + extracted header, `raw_extraction` JSON, cascade
+`uploaded_by`, unique `payment_id` SetNull — deleting the payment leaves a
+confirmed receipt as an audit artifact), `receipt_items` (unique
+`(receipt_id, position)`, decimal quantity, line discounts, SetNull
+category; `product_id` lands in Phase 8). Diff-generated expand-only
+migration `20260704150000`, applied to dev; relations wired into User /
+Payment / Category; prisma-models compile spec.
+
+### 7.3 — file storage
+
+`ReceiptStorageService`: `RECEIPT_STORAGE_DIR` root outside the web root,
+`yyyy/mm/<uuid>.<ext>` layout, MAGIC-BYTE type detection (JPEG / PNG /
+WebP / HEIC-family / PDF — client filename + content type advisory only),
+structured 400s for oversize/non-whitelisted, streamed reads, best-effort
+idempotent deletes, and a traversal guard on ref resolution. 15 cases
+against a temp dir.
+
+### 7.4 — ingestion API + producer
+
+`ReceiptModule` REST surface (upload / url / list / get / file / retry /
+delete; uploader-private, 404-no-leak), `RECEIPT_EXTRACTIONS_QUEUE`
+producer (attempts 3, exponential backoff, timestamped job ids so retries
+re-fire; the 7.6 worker's status guard makes duplicates no-ops), realtime
+`receipt.updated` / `receipt.deleted` events (uploader-only fan-out),
+audit actions. Service (13) + controller (5) specs.
+
+**api suite: 904 green**; typecheck + lint clean; every iteration pushed
+CI-green with staging deploys.
+
+**Next** — 7.5 (extraction provider layer: mock + Anthropic + OpenAI
+implementations behind `RECEIPT_EXTRACTION_PROVIDER`), 7.6 (worker).
