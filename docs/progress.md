@@ -7169,3 +7169,63 @@ occurrence rows, and the read/cancel REST surface.
 merge held for manual trigger).**
 
 **Next** — 6.20 (Plans UI: form disclosure, amortisation table, cancel plan).
+
+---
+
+## Phase 6 · Iteration 6.20 — Plans UI (2026-07-04)
+
+**Goal.** Surface the 6.19 plans API: create installments / loans / mortgages
+from the payment form and manage them from the detail page.
+
+### What shipped
+
+- **[`PaymentTypeSelector`](../apps/web/src/components/payment/PaymentTypeSelector.tsx)** —
+  plan kinds move out of "coming soon" in create mode. New `planKindsEnabled`
+  prop: the edit flow passes `false` (plan parents are not editable — the API
+  cannot convert an existing payment into a plan parent), demoting them back
+  to disabled entries. LIMITED_PERIOD remains the only always-disabled type.
+- **[`PaymentPlanSubForm`](../apps/web/src/components/payment/PaymentPlanSubForm.tsx)** —
+  rate (% p.a. → decimal fraction on the wire), payments count (≤ 600),
+  frequency, first due date, method override (`auto` default resolves by
+  kind). Sticky across type toggles, mirroring the schedule sub-form.
+  `buildPlanSpec()` validates client-side incl. the equal-method zero-rate
+  cross-check (which never masks a more specific rate error).
+- **[`PaymentFormDialog`](../apps/web/src/components/payment/PaymentFormDialog.tsx)** —
+  single-step create: `POST /payments` carries the inline plan body; the
+  payment's own amount is the principal (no duplicate field). Mutually
+  exclusive with the schedule sub-form.
+- **[`PaymentPlanSection`](../apps/web/src/components/payment/PaymentPlanSection.tsx)** —
+  detail-page section for plan parents: summary strip (kind, principal, rate,
+  frequency, method, active/cancelled pill), full amortisation table
+  (due date, principal, interest, payment, remaining, per-row occurrence
+  status pill), creator-only terminal **Cancel plan** behind an inline
+  two-step confirm (6.18.2 pattern). Owns its fetch via the new
+  `getPlan` (404 → null) / `cancelPlan` context methods; cancel replaces
+  local state from the authoritative response + success/error toasts.
+- **Detail page** — plan parents render the section; the legacy
+  schedule/plan placeholder now only covers LIMITED_PERIOD and child
+  occurrences.
+- **i18n** — full `payments.plan.*` namespace in EN + HE (form labels,
+  validation, table headers, row statuses, cancel flow, toasts).
+
+### Tests
+
+- `PaymentPlanSubForm.spec` — 15 cases (spec fixtures incl. percent→fraction,
+  method default/override, cross-check precedence, field validation grid,
+  rendering/disabled).
+- `PaymentPlanSection.spec` — 7 cases (table + statuses, 404→null renders
+  nothing, two-step terminal cancel + toasts, keep-dismiss, non-creator
+  gating, failed cancel, fetch-error retry).
+- `PaymentFormDialog.spec` +5 (sub-form reveal, LOAN payload shape, invalid
+  plan short-circuits, method override, edit-mode gating).
+- `PaymentTypeSelector.spec` reworked for the enabled/disabled split.
+- `payment-detail.spec` +2; legacy placeholder case moved to LIMITED_PERIOD.
+- Web suite **1071 green**; typecheck + lint clean (0 errors).
+
+**Commits.** Feat: `d800727`.
+
+**Phase 6 status: 6.19 + 6.20 complete — remaining: 6.21 (closing pass;
+production merge held for manual trigger).**
+
+**Next** — 6.21 (audit matrix, Playwright E2E happy paths, i18n sweep,
+dark-mode pass, staging verification).
