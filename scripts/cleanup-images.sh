@@ -37,7 +37,9 @@ if [ -f "$METADATA_FILE" ]; then
   PREVIOUS_TAG="${PREVIOUS_IMAGE_TAG:-}"
 fi
 
-# Build list of tags to keep
+# Build list of tags to keep (exact matches only).
+# Staging metadata stores full tags ("staging-<sha>"), production stores
+# bare SHAs ("<sha>") — matching the corresponding image tag schemes.
 KEEP_TAGS=()
 
 if [ -n "$CURRENT_TAG" ]; then
@@ -48,8 +50,12 @@ if [ -n "$PREVIOUS_TAG" ]; then
   KEEP_TAGS+=("$PREVIOUS_TAG")
 fi
 
-# Always keep the environment's floating tags
-KEEP_TAGS+=("latest" "staging")
+# Always keep the environment's floating tag
+if [ "$ENV" = "staging" ]; then
+  KEEP_TAGS+=("staging")
+else
+  KEEP_TAGS+=("latest")
+fi
 
 echo "=== Smart Image Cleanup for ${ENV} ==="
 echo "Keeping tags: ${KEEP_TAGS[*]}"
@@ -59,10 +65,17 @@ echo ""
 
 SPACE_BEFORE=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "unknown")
 
-# ─── Remove old GHCR images ─────────────────────────────────────────────────
+# ─── Remove old GHCR images (this environment's namespace only) ─────────────
+# Both environments share one Docker host: staging images are tagged
+# "staging-<sha>" / "staging", production images "<sha>" / "latest".
+# A cleanup run must only ever delete images belonging to its own
+# environment, and must use EXACT tag matching — a wildcard like
+# "staging-*" matching keep-tag "staging" would keep every staging image
+# forever and fill the disk.
 
 REMOVED_COUNT=0
 KEPT_COUNT=0
+SKIPPED_COUNT=0
 
 ALL_IMAGES=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
   | grep "^${GHCR_PREFIX}" | sort -u || true)
@@ -72,16 +85,23 @@ if [ -z "$ALL_IMAGES" ]; then
 else
   for image in $ALL_IMAGES; do
     tag="${image##*:}"
-    should_keep=false
 
+    # Does this tag belong to the environment being cleaned?
+    in_namespace=false
+    if [ "$ENV" = "staging" ]; then
+      [[ "$tag" == "staging" || "$tag" == staging-* ]] && in_namespace=true
+    else
+      [[ "$tag" != "staging" && "$tag" != staging-* ]] && in_namespace=true
+    fi
+
+    if [ "$in_namespace" = false ]; then
+      SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+      continue
+    fi
+
+    should_keep=false
     for keep_tag in "${KEEP_TAGS[@]}"; do
-      # Exact match
       if [ "$tag" = "$keep_tag" ]; then
-        should_keep=true
-        break
-      fi
-      # SHA-prefixed tag match (e.g., "staging-abc1234" matches tag "staging-abc1234")
-      if [[ "$tag" == *"-${keep_tag}" ]] || [[ "$tag" == "${keep_tag}-"* ]]; then
         should_keep=true
         break
       fi
@@ -99,7 +119,7 @@ else
 fi
 
 echo ""
-echo "Images: kept=${KEPT_COUNT}, removed=${REMOVED_COUNT}"
+echo "Images: kept=${KEPT_COUNT}, removed=${REMOVED_COUNT}, other-env skipped=${SKIPPED_COUNT}"
 
 # ─── Prune dangling images ──────────────────────────────────────────────────
 
@@ -111,7 +131,8 @@ docker image prune -f 2>/dev/null || true
 
 echo ""
 echo "Pruning build cache (keeping 1GB)..."
-docker builder prune -f --keep-storage=1073741824 2>/dev/null || true
+docker builder prune -f --reserved-space=1073741824 2>/dev/null \
+  || docker builder prune -f --keep-storage=1073741824 2>/dev/null || true
 
 # ─── Prune stopped containers ───────────────────────────────────────────────
 

@@ -56,6 +56,23 @@ export function ConnectedAccounts() {
     fetchAccounts();
   }, [fetchAccounts]);
 
+  // The Google link flow round-trips through the API and Google, coming
+  // back to this page with a result flag in the query string.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const linked = params.has('googleLinked');
+    const failed = params.has('googleLinkError');
+    if (!linked && !failed) return;
+    addToast(
+      linked ? 'success' : 'error',
+      linked ? t('linkSuccess', { provider: 'Google' }) : t('linkError', { provider: 'Google' }),
+    );
+    params.delete('googleLinked');
+    params.delete('googleLinkError');
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+  }, [addToast, t]);
+
   const handleLinkTelegram = useCallback(
     async (result: TelegramLoginResult) => {
       if (!accessToken) return;
@@ -69,10 +86,6 @@ export function ConnectedAccounts() {
           },
           body: JSON.stringify(result),
         });
-        if (res.status === 409) {
-          addToast('error', t('alreadyLinked', { provider: 'Telegram' }));
-          return;
-        }
         if (!res.ok) {
           addToast('error', t('linkError', { provider: 'Telegram' }));
           return;
@@ -222,7 +235,9 @@ export function ConnectedAccounts() {
               variant="outline"
               size="sm"
               onClick={() => {
-                window.location.href = '/api/v1/auth/google';
+                // Full-page navigation: the API authenticates via the
+                // access_token cookie and links (not logs in) Google.
+                window.location.href = `${API_BASE}/auth/google/link`;
               }}
             >
               {t('connectGoogle')}

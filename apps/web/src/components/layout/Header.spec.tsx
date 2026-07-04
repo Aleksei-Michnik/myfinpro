@@ -95,24 +95,6 @@ describe('Header', () => {
     expect(appNameLink.closest('a')).toHaveAttribute('href', '/');
   });
 
-  it('contains navigation element', () => {
-    render(<Header />);
-    const nav = screen.getByRole('navigation');
-    expect(nav).toBeInTheDocument();
-  });
-
-  it('renders home navigation link', () => {
-    render(<Header />);
-    expect(screen.getByText('nav.home')).toBeInTheDocument();
-  });
-
-  it('renders help navigation link', () => {
-    render(<Header />);
-    const helpLink = screen.getByText('nav.help');
-    expect(helpLink).toBeInTheDocument();
-    expect(helpLink.closest('a')).toHaveAttribute('href', '/help');
-  });
-
   it('renders locale switcher dropdown with all locales', () => {
     render(<Header />);
     const select = screen.getByRole('combobox', { name: 'Select language' });
@@ -136,6 +118,24 @@ describe('Header', () => {
   });
 
   describe('when unauthenticated', () => {
+    it('contains a navigation landmark with public links', () => {
+      render(<Header />);
+      const nav = screen.getByRole('navigation');
+      expect(nav).toBeInTheDocument();
+    });
+
+    it('renders home navigation link', () => {
+      render(<Header />);
+      expect(screen.getByText('nav.home')).toBeInTheDocument();
+    });
+
+    it('renders help navigation link', () => {
+      render(<Header />);
+      const helpLink = screen.getByText('nav.help');
+      expect(helpLink).toBeInTheDocument();
+      expect(helpLink.closest('a')).toHaveAttribute('href', '/help');
+    });
+
     it('renders sign in navigation link', () => {
       render(<Header />);
       const signInLink = screen.getByText('nav.signIn');
@@ -150,10 +150,11 @@ describe('Header', () => {
       expect(signUpLink.closest('a')).toHaveAttribute('href', '/auth/register');
     });
 
-    it('does not render user name or logout', () => {
+    it('does not render user name, logout, or sidebar toggle', () => {
       render(<Header />);
       expect(screen.queryByTestId('user-name')).not.toBeInTheDocument();
       expect(screen.queryByText('nav.logout')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('sidebar-toggle')).not.toBeInTheDocument();
     });
   });
 
@@ -180,30 +181,11 @@ describe('Header', () => {
       expect(screen.getByTestId('user-name')).toHaveTextContent('Test User');
     });
 
-    it('renders dashboard link', () => {
+    it('does not render page links (they live in the Sidebar)', () => {
       render(<Header />);
-      const dashboardLink = screen.getByText('nav.dashboard');
-      expect(dashboardLink).toBeInTheDocument();
-      expect(dashboardLink.closest('a')).toHaveAttribute('href', '/dashboard');
-    });
-
-    it('renders groups link', () => {
-      render(<Header />);
-      const groupsLink = screen.getByText('nav.groups');
-      expect(groupsLink).toBeInTheDocument();
-      expect(groupsLink.closest('a')).toHaveAttribute('href', '/groups');
-    });
-
-    it('renders settings link', () => {
-      render(<Header />);
-      const settingsLink = screen.getByText('nav.settings');
-      expect(settingsLink).toBeInTheDocument();
-      expect(settingsLink.closest('a')).toHaveAttribute('href', '/settings/account');
-    });
-
-    it('does not render a separate connected accounts link', () => {
-      render(<Header />);
-      expect(screen.queryByText('nav.connectedAccounts')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.dashboard')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.groups')).not.toBeInTheDocument();
+      expect(screen.queryByText('nav.settings')).not.toBeInTheDocument();
     });
 
     it('renders logout button', () => {
@@ -223,6 +205,32 @@ describe('Header', () => {
       render(<Header />);
       expect(screen.queryByText('nav.signIn')).not.toBeInTheDocument();
       expect(screen.queryByText('nav.signUp')).not.toBeInTheDocument();
+    });
+
+    it('renders an accessible sidebar toggle when a handler is provided', () => {
+      const onSidebarToggle = vi.fn();
+      render(<Header isSidebarOpen={false} onSidebarToggle={onSidebarToggle} />);
+
+      const toggle = screen.getByTestId('sidebar-toggle');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveAttribute('aria-controls', 'app-sidebar');
+      expect(toggle).toHaveAttribute('aria-label', 'nav.menu');
+
+      fireEvent.click(toggle);
+      expect(onSidebarToggle).toHaveBeenCalled();
+    });
+
+    it('reflects the open drawer state on the toggle', () => {
+      render(<Header isSidebarOpen onSidebarToggle={vi.fn()} />);
+
+      const toggle = screen.getByTestId('sidebar-toggle');
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(toggle).toHaveAttribute('aria-label', 'nav.closeMenu');
+    });
+
+    it('does not render the sidebar toggle without a handler', () => {
+      render(<Header />);
+      expect(screen.queryByTestId('sidebar-toggle')).not.toBeInTheDocument();
     });
   });
 

@@ -50,6 +50,7 @@ model User {
   paymentComments         PaymentComment[]
   paymentStars            PaymentStar[]
   paymentDocuments        PaymentDocument[]
+  receiptsUploaded        Receipt[]                @relation("ReceiptUploader")
 
   @@index([email])
   @@index([createdAt])
@@ -224,6 +225,7 @@ model Payment {
   documents    PaymentDocument[]
   schedule     PaymentSchedule?
   plan         PaymentPlan?
+  receipt      Receipt?
 
   @@index([direction, occurredAt])
   @@index([categoryId])
@@ -264,7 +266,8 @@ model Category {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  payments Payment[]
+  payments     Payment[]
+  receiptItems ReceiptItem[]
 
   @@unique([ownerType, ownerId, slug, direction], name: "category_owner_slug_unique")
   @@index([ownerType, ownerId])
@@ -364,4 +367,88 @@ model PaymentStar {
   @@unique([paymentId, userId])
   @@index([userId, createdAt])
   @@map("payment_stars")
+}
+
+// ── Phase 7: Receipt Ingestion & LLM Extraction ──
+
+model Merchant {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  name           String   @db.VarChar(200)
+  // Lowercased, whitespace-collapsed, diacritics-stripped — the global
+  // dedup key for the registry (design §2.3).
+  normalizedName String   @unique @map("normalized_name") @db.VarChar(200)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  receipts Receipt[]
+
+  @@map("merchants")
+}
+
+model Receipt {
+  id     String @id @default(uuid()) @db.VarChar(36)
+  // Lifecycle: UPLOADED → EXTRACTING → REVIEW → CONFIRMED, or FAILED
+  // (retryable). See docs/phase-7-receipts-design.md §2.1.
+  status String @default("UPLOADED") @db.VarChar(20)
+  source String @default("upload") @db.VarChar(20)
+
+  // File — nullable for source=url until the fetcher stores a snapshot.
+  fileRef      String? @map("file_ref") @db.VarChar(500)
+  originalName String? @map("original_name") @db.VarChar(255)
+  mimeType     String? @map("mime_type") @db.VarChar(100)
+  sizeBytes    Int?    @map("size_bytes")
+  sourceUrl    String? @map("source_url") @db.VarChar(2000)
+
+  // Extracted header — nullable until the worker reaches REVIEW.
+  merchantId            String?   @map("merchant_id") @db.VarChar(36)
+  merchant              Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  extractedMerchantName String?   @map("extracted_merchant_name") @db.VarChar(200)
+  purchasedAt           DateTime? @map("purchased_at")
+  currency              String?   @db.VarChar(3)
+  totalCents            Int?      @map("total_cents")
+  discountCents         Int?      @map("discount_cents")
+  rawExtraction         Json?     @map("raw_extraction")
+  failureReason         String?   @map("failure_reason") @db.VarChar(500)
+
+  // Ownership + linkage. paymentId is set on confirm; deleting the payment
+  // SetNulls it and the receipt remains a CONFIRMED audit artifact.
+  uploadedById String   @map("uploaded_by_id") @db.VarChar(36)
+  uploadedBy   User     @relation("ReceiptUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  paymentId    String?  @unique @map("payment_id") @db.VarChar(36)
+  payment      Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  items ReceiptItem[]
+
+  @@index([uploadedById, status])
+  @@index([merchantId])
+  @@map("receipts")
+}
+
+model ReceiptItem {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  receiptId String  @map("receipt_id") @db.VarChar(36)
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  // 1-based order on the receipt; PUT /items renumbers contiguously.
+  position  Int
+
+  rawName        String  @map("raw_name") @db.VarChar(300)
+  quantity       Decimal @default(1) @db.Decimal(10, 3)
+  unitPriceCents Int?    @map("unit_price_cents")
+  discountCents  Int     @default(0) @map("discount_cents")
+  // Line total AFTER the line-level discount.
+  totalCents     Int     @map("total_cents")
+
+  // Suggested by extraction / confirmed at review. SetNull so category
+  // cleanup never orphan-fails a receipt. Phase 8 adds product_id here.
+  categoryId String?   @map("category_id") @db.VarChar(36)
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([receiptId, position])
+  @@index([categoryId])
+  @@map("receipt_items")
 }

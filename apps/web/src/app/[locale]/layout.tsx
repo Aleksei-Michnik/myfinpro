@@ -5,8 +5,8 @@ import { getMessages } from 'next-intl/server';
 import type { ReactNode } from 'react';
 import { TimezoneDetector } from '@/components/auth/TimezoneDetector';
 import { VerificationBanner } from '@/components/auth/VerificationBanner';
+import { AppShell } from '@/components/layout/AppShell';
 import { Footer } from '@/components/layout/Footer';
-import { Header } from '@/components/layout/Header';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { PageProgressBar } from '@/components/ui/PageProgressBar';
 import { ToastProvider, ToastContainer } from '@/components/ui/Toast';
@@ -58,11 +58,12 @@ export default async function LocaleLayout({ children, params }: Props) {
                   <PaymentProvider>
                     <CategoryProvider>
                       <ToastProvider>
-                        <Header />
-                        <VerificationBanner />
-                        <TimezoneDetector />
-                        <ErrorBoundary>{children}</ErrorBoundary>
-                        <Footer />
+                        <AppShell>
+                          <VerificationBanner />
+                          <TimezoneDetector />
+                          <ErrorBoundary>{children}</ErrorBoundary>
+                          <Footer />
+                        </AppShell>
                         <ToastContainer />
                       </ToastProvider>
                     </CategoryProvider>
