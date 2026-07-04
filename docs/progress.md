@@ -7363,3 +7363,52 @@ CI-green with staging deploys.
 
 **Next** — 7.5 (extraction provider layer: mock + Anthropic + OpenAI
 implementations behind `RECEIPT_EXTRACTION_PROVIDER`), 7.6 (worker).
+
+---
+
+## Phase 7 · Iterations 7.5–7.6 — Extraction providers + worker (2026-07-04)
+
+### 7.5 — pluggable provider layer
+
+`ReceiptExtractionProvider` contract (image / pdf / html inputs; category
+candidates + locale in context) bound to a DI token by an env-selected
+factory (`RECEIPT_EXTRACTION_PROVIDER`, unknown names fail the boot):
+
+- **mock** (default) — deterministic reconciling fixture; zero network for
+  dev/CI/integration.
+- **anthropic** — `@anthropic-ai/sdk`: base64 `image`/`document` blocks
+  before the instruction text, adaptive thinking, `output_config`
+  json_schema structured output, per-call usage/cost logging. Default model
+  `claude-opus-4-8` (override via `RECEIPT_EXTRACTION_MODEL`).
+- **openai** — raw-HTTP chat completions (`image_url` data-URLs + strict
+  `response_format` json_schema); PDFs fail permanently with a pointer to
+  the anthropic provider.
+
+Both real providers re-validate output with the shared
+`validateExtractionResult` — schema drift becomes a permanent
+`ExtractionFailedError`, never bad rows. `ResilientExtractionProvider`
+wraps them: 3 attempts + exponential backoff for transient errors, no
+retry for permanent ones, consecutive-failure circuit breaker
+(open → fail fast → half-open probe). 14-case spec incl. the mocked
+Anthropic request shape.
+
+### 7.6 — extraction worker
+
+`ReceiptExtractionProcessor` (BullMQ consumer) owns the status machine:
+UPLOADED/EXTRACTING → REVIEW (header + `raw_extraction` + items replaced
+with 1-based positions, suggested category ids filtered against the
+uploader's visible OUT candidates) or → FAILED. URL sources fetch a
+snapshot (20 s timeout, 500 KB cap; dead links permanent, 5xx transient).
+Permanent failures are swallowed (no wasted BullMQ retries); transient
+ones ride attempts/backoff and mark FAILED on the last attempt. Every
+transition publishes `receipt.updated` + audit rows. 8-case spec.
+
+**Deferred (documented):** HEIC→JPEG conversion before provider calls
+(whitelisted for upload, but vision APIs take JPEG/PNG/WebP — convert in a
+follow-up or fail with a clear reason); end-to-end pipeline integration
+spec lands with 7.10.
+
+**api suite: 926 green**; every push CI-green with staging deploys.
+
+**Next** — 7.7 (upload UI), 7.8 (review UI), 7.9 (confirm → payment),
+7.10 (URL polish + integration/E2E + i18n sweep).
