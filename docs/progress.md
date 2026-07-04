@@ -7457,3 +7457,32 @@ validation errors; periodKey format. Plus budget enum/shape specs.
 typecheck unaffected.**
 
 **Next** — 10.2 (`BudgetModule` CRUD + guards + `budget.updated` SSE).
+
+---
+
+## Phase 7 · Iteration 7.7 — Receipts upload UI (2026-07-04)
+
+**`/receipts`** (new sidebar entry): intake via drag-and-drop, file browse,
+mobile camera capture (`capture="environment"`), and a URL form; the
+uploader's receipt list renders lifecycle status pills (EXTRACTING pulses),
+merchant/total/item-count once extracted, failure reasons with Retry on
+FAILED rows, two-step Delete on non-confirmed rows, and cursor-paginated
+Load more. Live lifecycle: `receipt.updated` patches rows in place /
+prepends unknown ids, `receipt.deleted` removes, reconnect-after-gap
+refetches (ui-realtime-conventions). `ReceiptProvider` follows the
+payment-context conventions (multipart upload lets the browser set the
+boundary); both receipt event types joined the web realtime union. i18n
+`receipts.*` + `nav.receipts` in EN + HE.
+
+Found-by-test fix: void async ops made success indistinguishable from
+failure in the `.then(r => r !== undefined)` guard — intake/row ops now
+resolve to counts/flags.
+
+Tests: upload-zone spec (5) + client spec (11). **Web suite 1101 green.**
+
+**Coordination note:** budget work (Phase 10) is in progress in the same
+tree in parallel — receipt commits stage files explicitly and leave
+`apps/api/src/budget/*` + its module/event wiring untouched.
+
+**Next** — 7.8 (review page: header + items editing, merchant
+autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
