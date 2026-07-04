@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-05-17
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — in progress, 16/21 iterations complete (backend complete; 6/11 frontend iterations done; recurring worker live on staging)
+> **Last updated:** 2026-07-04
+> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — **all 21 iterations complete**; verified on staging. Production merge (develop → main) deliberately held for manual trigger — see the 6.21 entry.
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -61,7 +61,7 @@
 | 16    | LLM Assistant (in-app)                          | 0/7        | ⬜ Not Started | —               |
 | 17    | WebMCP (in-GUI agent tools)                     | 0/4        | ⬜ Not Started | —               |
 
-**Total iterations:** 171 | **Completed:** 66 | **Remaining:** 105
+**Total iterations:** 171 | **Completed:** 71 | **Remaining:** 100
 
 > **Re-plan (2026-07-03)**: Phases after 6 restructured around receipt ingestion and the product catalog — see the re-plan note in [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) §5. Receipts (with pluggable vision-LLM extraction) now come directly after Phase 6, followed by the two-layer product catalog with barcode scanning, configurable purchase analytics, budgets, and a remote MCP server (OAuth 2.1) exposing user-scoped purchase tools to LLM chat clients. WebMCP added as the final phase. Old → new numbering: Budgets 8→10, Receipts 9→7, Analytics 10→9, Bot 11→12, Mini App 12→13, Bot Receipts 13→14, Bot Analytics 14→15, LLM Assistant 15→16.
 
@@ -7229,3 +7229,81 @@ production merge held for manual trigger).**
 
 **Next** — 6.21 (audit matrix, Playwright E2E happy paths, i18n sweep,
 dark-mode pass, staging verification).
+
+---
+
+## Phase 6 · Iteration 6.21 — Closing pass (2026-07-04)
+
+**Goal.** Verify the whole phase end-to-end and hand over a ready-to-merge
+develop branch. Per explicit decision, the production merge (develop → main)
+is NOT executed here — it stays a manual trigger.
+
+### E2E happy paths (design acceptance: one-time / recurring / loan)
+
+New [`apps/web/e2e/payments.spec.ts`](../apps/web/e2e/payments.spec.ts),
+verified green locally (chromium, ~11 s) against a live stack
+(web :3002 + api :3001 + MySQL + Redis): fresh-user registration →
+ONE_TIME create → RECURRING create (schedule defaults; the catch-up worker
+generated today's occurrence live during the run — the assertion tolerates
+the extra row) → LOAN $10,000 @ 5% × 12 → detail page renders the
+amortisation table with the reference **$856.07** annuity and PENDING rows →
+two-step terminal plan cancel flips every row to CANCELLED.
+
+### Audit-log matrix (§4.7 — all financial mutations logged)
+
+| Operation                          | Audit action                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Payment create (incl. plan kinds)  | `PAYMENT_CREATED` (+ plan params in details)                                                     |
+| Payment edit (plain)               | `PAYMENT_UPDATED` `{changed}`                                                                    |
+| Cascade edit (6.18.1.5)            | `PAYMENT_UPDATED` `{changed, propagate}` on the parent + one per cascaded child `{cascadedFrom}` |
+| Attribution add / remove           | `PAYMENT_ATTRIBUTION_ADDED` / `_REMOVED`                                                         |
+| Payment delete                     | `PAYMENT_DELETED`                                                                                |
+| Star toggle                        | `PAYMENT_STARRED` / `PAYMENT_UNSTARRED`                                                          |
+| Comment create / edit / delete     | `PAYMENT_COMMENT_*`                                                                              |
+| Schedule create / replace / delete | `PAYMENT_SCHEDULE_*`                                                                             |
+| Schedule pause / resume / cancel   | `PAYMENT_SCHEDULE_PAUSED` / `_RESUMED` / `_CANCELLED`                                            |
+| Plan cancel                        | `PAYMENT_PLAN_CANCELLED` `{cancelledChildren}`                                                   |
+| Worker occurrence                  | `PAYMENT_OCCURRENCE_CREATED`                                                                     |
+
+No gaps found.
+
+### i18n EN + HE sweep
+
+Scripted recursive comparison: **707/707 keys** present in both locales, no
+placeholder mismatches (the four flags raised by the naive regex were ICU
+plural bodies — verified correct in both languages), no untranslated Hebrew
+values in the new `payments.plan` / `payments.propagate` /
+`payments.schedule.badge` namespaces (`repeatCron: "Cron: {expr}"` is
+intentionally technical).
+
+### Dark-mode contrast pass
+
+Scripted sweep over the components added in this closing stretch
+(PropagationChoiceDialog, ScheduleBadge, PaymentPlanSubForm,
+PaymentPlanSection, PaymentTypeSelector): all status pills and surfaces
+carry `dark:` variants. Two minor fixes applied: plan sub-form error texts
+gained `dark:text-red-400` (matching `PaymentCategoryPicker`), the
+plan-table placeholder dash gained `dark:text-gray-500`. The `bg-black/50`
+dialog backdrop matches the app-wide convention.
+
+### Suites & CI
+
+- api: **841 unit** + payment integration suites green (plans, cascade,
+  schedule, occurrences, categories). The full integration run against the
+  shared local dev DB shows 59 pre-existing failures in auth/app suites
+  (409 duplicate-email + 429 throttling artifacts of repeated local runs) —
+  unrelated to Phase 6; those suites are green in CI environments.
+- web: **1071 unit/interaction** green; typecheck + lint 0 errors.
+- Every push in this stretch is CI-green with successful blue-green staging
+  deploys (latest: `28701564706` / staging `28701564697`).
+
+**Commits.** 6.21: `b2bf0ca` (+ this docs entry).
+
+**Phase 6 status: 21 / 21 — COMPLETE.** ✅
+**Held for manual trigger:** merge `develop` → `main` (production deploy).
+Deferred (documented): LIMITED_PERIOD type; plan PATCH/attach endpoints;
+realtime `plan.*` events; `payments.propagate` period-change destructive
+warning (6.18.1.5.2).
+
+**Next** — Phase 7: Receipt Ingestion & LLM Extraction (design doc at
+kickoff, per the 2026-07-03 re-plan).
