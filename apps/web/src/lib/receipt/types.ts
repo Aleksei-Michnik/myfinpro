@@ -60,3 +60,27 @@ export interface ListReceiptsParams {
   limit?: number;
   cursor?: string;
 }
+
+export interface ReceiptItemInput {
+  rawName: string;
+  quantity: number;
+  unitPriceCents?: number | null;
+  discountCents?: number;
+  totalCents: number;
+  categoryId?: string | null;
+}
+
+/** PATCH /receipts/:id body — explicit nulls clear nullable fields. */
+export interface UpdateReceiptInput {
+  extractedMerchantName?: string | null;
+  merchantId?: string | null;
+  purchasedAt?: string | null;
+  currency?: string | null;
+  totalCents?: number | null;
+  discountCents?: number | null;
+}
+
+export interface MerchantSuggestion {
+  id: string;
+  name: string;
+}

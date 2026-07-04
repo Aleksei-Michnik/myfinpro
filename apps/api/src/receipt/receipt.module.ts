@@ -6,6 +6,7 @@ import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.p
 import { extractionProviderFactory } from './extraction/extraction-provider.factory';
 import { MockExtractionProvider } from './extraction/mock-extraction.provider';
 import { OpenAiExtractionProvider } from './extraction/openai-extraction.provider';
+import { MerchantController } from './merchant.controller';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
@@ -29,7 +30,7 @@ import { ReceiptService } from './receipt.service';
     extractionProviderFactory,
     ReceiptExtractionProcessor,
   ],
-  controllers: [ReceiptController],
+  controllers: [ReceiptController, MerchantController],
   exports: [ReceiptService, ReceiptStorageService, extractionProviderFactory],
 })
 export class ReceiptModule {}

@@ -1021,6 +1021,34 @@
       "deletedToast": "Receipt deleted",
       "loadMore": "Load more",
       "actionFailed": "Action failed"
+    },
+    "review": {
+      "back": "Back to receipts",
+      "notFound": "Receipt not found",
+      "loadFailed": "Could not load the receipt",
+      "previewTitle": "Receipt preview",
+      "previewLoading": "Loading preview…",
+      "headerTitle": "Extracted details",
+      "merchantLabel": "Merchant",
+      "merchantLinked": "Linked to a known merchant",
+      "purchasedAtLabel": "Purchase date",
+      "currencyLabel": "Currency",
+      "totalLabel": "Total",
+      "discountLabel": "Discount",
+      "mismatchWarning": "Items don't add up to the total (off by {delta}). Double-check the amounts before confirming.",
+      "itemsTitle": "Items",
+      "itemName": "Item name",
+      "itemQty": "Qty",
+      "itemTotal": "Total",
+      "itemNoCategory": "No category",
+      "itemAdd": "Add item",
+      "itemRemove": "Remove item",
+      "itemsInvalid": "Each item needs a name, a positive quantity and a total.",
+      "save": "Save changes",
+      "savedToast": "Receipt updated",
+      "saveFailed": "Could not save the receipt",
+      "retry": "Retry extraction",
+      "retriedToast": "Extraction restarted"
     }
   }
 }

@@ -5,7 +5,14 @@
 // shaped objects, run() maintains the transient loading/error state).
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { ListReceiptsParams, ReceiptListResponse, ReceiptSummary } from './types';
+import type {
+  ListReceiptsParams,
+  MerchantSuggestion,
+  ReceiptItemInput,
+  ReceiptListResponse,
+  ReceiptSummary,
+  UpdateReceiptInput,
+} from './types';
 import { useAuth } from '@/lib/auth/auth-context';
 
 export interface ReceiptApiError extends Error {
@@ -24,6 +31,22 @@ interface ReceiptContextValue {
   retryReceipt(id: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Non-confirmed receipts only. */
   removeReceipt(id: string, signal?: AbortSignal): Promise<void>;
+  /** REVIEW-only header corrections (7.8). */
+  updateReceipt(
+    id: string,
+    patch: UpdateReceiptInput,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** REVIEW-only full item replacement (7.8). */
+  replaceItems(
+    id: string,
+    items: ReceiptItemInput[],
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Global merchant registry lookup (7.8). */
+  searchMerchants(search: string, signal?: AbortSignal): Promise<MerchantSuggestion[]>;
+  /** Authenticated fetch of the stored file as a Blob (for previews). */
+  fetchFileBlob(id: string, signal?: AbortSignal): Promise<Blob>;
   /** Authenticated-endpoint URL of the stored file (for <img>/<object>). */
   fileUrl(id: string): string;
 
@@ -188,6 +211,62 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateReceipt = useCallback(
+    (id: string, patch: UpdateReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify(patch),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to update receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const replaceItems = useCallback(
+    (id: string, items: ReceiptItemInput[], signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/items`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ items }),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to update items');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const searchMerchants = useCallback(
+    (search: string, signal?: AbortSignal): Promise<MerchantSuggestion[]> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/merchants${buildQuery({ search })}`, {
+          headers: authHeaders(),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to search merchants');
+        return (await res.json()) as MerchantSuggestion[];
+      }),
+    [authHeaders, run],
+  );
+
+  const fetchFileBlob = useCallback(
+    (id: string, signal?: AbortSignal): Promise<Blob> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/file`, {
+          headers: authHeaders(false),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to load receipt file');
+        return res.blob();
+      }),
+    [authHeaders, run],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<ReceiptContextValue>(
@@ -198,6 +277,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       getReceipt,
       retryReceipt,
       removeReceipt,
+      updateReceipt,
+      replaceItems,
+      searchMerchants,
+      fetchFileBlob,
       fileUrl,
       isLoading,
       error,
@@ -210,6 +293,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       getReceipt,
       retryReceipt,
       removeReceipt,
+      updateReceipt,
+      replaceItems,
+      searchMerchants,
+      fetchFileBlob,
       fileUrl,
       isLoading,
       error,

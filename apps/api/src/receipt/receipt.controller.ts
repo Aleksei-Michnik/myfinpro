@@ -9,7 +9,9 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Put,
   Query,
   Res,
   UploadedFile,
@@ -39,6 +41,8 @@ import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
+import { ReplaceItemsDto } from './dto/replace-items.dto';
+import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptService, type ReceiptListResponse } from './receipt.service';
 
 /**
@@ -176,6 +180,50 @@ export class ReceiptController {
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Cache-Control', 'private, max-age=3600');
     stream.pipe(res);
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Correct extracted header fields (REVIEW only)',
+    description:
+      'Explicit nulls clear nullable fields. Merchant linking accepts an existing registry id; ' +
+      'creating a new registry merchant happens at confirm time.',
+  })
+  @ApiOkResponse({ description: 'Updated receipt', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader / unknown merchant' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.update(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/items')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Replace all line items (REVIEW only)',
+    description:
+      'Positions are assigned from array order (1-based). Categories must be visible to the ' +
+      'uploader and OUT-compatible. An empty array removes every line.',
+  })
+  @ApiOkResponse({ description: 'Updated receipt incl. items', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async replaceItems(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReplaceItemsDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.replaceItems(user.sub, id, dto);
   }
 
   @CustomThrottle({ limit: 20, ttl: 60_000 })

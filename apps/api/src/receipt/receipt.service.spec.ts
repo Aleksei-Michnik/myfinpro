@@ -2,6 +2,7 @@ import { encodeCursor } from '@myfinpro/shared';
 import { getQueueToken } from '@nestjs/bullmq';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
@@ -17,11 +18,16 @@ describe('ReceiptService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn(),
+      findUnique: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     },
+    receiptItem: { deleteMany: jest.fn(), createMany: jest.fn() },
+    merchant: { findUnique: jest.fn(), findMany: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
+    $transaction: jest.fn(),
   };
+  const categoryMock = { list: jest.fn() };
   const storageMock = {
     save: jest.fn(),
     openStream: jest.fn(),
@@ -66,6 +72,7 @@ describe('ReceiptService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: ReceiptStorageService, useValue: storageMock },
         { provide: EventBus, useValue: eventBusMock },
+        { provide: CategoryService, useValue: categoryMock },
         { provide: getQueueToken(RECEIPT_EXTRACTIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();
@@ -253,6 +260,111 @@ describe('ReceiptService', () => {
         expect(codeOf(err)).toBe('RECEIPT_ALREADY_CONFIRMED');
       }
       expect(prismaMock.receipt.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update (7.8)', () => {
+    it('REVIEW-only: applies header corrections incl. null clears and merchant link', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      prismaMock.merchant.findUnique.mockResolvedValue({ id: 'm-1', name: 'Shufersal' });
+      prismaMock.receipt.update.mockResolvedValue(
+        makeRow({ status: 'REVIEW', extractedMerchantName: 'Shufersal' }),
+      );
+
+      await service.update('u-1', 'r-1', {
+        extractedMerchantName: '  Shufersal  ',
+        merchantId: 'm-1',
+        purchasedAt: null,
+        totalCents: 4590,
+      });
+
+      const data = prismaMock.receipt.update.mock.calls[0][0].data;
+      expect(data.extractedMerchantName).toBe('Shufersal');
+      expect(data.merchant).toEqual({ connect: { id: 'm-1' } });
+      expect(data.purchasedAt).toBeNull();
+      expect(data.totalCents).toBe(4590);
+      expect(data.currency).toBeUndefined(); // untouched field stays out
+      expect(eventBusMock.publish).toHaveBeenCalled();
+    });
+
+    it('rejects edits outside REVIEW and unknown merchants', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'EXTRACTING' }));
+      try {
+        await service.update('u-1', 'r-1', { totalCents: 1 });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      prismaMock.merchant.findUnique.mockResolvedValue(null);
+      try {
+        await service.update('u-1', 'r-1', { merchantId: '3b2c9a3e-0000-0000-0000-000000000000' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('MERCHANT_NOT_FOUND');
+      }
+    });
+  });
+
+  describe('replaceItems (7.8)', () => {
+    beforeEach(() => {
+      prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ receiptItem: prismaMock.receiptItem }),
+      );
+      prismaMock.receipt.findUnique.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+    });
+
+    it('replaces items with 1-based positions after category validation', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      categoryMock.list.mockResolvedValue([{ id: 'cat-1', name: 'Groceries' }]);
+
+      await service.replaceItems('u-1', 'r-1', {
+        items: [
+          { rawName: ' Milk ', quantity: 2, totalCents: 880, categoryId: 'cat-1' },
+          { rawName: 'Bread', quantity: 1, totalCents: 500 },
+        ],
+      });
+
+      expect(prismaMock.receiptItem.deleteMany).toHaveBeenCalledWith({
+        where: { receiptId: 'r-1' },
+      });
+      const created = prismaMock.receiptItem.createMany.mock.calls[0][0].data;
+      expect(created[0]).toMatchObject({ position: 1, rawName: 'Milk', categoryId: 'cat-1' });
+      expect(created[1]).toMatchObject({ position: 2, categoryId: null });
+    });
+
+    it('rejects categories outside the visible OUT set', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      categoryMock.list.mockResolvedValue([{ id: 'cat-1', name: 'Groceries' }]);
+      try {
+        await service.replaceItems('u-1', 'r-1', {
+          items: [{ rawName: 'X', quantity: 1, totalCents: 1, categoryId: 'cat-foreign' }],
+        });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_ITEMS_INVALID');
+      }
+      expect(prismaMock.receiptItem.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('searchMerchants (7.8)', () => {
+    it('normalizes the query and returns id+name matches', async () => {
+      prismaMock.merchant.findMany.mockResolvedValue([{ id: 'm-1', name: 'Café Aroma' }]);
+      const out = await service.searchMerchants('  CAFÉ   aroma ');
+      expect(prismaMock.merchant.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { normalizedName: { contains: 'cafe aroma' } },
+          take: 10,
+        }),
+      );
+      expect(out).toEqual([{ id: 'm-1', name: 'Café Aroma' }]);
+    });
+
+    it('empty/whitespace queries return [] without touching the DB', async () => {
+      await expect(service.searchMerchants('   ')).resolves.toEqual([]);
+      expect(prismaMock.merchant.findMany).not.toHaveBeenCalled();
     });
   });
 

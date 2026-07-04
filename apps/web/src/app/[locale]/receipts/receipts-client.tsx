@@ -12,6 +12,7 @@ import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
+import { Link } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -221,9 +222,13 @@ export function ReceiptsClient() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <Link
+                    href={`/receipts/${receipt.id}`}
+                    className="block truncate text-sm font-medium text-gray-900 hover:text-primary-700 hover:underline dark:text-gray-100 dark:hover:text-primary-300"
+                    data-testid={`receipt-link-${receipt.id}`}
+                  >
                     {title(receipt)}
-                  </p>
+                  </Link>
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                     {formatWhen(receipt.createdAt, locale)}
                     {receipt.totalCents !== null && (

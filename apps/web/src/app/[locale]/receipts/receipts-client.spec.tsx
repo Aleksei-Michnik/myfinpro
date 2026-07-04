@@ -34,6 +34,16 @@ vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: addToastMock }),
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ children, href, ...props }: Record<string, unknown>) => (
+    <a href={href as string} {...props}>
+      {children as React.ReactNode}
+    </a>
+  ),
+  usePathname: () => '/',
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 // Capture realtime handlers so tests can emit events.
 type Handler = (event: RealtimeEvent) => void;
 const realtimeHandlers: { filter: { type: string }; handler: Handler }[] = [];
