@@ -202,7 +202,7 @@ export function PaymentPlanSection({ paymentId, createdById, currency }: Payment
                       {t(`rowStatus.${row.status}`)}
                     </span>
                   ) : (
-                    <span className="text-xs text-gray-400">—</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                   )}
                 </td>
               </tr>

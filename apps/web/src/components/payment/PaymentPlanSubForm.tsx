@@ -163,7 +163,10 @@ export function PaymentPlanSubForm({ state, errors, onChange, disabled }: Paymen
             className={inputClass}
           />
           {errors.interestRate && (
-            <span className="mt-1 text-xs text-red-600" data-testid="plan-error-rate">
+            <span
+              className="mt-1 text-xs text-red-600 dark:text-red-400"
+              data-testid="plan-error-rate"
+            >
               {errors.interestRate}
             </span>
           )}
@@ -185,7 +188,10 @@ export function PaymentPlanSubForm({ state, errors, onChange, disabled }: Paymen
             className={inputClass}
           />
           {errors.paymentsCount && (
-            <span className="mt-1 text-xs text-red-600" data-testid="plan-error-count">
+            <span
+              className="mt-1 text-xs text-red-600 dark:text-red-400"
+              data-testid="plan-error-count"
+            >
               {errors.paymentsCount}
             </span>
           )}
@@ -221,7 +227,10 @@ export function PaymentPlanSubForm({ state, errors, onChange, disabled }: Paymen
             className={inputClass}
           />
           {errors.firstDueAt && (
-            <span className="mt-1 text-xs text-red-600" data-testid="plan-error-first-due">
+            <span
+              className="mt-1 text-xs text-red-600 dark:text-red-400"
+              data-testid="plan-error-first-due"
+            >
               {errors.firstDueAt}
             </span>
           )}
