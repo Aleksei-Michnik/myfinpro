@@ -4,29 +4,32 @@
 
 ### Project Description
 
-This plan describes an incremental, deployable implementation roadmap for a personal/family finance management platform spanning a web app, Telegram bot, and Telegram mini app. The scope includes multi-provider authentication with API-first JWT architecture, group management, income/expense tracking (including loans, mortgages, and installment plans with configurable interest and payment counts), budgets and spending targets, receipt ingestion, analytics, and LLM-assisted insights. The system targets a single dedicated Ubuntu server with Docker-based environments and GitHub Actions CI/CD.
+This plan describes an incremental, deployable implementation roadmap for a personal/family finance management platform spanning a web app, Telegram bot, and Telegram mini app. The scope includes multi-provider authentication with API-first JWT architecture, group management, income/expense tracking (including loans, mortgages, and installment plans with configurable interest and payment counts), budgets and spending targets, receipt ingestion with vision-LLM extraction, a two-layer product catalog with barcode identification, configurable purchase analytics, an MCP server giving LLM chat clients secure user-scoped access to purchases, WebMCP in-GUI agent tools, and LLM-assisted insights. The system targets a single dedicated Ubuntu server with Docker-based environments and GitHub Actions CI/CD.
 
 ### Recommended Technology Stack (Target Environment: Dedicated Ubuntu + Docker)
 
-| Layer               | Recommendation                                            | Notes                                                  |
-| ------------------- | --------------------------------------------------------- | ------------------------------------------------------ |
-| Frontend (Web)      | Next.js + TypeScript                                      | SSR, routing, thin auth client                         |
-| Frontend i18n       | next-intl                                                 | Localization for web, RTL support                      |
-| Backend API         | NestJS + TypeScript                                       | Modular architecture, DTO validation, JWT auth         |
-| Database            | MySQL + Prisma                                            | Migrations, type-safe queries                          |
-| Authentication      | Passport.js (NestJS)                                      | JWT access + refresh tokens, all auth via API          |
-| Currency Handling   | dinero.js                                                 | Safe money arithmetic, amounts stored as integer cents |
-| File Storage        | Local filesystem                                          | Optional future move to S3                             |
-| Receipt Processing  | URL ingestion early, LLM extraction for PDFs/photos later | LLM in Phase 14                                        |
-| Queue               | BullMQ + Redis                                            | Async parsing, analytics jobs, recurring transactions  |
-| Telegram            | grammy.js                                                 | Bot + mini app hooks                                   |
-| Telegram i18n       | @grammyjs/fluent                                          | Bot message localization                               |
-| LLM                 | OpenAI API                                                | Structured output for receipts                         |
-| API Documentation   | @nestjs/swagger                                           | Auto-generated OpenAPI docs                            |
-| E2E Testing         | Playwright                                                | Web E2E tests, visual regression                       |
-| Integration Testing | Testcontainers                                            | Isolated MySQL for API tests                           |
-| CI/CD               | GitHub Actions                                            | Lint/test/build/deploy                                 |
-| Hosting             | Docker Compose + Nginx                                    | Dedicated Ubuntu server                                |
+| Layer               | Recommendation                                   | Notes                                                  |
+| ------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| Frontend (Web)      | Next.js + TypeScript                             | SSR, routing, thin auth client                         |
+| Frontend i18n       | next-intl                                        | Localization for web, RTL support                      |
+| Backend API         | NestJS + TypeScript                              | Modular architecture, DTO validation, JWT auth         |
+| Database            | MySQL + Prisma                                   | Migrations, type-safe queries                          |
+| Authentication      | Passport.js (NestJS)                             | JWT access + refresh tokens, all auth via API          |
+| Currency Handling   | dinero.js                                        | Safe money arithmetic, amounts stored as integer cents |
+| File Storage        | Local filesystem                                 | Optional future move to S3                             |
+| Receipt Processing  | Vision-LLM extraction (pluggable provider)       | Structured output; photos, PDFs, URLs (Phase 7)        |
+| Queue               | BullMQ + Redis                                   | Async parsing, analytics jobs, recurring transactions  |
+| Telegram            | grammy.js                                        | Bot + mini app hooks                                   |
+| Telegram i18n       | @grammyjs/fluent                                 | Bot message localization                               |
+| LLM                 | Pluggable provider (OpenAI / Anthropic / Gemini) | Receipt extraction + assistant, structured output      |
+| MCP Server          | @modelcontextprotocol/sdk (Streamable HTTP)      | OAuth 2.1: PKCE + dynamic client registration          |
+| Barcode Scanning    | BarcodeDetector API + @zxing/browser fallback    | Camera via getUserMedia; barcode = product identifier  |
+| Product Data        | Open Food Facts API                              | Prefill for unknown barcodes                           |
+| API Documentation   | @nestjs/swagger                                  | Auto-generated OpenAPI docs                            |
+| E2E Testing         | Playwright                                       | Web E2E tests, visual regression                       |
+| Integration Testing | Testcontainers                                   | Isolated MySQL for API tests                           |
+| CI/CD               | GitHub Actions                                   | Lint/test/build/deploy                                 |
+| Hosting             | Docker Compose + Nginx                           | Dedicated Ubuntu server                                |
 
 ### Architecture Overview (Mermaid)
 
@@ -42,7 +45,9 @@ flowchart LR
   api --> fs[File Storage]
   api --> mq[BullMQ + Redis]
   api --> llm[LLM Provider]
-  api --> ocr[Receipt Parsing]
+  api --> vision[Vision LLM Extraction]
+  chat[LLM Chat Clients] --> mcp[MCP Server OAuth 2.1]
+  mcp --> api
 ```
 
 ### Authentication Architecture (API-First)
@@ -344,28 +349,32 @@ Full localization can be deferred, but the foundation should be set early to avo
 
 Each iteration is deployable, includes tests, and expands CI/CD coverage. Order follows the required sequence.
 
-**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (15), Phase 5 (14), Phase 6 (10), Phase 7 (13), Phase 8 (10), Phase 9 (8), Phase 10 (8), Phase 11-Core (4), Phase 11-Transactions (12), Phase 12 (10), Phase 13 (8), Phase 14 (4), Phase 15 (8). **Total: 143 iterations.**
+**Iteration count summary**: Phase 0 (8), Phase 1 (12), Phase 2 (4), Phase 3 (4), Phase 4 (15), Phase 5 (14), Phase 6 — unified Payment Management (21, replaces original Phase 6 + 7), Phase 7 — Receipts & Extraction (10), Phase 8 — Product Catalog & Barcode (10), Phase 9 — Purchase Analytics (8), Phase 10 — Budgets (10), Phase 11 — MCP Server (8), Phase 12-Core (4), Phase 12-Transactions (12), Phase 13 — Mini App (10), Phase 14 — Bot Receipts (6), Phase 15 — Bot Analytics (4), Phase 16 — LLM Assistant (7), Phase 17 — WebMCP (4). **Total: 171 iterations.**
+
+> **Re-plan (2026-07-03)**: Everything after Phase 6 was restructured around receipt ingestion and the product catalog: receipts moved ahead of budgets, Tesseract OCR was replaced by pluggable vision-LLM extraction, and new phases were added for the product catalog + barcode scanning (8), the MCP server (11), and WebMCP (17). Old → new numbering: Budgets 8→10, Receipts 9→7 (rewritten), Analytics 10→9 (rewritten), Bot 11→12, Mini App 12→13, Bot Receipts 13→14 (reduced), Bot Analytics 14→15, LLM Assistant 15→16 (extraction moved to 7).
 
 ### Phase Size Guidelines
 
-| Phase                     | Iterations | Size Category | Notes                                                                                                |
-| ------------------------- | ---------- | ------------- | ---------------------------------------------------------------------------------------------------- |
-| Phase 0: Foundation       | 8          | Medium        | Infrastructure setup, one-time                                                                       |
-| Phase 1: Basic Auth       | 12         | Medium-Large  | Core feature, granular for security                                                                  |
-| Phase 2: Google Auth      | 4          | Small         | OAuth integration                                                                                    |
-| Phase 3: Telegram Auth    | 4          | Small         | Widget integration                                                                                   |
-| Phase 4: Auth Completion  | 15         | Medium        | Email confirm, password reset, delete, settings consolidation, currency/TZ, legal pages, Haraka SMTP |
-| Phase 5: Groups + Profile | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)                                                    |
-| Phase 6: Income           | 10         | Medium        | Core transaction type                                                                                |
-| Phase 7: Expense          | 13         | Medium-Large  | More complex with loans/installments                                                                 |
-| Phase 8: Budgets          | 10         | Medium        | Depends on income/expense                                                                            |
-| Phase 9: Receipts         | 8          | Medium        | File handling complexity                                                                             |
-| Phase 10: Analytics       | 8          | Medium        | Dashboard and charts                                                                                 |
-| Phase 11: Telegram Bot    | 4 + 12     | Large         | Split: Core (11.1-11.4) + Transactions (11.5-11.9)                                                   |
-| Phase 12: Mini App        | 10         | Medium        | Mobile-first interface                                                                               |
-| Phase 13: Bot Receipts    | 8          | Medium        | Photo and URL processing                                                                             |
-| Phase 14: Bot Analytics   | 4          | Small         | Summary commands                                                                                     |
-| Phase 15: LLM             | 8          | Medium        | AI integration                                                                                       |
+| Phase                                                     | Iterations | Size Category | Notes                                                                                                                                                                                                              |
+| --------------------------------------------------------- | ---------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 0: Foundation                                       | 8          | Medium        | Infrastructure setup, one-time                                                                                                                                                                                     |
+| Phase 1: Basic Auth                                       | 12         | Medium-Large  | Core feature, granular for security                                                                                                                                                                                |
+| Phase 2: Google Auth                                      | 4          | Small         | OAuth integration                                                                                                                                                                                                  |
+| Phase 3: Telegram Auth                                    | 4          | Small         | Widget integration                                                                                                                                                                                                 |
+| Phase 4: Auth Completion                                  | 15         | Medium        | Email confirm, password reset, delete, settings consolidation, currency/TZ, legal pages, Haraka SMTP                                                                                                               |
+| Phase 5: Groups + Profile                                 | 8 + 6      | Medium        | Groups (5.1-5.8) + Profile sub-section (5.9-5.14)                                                                                                                                                                  |
+| Phase 6: Payment Management (incomes + expenses, unified) | 21         | Large         | Replaces original Phase 6 (Income) + Phase 7 (Expense); single Payment entity with direction IN/OUT; shared UI, attributions, categories, schedules, plans, stars, comments; BullMQ recurring worker; amortisation |
+| Phase 7: Receipt Ingestion & LLM Extraction               | 10         | Medium        | Pluggable vision-LLM extraction; receipts/items/merchants schema; review flow; URL ingestion                                                                                                                       |
+| Phase 8: Product Catalog, Matching & Barcode              | 10         | Medium        | Two-layer product DB (global registry + private data); staged matching; walkthrough UI; camera barcode scanning; Open Food Facts                                                                                   |
+| Phase 9: Purchase Analytics (configurable)                | 8          | Medium        | Composable dimensions/filters, saved views, price dynamics, habit summaries                                                                                                                                        |
+| Phase 10: Budgets                                         | 10         | Medium        | Renumbered from original Phase 8; depends on payments                                                                                                                                                              |
+| Phase 11: MCP Server                                      | 8          | Medium        | OAuth 2.1 + Streamable HTTP MCP; read/write tools; purchase comments; client verification                                                                                                                          |
+| Phase 12: Telegram Bot                                    | 4 + 12     | Large         | Split: Core (12.1-12.4) + Transactions (12.5-12.9)                                                                                                                                                                 |
+| Phase 13: Mini App                                        | 10         | Medium        | Mobile-first interface                                                                                                                                                                                             |
+| Phase 14: Bot Receipts                                    | 6          | Small-Medium  | Entry points into the Phase 7 pipeline                                                                                                                                                                             |
+| Phase 15: Bot Analytics                                   | 4          | Small         | Summary commands                                                                                                                                                                                                   |
+| Phase 16: LLM Assistant                                   | 7          | Medium        | In-app chat; reuses Phase 7 provider layer                                                                                                                                                                         |
+| Phase 17: WebMCP                                          | 4          | Small         | Feature-detected in-GUI agent tools; reuses Phase 11 tool contracts                                                                                                                                                |
 
 **Target phase size**: 6-10 iterations recommended. Larger phases are split into logical sub-sections.
 
@@ -474,185 +483,305 @@ Each iteration is deployable, includes tests, and expands CI/CD coverage. Order 
 | 5.13     | Data export      | Deferred to post-Phase 6 — no meaningful financial data exists to export until transactions are implemented                              |
 | 5.14     | Export UI        | Deferred — depends on 5.13                                                                                                               |
 
-### Phase 6: Income Management
+### Phase 6: Payment Management (Unified Income + Expense)
 
-| Iteration | Objective        | Scope                                                                                                                                                                                                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                                               |
-| --------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 6.1       | Income schema    | Incomes table with currency field (ISO 4217), amount as cents, indexes on (user_id, created_at)                                                                                                                                                  | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                    |
-| 6.2       | Categories       | Predefined/custom income categories                                                                                                                                                                                                              | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                 |
-| 6.3       | Add API          | Create income endpoint with currency validation                                                                                                                                                                                                  | API tests         | lint + typecheck + integration | Deploy     | Income saved                                                                                                                      |
-| 6.4       | Add UI           | Income form with currency selector                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Income created                                                                                                                    |
-| 6.5       | Types            | Recurring/limited income types                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Types supported                                                                                                                   |
-| 6.6       | List API + UI    | List incomes with pagination                                                                                                                                                                                                                     | E2E tests         | full suite                     | Deploy     | Lists shown with cursor pagination                                                                                                |
-| 6.7       | Edit/delete      | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                        |
-| 6.8       | Attribution      | Personal vs group income                                                                                                                                                                                                                         | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                              |
-| 6.9       | Recurring engine | BullMQ cron-based scheduler for recurring income generation; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; handling of missed/late recurring transactions with catch-up logic | Integration tests | lint + typecheck + integration | Deploy     | Recurring incomes auto-created on schedule; missed transactions detected and generated; user notified of each auto-created income |
-| 6.10      | Audit logging    | Log all income modifications                                                                                                                                                                                                                     | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                              |
+> **Scope change**: The original Phase 6 (Income, 10 iterations) and Phase 7 (Expense, 13 iterations) have been **merged** into a single unified Phase 6. Incomes and expenses are the same entity with a `direction` field (`IN` / `OUT`); all CRUD flows, UI components, categories, schedules, plans, stars, and comments are shared — hitting the `dna.md` DRY rule. This also adds payment notes, a document placeholder (for Phase 7 receipts), per-user stars/favourites, and a comments entity for group discussions.
+>
+> **Detailed design**: See [`docs/phase-6-payments-design.md`](docs/phase-6-payments-design.md).
+>
+> The original **Phase 7** number was freed by this merge and is now used by **Receipt Ingestion & LLM Extraction** (re-plan 2026-07-03).
 
-### Phase 7: Expense Management
+#### Part A — Foundations
 
-| Iteration | Objective          | Scope                                                                                                                                                                                                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                                                 |
-| --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 7.1       | Expense schema     | Expenses table with currency field, amount as cents, indexes                                                                                                                                                                                     | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                                      |
-| 7.2       | Categories         | Predefined/custom expense categories                                                                                                                                                                                                             | Unit tests        | lint + typecheck + unit        | Deploy     | Categories usable                                                                                                                   |
-| 7.3       | Add API            | Create expense endpoint with currency validation                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | Expense saved                                                                                                                       |
-| 7.4       | Add UI             | Expense form with currency support                                                                                                                                                                                                               | UI tests          | lint + typecheck + unit        | Deploy     | Expense created                                                                                                                     |
-| 7.5       | Auto-categorize    | Rules-based categorization                                                                                                                                                                                                                       | Unit tests        | lint + typecheck + unit        | Deploy     | Rules applied                                                                                                                       |
-| 7.6       | List API + UI      | List expenses with cursor pagination                                                                                                                                                                                                             | E2E tests         | full suite                     | Deploy     | Lists shown                                                                                                                         |
-| 7.7       | Edit/delete        | Update endpoints                                                                                                                                                                                                                                 | API tests         | lint + typecheck + integration | Deploy     | CRUD works                                                                                                                          |
-| 7.8       | Attribution        | Personal vs group expense                                                                                                                                                                                                                        | Integration tests | lint + typecheck + integration | Deploy     | Attribution enforced                                                                                                                |
-| 7.9       | Loans & mortgages  | Principal, interest, schedule                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Loan expenses supported                                                                                                             |
-| 7.10      | Installments       | Zero or custom interest, payments count                                                                                                                                                                                                          | Integration tests | lint + typecheck + integration | Deploy     | Installments tracked                                                                                                                |
-| 7.11      | Remember choice    | Last classification preference                                                                                                                                                                                                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Defaults applied                                                                                                                    |
-| 7.12      | Recurring expenses | BullMQ cron-based scheduler for recurring expense generation; reuse recurring engine from 6.9; support daily, weekly, biweekly, monthly, quarterly, annual frequencies; auto-generation with user notification; missed/late transaction catch-up | Integration tests | lint + typecheck + integration | Deploy     | Recurring expenses auto-created on schedule; missed transactions detected and generated; user notified of each auto-created expense |
-| 7.13      | Audit logging      | Log all expense modifications                                                                                                                                                                                                                    | Unit tests        | lint + typecheck + unit        | Deploy     | Modifications logged                                                                                                                |
+| Iteration | Objective               | Scope                                                                                                                                                                                            | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                              |
+| --------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------ | ---------- | ---------------------------------------------------------------- |
+| 6.1       | Shared types + DTOs     | `packages/shared`: `PaymentDirection`, `PaymentType`, `PaymentStatus`, `PaymentFrequency`, `AttributionScope`, default category slugs                                                            | Unit tests         | lint + typecheck + unit        | N/A        | Types importable across workspaces                               |
+| 6.2       | DB schema + migration   | Prisma models: `payments`, `payment_attributions`, `categories`, `payment_schedules`, `payment_plans`, `payment_documents`, `payment_comments`, `payment_stars` + indexes; expand-only migration | Migration tests    | lint + typecheck + unit        | Deploy     | Migration applies on staging; schema matches design doc          |
+| 6.3       | Seed default categories | Idempotent seed of ~22 system categories (15 OUT + 7 IN) with stable slugs                                                                                                                       | Unit tests         | lint + typecheck + unit        | Deploy     | Fresh and existing DBs end up with the same default category set |
+| 6.4       | Categories API          | `CategoryModule`: list + personal/group CRUD with owner/admin guards; reject delete when in use                                                                                                  | Unit + integration | lint + typecheck + integration | Deploy     | Categories manageable via Swagger; visibility respects scope     |
 
-### Phase 8: Budgets & Spending Targets
+#### Part B — Payment core API (one-time)
+
+| Iteration | Objective           | Scope                                                                                                                    | Testing            | CI/CD                                       | Deployment         | Acceptance Criteria                                                                      |
+| --------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| 6.5       | Create payment API  | `POST /payments` (ONE_TIME); validates attributions, category direction, currency, amount                                | Unit + integration | lint + typecheck + integration              | Deploy             | Personal, group, and mixed attributions all create successfully; invalid scopes rejected |
+| 6.6       | List payments API   | `GET /payments` with cursor pagination and filters: scope / direction / category / date / starred / type / search / sort | Unit + integration | lint + typecheck + integration              | Deploy             | Filters honoured; pagination stable; visibility = user's personal ∪ member groups        |
+| 6.7       | Get-one + edit API  | `GET /payments/:id` (access guard) + `PATCH /payments/:id` (creator only)                                                | Unit + integration | lint + typecheck + integration              | Deploy             | Creator edits; non-creator blocked; non-accessor 404                                     |
+| 6.8       | Delete API (scoped) | `DELETE /payments/:id?scope=personal                                                                                     | group:<id>         | all`; last attribution triggers hard delete | Unit + integration | lint + typecheck + integration                                                           | Deploy | Only accessible attributions removed; other users' / non-member groups' attributions kept |
+
+#### Part C — Social features API
+
+| Iteration | Objective       | Scope                                                                                                              | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                 |
+| --------- | --------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------ | ---------- | ----------------------------------------------------------------------------------- |
+| 6.9       | Star toggle API | `POST /payments/:id/star` toggles per-user star; list returns `starredByMe`                                        | Unit + integration | lint + typecheck + integration | Deploy     | Star isolation per user; list filter `?starred=true` works                          |
+| 6.10      | Comments API    | `GET/POST/PATCH/DELETE /payments/:id/comments[/:commentId]` — any accessor can comment; author can edit/delete own | Unit + integration | lint + typecheck + integration | Deploy     | Comment thread functional; edit/delete limited to author; soft delete preserves row |
+
+#### Part D — DRY frontend
+
+| Iteration | Objective                | Scope                                                                                                                                                    | Testing            | CI/CD                   | Deployment | Acceptance Criteria                                                                              |
+| --------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| 6.11      | PaymentContext + helpers | `PaymentProvider`, types, formatters, `remember.ts` (localStorage for last-used scopes/direction/type)                                                   | Unit (vitest)      | lint + typecheck + unit | Deploy     | Provider mounts; formatters handle USD/ILS/EUR × en/he                                           |
+| 6.12      | `<PaymentsList>`         | Reusable list with filter bar, sorting, star/edit/delete controls; responsive table/card                                                                 | Unit + interaction | lint + typecheck + unit | Deploy     | Component reusable with any scope; filters trigger refetch; delete dialog presents scope options |
+| 6.13      | `<PaymentFormDialog>`    | Add/edit dialog: direction toggle, amount+currency, note, scope multiselect (w/ remember), category picker, type selector with recurring/plan disclosure | Unit + interaction | lint + typecheck + unit | Deploy     | Valid payloads for ONE_TIME, RECURRING, INSTALLMENT, LOAN form submissions                       |
+| 6.14      | Payment detail page      | `/payments/:id` with note, documents placeholder, comments thread, star, edit/delete; schedule/plan summary                                              | Unit + E2E         | lint + typecheck + unit | Deploy     | Detail page deep-links from list and dashboard; comments + star update live                      |
+| 6.15      | Aggregated dashboard     | `/dashboard` with totals, recent activity, starred section, and scope entry cards (personal + each group)                                                | Unit + E2E smoke   | lint + typecheck + unit | Deploy     | Dashboard shows aggregated data; scope cards link to expanded views                              |
+
+#### Part E — Per-scope views & categories UI
+
+| Iteration | Objective                               | Scope                                                                                                                                         | Testing    | CI/CD                          | Deployment | Acceptance Criteria                                                                       |
+| --------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------- |
+| 6.16      | Personal + group views, CategoryManager | `/payments?scope=personal`, `/payments/starred`, Payments tab inside `/groups/[groupId]`, personal + group Category manager on settings pages | Unit + E2E | lint + typecheck + integration | Deploy     | All scope filters usable; categories can be added/edited/deleted from both settings pages |
+
+#### Part F — Recurring & limited-period
+
+| Iteration | Objective                     | Scope                                                                               | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                     |
+| --------- | ----------------------------- | ----------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | --------------------------------------------------------------------------------------- |
+| 6.17      | Schedules API + BullMQ worker | `PaymentSchedule` flow, hourly cron, catch-up for missed occurrences, audit logging | Unit + integration | lint + typecheck + integration | Deploy     | Recurring payment with back-dated `startsAt` generates missed occurrences on first tick |
+| 6.18      | Recurring UI                  | "Make recurring" disclosure in form, schedule summary on detail page, pause/cancel  | Unit + E2E         | lint + typecheck + integration | Deploy     | User can create / pause / cancel recurring payments from the UI                         |
+
+#### Part G — Installments & loans/mortgages
+
+| Iteration | Objective                | Scope                                                                                            | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                             |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------------ | ------------------ | ------------------------------ | ---------- | ------------------------------------------------------------------------------- |
+| 6.19      | Plans API + amortisation | `PaymentPlan` creation, amortisation util (equal + french), pre-generate N occurrences           | Unit + integration | lint + typecheck + integration | Deploy     | Reference amortisation schedules match hand-calculated fixtures                 |
+| 6.20      | Plans UI                 | Installment / loan / mortgage disclosure in form, amortisation table on detail page, cancel plan | Unit + E2E         | lint + typecheck + integration | Deploy     | User can create a loan/installment/mortgage and see the full amortisation table |
+
+#### Part H — Polish & production merge
+
+| Iteration | Objective             | Scope                                                                                                                                                                                           | Testing         | CI/CD      | Deployment | Acceptance Criteria                                                   |
+| --------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ---------- | ---------- | --------------------------------------------------------------------- |
+| 6.21      | Audit + tests + merge | Full audit-log matrix, integration + Playwright E2E happy paths (one-time / recurring / loan), i18n EN+HE sweep, dark-mode contrast pass; merge `develop` → `main` and verify production deploy | Full test suite | full suite | Deploy     | Production green; user-verified; progress doc updated to "Phase 6 ✅" |
+
+### Phase 7: Receipt Ingestion & LLM Extraction
+
+> **Re-plan (2026-07-03)**: This phase replaces the original Phase 9 (Receipt Processing) and absorbs original 15.8 (LLM receipt extraction). Classical OCR (Tesseract) is dropped entirely — extraction is done by a **pluggable vision-LLM provider layer** (structured JSON output) from day one. Extracted data: merchant ("place"), purchase date/time, currency, line items (name, quantity, unit price, applied discounts, line total), and receipt totals.
+>
+> **Core concepts**:
+>
+> - **Receipt lifecycle**: `UPLOADED → EXTRACTING → REVIEW → CONFIRMED` (or `FAILED`). Extraction is async via BullMQ; the existing realtime (SSE) stack notifies the UI on transitions.
+> - **One confirmed receipt = one `Payment`** (direction `OUT`, type `ONE_TIME`) with the file attached as a `PaymentDocument` (kind `receipt`) and line items in a new `receipt_items` table.
+> - **Per-item categories**: each line item is classified by the LLM against the user's _existing_ categories (system + personal + group, direction `OUT`); the user confirms during review. The payment keeps a primary category; analytics uses item-level categories.
+> - **Merchants** are a global registry (like products in Phase 8): normalized name + aliases; extraction output is fuzzy-matched against existing merchants and the user confirms.
+> - **Provider abstraction**: `ReceiptExtractionProvider` interface with one config-selected default implementation (OpenAI / Anthropic / Gemini); retry + circuit breaker + per-call cost logging.
+>
+> **Detailed design**: `docs/phase-7-receipts-design.md` (to be written at phase kickoff).
+
+| Iteration | Objective                  | Scope                                                                                                                                                                  | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                                     |
+| --------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------- |
+| 7.1       | Shared types + DTOs        | `packages/shared`: `ReceiptStatus`, extraction result JSON schema (merchant, time, currency, items, discounts, totals), receipt DTOs                                   | Unit tests         | lint + typecheck + unit        | N/A        | Types importable across workspaces; extraction schema validates fixture receipts                        |
+| 7.2       | DB schema + migration      | Prisma models: `receipts`, `receipt_items`, `merchants` + indexes; expand-only migration                                                                               | Migration tests    | lint + typecheck + unit        | Deploy     | Migration applies on staging; schema matches design doc                                                 |
+| 7.3       | File infra                 | Receipt storage outside web root, MIME whitelist (JPEG/PNG/WebP/HEIC/PDF), 10MB limit, authenticated download endpoint                                                 | Unit tests         | lint + typecheck + unit        | Deploy     | Files stored securely; only the uploader / attributed group members can download                        |
+| 7.4       | Upload API                 | `POST /receipts` (multipart) creates receipt row (`UPLOADED`) + enqueues BullMQ extraction job; `GET /receipts` list + status; realtime events                         | API tests          | lint + typecheck + integration | Deploy     | Upload returns receipt id; status transitions observable via list endpoint and SSE                      |
+| 7.5       | Extraction provider layer  | `ReceiptExtractionProvider` interface + default vision-LLM impl (config-selected); structured output; retry/circuit breaker; cost logging                              | Unit tests (mocks) | lint + typecheck + unit        | Deploy     | Provider swappable via env config; fixture receipts (EN + HE) extract merchant, time, items, discounts  |
+| 7.6       | Extraction worker          | BullMQ consumer: run provider, totals validation (Σ items − discounts ≈ total), persist raw + parsed result, status transitions, SSE event                             | Integration tests  | lint + typecheck + integration | Deploy     | Uploaded fixture receipt reaches `REVIEW` with parsed line items; failures land in `FAILED` with reason |
+| 7.7       | Upload UI                  | `/receipts` page: drag-and-drop + mobile camera capture, upload progress, receipt list with live status (existing realtime stack)                                      | UI tests           | lint + typecheck + unit        | Deploy     | User can upload a photo/PDF from desktop and mobile and watch it reach `REVIEW`                         |
+| 7.8       | Review UI — header + items | Review page: receipt image side-by-side with extracted merchant/date/time/total; merchant suggestions (fuzzy match); editable line items with LLM-suggested categories | UI + interaction   | lint + typecheck + unit        | Deploy     | User can correct any extracted field; per-item category defaults suggested from existing categories     |
+| 7.9       | Confirm → payment          | Confirming creates `Payment` (OUT) + attributions (remembered scopes) + `PaymentDocument` link; payment detail page shows line-item breakdown                          | Integration + E2E  | full suite                     | Deploy     | Confirmed receipt appears as a payment with correct total, scope, document, and item breakdown          |
+| 7.10      | URL ingestion + polish     | URL receipts (fetch HTML/screenshot → same extraction pipeline) with retry/circuit breaker; audit-log matrix; i18n EN+HE sweep; Playwright E2E                         | Full test suite    | full suite                     | Deploy     | URL receipt reaches `REVIEW`; audit trail complete; E2E covers upload → extract → review → confirm      |
+
+### Phase 8: Product Catalog, Matching & Barcode
+
+> **Re-plan (2026-07-03)**: New phase. Implements the **two-layer product database**: a **global product registry** shared by all users (barcode/GTIN as the primary identifier, canonical name, brand, one image, default category, multi-language aliases) plus **private purchase data** (receipt items, prices, stats) scoped per user/group. The registry updates automatically as new products appear in receipts.
+>
+> **Core concepts**:
+>
+> - **Staged matching**: barcode → confirmed alias → normalized exact name → fuzzy (trigram) candidates; the extraction LLM ranks candidates and proposes matches in the same extraction call (handles cross-language matches like `חלב` ↔ `Milk`).
+> - **Walkthrough**: after extraction the user steps through every line item, confirming the proposed product match, picking another candidate, or creating a new product. Each confirmation records an alias (name + locale) and strengthens future matching.
+> - **Barcode scanning**: camera via `getUserMedia`, native `BarcodeDetector` API where available with `@zxing/browser` fallback (HTTPS already in place). Barcode is the primary product identifier.
+> - **Open Food Facts enrichment**: unknown barcodes trigger an async OFF lookup to prefill name/brand/image; manual entry remains the fallback.
+> - **Product images**: one per product, uploaded in the background (BullMQ resize job) or captured manually.
+> - **Price history is derived** from confirmed `receipt_items` (product × merchant × date × unit price) — no separate price table; indexes support the Phase 9 queries.
+>
+> **Detailed design**: `docs/phase-8-products-design.md` (to be written at phase kickoff).
+
+| Iteration | Objective              | Scope                                                                                                                                                                                                                                                                           | Testing              | CI/CD                          | Deployment | Acceptance Criteria                                                                                       |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------- |
+| 8.1       | Product schema         | Prisma models: `products` (global; unique nullable barcode, canonical name, brand, image ref, default category), `product_aliases` (name, locale, source, confirmation count); `receipt_items.product_id` FK; indexes incl. `(product_id, purchased_at)`; expand-only migration | Migration tests      | lint + typecheck + unit        | Deploy     | Schema applied; barcode uniqueness enforced; alias lookups indexed                                        |
+| 8.2       | Product API            | Search (normalized + fuzzy), get/create/update, alias add/confirm, barcode lookup endpoint                                                                                                                                                                                      | Unit + integration   | lint + typecheck + integration | Deploy     | Product searchable by partial name in any recorded language and by barcode                                |
+| 8.3       | Matching service       | Staged matcher (barcode → alias → exact → trigram fuzzy); candidate list injected into extraction call for LLM ranking; confidence scores                                                                                                                                       | Unit + integration   | lint + typecheck + integration | Deploy     | Fixture receipts produce correct match proposals incl. cross-language cases; confidence thresholds tested |
+| 8.4       | Item walkthrough UI    | Step-through of receipt items: proposed match + candidates with confidence, confirm / pick other / create new; per-item category confirm                                                                                                                                        | UI + interaction     | lint + typecheck + unit        | Deploy     | User can process an entire receipt item-by-item with keyboard-fast flow; skipped items resumable          |
+| 8.5       | Registry auto-update   | Confirming a match records alias (name + locale) and bumps confidence; creating a product publishes to the global registry; audit logging                                                                                                                                       | Integration tests    | lint + typecheck + integration | Deploy     | Second upload of a same-store receipt auto-matches items confirmed the first time                         |
+| 8.6       | Barcode scanning UI    | Camera access, `BarcodeDetector` + `@zxing/browser` fallback; attach barcode to product; scan-to-find during walkthrough                                                                                                                                                        | UI + manual (device) | lint + typecheck + unit        | Deploy     | Barcode scanned from a phone camera attaches to a product and resolves it in later scans                  |
+| 8.7       | Open Food Facts lookup | Unknown barcode → async OFF query (name/brand/image prefill) with circuit breaker + rate limiting; manual fallback                                                                                                                                                              | Unit + integration   | lint + typecheck + integration | Deploy     | Known OFF barcode prefills product fields; OFF outage degrades gracefully to manual entry                 |
+| 8.8       | Product images         | One image per product; manual upload + background processing queue (resize/strip EXIF); served via API                                                                                                                                                                          | Integration tests    | lint + typecheck + integration | Deploy     | Image uploads process in background; product cards show images                                            |
+| 8.9       | Catalog UI             | `/products` catalog: search, product detail (names/aliases, barcode, image, purchase history, price per merchant)                                                                                                                                                               | UI tests             | lint + typecheck + unit        | Deploy     | User can browse purchased products and see per-merchant purchase history                                  |
+| 8.10      | Tests + polish         | Integration + Playwright E2E (upload → extract → walkthrough → confirm → catalog), i18n EN+HE sweep, dark-mode pass                                                                                                                                                             | Full test suite      | full suite                     | Deploy     | Full receipt-to-catalog flow green in E2E; staging user-verified                                          |
+
+### Phase 9: Purchase Analytics (Configurable)
+
+> **Re-plan (2026-07-03)**: Replaces the original Phase 10. The original stores/goods/price-history models are subsumed by Phase 7 `merchants` and Phase 7/8 `receipt_items` + `products`. The centerpiece is a **configurable analytics engine**: the user composes dimensions and filter conditions (where do I/my groups buy, how much per category/product/merchant/member/period) and can save named views.
+
+| Iteration | Objective           | Scope                                                                                                                                                            | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                           |
+| --------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------- |
+| 9.1       | Aggregation API     | Spend aggregations by composable dimensions (merchant / category / product / member / group / scope / period) with filters, cursor pagination, currency handling | API tests          | lint + typecheck + integration | Deploy     | API returns correct totals for arbitrary dimension combinations against seeded fixtures       |
+| 9.2       | Query builder UI    | Configurable analysis view: pick dimensions + conditions, run, and **save named views** per user                                                                 | UI tests           | lint + typecheck + unit        | Deploy     | User composes "spend by category at merchant X last 3 months", saves it, reloads it           |
+| 9.3       | Dashboards + charts | Category pie, monthly trend line, top merchants, top products; responsive + currency formatting                                                                  | UI tests           | lint + typecheck + unit        | Deploy     | Charts render with correct data, responsive layout, EN+HE locales                             |
+| 9.4       | Price dynamics      | Price history charts per product (overall + per merchant) derived from receipt items, date range selector                                                        | UI + API tests     | lint + typecheck + integration | Deploy     | Product bought multiple times shows a price trend overall and split by merchant               |
+| 9.5       | Merchant analytics  | Per-merchant totals, visit counts, average basket, category mix                                                                                                  | API tests          | lint + typecheck + integration | Deploy     | API returns per-merchant spending totals, visit counts, and average transaction amount        |
+| 9.6       | Group analytics     | Group aggregates with per-member contribution breakdown and drilldown                                                                                            | Integration tests  | lint + typecheck + integration | Deploy     | Group analytics shows totals with per-member percentages and category breakdown               |
+| 9.7       | Habit summaries     | Weekly/monthly recurring-purchase detection (what is bought regularly, typical spend); persisted summaries for MCP (Phase 11)                                    | Unit + integration | lint + typecheck + integration | Deploy     | Seeded repeat purchases are detected as weekly/monthly habits with typical quantity and spend |
+| 9.8       | Performance + tests | Index/query performance on realistic volumes, visual regression on charts, Playwright E2E                                                                        | Full test suite    | full suite                     | Deploy     | p95 < 500ms on analytics endpoints with production-size fixtures; visual baselines committed  |
+
+### Phase 10: Budgets & Spending Targets
+
+> **Re-plan (2026-07-03)**: Renumbered from original Phase 8, content unchanged; moved after the receipt/product/analytics track.
 
 | Iteration | Objective             | Scope                                                                  | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                  |
 | --------- | --------------------- | ---------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
-| 8.1       | Budget schema         | Budgets/targets table with personal + group scope, timeframe, currency | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                       |
-| 8.2       | Create target API     | CRUD endpoints for spending targets                                    | API tests         | lint + typecheck + integration | Deploy     | Target created                                                                                       |
-| 8.3       | Create target UI      | Target creation form with amount, timeframe                            | UI tests          | lint + typecheck + unit        | Deploy     | UI creates target                                                                                    |
-| 8.4       | List/edit targets     | Target list and edit functionality                                     | E2E tests         | full suite                     | Deploy     | Targets manageable                                                                                   |
-| 8.5       | Progress tracking     | Calculate progress percentage against expenses                         | Integration tests | lint + typecheck + integration | Deploy     | Progress accurate                                                                                    |
-| 8.6       | Personal dashboard    | Dashboard with budget overview, progress bars                          | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard displays each budget with name, amount, spent, remaining, and progress bar with percentage |
-| 8.7       | Group targets         | Group-scoped budgets and targets                                       | Integration tests | lint + typecheck + integration | Deploy     | Group members can create, view, and track shared budget targets                                      |
-| 8.8       | Group dashboard       | Group budget overview                                                  | UI tests          | lint + typecheck + unit        | Deploy     | Group dashboard displays shared budgets with per-member contribution breakdown                       |
-| 8.9       | Alert configuration   | Threshold alerts, low balance warnings                                 | Integration tests | lint + typecheck + integration | Deploy     | Alerts configurable                                                                                  |
-| 8.10      | Due payment reminders | Reminder scheduling for upcoming payments                              | Integration tests | lint + typecheck + integration | Deploy     | Reminders scheduled                                                                                  |
+| 10.1      | Budget schema         | Budgets/targets table with personal + group scope, timeframe, currency | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                       |
+| 10.2      | Create target API     | CRUD endpoints for spending targets                                    | API tests         | lint + typecheck + integration | Deploy     | Target created                                                                                       |
+| 10.3      | Create target UI      | Target creation form with amount, timeframe                            | UI tests          | lint + typecheck + unit        | Deploy     | UI creates target                                                                                    |
+| 10.4      | List/edit targets     | Target list and edit functionality                                     | E2E tests         | full suite                     | Deploy     | Targets manageable                                                                                   |
+| 10.5      | Progress tracking     | Calculate progress percentage against expenses                         | Integration tests | lint + typecheck + integration | Deploy     | Progress accurate                                                                                    |
+| 10.6      | Personal dashboard    | Dashboard with budget overview, progress bars                          | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard displays each budget with name, amount, spent, remaining, and progress bar with percentage |
+| 10.7      | Group targets         | Group-scoped budgets and targets                                       | Integration tests | lint + typecheck + integration | Deploy     | Group members can create, view, and track shared budget targets                                      |
+| 10.8      | Group dashboard       | Group budget overview                                                  | UI tests          | lint + typecheck + unit        | Deploy     | Group dashboard displays shared budgets with per-member contribution breakdown                       |
+| 10.9      | Alert configuration   | Threshold alerts, low balance warnings                                 | Integration tests | lint + typecheck + integration | Deploy     | Alerts configurable                                                                                  |
+| 10.10     | Due payment reminders | Reminder scheduling for upcoming payments                              | Integration tests | lint + typecheck + integration | Deploy     | Reminders scheduled                                                                                  |
 
-### Phase 9: Receipt Processing
+### Phase 11: MCP Server (LLM Access to Purchases)
 
-| Iteration | Objective            | Scope                                                            | Testing           | CI/CD                          | Deployment | Acceptance Criteria   |
-| --------- | -------------------- | ---------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------- |
-| 9.1       | File infra           | Local storage paths, security constraints (outside web root)     | Unit tests        | lint + typecheck + unit        | Deploy     | Files stored securely |
-| 9.2       | Upload API           | Receipt upload endpoint with MIME validation, size limits (10MB) | API tests         | lint + typecheck + integration | Deploy     | Upload works          |
-| 9.3       | Upload UI            | Drag-and-drop UI                                                 | UI tests          | lint + typecheck + unit        | Deploy     | UI uploads            |
-| 9.4       | URL ingestion        | URL receipt input                                                | Integration tests | lint + typecheck + integration | Deploy     | URL saved             |
-| 9.5       | OCR parsing          | Tesseract OCR for images                                         | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted  |
-| 9.6       | Expense from receipt | Create expense flow with currency detection                      | E2E tests         | full suite                     | Deploy     | Expense created       |
-| 9.7       | PDF support          | PDF upload handling                                              | Integration tests | lint + typecheck + integration | Deploy     | PDF accepted          |
-| 9.8       | URL scraping         | URL scraping for online receipts with retry/circuit breaker      | Unit tests        | lint + typecheck + unit        | Deploy     | HTML parsed           |
+> **Re-plan (2026-07-03)**: New phase. A **remote MCP server** (Streamable HTTP, `@modelcontextprotocol/sdk`) hosted alongside the API with an **OAuth 2.1 authorization layer** (authorization code + PKCE + dynamic client registration) built on the existing auth stack — so users can connect ChatGPT, Claude, Gemini, etc. as first-class connectors. All access is strictly user-scoped by the OAuth token.
+>
+> **Capabilities**: read purchases/payments/stats/habits for advice; add payments; **upload receipts from chat** (the chat client becomes an alternative UI — our system plays the database role with add/read layers); confirm product matches conversationally; add/read **purchase comments** to remember item context.
 
-### Phase 10: Purchase Analytics
+| Iteration | Objective                  | Scope                                                                                                                           | Testing            | CI/CD                          | Deployment | Acceptance Criteria                                                                                |
+| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------- |
+| 11.1      | OAuth 2.1 server           | Authorization code + PKCE, dynamic client registration (RFC 7591), consent screen, scoped access tokens on existing auth stack  | Unit + integration | lint + typecheck + integration | Deploy     | A standards-compliant OAuth client can register, obtain consent, and receive a scoped token        |
+| 11.2      | MCP endpoint skeleton      | Streamable HTTP transport mounted on the API, user-scoped sessions from OAuth tokens, tool registry, protocol conformance       | Integration tests  | lint + typecheck + integration | Deploy     | MCP inspector connects, lists tools, and calls a ping tool as the authenticated user               |
+| 11.3      | Read tools                 | Search/list payments, receipts, purchase items, products; stats + habit-summary tools (reusing Phase 9 aggregations)            | Integration tests  | lint + typecheck + integration | Deploy     | LLM client can answer "what do I buy weekly?" and "how much did I spend on groceries?" via tools   |
+| 11.4      | Write tools                | Add payment; upload receipt (base64 / URL → Phase 7 pipeline); confirm/reject product match proposals conversationally          | Integration tests  | lint + typecheck + integration | Deploy     | Receipt uploaded from an LLM chat lands in the same review pipeline; matches confirmable via tools |
+| 11.5      | Purchase comments          | Item-level comments (schema + API + web UI section) + MCP add/read comment tools for purchase context                           | Unit + integration | lint + typecheck + integration | Deploy     | Comments attached to a purchase item are readable/writable from both web UI and MCP                |
+| 11.6      | Security hardening         | Scope enforcement per tool, per-token rate limits, audit logging of all MCP actions, connection/token revocation UI in settings | Integration tests  | lint + typecheck + integration | Deploy     | Out-of-scope tool calls rejected; user can list and revoke connected LLM clients                   |
+| 11.7      | Client verification + docs | End-to-end verification with Claude and ChatGPT connectors; `/help` docs for connecting an assistant                            | Manual + E2E       | full suite                     | Deploy     | Documented happy path works against staging from at least two real LLM clients                     |
+| 11.8      | Tests + merge              | Integration tests for OAuth + MCP flows, load sanity check, merge to production                                                 | Full test suite    | full suite                     | Deploy     | Production green; MCP endpoint live and user-verified                                              |
 
-| Iteration | Objective       | Scope                                                   | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                               |
-| --------- | --------------- | ------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| 10.1      | Stores model    | Stores table with indexes                               | Migration tests   | lint + typecheck + unit        | Deploy     | Schema applied                                                                                                    |
-| 10.2      | Goods tracking  | Purchased items model                                   | Unit tests        | lint + typecheck + unit        | Deploy     | Items stored                                                                                                      |
-| 10.3      | Analytics API   | Spending by category/time with pagination               | API tests         | lint + typecheck + integration | Deploy     | API returns spending-by-category, spending-by-month, and top-merchants aggregations with correct totals           |
-| 10.4      | Dashboard UI    | Analytics UI with charts                                | UI tests          | lint + typecheck + unit        | Deploy     | Spending-by-category pie chart and monthly trend line chart render with responsive layout and currency formatting |
-| 10.5      | Price history   | History model with indexes (store_id, product_id, date) | Unit tests        | lint + typecheck + unit        | Deploy     | Price history records saved with store, product, date, and amount                                                 |
-| 10.6      | Price charts    | Trends UI                                               | UI tests          | lint + typecheck + unit        | Deploy     | Price trend line chart shows historical prices per product with date range selector                               |
-| 10.7      | Store analytics | Store breakdown                                         | API tests         | lint + typecheck + integration | Deploy     | API returns per-store spending totals, visit counts, and average transaction amount                               |
-| 10.8      | Group analytics | Group aggregate with member breakdown                   | Integration tests | lint + typecheck + integration | Deploy     | Group analytics shows total group spending with per-member contribution percentages and category breakdown        |
+### Phase 12: Telegram Bot
 
-### Phase 11: Telegram Bot
+> Renumbered from original Phase 11; content unchanged.
 
-#### 11A: Bot Core (Iterations 11.1–11.4)
+#### 12A: Bot Core (Iterations 12.1–12.4)
 
 Setup, commands, and user account linking.
 
 | Iteration | Objective    | Scope                                                  | Testing          | CI/CD                          | Deployment | Acceptance Criteria                            |
 | --------- | ------------ | ------------------------------------------------------ | ---------------- | ------------------------------ | ---------- | ---------------------------------------------- |
-| 11.1      | Bot setup    | Bot registration with BotFather, webhook configuration | Manual test      | lint + typecheck               | Deploy     | Bot responds to /start with welcome message    |
-| 11.2      | Framework    | grammy.js app with middleware, session, error handling | Unit tests       | lint + typecheck + unit        | Deploy     | Bot process runs and handles errors gracefully |
-| 11.3      | Commands     | /start /help with command descriptions                 | Manual test      | lint + typecheck               | Deploy     | Commands respond with formatted help text      |
-| 11.4      | User linking | Link accounts via JWT validation, /link command        | Integration test | lint + typecheck + integration | Deploy     | User can link Telegram to existing web account |
+| 12.1      | Bot setup    | Bot registration with BotFather, webhook configuration | Manual test      | lint + typecheck               | Deploy     | Bot responds to /start with welcome message    |
+| 12.2      | Framework    | grammy.js app with middleware, session, error handling | Unit tests       | lint + typecheck + unit        | Deploy     | Bot process runs and handles errors gracefully |
+| 12.3      | Commands     | /start /help with command descriptions                 | Manual test      | lint + typecheck               | Deploy     | Commands respond with formatted help text      |
+| 12.4      | User linking | Link accounts via JWT validation, /link command        | Integration test | lint + typecheck + integration | Deploy     | User can link Telegram to existing web account |
 
-#### 11B: Bot Transactions (Iterations 11.5–11.9)
+#### 12B: Bot Transactions (Iterations 12.5–12.9)
 
 Expense/income flows and notifications.
 
 | Iteration | Objective             | Scope                                             | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                       |
 | --------- | --------------------- | ------------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------- |
-| 11.5      | Balance command       | Summary balance with currency formatting          | Unit tests        | lint + typecheck + unit        | Deploy     | /balance shows total income, expenses, and net balance    |
-| 11.6a     | Expense flow init     | `/expense` command initialization                 | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
-| 11.6b     | Amount parsing        | Parse amount from message with currency detection | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and currency extracted from input like "50.00 USD" |
-| 11.6c     | Category selection    | Inline keyboard category choice                   | Integration tests | lint + typecheck + integration | Deploy     | Category selected via inline buttons                      |
-| 11.6d     | Description input     | Optional description prompt                       | Integration tests | lint + typecheck + integration | Deploy     | Description captured or skipped                           |
-| 11.6e     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Expense saved with confirmation message                   |
-| 11.7a     | Income flow init      | `/income` command initialization                  | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
-| 11.7b     | Amount/source parsing | Amount and source parsing                         | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and source extracted correctly                     |
-| 11.7c     | Income type selection | Inline keyboard type choice (one-time/recurring)  | Integration tests | lint + typecheck + integration | Deploy     | Type selected via inline buttons                          |
-| 11.7d     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Income saved with confirmation message                    |
-| 11.8      | Recent txns           | Last transactions via /recent command             | API tests         | lint + typecheck + integration | Deploy     | Last 10 transactions shown with amount, category, date    |
-| 11.9      | Notifications         | Due payment and low balance alerts via Telegram   | Integration tests | lint + typecheck + integration | Deploy     | Alerts sent to linked users when thresholds triggered     |
+| 12.5      | Balance command       | Summary balance with currency formatting          | Unit tests        | lint + typecheck + unit        | Deploy     | /balance shows total income, expenses, and net balance    |
+| 12.6a     | Expense flow init     | `/expense` command initialization                 | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
+| 12.6b     | Amount parsing        | Parse amount from message with currency detection | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and currency extracted from input like "50.00 USD" |
+| 12.6c     | Category selection    | Inline keyboard category choice                   | Integration tests | lint + typecheck + integration | Deploy     | Category selected via inline buttons                      |
+| 12.6d     | Description input     | Optional description prompt                       | Integration tests | lint + typecheck + integration | Deploy     | Description captured or skipped                           |
+| 12.6e     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Expense saved with confirmation message                   |
+| 12.7a     | Income flow init      | `/income` command initialization                  | Integration tests | lint + typecheck + integration | Deploy     | Flow starts with amount prompt                            |
+| 12.7b     | Amount/source parsing | Amount and source parsing                         | Unit tests        | lint + typecheck + unit        | Deploy     | Amount and source extracted correctly                     |
+| 12.7c     | Income type selection | Inline keyboard type choice (one-time/recurring)  | Integration tests | lint + typecheck + integration | Deploy     | Type selected via inline buttons                          |
+| 12.7d     | Confirm + save        | Confirmation and save                             | Integration tests | lint + typecheck + integration | Deploy     | Income saved with confirmation message                    |
+| 12.8      | Recent txns           | Last transactions via /recent command             | API tests         | lint + typecheck + integration | Deploy     | Last 10 transactions shown with amount, category, date    |
+| 12.9      | Notifications         | Due payment and low balance alerts via Telegram   | Integration tests | lint + typecheck + integration | Deploy     | Alerts sent to linked users when thresholds triggered     |
 
-### Phase 12: Telegram Mini App (Expanded)
+### Phase 13: Telegram Mini App (Expanded)
+
+> Renumbered from original Phase 12; receipt upload (13.7) now feeds the Phase 7 extraction pipeline.
 
 | Iteration | Objective             | Scope                                         | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                           |
 | --------- | --------------------- | --------------------------------------------- | ----------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------- |
-| 12.1      | Mini app setup        | Mini app project scaffolding                  | Smoke tests       | lint + typecheck + unit        | Deploy     | Mini app builds                                                                               |
-| 12.2      | Mini app auth         | Link mini app session to main account via JWT | Integration tests | lint + typecheck + integration | Deploy     | Account linked                                                                                |
-| 12.3      | Mini app UI shell     | Dashboard layout + navigation                 | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard renders with bottom navigation, balance summary card, and recent activity list      |
-| 12.4      | Expense entry         | Mini app expense form with currency           | Integration tests | lint + typecheck + integration | Deploy     | Expense form submits with amount, category picker, and optional note; saved to backend        |
-| 12.5      | Income entry          | Mini app income form                          | Integration tests | lint + typecheck + integration | Deploy     | Income form submits with amount, source, type, and optional note; saved to backend            |
-| 12.6      | Analytics views       | Spending analytics in mini app                | UI tests          | lint + typecheck + unit        | Deploy     | Mini app shows spending-by-category chart and monthly totals with period selector             |
-| 12.7      | Receipt upload        | Photo upload from mini app                    | Integration tests | lint + typecheck + integration | Deploy     | Camera/gallery photo captured, uploaded, and receipt record created with file reference       |
-| 12.8      | Budget/target view    | Budget management in mini app                 | UI tests          | lint + typecheck + unit        | Deploy     | Budget list shows each target with progress bar, spent/remaining amounts, and timeframe       |
-| 12.9      | Group/family view     | Group balances and members                    | Integration tests | lint + typecheck + integration | Deploy     | Group view displays group name, member avatars, shared balance, and recent group transactions |
-| 12.10     | Group member expenses | View expenses by group member                 | Integration tests | lint + typecheck + integration | Deploy     | Member breakdown visible                                                                      |
+| 13.1      | Mini app setup        | Mini app project scaffolding                  | Smoke tests       | lint + typecheck + unit        | Deploy     | Mini app builds                                                                               |
+| 13.2      | Mini app auth         | Link mini app session to main account via JWT | Integration tests | lint + typecheck + integration | Deploy     | Account linked                                                                                |
+| 13.3      | Mini app UI shell     | Dashboard layout + navigation                 | UI tests          | lint + typecheck + unit        | Deploy     | Dashboard renders with bottom navigation, balance summary card, and recent activity list      |
+| 13.4      | Expense entry         | Mini app expense form with currency           | Integration tests | lint + typecheck + integration | Deploy     | Expense form submits with amount, category picker, and optional note; saved to backend        |
+| 13.5      | Income entry          | Mini app income form                          | Integration tests | lint + typecheck + integration | Deploy     | Income form submits with amount, source, type, and optional note; saved to backend            |
+| 13.6      | Analytics views       | Spending analytics in mini app                | UI tests          | lint + typecheck + unit        | Deploy     | Mini app shows spending-by-category chart and monthly totals with period selector             |
+| 13.7      | Receipt upload        | Photo upload from mini app → Phase 7 pipeline | Integration tests | lint + typecheck + integration | Deploy     | Camera/gallery photo captured, uploaded, and receipt enters the extraction pipeline           |
+| 13.8      | Budget/target view    | Budget management in mini app                 | UI tests          | lint + typecheck + unit        | Deploy     | Budget list shows each target with progress bar, spent/remaining amounts, and timeframe       |
+| 13.9      | Group/family view     | Group balances and members                    | Integration tests | lint + typecheck + integration | Deploy     | Group view displays group name, member avatars, shared balance, and recent group transactions |
+| 13.10     | Group member expenses | View expenses by group member                 | Integration tests | lint + typecheck + integration | Deploy     | Member breakdown visible                                                                      |
 
-### Phase 13: Telegram Bot - Receipt Processing (Photo + URL)
+### Phase 14: Telegram Bot — Receipt Processing
 
-| Iteration | Objective                 | Scope                                                | Testing           | CI/CD                          | Deployment | Acceptance Criteria          |
-| --------- | ------------------------- | ---------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ---------------------------- |
-| 13.1      | URL handling              | URL receipt ingestion via bot                        | Integration tests | lint + typecheck + integration | Deploy     | URL stored                   |
-| 13.2      | URL parsing               | Parse receipt from URL                               | Unit tests        | lint + typecheck + unit        | Deploy     | Parsed fields                |
-| 13.3      | Photo handling            | Receive photo from Telegram, download and store file | Integration tests | lint + typecheck + integration | Deploy     | Photo stored                 |
-| 13.4      | Photo OCR                 | Photo → OCR extraction pipeline (reuse Phase 9 OCR)  | Unit tests        | lint + typecheck + unit        | Deploy     | OCR fields extracted         |
-| 13.5      | Confirmation flow (URL)   | Review flow for URL receipts                         | E2E tests         | full suite                     | Deploy     | User confirms                |
-| 13.6      | Confirmation flow (photo) | Review flow for photo receipts, show extracted data  | E2E tests         | full suite                     | Deploy     | User confirms extracted data |
-| 13.7      | Quick create (URL)        | Expense creation from URL                            | E2E tests         | full suite                     | Deploy     | Expense created              |
-| 13.8      | Quick create (photo)      | Expense creation from confirmed photo data           | E2E tests         | full suite                     | Deploy     | Expense created              |
+> **Re-plan (2026-07-03)**: Renumbered from original Phase 13 and reduced from 8 to 6 iterations — the extraction pipeline, review semantics, and product matching all come from Phases 7–8; the bot is only another entry point.
 
-### Phase 14: Telegram Bot - Analytics
+| Iteration | Objective                | Scope                                                                                      | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                           |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------ | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------- |
+| 14.1      | Photo handling           | Receive photo via bot, download, store, enqueue Phase 7 extraction                         | Integration tests | lint + typecheck + integration | Deploy     | Photo sent to bot appears as a receipt in `EXTRACTING` status                 |
+| 14.2      | URL handling             | URL receipt ingestion via bot → same pipeline                                              | Integration tests | lint + typecheck + integration | Deploy     | URL sent to bot creates a receipt and extraction job                          |
+| 14.3      | Extraction notifications | Bot notifies when extraction completes; deep link to web review page                       | Integration tests | lint + typecheck + integration | Deploy     | User gets a message with extracted total + merchant and a review link         |
+| 14.4      | Quick confirm flow       | Inline confirmation of merchant/total/date for simple receipts; creates payment            | E2E tests         | full suite                     | Deploy     | Simple receipt confirmable entirely inside Telegram                           |
+| 14.5      | Item walkthrough (bot)   | Simplified product-match confirmation via inline keyboards; defer-to-web for complex cases | Integration tests | lint + typecheck + integration | Deploy     | Items with high-confidence matches confirmable in chat; rest deep-link to web |
+| 14.6      | Tests + polish           | E2E happy paths (photo + URL), i18n sweep                                                  | Full test suite   | full suite                     | Deploy     | Bot receipt flows green in E2E                                                |
+
+### Phase 15: Telegram Bot — Analytics
+
+> Renumbered from original Phase 14; content unchanged.
 
 | Iteration | Objective          | Scope                                | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                      |
 | --------- | ------------------ | ------------------------------------ | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------- |
-| 14.1      | Summary command    | Quick stats with currency formatting | API tests         | lint + typecheck + integration | Deploy     | /stats returns total income, total expenses, net balance, and top 3 expense categories for current month |
-| 14.2      | Category breakdown | Breakdown view                       | API tests         | lint + typecheck + integration | Deploy     | /breakdown shows per-category spending with amounts and percentages, formatted as readable table         |
-| 14.3      | Group analytics    | Group stats with member breakdown    | Integration tests | lint + typecheck + integration | Deploy     | /groupstats shows group total, per-member contributions, and top shared expenses                         |
-| 14.4      | Inline charts      | Text or image chart                  | UI tests          | lint + typecheck + unit        | Deploy     | Chart image generated and sent as photo message with spending distribution visualization                 |
+| 15.1      | Summary command    | Quick stats with currency formatting | API tests         | lint + typecheck + integration | Deploy     | /stats returns total income, total expenses, net balance, and top 3 expense categories for current month |
+| 15.2      | Category breakdown | Breakdown view                       | API tests         | lint + typecheck + integration | Deploy     | /breakdown shows per-category spending with amounts and percentages, formatted as readable table         |
+| 15.3      | Group analytics    | Group stats with member breakdown    | Integration tests | lint + typecheck + integration | Deploy     | /groupstats shows group total, per-member contributions, and top shared expenses                         |
+| 15.4      | Inline charts      | Text or image chart                  | UI tests          | lint + typecheck + unit        | Deploy     | Chart image generated and sent as photo message with spending distribution visualization                 |
 
-### Phase 15: LLM Assistant
+### Phase 16: LLM Assistant (In-App)
 
-| Iteration | Objective          | Scope                                          | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                      |
-| --------- | ------------------ | ---------------------------------------------- | ----------------- | ------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------- |
-| 15.1      | LLM integration    | OpenAI client + secrets, retry/circuit breaker | Unit tests        | lint + typecheck + unit        | Deploy     | OpenAI client initialized, API key validated, retry on 429/500 errors with exponential backoff           |
-| 15.2      | Context prep       | Summaries, budgets, currency-aware             | Unit tests        | lint + typecheck + unit        | Deploy     | Context builder produces structured prompt with user income/expense summary, budget status, and currency |
-| 15.3      | Chat API           | Chat endpoint                                  | API tests         | lint + typecheck + integration | Deploy     | POST /chat returns streamed or complete LLM response within 10s timeout                                  |
-| 15.4      | Chat UI            | UI component                                   | UI tests          | lint + typecheck + unit        | Deploy     | Chat widget renders with message input, conversation history, typing indicator, and error state          |
-| 15.5      | Personal Q&A       | Personal insights                              | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
-| 15.6      | Group Q&A          | Group insights                                 | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                          |
-| 15.7      | Insight generation | Recommendations                                | Integration tests | lint + typecheck + integration | Deploy     | Insights shown                                                                                           |
-| 15.8      | LLM receipts       | LLM extraction for PDFs and photos             | E2E tests         | full suite                     | Deploy     | Receipt parsed                                                                                           |
+> **Re-plan (2026-07-03)**: Renumbered from original Phase 15. Original 15.8 (LLM receipt extraction) moved into Phase 7. The assistant reuses the pluggable provider layer from Phase 7 and the habit summaries from Phase 9.
+
+| Iteration | Objective          | Scope                                                                             | Testing           | CI/CD                          | Deployment | Acceptance Criteria                                                                                         |
+| --------- | ------------------ | --------------------------------------------------------------------------------- | ----------------- | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------- |
+| 16.1      | LLM integration    | Reuse pluggable provider layer (Phase 7) for chat; secrets, retry/circuit breaker | Unit tests        | lint + typecheck + unit        | Deploy     | Chat provider initialized, retry on 429/500 with exponential backoff                                        |
+| 16.2      | Context prep       | Summaries, budgets, habits, currency-aware context builder                        | Unit tests        | lint + typecheck + unit        | Deploy     | Context builder produces structured prompt with income/expense summary, budget status, habits, and currency |
+| 16.3      | Chat API           | Chat endpoint                                                                     | API tests         | lint + typecheck + integration | Deploy     | POST /chat returns streamed or complete LLM response within 10s timeout                                     |
+| 16.4      | Chat UI            | UI component                                                                      | UI tests          | lint + typecheck + unit        | Deploy     | Chat widget renders with message input, conversation history, typing indicator, and error state             |
+| 16.5      | Personal Q&A       | Personal insights                                                                 | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                             |
+| 16.6      | Group Q&A          | Group insights                                                                    | Integration tests | lint + typecheck + integration | Deploy     | Answers correct                                                                                             |
+| 16.7      | Insight generation | Recommendations                                                                   | Integration tests | lint + typecheck + integration | Deploy     | Insights shown                                                                                              |
+
+### Phase 17: WebMCP (In-GUI Agent Tools)
+
+> **Re-plan (2026-07-03)**: New phase, deliberately last. WebMCP (`navigator.modelContext`, Chromium origin trial) lets in-browser agents call the app's functions directly instead of driving the DOM. The spec is still moving, so everything ships behind **feature detection** with zero impact when the API is absent, and the tool contracts **reuse the Phase 11 MCP tool shapes** so there is one canonical tool surface.
+
+| Iteration | Objective        | Scope                                                                                              | Testing                  | CI/CD                   | Deployment | Acceptance Criteria                                                                       |
+| --------- | ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| 17.1      | Foundation       | Feature detection, tool registration module, shared tool contracts with Phase 11 (packages/shared) | Unit tests               | lint + typecheck + unit | Deploy     | App loads unchanged in non-supporting browsers; tools register in Chromium with flag      |
+| 17.2      | Read tools       | Expose search payments/products, stats, and current-view context as WebMCP tools                   | Unit + manual (Chromium) | lint + typecheck + unit | Deploy     | In-browser agent can query purchases and stats without DOM automation                     |
+| 17.3      | Write tools      | Add payment/purchase, start receipt upload, confirm product matches                                | Unit + manual (Chromium) | lint + typecheck + unit | Deploy     | In-browser agent can add a purchase end-to-end; all writes go through existing API guards |
+| 17.4      | Hardening + docs | Permission prompts/confirmation UX for write tools, spec-drift isolation layer, docs               | E2E (Chromium)           | full suite              | Deploy     | Write tools require explicit user confirmation; WebMCP layer isolated behind one adapter  |
 
 ## 6. Suggested Technology Stack (Details)
 
-| Layer               | Recommendation                                            | Notes                                                 |
-| ------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
-| Frontend            | Next.js + TypeScript                                      | SSR, routing, thin auth client (no Auth.js)           |
-| Frontend i18n       | next-intl                                                 | Localization for web, RTL support                     |
-| Backend API         | NestJS + TypeScript                                       | Modular architecture, DTO validation, all auth logic  |
-| Database            | MySQL + Prisma                                            | Migrations, type-safe queries                         |
-| Authentication      | Passport.js (in NestJS)                                   | Local + Google + Telegram strategies, JWT issuance    |
-| JWT                 | @nestjs/jwt                                               | Access (15min) + refresh (7d) tokens                  |
-| Currency            | dinero.js                                                 | Safe money arithmetic, integer cents storage          |
-| File Storage        | Local filesystem                                          | Optional future move to S3                            |
-| Receipt Processing  | URL ingestion early, LLM extraction for PDFs/photos later | LLM in Phase 14                                       |
-| Queue               | BullMQ + Redis                                            | Async parsing, analytics jobs, recurring transactions |
-| Rate Limiting       | @nestjs/throttler                                         | API and auth endpoint protection                      |
-| API Documentation   | @nestjs/swagger                                           | Auto-generated OpenAPI docs                           |
-| E2E Testing         | Playwright                                                | Web E2E tests, visual regression                      |
-| Integration Testing | Testcontainers                                            | Isolated MySQL for test suites                        |
-| Telegram            | grammy.js                                                 | Bot + mini app hooks                                  |
-| Telegram i18n       | @grammyjs/fluent                                          | Bot message localization                              |
-| LLM                 | OpenAI API                                                | Structured output for receipts                        |
-| CI/CD               | GitHub Actions                                            | Lint/test/build/deploy                                |
-| Hosting             | Docker Compose + Nginx                                    | Dedicated Ubuntu server                               |
+| Layer               | Recommendation                                   | Notes                                                 |
+| ------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| Frontend            | Next.js + TypeScript                             | SSR, routing, thin auth client (no Auth.js)           |
+| Frontend i18n       | next-intl                                        | Localization for web, RTL support                     |
+| Backend API         | NestJS + TypeScript                              | Modular architecture, DTO validation, all auth logic  |
+| Database            | MySQL + Prisma                                   | Migrations, type-safe queries                         |
+| Authentication      | Passport.js (in NestJS)                          | Local + Google + Telegram strategies, JWT issuance    |
+| JWT                 | @nestjs/jwt                                      | Access (15min) + refresh (7d) tokens                  |
+| Currency            | dinero.js                                        | Safe money arithmetic, integer cents storage          |
+| File Storage        | Local filesystem                                 | Optional future move to S3                            |
+| Receipt Processing  | Vision-LLM extraction (pluggable provider)       | Structured output; photos, PDFs, URLs (Phase 7)       |
+| Queue               | BullMQ + Redis                                   | Async parsing, analytics jobs, recurring transactions |
+| Rate Limiting       | @nestjs/throttler                                | API and auth endpoint protection                      |
+| API Documentation   | @nestjs/swagger                                  | Auto-generated OpenAPI docs                           |
+| E2E Testing         | Playwright                                       | Web E2E tests, visual regression                      |
+| Integration Testing | Testcontainers                                   | Isolated MySQL for test suites                        |
+| Telegram            | grammy.js                                        | Bot + mini app hooks                                  |
+| Telegram i18n       | @grammyjs/fluent                                 | Bot message localization                              |
+| LLM                 | Pluggable provider (OpenAI / Anthropic / Gemini) | Receipt extraction + assistant, structured output     |
+| MCP Server          | @modelcontextprotocol/sdk (Streamable HTTP)      | OAuth 2.1: PKCE + dynamic client registration         |
+| Barcode Scanning    | BarcodeDetector API + @zxing/browser fallback    | Camera via getUserMedia; barcode = product identifier |
+| Product Data        | Open Food Facts API                              | Prefill for unknown barcodes                          |
+| CI/CD               | GitHub Actions                                   | Lint/test/build/deploy                                |
+| Hosting             | Docker Compose + Nginx                           | Dedicated Ubuntu server                               |
 
 ## 7. Phase Breakdown (Summary)
 
@@ -664,16 +793,18 @@ This section mirrors the required order with short summaries. Detailed micro-ite
 - **Phase 3**: Telegram login integration via NestJS.
 - **Phase 4**: Auth completion — email confirmation, password reset, account deletion, legal pages.
 - **Phase 5**: Family/group creation, invites, roles, profile management, and GDPR data export.
-- **Phase 6**: Manual income tracking with currency support and recurring transactions.
-- **Phase 7**: Manual expense tracking with loans/mortgages/installments and recurring transactions.
-- **Phase 8**: Budgets and spending targets with progress tracking and alerts.
-- **Phase 9**: Receipt upload + URL ingestion; parsing V1 with file security.
-- **Phase 10**: Analytics dashboards and models.
-- **Phase 11**: Telegram bot core features with notifications.
-- **Phase 12**: Telegram mini app (expanded: income, analytics, receipts, budgets, group views).
-- **Phase 13**: Bot receipt workflows (both URL and photo with OCR).
-- **Phase 14**: Bot analytics.
-- **Phase 15**: LLM assistant and LLM-based receipt extraction.
+- **Phase 6**: Unified Payment Management (incomes + expenses in one entity with a `direction` field). Attribution to personal and/or groups; system + custom per-scope categories; one-time, recurring, limited-period, installment, loan, and mortgage types; per-user stars; comments; documents placeholder for Phase 7 receipts; amortisation; BullMQ recurring engine. Replaces original Phase 6 + Phase 7. (21 iterations — see [`docs/phase-6-payments-design.md`](docs/phase-6-payments-design.md).)
+- **Phase 7**: Receipt ingestion & LLM extraction — upload (photo/PDF/URL), pluggable vision-LLM structured extraction (merchant, time, items, quantities, discounts), review flow, receipt → payment with line items.
+- **Phase 8**: Product catalog, matching & barcode — two-layer product DB (global barcode-keyed registry + private purchase data), multi-language aliases, item walkthrough with match proposals, camera barcode scanning, Open Food Facts enrichment, product images.
+- **Phase 9**: Configurable purchase analytics — composable dimensions/filters (merchant / category / product / member / group / period), saved views, price dynamics, habit summaries.
+- **Phase 10**: Budgets and spending targets with progress tracking and alerts (renumbered from original Phase 8).
+- **Phase 11**: MCP server — remote Streamable HTTP + OAuth 2.1; user-scoped read/write tools (purchases, stats, habits, receipt upload from chat, match confirmation, purchase comments).
+- **Phase 12**: Telegram bot core features with notifications.
+- **Phase 13**: Telegram mini app (expanded: income, analytics, receipts, budgets, group views).
+- **Phase 14**: Bot receipt workflows (photo + URL entry points into the Phase 7 pipeline).
+- **Phase 15**: Bot analytics.
+- **Phase 16**: In-app LLM assistant (receipt extraction already lives in Phase 7).
+- **Phase 17**: WebMCP — in-GUI agent tools behind feature detection, reusing the MCP tool contracts.
 
 ## 8. Deployment Strategy
 
@@ -842,31 +973,36 @@ flowchart TB
 
 ### 9.1 Critical Path Overview
 
-| Area           | Critical Path Notes                                      | Parallelization                            |
-| -------------- | -------------------------------------------------------- | ------------------------------------------ |
-| Foundation     | CI/CD, shared DTOs, and environment are prerequisites    | Can parallelize scaffolding and basic CD   |
-| Auth           | JWT auth before OAuth providers; NestJS handles all auth | UI and API can parallelize after schema    |
-| Group Mgmt     | Depends on auth and user schema                          | Frontend and backend in parallel           |
-| Income/Expense | Depends on groups and auth                               | Income and expense modules in parallel     |
-| Budgets        | Depends on income/expense for progress tracking          | Can start schema early                     |
-| Receipts       | Depends on expenses + storage                            | URL ingestion can parallel with file infra |
-| Analytics      | Depends on income/expense models                         | UI can parallel with API once models done  |
-| Telegram Bot   | Depends on auth linking                                  | Bot commands and data access can parallel  |
-| Mini App       | Depends on bot + auth                                    | Can parallel with bot receipt processing   |
-| LLM            | Depends on analytics + receipts                          | LLM receipt parsing last                   |
+| Area                | Critical Path Notes                                                   | Parallelization                                                     |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Foundation          | CI/CD, shared DTOs, and environment are prerequisites                 | Can parallelize scaffolding and basic CD                            |
+| Auth                | JWT auth before OAuth providers; NestJS handles all auth              | UI and API can parallelize after schema                             |
+| Group Mgmt          | Depends on auth and user schema                                       | Frontend and backend in parallel                                    |
+| Payments (unified)  | Depends on groups and auth; replaces separate income + expense phases | Backend API, BullMQ worker, and frontend components can parallelise |
+| Receipts (7)        | Depends on payments + file storage; extraction provider layer first   | Upload UI can parallel with extraction worker                       |
+| Product Catalog (8) | Depends on receipt items                                              | Barcode/OFF work can parallel with matching service                 |
+| Analytics (9)       | Depends on receipt items + products                                   | UI can parallel with API once aggregations done                     |
+| Budgets (10)        | Depends on payments for progress tracking                             | Can start schema early                                              |
+| MCP Server (11)     | Depends on analytics habits (9.7) + receipt pipeline                  | OAuth server can parallel with tool implementation                  |
+| Telegram Bot        | Depends on auth linking                                               | Bot commands and data access can parallel                           |
+| Mini App            | Depends on bot + auth                                                 | Can parallel with bot receipt processing                            |
+| LLM Assistant (16)  | Depends on analytics + receipts                                       | Reuses Phase 7 provider layer                                       |
+| WebMCP (17)         | Depends on MCP tool contracts (11)                                    | Can start once Phase 11 tool shapes stabilise                       |
 
 ### 9.2 Parallelization Opportunities
 
 The following phases can run in parallel to accelerate delivery:
 
-| Parallel Track          | Phases                                        | Prerequisites          | Notes                                                  |
-| ----------------------- | --------------------------------------------- | ---------------------- | ------------------------------------------------------ |
-| OAuth Providers         | Phase 2 (Google) ∥ Phase 3 (Telegram)         | Phase 1 complete       | Both depend only on JWT auth                           |
-| Auth Completion         | Phase 4 (Auth Completion) after Phase 3       | Phase 3 complete       | Email infra, legal pages can parallel with features    |
-| Transaction Types       | Phase 6 (Income) ∥ Phase 7 (Expense)          | Phase 5 complete       | Independent schemas and APIs                           |
-| Post-Expense Features   | Phase 9 (Receipts) ∥ Phase 10 (Analytics)     | Phase 7 complete       | Receipts need expenses; Analytics needs income+expense |
-| Telegram Ecosystem      | Phase 11 (Bot) after Phase 3                  | Telegram Auth done     | Bot can start once TG auth exists                      |
-| Mini App + Bot Features | Phase 12 (Mini App) ∥ Phase 13 (Bot Receipts) | Phase 11 Core complete | Both build on bot foundation                           |
+| Parallel Track          | Phases                                        | Prerequisites          | Notes                                                   |
+| ----------------------- | --------------------------------------------- | ---------------------- | ------------------------------------------------------- |
+| OAuth Providers         | Phase 2 (Google) ∥ Phase 3 (Telegram)         | Phase 1 complete       | Both depend only on JWT auth                            |
+| Auth Completion         | Phase 4 (Auth Completion) after Phase 3       | Phase 3 complete       | Email infra, legal pages can parallel with features     |
+| Receipt Track           | Phase 7 (Receipts) → Phase 8 (Products)       | Phase 6 complete       | Product matching builds on receipt items                |
+| Analytics ∥ Budgets     | Phase 9 (Analytics) ∥ Phase 10 (Budgets)      | Phase 8 / 6 complete   | Budgets only needs payments; can start any time after 6 |
+| MCP Server              | Phase 11 (MCP) after Phase 9                  | Habit summaries (9.7)  | OAuth 2.1 groundwork can start right after Phase 6      |
+| Telegram Ecosystem      | Phase 12 (Bot) after Phase 3                  | Telegram Auth done     | Bot can start once TG auth exists                       |
+| Mini App + Bot Features | Phase 13 (Mini App) ∥ Phase 14 (Bot Receipts) | Phase 12 Core complete | Both build on bot foundation                            |
+| WebMCP                  | Phase 17 after Phase 11                       | MCP tool contracts     | Spec-gated; any time after MCP ships                    |
 
 ### 9.3 Phase Dependency Gantt Chart
 
@@ -887,23 +1023,27 @@ gantt
 
     section Core Features
     Phase 5 - Groups + Profile     :p5, after p4, 21d
-    Phase 6 - Income               :p6, after p5, 14d
-    Phase 7 - Expense              :p7, after p5, 21d
-    Phase 8 - Budgets              :p8, after p6, 14d
+    Phase 6 - Payment Management   :p6, after p5, 28d
 
-    section Advanced Features
-    Phase 9 - Receipts             :p9, after p7, 14d
-    Phase 10 - Analytics           :p10, after p7, 14d
+    section Receipts and Products
+    Phase 7 - Receipts Extraction  :p7, after p6, 14d
+    Phase 8 - Product Catalog      :p8, after p7, 14d
+    Phase 9 - Purchase Analytics   :p9, after p8, 14d
+    Phase 10 - Budgets             :p10, after p6, 14d
+
+    section AI Access
+    Phase 11 - MCP Server          :p11, after p9, 14d
 
     section Telegram
-    Phase 11 - Bot Core            :p11a, after p3, 7d
-    Phase 11 - Bot Transactions    :p11b, after p11a, 21d
-    Phase 12 - Mini App            :p12, after p11a, 14d
-    Phase 13 - Bot Receipts        :p13, after p9, 14d
-    Phase 14 - Bot Analytics       :p14, after p10, 7d
+    Phase 12 - Bot Core            :p12a, after p3, 7d
+    Phase 12 - Bot Transactions    :p12b, after p12a, 21d
+    Phase 13 - Mini App            :p13, after p12a, 14d
+    Phase 14 - Bot Receipts        :p14, after p7, 14d
+    Phase 15 - Bot Analytics       :p15, after p9, 7d
 
     section AI
-    Phase 15 - LLM                 :p15, after p14, 14d
+    Phase 16 - LLM Assistant       :p16, after p11, 14d
+    Phase 17 - WebMCP              :p17, after p16, 7d
 ```
 
 ### 9.4 Recommended Parallel Execution Strategy
@@ -912,16 +1052,16 @@ For a team with 2+ developers, consider these parallel tracks:
 
 **Track A (Core Web)**:
 
-1. Phase 0 → Phase 1 → Phase 4 → Phase 5 → Phase 6/7 → Phase 8 → Phase 10
+1. Phase 0 → Phase 1 → Phase 4 → Phase 5 → Phase 6 (Payments) → Phase 7 (Receipts) → Phase 8 (Products) → Phase 9 (Analytics) → Phase 10 (Budgets)
 
 **Track B (Telegram + OAuth)**:
 
 1. After Phase 1: Phase 2 + Phase 3
-2. After Phase 3: Phase 11 → Phase 12 → Phase 13 → Phase 14
+2. After Phase 3: Phase 12 (Bot) → Phase 13 (Mini App) → Phase 14 (Bot Receipts) → Phase 15 (Bot Analytics)
 
-**Track C (Receipts + LLM)** (can join later):
+**Track C (AI Access)** (can join later):
 
-1. After Phase 7: Phase 9 → Phase 15
+1. After Phase 9: Phase 11 (MCP Server) → Phase 16 (LLM Assistant) → Phase 17 (WebMCP)
 
 ## 10. Security and Scalability Considerations
 
@@ -938,14 +1078,17 @@ For a team with 2+ developers, consider these parallel tracks:
 - [ ] Audit logging for auth events and financial modifications
 - [ ] Secrets in environment variables and CI secrets
 - [ ] Least-privilege DB credentials
-- [ ] Retry/circuit breaker for external APIs (Google, Telegram, OpenAI)
+- [ ] Retry/circuit breaker for external APIs (Google, Telegram, LLM providers, Open Food Facts)
+- [ ] MCP: OAuth 2.1 scopes per tool, per-token rate limits, full audit logging, connection revocation UI
+- [ ] Product images: background processing strips EXIF metadata before storage
+- [ ] WebMCP write tools require explicit in-app user confirmation
 
 ### Scalability Path
 
 | Stage      | Strategy                          |
 | ---------- | --------------------------------- |
-| Phase 0-9  | Single MySQL instance             |
-| Phase 10+  | BullMQ for async processing       |
+| Phase 0-10 | Single MySQL instance             |
+| Phase 6+   | BullMQ for async processing       |
 | High scale | Read replicas, connection pooling |
 
 ## 11. Next Steps

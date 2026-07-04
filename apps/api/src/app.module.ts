@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CategoryModule } from './category/category.module';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
 import { LoggerModule } from './common/logger/logger.module';
 import { MetricsModule } from './common/metrics/metrics.module';
@@ -11,7 +12,10 @@ import { AppThrottlerModule } from './common/throttler/throttler.module';
 import { GroupModule } from './group/group.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { QueueModule } from './queue/queue.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -22,12 +26,16 @@ import { PrismaModule } from './prisma/prisma.module';
     ScheduleModule.forRoot(),
     LoggerModule,
     PrismaModule,
+    QueueModule,
     MailModule,
     MetricsModule,
     AppThrottlerModule,
     HealthModule,
     AuthModule,
     GroupModule,
+    PaymentModule,
+    CategoryModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

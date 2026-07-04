@@ -447,7 +447,7 @@ Configure these in **Settings → Secrets and variables → Actions**.
 | `*_DATABASE_URL`        | Full MySQL connection string                    |
 | `*_JWT_SECRET`          | JWT access token signing secret (min 32 chars)  |
 | `*_JWT_REFRESH_SECRET`  | JWT refresh token signing secret (min 32 chars) |
-| `*_REDIS_URL`           | Redis connection string                         |
+| `*_REDIS_PASSWORD`      | Redis `requirepass` password (BullMQ + caching) |
 
 ### Domain Secrets
 
@@ -619,3 +619,51 @@ flowchart LR
     API_B --> MySQL
     API_B --> Redis
 ```
+
+---
+
+## Redis (BullMQ + future caching)
+
+A Redis container is part of every environment's infrastructure stack and is used by the API for BullMQ job queues (Phase 6.17 onwards). It runs alongside MySQL and Haraka in:
+
+- **Dev** — [`docker-compose.yml`](../docker-compose.yml:1) (host port `6379` mapped for tooling).
+- **Staging** — [`docker-compose.staging.infra.yml`](../docker-compose.staging.infra.yml:1), container `myfinpro-staging-redis`.
+- **Production** — [`docker-compose.production.infra.yml`](../docker-compose.production.infra.yml:1), container `myfinpro-prod-redis`.
+
+The image is `redis:8-alpine`, the data volume is named per-env (`myfinpro-staging-redis` / `myfinpro-production-redis`), and the server is started with `--appendonly yes --maxmemory <N>mb --maxmemory-policy allkeys-lru` plus a conditional `--requirepass "$REDIS_PASSWORD"` when the env var is non-empty.
+
+### Setting the Redis password
+
+The password is the only Redis-related secret — host/port/TLS are static and live in the compose files. **No `.env` file is ever written to either server.**
+
+```bash
+# Staging
+gh secret set STAGING_REDIS_PASSWORD --env staging --body "$(openssl rand -base64 48)"
+
+# Production
+gh secret set PRODUCTION_REDIS_PASSWORD --env production --body "$(openssl rand -base64 48)"
+```
+
+Once set, the staging/production deploy workflows pick the secret up automatically (same injection pattern as `JWT_SECRET` / `DATABASE_URL`). The `redis` service reads `REDIS_PASSWORD` from the env and conditionally enables `requirepass` on boot — so the very first deploy after the secret is created switches the container from unauthenticated to authenticated automatically.
+
+Rotating: set a new value with `gh secret set`, redeploy, then the next `docker compose up -d` of the infra stack picks up the new password (the running container needs to be recreated since `requirepass` is set via command-line args, not `CONFIG SET`).
+
+### Smoke commands
+
+After a deploy:
+
+```bash
+# Container health (no auth needed for the docker-side check)
+docker compose -f /opt/myfinpro/<env>/docker-compose.<env>.infra.yml ps redis
+# Expected: STATUS column shows "healthy"
+
+# Authenticated PING from inside the container (with REDIS_PASSWORD exported in the SSH session)
+docker exec myfinpro-<staging|prod>-redis redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
+# Expected: PONG
+
+# Deep health endpoint through the LB (200 with redis: up)
+curl -fsS https://<env-domain>/api/v1/health/details | jq '.info.redis'
+# Expected: { "status": "up", "reply": "PONG" }
+```
+
+If the deep endpoint returns 503 with `redis.status: "down"`, the API can't reach Redis — check `REDIS_PASSWORD` matches between the API container env and the Redis container, and inspect `docker logs myfinpro-<env>-redis` for `WRONGPASS` errors.

@@ -7,6 +7,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Phase 6 · Iteration 6.18.1.2 — pin the timezone so any code path
+    // that converts a `<input type="datetime-local">` value to UTC ISO
+    // (PaymentFormDialog) is deterministic across CI + dev machines.
+    env: { TZ: 'UTC' },
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['e2e/**', 'node_modules/**'],

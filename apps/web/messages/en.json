@@ -9,6 +9,27 @@
     "edit": "Edit",
     "back": "Back"
   },
+  "ui": {
+    "loading": {
+      "pageProgressLabel": "Loading",
+      "overlayDefault": "Loading…",
+      "buttonBusy": "Saving…",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…"
+    },
+    "errors": {
+      "title": "Something went wrong",
+      "messages": {
+        "timeout": "The request took too long. Check your connection and try again.",
+        "network": "Network error. Check your connection.",
+        "http": "Server error ({status}). Try again.",
+        "aborted": "The operation was cancelled.",
+        "unknown": "Something went wrong. Try again."
+      },
+      "retry": "Retry",
+      "return": "Cancel"
+    }
+  },
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",
@@ -114,7 +135,42 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here."
+    "subtitle": "Your finances at a glance.",
+    "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here.",
+    "actions": {
+      "add": "+ Add payment"
+    },
+    "totals": {
+      "title": "This month",
+      "in": "Income",
+      "out": "Expense",
+      "net": "Net",
+      "noActivity": "No activity this month yet.",
+      "loading": "Loading totals…",
+      "error": "Couldn't load totals. {message}",
+      "retry": "Retry",
+      "partial": "Showing first {count} payments — totals are partial."
+    },
+    "scopes": {
+      "title": "Your scopes",
+      "personal": "Personal",
+      "personalSubtitle": "Your individual payments",
+      "groupSubtitle": "{role}",
+      "view": "View",
+      "noActivity": "No activity yet",
+      "empty": "Join or create a group to share payments.",
+      "createGroup": "Create a group"
+    },
+    "recent": {
+      "title": "Recent activity",
+      "viewAll": "View all",
+      "empty": "No payments yet. Add one to get started."
+    },
+    "starred": {
+      "title": "Starred",
+      "viewAll": "All starred",
+      "empty": "Star a payment to find it here."
+    }
   },
   "groups": {
     "title": "My Groups",
@@ -478,5 +534,454 @@
     "privacy": "Privacy Policy",
     "help": "Help",
     "copyright": "© {year} MyFinPro. All rights reserved."
+  },
+  "payments": {
+    "scope": {
+      "personal": "Personal",
+      "group": "Group"
+    },
+    "list": {
+      "empty": "No payments yet.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading…",
+      "retry": "Retry",
+      "errorLoading": "Could not load payments. {message}"
+    },
+    "table": {
+      "date": "Date",
+      "direction": "Direction",
+      "amount": "Amount",
+      "category": "Category",
+      "scopes": "Scope",
+      "note": "Note",
+      "starred": "★",
+      "controls": "Actions"
+    },
+    "directions": {
+      "in": "Income",
+      "out": "Expense"
+    },
+    "filters": {
+      "all": "All",
+      "in": "Income",
+      "out": "Expense",
+      "scopeAll": "All scopes",
+      "scopePersonal": "Personal",
+      "scopeGroup": "{name}",
+      "search": "Search note…",
+      "from": "From",
+      "to": "To",
+      "category": "Category",
+      "anyCategory": "Any category",
+      "categoryGroupSystem": "System",
+      "categoryGroupPersonal": "Personal",
+      "categoryGroupGroup": "Group",
+      "sort": "Sort",
+      "sortDateDesc": "Newest first",
+      "sortDateAsc": "Oldest first",
+      "sortAmountDesc": "Amount: high → low",
+      "sortAmountAsc": "Amount: low → high"
+    },
+    "controls": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "open": "Open"
+    },
+    "row": {
+      "starAdd": "Add to starred",
+      "starRemove": "Remove from starred",
+      "moreScopes": "+{count} more"
+    },
+    "delete": {
+      "title": "Delete payment",
+      "description": "This payment is shared across multiple scopes. Choose what to remove.",
+      "scopeOnly": "Delete from this scope",
+      "scopeAll": "Delete from all my accessible scopes ({count})",
+      "pickScope": "Which scope?",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "errorNoAccess": "You no longer have access to delete this payment.",
+      "deleted": "Payment removed.",
+      "deletedFromScope": "Removed from {scope}."
+    },
+    "propagate": {
+      "title": "Apply changes to occurrences?",
+      "description": "This recurring payment has generated occurrences. Choose how far this change should reach.",
+      "destructiveWarning": "This change rebuilds future occurrences and may discard their comments and attachments.",
+      "mode": {
+        "self": {
+          "label": "This payment only",
+          "description": "Update just this recurring payment. Occurrences stay as they are."
+        },
+        "future": {
+          "label": "This and future occurrences",
+          "description": "Update this payment and every occurrence dated from now onward."
+        },
+        "all": {
+          "label": "All occurrences",
+          "description": "Update this payment and every occurrence, past and future."
+        }
+      },
+      "confirm": "Apply",
+      "cancel": "Cancel",
+      "resultUpdated": "Updated payment and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
+      "resultSkipped": "{count, plural, =1 {# occurrence in a group you don't manage was} other {# occurrences in groups you don't manage were}} left unchanged."
+    },
+    "form": {
+      "createTitle": "Add payment",
+      "editTitle": "Edit payment",
+      "direction": "Direction",
+      "directionIn": "Income",
+      "directionOut": "Expense",
+      "amount": "Amount",
+      "amountPlaceholder": "0.00",
+      "currency": "Currency",
+      "date": "Date",
+      "category": "Category",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Brief description…",
+      "attributedTo": "Attributed to",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "saving": "Saving…",
+      "loading": "Loading payment…",
+      "loadError": "Could not refresh payment data. Showing the last known values.",
+      "discardChanges": "Discard changes?",
+      "discard": "Discard",
+      "keepEditing": "Keep editing",
+      "errorGeneric": "Could not save the payment. {message}",
+      "validation": {
+        "amountRequired": "Amount must be greater than zero.",
+        "currencyInvalid": "Pick a currency.",
+        "dateInvalid": "Enter a valid date.",
+        "dateFuture": "Date can't be more than 1 day in the future.",
+        "categoryRequired": "Pick a category.",
+        "categoryDirectionMismatch": "This category doesn't match the selected direction.",
+        "scopesRequired": "Pick at least one scope.",
+        "noteTooLong": "Note must be 2000 characters or fewer."
+      },
+      "addAction": "+ Add payment",
+      "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
+      "othersPreserved": "Other users' attributions on this payment will not be touched.",
+      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved."
+    },
+    "types": {
+      "label": "Type",
+      "advanced": "Show advanced types",
+      "hideAdvanced": "Hide advanced types",
+      "comingSoon": "Coming soon",
+      "options": {
+        "ONE_TIME": "One-time",
+        "RECURRING": "Recurring",
+        "LIMITED_PERIOD": "Recurring with end date",
+        "INSTALLMENT": "Installment plan",
+        "LOAN": "Loan",
+        "MORTGAGE": "Mortgage"
+      },
+      "iterationHint": {
+        "RECURRING": "Available from iteration 6.18.",
+        "LIMITED_PERIOD": "Available from iteration 6.18.",
+        "INSTALLMENT": "Available from iteration 6.20.",
+        "LOAN": "Available from iteration 6.20.",
+        "MORTGAGE": "Available from iteration 6.20."
+      }
+    },
+    "scopeSelector": {
+      "personal": "Personal",
+      "groupRole": {
+        "admin": "admin",
+        "member": "member"
+      },
+      "noGroups": "You're not a member of any group yet."
+    },
+    "categoryPicker": {
+      "placeholder": "Pick a category…",
+      "groupSystem": "System",
+      "groupPersonal": "My categories",
+      "groupGroup": "Group: {name}",
+      "bothBadge": "(both)",
+      "loading": "Loading categories…",
+      "errorLoading": "Could not load categories. {message}"
+    },
+    "detail": {
+      "back": "Back",
+      "loading": "Loading payment…",
+      "notFound": "Payment not found or no longer accessible.",
+      "errorGeneric": "Could not load payment. {message}",
+      "tryAgain": "Try again",
+      "amountLabel": "Amount",
+      "dateLabel": "Date",
+      "categoryLabel": "Category",
+      "attributionsLabel": "Attributed to",
+      "noteLabel": "Note",
+      "noNote": "No note added.",
+      "starAdd": "Star",
+      "starRemove": "Unstar",
+      "edit": "Edit",
+      "delete": "Delete",
+      "editDisabledNotCreator": "Only the creator can edit this payment.",
+      "editDisabled": {
+        "generatedOccurrence": "This payment was generated by a recurring schedule. Edit the parent to change all occurrences.",
+        "unsupportedType": "Editing this payment type isn't supported yet."
+      },
+      "edited": "edited",
+      "deletedToast": "Payment removed.",
+      "occurrences": {
+        "title": "Occurrences",
+        "countSingular": "1 occurrence",
+        "countPlural": "{n} occurrences",
+        "empty": "No occurrences yet — they will appear here as the schedule runs."
+      }
+    },
+    "comments": {
+      "title": "Comments",
+      "loading": "Loading comments…",
+      "empty": "No comments yet.",
+      "loadEarlier": "Load earlier comments",
+      "loadingMore": "Loading…",
+      "errorLoading": "Could not load comments. {message}",
+      "post": "Post",
+      "posting": "Posting…",
+      "postPlaceholder": "Add a comment…",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "confirmDelete": "Delete this comment?",
+      "deleteConfirm": "Delete",
+      "deleting": "Deleting…",
+      "errorPost": "Could not post comment. {message}",
+      "errorEdit": "Could not save comment. {message}",
+      "errorDelete": "Could not delete comment. {message}",
+      "alreadyRemoved": "This comment was already removed.",
+      "validation": {
+        "tooShort": "Comment can't be empty.",
+        "tooLong": "Comment must be 2000 characters or fewer."
+      },
+      "edited": "edited",
+      "tooltipDeleted": "Comment deleted."
+    },
+    "documents": {
+      "title": "Documents",
+      "comingSoon": "Receipts, photos, and PDFs are coming in Phase 9."
+    },
+    "schedulePlan": {
+      "occurrenceTitle": "Schedule / Plan",
+      "comingSoon": "Recurring and plan management ship in iterations 6.18 and 6.20."
+    },
+    "page": {
+      "title": "Payments",
+      "subtitle": "Manage all payments you can see.",
+      "scopeTabs": {
+        "all": "All",
+        "personal": "Personal",
+        "noAccess": "You don't have access to this scope.",
+        "backToDashboard": "Back to dashboard"
+      },
+      "starredToggle": {
+        "label": "Starred only",
+        "ariaPressed": "Show starred only"
+      },
+      "clearFilters": "Clear filters",
+      "groupTabTitle": "Payments"
+    },
+    "schedule": {
+      "form": {
+        "legend": "Schedule",
+        "repeatModeLabel": "Repeat mode",
+        "repeatMode": {
+          "every": "Repeat every <interval>",
+          "cron": "Cron expression"
+        },
+        "every": {
+          "label": "Every",
+          "unitLabel": "Unit",
+          "unitMinute": "minute(s)",
+          "unitHour": "hour(s)",
+          "unitDay": "day(s)",
+          "unitWeek": "week(s)",
+          "unitMonth": "month(s) (≈ 30 days)",
+          "minHelp": "Minimum 1 minute. Month is approximated as 30 days; for exact calendar months use a cron expression."
+        },
+        "cron": {
+          "label": "Cron expression",
+          "help": "Standard 5-field cron (minute hour dom month dow). Examples: 0 9 * * 1 = weekday 9 AM, 0 0 1 * * = first of month, */15 * * * * = every 15 minutes."
+        },
+        "startsAt": {
+          "label": "Starts on"
+        },
+        "endsAt": {
+          "label": "Ends on (optional)"
+        },
+        "limit": {
+          "label": "Run at most N times (optional)"
+        },
+        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated payments stay.",
+        "validation": {
+          "everyCountInvalid": "Enter a positive whole number.",
+          "everyMsTooSmall": "Interval must be at least 1 minute.",
+          "cronRequired": "Enter a cron expression.",
+          "startsAtInvalid": "Enter a valid start date.",
+          "endsAtBeforeStart": "End date must be after start date.",
+          "limitInvalid": "Limit must be at least 1.",
+          "specRequired": "Provide either an interval or a cron expression."
+        }
+      },
+      "badge": {
+        "title": "Schedule",
+        "statusActive": "Active",
+        "statusPaused": "Paused",
+        "statusCancelled": "Cancelled",
+        "repeatEveryMinutes": "Every {n} minute(s)",
+        "repeatEveryHours": "Every {n} hour(s)",
+        "repeatEveryDays": "Every {n} day(s)",
+        "repeatEveryWeeks": "Every {n} week(s)",
+        "repeatEveryMonths": "Every {n} month(s) (≈30 days)",
+        "repeatCron": "Cron: {expr}",
+        "nextRun": "Next run: {when}",
+        "lastRun": "Last run: {when}",
+        "cancelledAt": "Cancelled {when}",
+        "runsLimit": "Limit: {n} run(s)",
+        "fromRecurring": "← from recurring payment",
+        "pause": "Pause",
+        "resume": "Resume",
+        "cancelAction": "Cancel schedule",
+        "cancelConfirmBody": "Cancel this schedule permanently? Existing occurrences are kept; no new ones will be generated.",
+        "cancelConfirmYes": "Yes, cancel",
+        "cancelConfirmKeep": "Keep schedule",
+        "pausedToast": "Schedule paused",
+        "resumedToast": "Schedule resumed",
+        "cancelledToast": "Schedule cancelled",
+        "actionFailed": "Schedule action failed"
+      }
+    },
+    "plan": {
+      "kind": {
+        "INSTALLMENT": "Installment plan",
+        "LOAN": "Loan",
+        "MORTGAGE": "Mortgage"
+      },
+      "statusActive": "Active",
+      "statusCancelled": "Cancelled",
+      "summary": "{principal} over {count} payments · {rate}% p.a. · {frequency} · {method}",
+      "table": {
+        "dueAt": "Due",
+        "principal": "Principal",
+        "interest": "Interest",
+        "total": "Payment",
+        "remaining": "Remaining",
+        "status": "Status"
+      },
+      "rowStatus": {
+        "PENDING": "Pending",
+        "POSTED": "Posted",
+        "DUE": "Due",
+        "CANCELLED": "Cancelled"
+      },
+      "cancelAction": "Cancel plan",
+      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending payments will be marked cancelled; nothing is deleted.",
+      "cancelConfirmYes": "Yes, cancel",
+      "cancelConfirmKeep": "Keep plan",
+      "cancelledToast": "Plan cancelled",
+      "cancelFailed": "Plan action failed",
+      "form": {
+        "legend": "Plan details",
+        "rateLabel": "Annual interest rate (%)",
+        "countLabel": "Number of payments",
+        "frequencyLabel": "Frequency",
+        "firstDueLabel": "First payment due",
+        "methodLabel": "Amortisation method",
+        "principalHint": "The amount above is the plan's principal; each payment is derived from it.",
+        "frequency": {
+          "DAILY": "Daily",
+          "WEEKLY": "Weekly",
+          "BIWEEKLY": "Every two weeks",
+          "MONTHLY": "Monthly",
+          "QUARTERLY": "Quarterly",
+          "ANNUAL": "Annual"
+        },
+        "method": {
+          "auto": "Automatic (by type)",
+          "equal": "Equal (no interest)",
+          "french": "Annuity (fixed payment)"
+        },
+        "validation": {
+          "rateInvalid": "Enter a rate of 0 or more",
+          "rateTooHigh": "Rate cannot exceed 100%",
+          "countInvalid": "Enter a whole number of payments (at least 1)",
+          "countTooHigh": "At most 600 payments",
+          "firstDueRequired": "Pick the first due date",
+          "firstDueInvalid": "Invalid date",
+          "equalRequiresZeroRate": "The equal method is interest-free — set the rate to 0 or pick the annuity method"
+        }
+      }
+    }
+  },
+  "categories": {
+    "page": {
+      "title": "Categories",
+      "subtitle": "Manage your payment categories."
+    },
+    "scope": {
+      "personal": "Personal",
+      "groupHeading": "{group}"
+    },
+    "system": {
+      "badge": "Default",
+      "hint": "Default categories can't be edited."
+    },
+    "actions": {
+      "create": "+ New category",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "title": {
+        "create": "New category",
+        "edit": "Edit category"
+      },
+      "name": {
+        "label": "Name",
+        "placeholder": "Groceries"
+      },
+      "icon": {
+        "label": "Icon (emoji)",
+        "placeholder": "🛒"
+      },
+      "color": {
+        "label": "Color",
+        "placeholder": "#7c3aed",
+        "presetsLabel": "Quick picks"
+      },
+      "direction": {
+        "label": "Direction",
+        "in": "Income",
+        "out": "Expense",
+        "both": "Both"
+      },
+      "errors": {
+        "nameRequired": "Name is required.",
+        "nameTooLong": "Max 60 characters.",
+        "colorInvalid": "Use a hex color like #7c3aed.",
+        "duplicate": "A category with this name already exists.",
+        "generic": "Could not save category. {message}"
+      },
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel"
+    },
+    "delete": {
+      "title": "Delete category",
+      "warning": "Are you sure you want to delete \"{name}\"? This can't be undone.",
+      "inUse": "{count} payment(s) still use this category. Choose a replacement category before deleting.",
+      "replaceLabel": "Replacement category",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleting": "Deleting…",
+      "errorGeneric": "Could not delete category. {message}"
+    },
+    "empty": "No custom categories yet.",
+    "loading": "Loading categories…"
   }
 }

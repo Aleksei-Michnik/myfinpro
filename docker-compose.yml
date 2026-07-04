@@ -29,23 +29,41 @@ services:
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
 
-  # ───── Redis ─────
+  # ───── Redis (BullMQ + future caching) ─────
   redis:
     image: redis:8-alpine
     container_name: myfinpro-redis
     restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
+      # Local dev only — staging/production use bind-only network.
       - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     networks:
       - myfinpro-net
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test:
+        [
+          'CMD-SHELL',
+          'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping; else redis-cli ping; fi',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # `requirepass` is only set when REDIS_PASSWORD is non-empty so local dev
+    # works without auth out of the box. Staging/production always pass a
+    # non-empty value via the GitHub-secret injection pattern.
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "$$REDIS_PASSWORD"
+        else
+          exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+        fi
 
   # ───── NestJS API ─────
   api:
@@ -62,6 +80,8 @@ services:
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TLS: ${REDIS_TLS:-false}
     ports:
       - '${API_PORT:-3001}:3001'
     volumes:

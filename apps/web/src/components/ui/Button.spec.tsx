@@ -26,6 +26,8 @@ describe('Button', () => {
       const button = screen.getByRole('button');
       expect(button.className).toContain('bg-primary-600');
       expect(button.className).toContain('text-white');
+      // Phase 6 · Iteration 6.16.5 — explicit dark-mode contrast.
+      expect(button.className).toContain('dark:bg-primary-500');
     });
 
     it('applies secondary variant classes', () => {
@@ -33,6 +35,8 @@ describe('Button', () => {
       const button = screen.getByRole('button');
       expect(button.className).toContain('bg-gray-200');
       expect(button.className).toContain('text-gray-800');
+      expect(button.className).toContain('dark:bg-gray-700');
+      expect(button.className).toContain('dark:text-gray-100');
     });
 
     it('applies outline variant classes', () => {
@@ -40,6 +44,30 @@ describe('Button', () => {
       const button = screen.getByRole('button');
       expect(button.className).toContain('border-primary-600');
       expect(button.className).toContain('text-primary-600');
+      expect(button.className).toContain('dark:border-primary-400');
+      expect(button.className).toContain('dark:text-primary-300');
+    });
+
+    it('applies danger variant classes (solid red, white text — WCAG-AA contrast)', () => {
+      render(<Button variant="danger">Delete</Button>);
+      const button = screen.getByRole('button');
+      // Solid red background + white foreground — same contrast level as primary.
+      expect(button.className).toContain('bg-red-600');
+      expect(button.className).toContain('text-white');
+      // Dark-mode adjustment.
+      expect(button.className).toContain('dark:bg-red-500');
+      // Must NOT use the low-contrast tinted treatment.
+      expect(button.className).not.toMatch(/text-red-300/);
+      expect(button.className).not.toMatch(/bg-red-500\/10/);
+    });
+
+    it('danger variant is not visually disabled when idle', () => {
+      render(<Button variant="danger">Delete</Button>);
+      const button = screen.getByRole('button');
+      expect(button).not.toBeDisabled();
+      // Idle danger button must read as enabled — no opacity/cursor modifier
+      // is *active* (the disabled: prefix only kicks in when [disabled]).
+      expect(button.getAttribute('aria-disabled')).not.toBe('true');
     });
   });
 

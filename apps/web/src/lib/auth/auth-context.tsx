@@ -1,8 +1,42 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+// Phase 6 · Iteration 6.18.1.4-hotfix — proactive token refresh.
+//
+// Three things happen here that did not before:
+//
+//   1. A 12-minute `setInterval` (TOKEN_REFRESH_INTERVAL_MS) calls
+//      `POST /auth/refresh` while authenticated, rotating the access
+//      token *before* the 15-minute JWT TTL expires. This eliminates
+//      the 401 storm that used to follow the in-memory token going
+//      stale.
+//
+//   2. The `api-client` interceptor is wired to this provider via
+//      `configureApiAuth`. Any 401 from a regular request triggers a
+//      single shared refresh; on success the new access token is
+//      written back here and the original request is retried
+//      transparently.
+//
+//   3. A `BroadcastChannel('auth')` listener picks up token refreshes
+//      from other tabs of the same browser, so concurrent tabs share
+//      one fresh token instead of each issuing their own refresh.
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react';
 import type { User, LoginData, RegisterData, AuthResponse } from './types';
 import type { TelegramLoginResult } from '@/components/auth/TelegramLoginButton';
+import {
+  AUTH_BROADCAST_CHANNEL,
+  TOKEN_REFRESHED_MESSAGE,
+  configureApiAuth,
+  type AuthBroadcastMessage,
+} from '@/lib/api-client';
 
 interface AuthContextType {
   user: User | null;
@@ -44,6 +78,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
+/**
+ * Refresh the access token at 80 % of the 15-minute JWT TTL. Slightly
+ * before expiry leaves head-room for clock skew and slow networks
+ * without making the rotation noticeable to the user.
+ */
+const TOKEN_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
+
 const syncLocaleCookie = (locale: string) => {
   document.cookie = `NEXT_LOCALE=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
 };
@@ -53,10 +94,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true); // true initially for silent refresh
 
+  // Mirror token in a ref so the api-client adapter always reads the
+  // latest value without re-configuring on every render.
+  const accessTokenRef = useRef<string | null>(null);
+  accessTokenRef.current = accessToken;
+
   const isAuthenticated = !!user && !!accessToken;
 
-  // Silent refresh on mount
+  const clearAuthState = useCallback(() => {
+    setUser(null);
+    setAccessToken(null);
+  }, []);
+
+  // Wire (and tear down) the api-client adapter. The api-client uses
+  // these callbacks to attach the Bearer header, persist refreshed
+  // tokens, and trigger logout when the server-side refresh fails.
   useEffect(() => {
+    configureApiAuth({
+      getAccessToken: () => accessTokenRef.current,
+      setAccessToken: (token) => setAccessToken(token),
+      onAuthFailed: () => {
+        // Token rotation failed — the server-side session is gone.
+        // Drop the in-memory token; downstream effects (UI redirect)
+        // are owned by the consuming pages.
+        clearAuthState();
+      },
+    });
+    return () => configureApiAuth(null);
+  }, [clearAuthState]);
+
+  // Silent refresh on mount + proactive refresh interval while
+  // authenticated.
+  useEffect(() => {
+    let cancelled = false;
     const silentRefresh = async () => {
       try {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
@@ -64,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
         });
+        if (cancelled) return;
         if (res.ok) {
           const data: AuthResponse = await res.json();
           setUser(data.user);
@@ -75,10 +146,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // Silent fail — user is not logged in
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     silentRefresh();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Proactive refresh interval — runs only while authenticated. Calls
+  // /auth/refresh directly to avoid bouncing through the api-client
+  // 401 retry path (which is reactive, not proactive).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let active = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!active) return;
+        if (res.ok) {
+          const data = (await res.json()) as AuthResponse;
+          setUser(data.user);
+          setAccessToken(data.accessToken);
+        } else {
+          // Refresh-token cookie expired or revoked — drop session.
+          clearAuthState();
+        }
+      } catch {
+        // Network failure — keep current token, the interval will
+        // retry on the next tick. A real expiry will be caught by the
+        // 401 interceptor as the safety net.
+      }
+    };
+
+    const interval = window.setInterval(tick, TOKEN_REFRESH_INTERVAL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [isAuthenticated, clearAuthState]);
+
+  // Cross-tab sync: adopt access tokens refreshed in any other tab.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+    const onMessage = (ev: MessageEvent<AuthBroadcastMessage>) => {
+      if (ev.data?.type === TOKEN_REFRESHED_MESSAGE && ev.data.accessToken) {
+        setAccessToken(ev.data.accessToken);
+      }
+    };
+    channel.addEventListener('message', onMessage);
+    return () => {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+    };
   }, []);
 
   const login = useCallback(async (data: LoginData) => {
@@ -224,9 +351,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Logout even if API call fails
     }
-    setUser(null);
-    setAccessToken(null);
-  }, []);
+    clearAuthState();
+  }, [clearAuthState]);
 
   const getAccessToken = useCallback(() => accessToken, [accessToken]);
 
@@ -353,3 +479,6 @@ export function useAuth() {
   }
   return context;
 }
+
+/** Exported for tests — mirrors the in-module constant. */
+export const TOKEN_REFRESH_INTERVAL_MS_FOR_TESTS = TOKEN_REFRESH_INTERVAL_MS;

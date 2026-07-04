@@ -83,3 +83,84 @@ body {
     opacity: 1;
   }
 }
+
+/* ── Iteration 6.16.2 — async-operation primitives ── */
+
+/* Spinner: rotating SVG (used by <Spinner>, <ButtonSpinner>, <InlineLoader>). */
+@keyframes mfp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mfp-spinner {
+  animation: mfp-spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+/* Determinate nprogress-style top page progress bar (<PageProgressBar>).
+   Width is driven inline via `transform: scaleX(progress / 100)` from the
+   React state machine in ui-status-context.tsx. The transition smooths
+   per-frame updates so motion stays fluid without re-rendering on every
+   RAF tick. RTL: the origin flips so the bar fills from the right edge in
+   Hebrew. Iteration 6.16.3. */
+.mfp-progress-bar {
+  transform-origin: left center;
+  transition:
+    transform 80ms linear,
+    opacity 200ms ease-out;
+  will-change: transform, opacity;
+}
+
+[dir='rtl'] .mfp-progress-bar {
+  transform-origin: right center;
+}
+
+.mfp-progress-bar.is-fading {
+  /* When the bar reaches 100 %, the React state machine briefly retains
+     the element so the CSS transition fades the opacity to 0 before the
+     element unmounts. */
+  opacity: 0;
+}
+
+/* Auto-retry countdown bar inside the Retry button on <RetryReturnDialog>.
+   Fills from 0 → 100% over a duration set via the --mfp-countdown-duration
+   custom property (default 5s). */
+@keyframes mfp-countdown {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.mfp-countdown {
+  animation: mfp-countdown var(--mfp-countdown-duration, 5s) linear forwards;
+  transform-origin: left center;
+}
+
+[dir='rtl'] .mfp-countdown {
+  transform-origin: right center;
+}
+
+/* Honour prefers-reduced-motion: replace animations with steady states. */
+@media (prefers-reduced-motion: reduce) {
+  .mfp-spinner {
+    animation: none;
+  }
+  .mfp-progress-bar {
+    /* No animated movement — show a steady half-width bar while in flight
+       so the user still gets visible loading feedback. The inline
+       `transform: scaleX(...)` is overridden via !important. */
+    transition: opacity 200ms ease-out;
+    transform: scaleX(0.5) !important;
+  }
+  [dir='rtl'] .mfp-progress-bar {
+    transform: scaleX(0.5) !important;
+  }
+  .mfp-countdown {
+    animation: none;
+    transform: scaleX(0);
+  }
+}

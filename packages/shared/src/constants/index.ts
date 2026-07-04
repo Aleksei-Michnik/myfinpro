@@ -19,3 +19,5 @@ export const PAGINATION = {
 export const LOCALES = ['en', 'he'] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'en';
+
+export * from './default-categories';

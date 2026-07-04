@@ -1,7 +1,12 @@
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AuthProvider, useAuth } from './auth-context';
+import {
+  AUTH_BROADCAST_CHANNEL,
+  TOKEN_REFRESHED_MESSAGE,
+  type AuthBroadcastMessage,
+} from '../api-client';
+import { AuthProvider, TOKEN_REFRESH_INTERVAL_MS_FOR_TESTS, useAuth } from './auth-context';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -758,5 +763,142 @@ describe('AuthContext', () => {
         );
       });
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 6 · 6.18.1.4-hotfix — proactive refresh + cross-tab broadcast.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('AuthContext — proactive refresh (Phase 6 · 6.18.1.4-hotfix)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('exposes a 12-minute refresh interval constant', () => {
+    expect(TOKEN_REFRESH_INTERVAL_MS_FOR_TESTS).toBe(12 * 60 * 1000);
+  });
+
+  it('registers a setInterval at TOKEN_REFRESH_INTERVAL_MS once authenticated', async () => {
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockAuthResponse),
+    });
+
+    const { unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    });
+
+    // setInterval was called with the 12-minute period.
+    const intervalCall = setIntervalSpy.mock.calls.find(
+      (c) => c[1] === TOKEN_REFRESH_INTERVAL_MS_FOR_TESTS,
+    );
+    expect(intervalCall).toBeDefined();
+
+    // Tearing down the provider clears the interval.
+    unmount();
+    expect(clearIntervalSpy).toHaveBeenCalled();
+
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+  });
+
+  it('drops the session when the api-client onAuthFailed hook fires (refresh failed)', async () => {
+    // Start authenticated.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockAuthResponse),
+    });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+    });
+
+    // Trigger the api-client's onAuthFailed by re-importing and using a
+    // 401 → 401 (refresh-fails) sequence on apiFetch.
+    const { apiFetch } = await import('../api-client');
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({}),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({}),
+    });
+
+    await act(async () => {
+      await apiFetch('/some-endpoint');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+    });
+  });
+
+  it('adopts a token broadcast on BroadcastChannel("auth") from another tab', async () => {
+    // Start authenticated so we have a baseline token to compare against.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockAuthResponse),
+    });
+
+    const listeners = new Set<(ev: MessageEvent<AuthBroadcastMessage>) => void>();
+    let observedName: string | null = null;
+    class TestChannel {
+      constructor(name: string) {
+        observedName = name;
+      }
+      addEventListener(_t: string, fn: (ev: MessageEvent<AuthBroadcastMessage>) => void) {
+        listeners.add(fn);
+      }
+      removeEventListener(_t: string, fn: (ev: MessageEvent<AuthBroadcastMessage>) => void) {
+        listeners.delete(fn);
+      }
+      postMessage(_d: unknown) {}
+      close() {}
+    }
+    const original = global.BroadcastChannel;
+    global.BroadcastChannel = TestChannel as unknown as typeof BroadcastChannel;
+
+    try {
+      render(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('token')).toHaveTextContent('mock-access-token');
+      });
+
+      expect(observedName).toBe(AUTH_BROADCAST_CHANNEL);
+
+      // Simulate another tab broadcasting a refreshed token.
+      await act(async () => {
+        for (const fn of listeners) {
+          fn({
+            data: { type: TOKEN_REFRESHED_MESSAGE, accessToken: 'cross-tab' },
+          } as MessageEvent<AuthBroadcastMessage>);
+        }
+      });
+
+      expect(screen.getByTestId('token')).toHaveTextContent('cross-tab');
+    } finally {
+      global.BroadcastChannel = original;
+    }
   });
 });

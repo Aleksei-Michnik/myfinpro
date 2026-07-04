@@ -5,7 +5,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
@@ -55,8 +54,6 @@ describe('AuthService', () => {
     generateAccessToken: jest.fn().mockReturnValue('mock-jwt-access-token'),
     generateRefreshToken: jest.fn().mockReturnValue('mock-refresh-token-uuid'),
     hashToken: jest.fn().mockReturnValue('mock-hashed-token'),
-    setRefreshTokenCookie: jest.fn(),
-    clearRefreshTokenCookie: jest.fn(),
     getRefreshExpirationDate: jest.fn().mockReturnValue(new Date('2026-03-21T00:00:00Z')),
     getRefreshExpirationMs: jest.fn().mockReturnValue(7 * 24 * 60 * 60 * 1000),
   };
@@ -79,11 +76,6 @@ describe('AuthService', () => {
     cancelDeletion: jest.fn(),
     reactivateOnLogin: jest.fn(),
   };
-
-  const mockResponse = {
-    cookie: jest.fn(),
-    clearCookie: jest.fn(),
-  } as unknown as Response;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -138,7 +130,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      const result = await service.register(registerDto, mockResponse);
+      const result = await service.register(registerDto);
 
       expect(result.user).toBeDefined();
       expect(result.user.email).toBe('test@example.com');
@@ -157,7 +149,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse);
+      await service.register(registerDto);
 
       expect(mockTokenService.generateAccessToken).toHaveBeenCalledWith(mockUser);
     });
@@ -169,7 +161,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse, '127.0.0.1', 'TestAgent');
+      await service.register(registerDto, '127.0.0.1', 'TestAgent');
 
       expect(mockTokenService.generateRefreshToken).toHaveBeenCalled();
       expect(mockTokenService.hashToken).toHaveBeenCalledWith('mock-refresh-token-uuid');
@@ -184,28 +176,28 @@ describe('AuthService', () => {
       });
     });
 
-    it('should set refresh token cookie', async () => {
+    it('should return the raw refresh token in the result', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(null);
       mockPasswordService.hash.mockResolvedValue('$argon2id$hashed');
       mockPrismaService.user.create.mockResolvedValue(mockUser);
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse);
+      // Phase 6 · 6.18.1.4-hotfix — the service returns the raw refresh
+      // token to the controller, which is the only layer that writes
+      // cookies.
+      const result = await service.register(registerDto);
 
-      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
-        mockResponse,
-        'mock-refresh-token-uuid',
-      );
+      expect(result.refreshToken).toBe('mock-refresh-token-uuid');
     });
 
     it('should throw ConflictException with errorCode if email already exists', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
 
-      await expect(service.register(registerDto, mockResponse)).rejects.toThrow(ConflictException);
+      await expect(service.register(registerDto)).rejects.toThrow(ConflictException);
 
       try {
-        await service.register(registerDto, mockResponse);
+        await service.register(registerDto);
       } catch (error) {
         expect(error).toBeInstanceOf(ConflictException);
         const response = (error as ConflictException).getResponse();
@@ -225,7 +217,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse);
+      await service.register(registerDto);
 
       expect(mockPasswordService.hash).toHaveBeenCalledWith('SecurePass123');
     });
@@ -237,7 +229,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse);
+      await service.register(registerDto);
 
       expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
         data: {
@@ -257,7 +249,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.register(registerDto, mockResponse);
+      await service.register(registerDto);
 
       expect(mockPrismaService.user.create).toHaveBeenCalledWith({
         data: {
@@ -288,7 +280,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      const result = await service.register(dtoWithOptions, mockResponse);
+      const result = await service.register(dtoWithOptions);
 
       expect(mockPrismaService.user.create).toHaveBeenCalledWith({
         data: {
@@ -465,7 +457,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.login(mockUser, mockResponse);
+      await service.login(mockUser);
 
       expect(mockPrismaService.user.update).toHaveBeenCalledWith({
         where: { id: mockUser.id },
@@ -478,7 +470,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.login(mockUser, mockResponse);
+      await service.login(mockUser);
 
       expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
         data: {
@@ -495,7 +487,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      const result = await service.login(mockUser, mockResponse);
+      const result = await service.login(mockUser);
 
       expect(result.user).toEqual({
         id: mockUser.id,
@@ -515,7 +507,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.login(mockUser, mockResponse);
+      await service.login(mockUser);
 
       expect(mockTokenService.generateAccessToken).toHaveBeenCalledWith(mockUser);
     });
@@ -525,7 +517,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.login(mockUser, mockResponse, '192.168.1.1', 'Mozilla/5.0');
+      await service.login(mockUser, '192.168.1.1', 'Mozilla/5.0');
 
       expect(mockTokenService.generateRefreshToken).toHaveBeenCalled();
       expect(mockTokenService.hashToken).toHaveBeenCalledWith('mock-refresh-token-uuid');
@@ -540,17 +532,17 @@ describe('AuthService', () => {
       });
     });
 
-    it('should set refresh token cookie', async () => {
+    it('should return the raw refresh token in the result', async () => {
       mockPrismaService.user.update.mockResolvedValue({});
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      await service.login(mockUser, mockResponse);
+      // Phase 6 · 6.18.1.4-hotfix — service returns the refresh token
+      // to the controller; cookies are no longer written from the
+      // service.
+      const result = await service.login(mockUser);
 
-      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
-        mockResponse,
-        'mock-refresh-token-uuid',
-      );
+      expect(result.refreshToken).toBe('mock-refresh-token-uuid');
     });
 
     it('should not expose passwordHash in response', async () => {
@@ -559,7 +551,7 @@ describe('AuthService', () => {
       mockPrismaService.auditLog.create.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
-      const result = await service.login(userWithHash, mockResponse);
+      const result = await service.login(userWithHash);
 
       expect(result.user).not.toHaveProperty('passwordHash');
     });
@@ -583,12 +575,7 @@ describe('AuthService', () => {
       });
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
 
-      const result = await service.refreshTokens(
-        'old-refresh-token',
-        mockResponse,
-        '127.0.0.1',
-        'TestAgent',
-      );
+      const result = await service.refreshTokens('old-refresh-token', '127.0.0.1', 'TestAgent');
 
       expect(mockRefreshTokenService.rotateRefreshToken).toHaveBeenCalledWith(
         'old-refresh-token',
@@ -596,11 +583,8 @@ describe('AuthService', () => {
         'TestAgent',
       );
       expect(mockTokenService.generateAccessToken).toHaveBeenCalledWith(mockUser);
-      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
-        mockResponse,
-        'new-refresh-token',
-      );
       expect(result.accessToken).toBe('mock-jwt-access-token');
+      expect(result.refreshToken).toBe('new-refresh-token');
       expect(result.user).toEqual({
         id: mockUser.id,
         email: mockUser.email,
@@ -621,7 +605,7 @@ describe('AuthService', () => {
       mockPrismaService.user.findUnique.mockResolvedValue(null);
 
       try {
-        await service.refreshTokens('old-refresh-token', mockResponse);
+        await service.refreshTokens('old-refresh-token');
         fail('Expected UnauthorizedException');
       } catch (error) {
         expect(error).toBeInstanceOf(UnauthorizedException);
@@ -645,7 +629,7 @@ describe('AuthService', () => {
       });
 
       try {
-        await service.refreshTokens('old-refresh-token', mockResponse);
+        await service.refreshTokens('old-refresh-token');
         fail('Expected UnauthorizedException');
       } catch (error) {
         expect(error).toBeInstanceOf(UnauthorizedException);
@@ -663,9 +647,7 @@ describe('AuthService', () => {
         new UnauthorizedException('Token reuse detected. All sessions revoked.'),
       );
 
-      await expect(service.refreshTokens('reused-token', mockResponse)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(service.refreshTokens('reused-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -740,15 +722,17 @@ describe('AuthService', () => {
   });
 
   describe('logout()', () => {
-    it('should revoke token, clear cookie, and log audit event', async () => {
+    it('should revoke token and log audit event', async () => {
       mockRefreshTokenService.revokeToken.mockResolvedValue(undefined);
       mockPrismaService.auditLog.create.mockResolvedValue({});
 
-      const result = await service.logout('some-refresh-token', mockResponse, 'user-uuid');
+      const result = await service.logout('some-refresh-token', 'user-uuid');
 
       expect(mockTokenService.hashToken).toHaveBeenCalledWith('some-refresh-token');
       expect(mockRefreshTokenService.revokeToken).toHaveBeenCalledWith('mock-hashed-token');
-      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
+      // Phase 6 · 6.18.1.4-hotfix — cookies are cleared by the
+      // controller, not the service. The service no longer accepts
+      // a Response.
       expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
         data: {
           userId: 'user-uuid',
@@ -764,7 +748,7 @@ describe('AuthService', () => {
       mockRefreshTokenService.revokeToken.mockResolvedValue(undefined);
       mockPrismaService.auditLog.create.mockResolvedValue({});
 
-      const result = await service.logout('some-refresh-token', mockResponse);
+      const result = await service.logout('some-refresh-token');
 
       expect(mockPrismaService.auditLog.create).toHaveBeenCalledWith({
         data: {

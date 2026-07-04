@@ -9,6 +9,27 @@
     "edit": "ערוך",
     "back": "חזרה"
   },
+  "ui": {
+    "loading": {
+      "pageProgressLabel": "טוען",
+      "overlayDefault": "טוען…",
+      "buttonBusy": "שומר…",
+      "loadMore": "טען עוד",
+      "loadingMore": "טוען…"
+    },
+    "errors": {
+      "title": "משהו השתבש",
+      "messages": {
+        "timeout": "הבקשה ארכה זמן רב מדי. בדוק את החיבור ונסה שוב.",
+        "network": "שגיאת רשת. בדוק את החיבור.",
+        "http": "שגיאת שרת ({status}). נסה שוב.",
+        "aborted": "הפעולה בוטלה.",
+        "unknown": "משהו השתבש. נסה שוב."
+      },
+      "retry": "נסה שוב",
+      "return": "ביטול"
+    }
+  },
   "nav": {
     "home": "דף הבית",
     "dashboard": "לוח בקרה",
@@ -114,7 +135,42 @@
   },
   "dashboard": {
     "title": "לוח בקרה",
-    "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן."
+    "subtitle": "המבט הכולל של הכספים שלך.",
+    "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן.",
+    "actions": {
+      "add": "+ הוסף תשלום"
+    },
+    "totals": {
+      "title": "החודש",
+      "in": "הכנסות",
+      "out": "הוצאות",
+      "net": "נטו",
+      "noActivity": "אין פעילות החודש עדיין.",
+      "loading": "טוען סיכומים…",
+      "error": "טעינת הסיכומים נכשלה. {message}",
+      "retry": "נסה שוב",
+      "partial": "מציג {count} תשלומים ראשונים — הסיכומים חלקיים."
+    },
+    "scopes": {
+      "title": "ההקשרים שלך",
+      "personal": "אישי",
+      "personalSubtitle": "התשלומים האישיים שלך",
+      "groupSubtitle": "{role}",
+      "view": "פתח",
+      "noActivity": "אין פעילות עדיין",
+      "empty": "הצטרף לקבוצה או צור אחת כדי לשתף תשלומים.",
+      "createGroup": "צור קבוצה"
+    },
+    "recent": {
+      "title": "פעילות אחרונה",
+      "viewAll": "ראה הכל",
+      "empty": "אין תשלומים עדיין. הוסף אחד כדי להתחיל."
+    },
+    "starred": {
+      "title": "מסומנים בכוכב",
+      "viewAll": "כל המסומנים",
+      "empty": "סמן תשלום בכוכב כדי לראות אותו כאן."
+    }
   },
   "groups": {
     "title": "הקבוצות שלי",
@@ -478,5 +534,454 @@
     "privacy": "מדיניות פרטיות",
     "help": "עזרה",
     "copyright": "© {year} MyFinPro. כל הזכויות שמורות."
+  },
+  "payments": {
+    "scope": {
+      "personal": "אישי",
+      "group": "קבוצה"
+    },
+    "list": {
+      "empty": "אין תשלומים עדיין.",
+      "loadMore": "טען עוד",
+      "loadingMore": "טוען…",
+      "retry": "נסה שוב",
+      "errorLoading": "טעינת התשלומים נכשלה. {message}"
+    },
+    "table": {
+      "date": "תאריך",
+      "direction": "כיוון",
+      "amount": "סכום",
+      "category": "קטגוריה",
+      "scopes": "היקף",
+      "note": "הערה",
+      "starred": "★",
+      "controls": "פעולות"
+    },
+    "directions": {
+      "in": "הכנסה",
+      "out": "הוצאה"
+    },
+    "filters": {
+      "all": "הכול",
+      "in": "הכנסה",
+      "out": "הוצאה",
+      "scopeAll": "כל ההיקפים",
+      "scopePersonal": "אישי",
+      "scopeGroup": "{name}",
+      "search": "חפש בהערה…",
+      "from": "מתאריך",
+      "to": "עד תאריך",
+      "category": "קטגוריה",
+      "anyCategory": "כל קטגוריה",
+      "categoryGroupSystem": "מערכת",
+      "categoryGroupPersonal": "אישי",
+      "categoryGroupGroup": "קבוצה",
+      "sort": "מיון",
+      "sortDateDesc": "החדש ביותר",
+      "sortDateAsc": "הישן ביותר",
+      "sortAmountDesc": "סכום: גבוה → נמוך",
+      "sortAmountAsc": "סכום: נמוך → גבוה"
+    },
+    "controls": {
+      "edit": "ערוך",
+      "delete": "מחק",
+      "open": "פתח"
+    },
+    "row": {
+      "starAdd": "הוסף למסומנים",
+      "starRemove": "הסר מהמסומנים",
+      "moreScopes": "+{count} נוספים"
+    },
+    "delete": {
+      "title": "מחיקת תשלום",
+      "description": "תשלום זה משויך למספר היקפים. בחר מה למחוק.",
+      "scopeOnly": "מחק מההיקף הזה",
+      "scopeAll": "מחק מכל ההיקפים שלי ({count})",
+      "pickScope": "מאיזה היקף?",
+      "confirm": "מחק",
+      "cancel": "ביטול",
+      "errorNoAccess": "אין לך עוד הרשאה למחוק תשלום זה.",
+      "deleted": "התשלום נמחק.",
+      "deletedFromScope": "נמחק מ-{scope}."
+    },
+    "propagate": {
+      "title": "להחיל את השינויים על המופעים?",
+      "description": "לתשלום החוזר הזה נוצרו מופעים. בחר עד כמה השינוי הזה יחול.",
+      "destructiveWarning": "שינוי זה בונה מחדש מופעים עתידיים ועלול למחוק את התגובות והקבצים המצורפים שלהם.",
+      "mode": {
+        "self": {
+          "label": "תשלום זה בלבד",
+          "description": "עדכן רק את התשלום החוזר הזה. המופעים יישארו כפי שהם."
+        },
+        "future": {
+          "label": "תשלום זה והמופעים העתידיים",
+          "description": "עדכן את התשלום הזה וכל מופע מהיום והלאה."
+        },
+        "all": {
+          "label": "כל המופעים",
+          "description": "עדכן את התשלום הזה וכל מופע, בעבר ובעתיד."
+        }
+      },
+      "confirm": "החל",
+      "cancel": "ביטול",
+      "resultUpdated": "עודכן התשלום ו{count, plural, =0 {ללא מופעים} =1 {מופע #} other {# מופעים}}.",
+      "resultSkipped": "{count, plural, =1 {מופע # בקבוצה שאינך מנהל נותר} other {# מופעים בקבוצות שאינך מנהל נותרו}} ללא שינוי."
+    },
+    "form": {
+      "createTitle": "הוסף תשלום",
+      "editTitle": "ערוך תשלום",
+      "direction": "כיוון",
+      "directionIn": "הכנסה",
+      "directionOut": "הוצאה",
+      "amount": "סכום",
+      "amountPlaceholder": "0.00",
+      "currency": "מטבע",
+      "date": "תאריך",
+      "category": "קטגוריה",
+      "noteLabel": "הערה (לא חובה)",
+      "notePlaceholder": "תיאור קצר…",
+      "attributedTo": "משויך ל-",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "close": "סגור",
+      "saving": "שומר…",
+      "loading": "טוען תשלום…",
+      "loadError": "לא ניתן לרענן את נתוני התשלום. מציג את הערכים האחרונים שידועים.",
+      "discardChanges": "לבטל את השינויים?",
+      "discard": "בטל",
+      "keepEditing": "המשך עריכה",
+      "errorGeneric": "שמירת התשלום נכשלה. {message}",
+      "validation": {
+        "amountRequired": "הסכום חייב להיות גדול מאפס.",
+        "currencyInvalid": "בחר מטבע.",
+        "dateInvalid": "הזן תאריך תקין.",
+        "dateFuture": "התאריך לא יכול להיות יותר מיום אחד בעתיד.",
+        "categoryRequired": "בחר קטגוריה.",
+        "categoryDirectionMismatch": "הקטגוריה הזו לא תואמת לכיוון שנבחר.",
+        "scopesRequired": "בחר לפחות היקף אחד.",
+        "noteTooLong": "ההערה יכולה להכיל עד 2000 תווים."
+      },
+      "addAction": "+ הוסף תשלום",
+      "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
+      "othersPreserved": "השיוכים של משתמשים אחרים לתשלום זה לא ישונו.",
+      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו."
+    },
+    "types": {
+      "label": "סוג",
+      "advanced": "הצג סוגים מתקדמים",
+      "hideAdvanced": "הסתר סוגים מתקדמים",
+      "comingSoon": "בקרוב",
+      "options": {
+        "ONE_TIME": "חד-פעמי",
+        "RECURRING": "חוזר",
+        "LIMITED_PERIOD": "חוזר עם תאריך סיום",
+        "INSTALLMENT": "תכנית תשלומים",
+        "LOAN": "הלוואה",
+        "MORTGAGE": "משכנתא"
+      },
+      "iterationHint": {
+        "RECURRING": "זמין מאיטרציה 6.18.",
+        "LIMITED_PERIOD": "זמין מאיטרציה 6.18.",
+        "INSTALLMENT": "זמין מאיטרציה 6.20.",
+        "LOAN": "זמין מאיטרציה 6.20.",
+        "MORTGAGE": "זמין מאיטרציה 6.20."
+      }
+    },
+    "scopeSelector": {
+      "personal": "אישי",
+      "groupRole": {
+        "admin": "מנהל",
+        "member": "חבר"
+      },
+      "noGroups": "אינך חבר באף קבוצה עדיין."
+    },
+    "categoryPicker": {
+      "placeholder": "בחר קטגוריה…",
+      "groupSystem": "מערכת",
+      "groupPersonal": "הקטגוריות שלי",
+      "groupGroup": "קבוצה: {name}",
+      "bothBadge": "(שניהם)",
+      "loading": "טוען קטגוריות…",
+      "errorLoading": "טעינת הקטגוריות נכשלה. {message}"
+    },
+    "detail": {
+      "back": "חזרה",
+      "loading": "טוען תשלום…",
+      "notFound": "התשלום לא נמצא או שאינו זמין יותר.",
+      "errorGeneric": "טעינת התשלום נכשלה. {message}",
+      "tryAgain": "נסה שוב",
+      "amountLabel": "סכום",
+      "dateLabel": "תאריך",
+      "categoryLabel": "קטגוריה",
+      "attributionsLabel": "משויך ל-",
+      "noteLabel": "הערה",
+      "noNote": "לא נוספה הערה.",
+      "starAdd": "סמן",
+      "starRemove": "הסר סימון",
+      "edit": "ערוך",
+      "delete": "מחק",
+      "editDisabledNotCreator": "רק היוצר יכול לערוך את התשלום.",
+      "editDisabled": {
+        "generatedOccurrence": "תשלום זה נוצר אוטומטית מתבנית קבועה. ערוך את התשלום ההורה כדי לשנות את כל המופעים.",
+        "unsupportedType": "עריכת תשלום מסוג זה אינה נתמכת עדיין."
+      },
+      "edited": "נערך",
+      "deletedToast": "התשלום נמחק.",
+      "occurrences": {
+        "title": "מופעים",
+        "countSingular": "מופע אחד",
+        "countPlural": "{n} מופעים",
+        "empty": "עדיין אין מופעים — הם יופיעו כאן ככל שלוח הזמנים יפעל."
+      }
+    },
+    "comments": {
+      "title": "תגובות",
+      "loading": "טוען תגובות…",
+      "empty": "אין תגובות עדיין.",
+      "loadEarlier": "טען תגובות קודמות",
+      "loadingMore": "טוען…",
+      "errorLoading": "טעינת התגובות נכשלה. {message}",
+      "post": "פרסם",
+      "posting": "מפרסם…",
+      "postPlaceholder": "הוסף תגובה…",
+      "edit": "ערוך",
+      "delete": "מחק",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "confirmDelete": "למחוק את התגובה הזו?",
+      "deleteConfirm": "מחק",
+      "deleting": "מוחק…",
+      "errorPost": "פרסום התגובה נכשל. {message}",
+      "errorEdit": "שמירת התגובה נכשלה. {message}",
+      "errorDelete": "מחיקת התגובה נכשלה. {message}",
+      "alreadyRemoved": "תגובה זו כבר הוסרה.",
+      "validation": {
+        "tooShort": "התגובה לא יכולה להיות ריקה.",
+        "tooLong": "התגובה יכולה להכיל עד 2000 תווים."
+      },
+      "edited": "נערך",
+      "tooltipDeleted": "התגובה נמחקה."
+    },
+    "documents": {
+      "title": "מסמכים",
+      "comingSoon": "קבלות, תמונות ו-PDFs בדרך בשלב 9."
+    },
+    "schedulePlan": {
+      "occurrenceTitle": "לוח זמנים / תכנית",
+      "comingSoon": "ניהול חוזר ותכניות תשלום יגיעו באיטרציות 6.18 ו-6.20."
+    },
+    "page": {
+      "title": "תשלומים",
+      "subtitle": "נהל את כל התשלומים שאתה רואה.",
+      "scopeTabs": {
+        "all": "הכל",
+        "personal": "אישי",
+        "noAccess": "אין לך גישה להיקף הזה.",
+        "backToDashboard": "חזרה ללוח הבקרה"
+      },
+      "starredToggle": {
+        "label": "מסומנים בלבד",
+        "ariaPressed": "הצג מסומנים בלבד"
+      },
+      "clearFilters": "נקה סינון",
+      "groupTabTitle": "תשלומים"
+    },
+    "schedule": {
+      "form": {
+        "legend": "לוח זמנים",
+        "repeatModeLabel": "מצב חזרה",
+        "repeatMode": {
+          "every": "חזרה כל <interval>",
+          "cron": "ביטוי Cron"
+        },
+        "every": {
+          "label": "כל",
+          "unitLabel": "יחידה",
+          "unitMinute": "דקה (דקות)",
+          "unitHour": "שעה (שעות)",
+          "unitDay": "יום (ימים)",
+          "unitWeek": "שבוע (שבועות)",
+          "unitMonth": "חודש (חודשים) (≈ 30 ימים)",
+          "minHelp": "מינימום: דקה אחת. חודש מחושב כ-30 ימים; ל\"ראשון לחודש\" מדויק יש להשתמש בביטוי cron."
+        },
+        "cron": {
+          "label": "ביטוי Cron",
+          "help": "Cron סטנדרטי בן 5 שדות (דקה שעה יום-בחודש חודש יום-בשבוע). דוגמאות: 0 9 * * 1 = ימי חול 9 בבוקר, 0 0 1 * * = הראשון לחודש, */15 * * * * = כל 15 דקות."
+        },
+        "startsAt": {
+          "label": "מתחיל ב"
+        },
+        "endsAt": {
+          "label": "מסתיים ב (לא חובה)"
+        },
+        "limit": {
+          "label": "מקסימום הפעלות (לא חובה)"
+        },
+        "typeChangeWarning": "שינוי הסוג יסיר את לוח הזמנים ויפסיק יצירת מופעים חדשים. תשלומים שכבר נוצרו יישמרו.",
+        "validation": {
+          "everyCountInvalid": "הזן מספר שלם חיובי.",
+          "everyMsTooSmall": "המרווח חייב להיות לפחות דקה אחת.",
+          "cronRequired": "הזן ביטוי cron.",
+          "startsAtInvalid": "הזן תאריך התחלה תקין.",
+          "endsAtBeforeStart": "תאריך הסיום חייב להיות אחרי תאריך ההתחלה.",
+          "limitInvalid": "מספר ההפעלות חייב להיות לפחות 1.",
+          "specRequired": "ציין מרווח זמן או ביטוי cron."
+        }
+      },
+      "badge": {
+        "title": "לוח זמנים",
+        "statusActive": "פעיל",
+        "statusPaused": "מושהה",
+        "statusCancelled": "בוטל",
+        "repeatEveryMinutes": "כל {n} דקה (דקות)",
+        "repeatEveryHours": "כל {n} שעה (שעות)",
+        "repeatEveryDays": "כל {n} יום (ימים)",
+        "repeatEveryWeeks": "כל {n} שבוע (שבועות)",
+        "repeatEveryMonths": "כל {n} חודש (חודשים) (≈30 ימים)",
+        "repeatCron": "Cron: {expr}",
+        "nextRun": "הפעלה הבאה: {when}",
+        "lastRun": "הפעלה אחרונה: {when}",
+        "cancelledAt": "בוטל ב-{when}",
+        "runsLimit": "תקרה: {n} הפעלות",
+        "fromRecurring": "→ מתשלום חוזר",
+        "pause": "השהיה",
+        "resume": "חידוש",
+        "cancelAction": "ביטול תזמון",
+        "cancelConfirmBody": "לבטל את התזמון לצמיתות? מופעים קיימים יישמרו; מופעים חדשים לא ייווצרו.",
+        "cancelConfirmYes": "כן, לבטל",
+        "cancelConfirmKeep": "להשאיר את התזמון",
+        "pausedToast": "התזמון הושהה",
+        "resumedToast": "התזמון חודש",
+        "cancelledToast": "התזמון בוטל",
+        "actionFailed": "פעולת התזמון נכשלה"
+      }
+    },
+    "plan": {
+      "kind": {
+        "INSTALLMENT": "תוכנית תשלומים",
+        "LOAN": "הלוואה",
+        "MORTGAGE": "משכנתא"
+      },
+      "statusActive": "פעילה",
+      "statusCancelled": "בוטלה",
+      "summary": "{principal} על פני {count} תשלומים · {rate}% שנתי · {frequency} · {method}",
+      "table": {
+        "dueAt": "מועד",
+        "principal": "קרן",
+        "interest": "ריבית",
+        "total": "תשלום",
+        "remaining": "יתרה",
+        "status": "סטטוס"
+      },
+      "rowStatus": {
+        "PENDING": "ממתין",
+        "POSTED": "נרשם",
+        "DUE": "לתשלום",
+        "CANCELLED": "בוטל"
+      },
+      "cancelAction": "ביטול תוכנית",
+      "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תשלומים עתידיים יסומנו כמבוטלים; דבר לא יימחק.",
+      "cancelConfirmYes": "כן, לבטל",
+      "cancelConfirmKeep": "להשאיר את התוכנית",
+      "cancelledToast": "התוכנית בוטלה",
+      "cancelFailed": "פעולת התוכנית נכשלה",
+      "form": {
+        "legend": "פרטי התוכנית",
+        "rateLabel": "ריבית שנתית (%)",
+        "countLabel": "מספר תשלומים",
+        "frequencyLabel": "תדירות",
+        "firstDueLabel": "מועד התשלום הראשון",
+        "methodLabel": "שיטת סילוקין",
+        "principalHint": "הסכום שלמעלה הוא קרן התוכנית; כל תשלום נגזר ממנו.",
+        "frequency": {
+          "DAILY": "יומי",
+          "WEEKLY": "שבועי",
+          "BIWEEKLY": "דו־שבועי",
+          "MONTHLY": "חודשי",
+          "QUARTERLY": "רבעוני",
+          "ANNUAL": "שנתי"
+        },
+        "method": {
+          "auto": "אוטומטי (לפי הסוג)",
+          "equal": "שווה (ללא ריבית)",
+          "french": "שפיצר (תשלום קבוע)"
+        },
+        "validation": {
+          "rateInvalid": "יש להזין ריבית 0 או יותר",
+          "rateTooHigh": "הריבית לא יכולה לעלות על 100%",
+          "countInvalid": "יש להזין מספר שלם של תשלומים (לפחות 1)",
+          "countTooHigh": "עד 600 תשלומים",
+          "firstDueRequired": "יש לבחור את מועד התשלום הראשון",
+          "firstDueInvalid": "תאריך לא תקין",
+          "equalRequiresZeroRate": "השיטה השווה היא ללא ריבית — יש להגדיר ריבית 0 או לבחור בשיטת שפיצר"
+        }
+      }
+    }
+  },
+  "categories": {
+    "page": {
+      "title": "קטגוריות",
+      "subtitle": "נהל את קטגוריות התשלום שלך."
+    },
+    "scope": {
+      "personal": "אישי",
+      "groupHeading": "{group}"
+    },
+    "system": {
+      "badge": "ברירת מחדל",
+      "hint": "לא ניתן לערוך קטגוריות ברירת מחדל."
+    },
+    "actions": {
+      "create": "+ קטגוריה חדשה",
+      "edit": "עריכה",
+      "delete": "מחיקה"
+    },
+    "form": {
+      "title": {
+        "create": "קטגוריה חדשה",
+        "edit": "עריכת קטגוריה"
+      },
+      "name": {
+        "label": "שם",
+        "placeholder": "מצרכים"
+      },
+      "icon": {
+        "label": "אייקון (אימוג'י)",
+        "placeholder": "🛒"
+      },
+      "color": {
+        "label": "צבע",
+        "placeholder": "#7c3aed",
+        "presetsLabel": "בחירה מהירה"
+      },
+      "direction": {
+        "label": "כיוון",
+        "in": "הכנסה",
+        "out": "הוצאה",
+        "both": "שניהם"
+      },
+      "errors": {
+        "nameRequired": "שם נדרש.",
+        "nameTooLong": "מקסימום 60 תווים.",
+        "colorInvalid": "השתמש בצבע הקס כמו #7c3aed.",
+        "duplicate": "קטגוריה בשם זה כבר קיימת.",
+        "generic": "לא ניתן לשמור קטגוריה. {message}"
+      },
+      "save": "שמור",
+      "saving": "שומר…",
+      "cancel": "ביטול"
+    },
+    "delete": {
+      "title": "מחיקת קטגוריה",
+      "warning": "האם אתה בטוח שברצונך למחוק את \"{name}\"? לא ניתן לבטל פעולה זו.",
+      "inUse": "{count} תשלומים עדיין משתמשים בקטגוריה זו. בחר קטגוריה חלופית לפני המחיקה.",
+      "replaceLabel": "קטגוריה חלופית",
+      "cancel": "ביטול",
+      "confirm": "מחיקה",
+      "deleting": "מוחק…",
+      "errorGeneric": "לא ניתן למחוק את הקטגוריה. {message}"
+    },
+    "empty": "אין קטגוריות מותאמות אישית עדיין.",
+    "loading": "טוען קטגוריות…"
   }
 }

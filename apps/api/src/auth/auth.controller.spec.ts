@@ -60,6 +60,7 @@ describe('AuthController', () => {
   };
 
   const mockTokenService = {
+    setRefreshTokenCookie: jest.fn(),
     clearRefreshTokenCookie: jest.fn(),
   };
 
@@ -121,14 +122,17 @@ describe('AuthController', () => {
   });
 
   describe('register()', () => {
-    it('should call AuthService.register() with DTO, response, ip and userAgent', async () => {
+    it('should call AuthService.register() and write auth cookies at the controller layer', async () => {
       const registerDto: RegisterDto = {
         email: 'test@example.com',
         password: 'SecurePass123',
         name: 'Test User',
       };
 
-      const expectedResult = {
+      // Phase 6 · 6.18.1.4-hotfix — service now returns the raw refresh
+      // token; the controller is responsible for setting both the
+      // refresh-token and the access-token cookie.
+      const serviceResult = {
         user: {
           id: 'test-uuid',
           email: 'test@example.com',
@@ -137,22 +141,31 @@ describe('AuthController', () => {
           locale: 'en',
         },
         accessToken: 'mock-jwt-token',
+        refreshToken: 'mock-refresh-token',
       };
 
-      mockAuthService.register.mockResolvedValue(expectedResult);
+      mockAuthService.register.mockResolvedValue(serviceResult);
 
       const result = await controller.register(registerDto, mockResponse, mockRequest);
 
+      // Service is no longer handed a Response.
       expect(mockAuthService.register).toHaveBeenCalledWith(
         registerDto,
-        mockResponse,
         '127.0.0.1',
         'TestAgent/1.0',
       );
-      expect(result).toEqual(expectedResult);
+      // Controller writes both cookies after success.
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
+        mockResponse,
+        'mock-refresh-token',
+      );
+      // The refresh token is NOT echoed back to the client.
+      expect(result).not.toHaveProperty('refreshToken');
+      expect(result.accessToken).toBe('mock-jwt-token');
+      expect(result.user.id).toBe('test-uuid');
     });
 
-    it('should return the result from AuthService', async () => {
+    it('should return only the public-safe fields (no refreshToken)', async () => {
       const registerDto: RegisterDto = {
         email: 'another@example.com',
         password: 'AnotherPass456',
@@ -161,7 +174,7 @@ describe('AuthController', () => {
         locale: 'he',
       };
 
-      const expectedResult = {
+      mockAuthService.register.mockResolvedValue({
         user: {
           id: 'another-uuid',
           email: 'another@example.com',
@@ -170,14 +183,14 @@ describe('AuthController', () => {
           locale: 'he',
         },
         accessToken: 'mock-jwt-token',
-      };
-
-      mockAuthService.register.mockResolvedValue(expectedResult);
+        refreshToken: 'mock-refresh-token',
+      });
 
       const result = await controller.register(registerDto, mockResponse, mockRequest);
 
-      expect(result).toEqual(expectedResult);
+      expect(result.accessToken).toBe('mock-jwt-token');
       expect(result.user.email).toBe('another@example.com');
+      expect(result).not.toHaveProperty('refreshToken');
     });
   });
 
@@ -195,25 +208,28 @@ describe('AuthController', () => {
       locale: 'en',
     };
 
-    it('should call validateUser and login with response, ip and userAgent', async () => {
-      const loginResponse = {
+    it('should call validateUser, login (no Response) and write auth cookies', async () => {
+      const serviceResult = {
         user: mockUser,
         accessToken: 'mock-jwt-token',
+        refreshToken: 'mock-refresh-token',
       };
 
       mockAuthService.validateUser.mockResolvedValue(mockUser);
-      mockAuthService.login.mockResolvedValue(loginResponse);
+      mockAuthService.login.mockResolvedValue(serviceResult);
 
       const result = await controller.login(loginDto, mockResponse, mockRequest);
 
       expect(mockAuthService.validateUser).toHaveBeenCalledWith(loginDto.email, loginDto.password);
-      expect(mockAuthService.login).toHaveBeenCalledWith(
-        mockUser,
+      // Phase 6 · 6.18.1.4-hotfix — Response no longer threaded into the
+      // service; the controller writes cookies after the service returns.
+      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser, '127.0.0.1', 'TestAgent/1.0');
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
         mockResponse,
-        '127.0.0.1',
-        'TestAgent/1.0',
+        'mock-refresh-token',
       );
-      expect(result).toEqual(loginResponse);
+      expect(result).not.toHaveProperty('refreshToken');
+      expect(result.accessToken).toBe('mock-jwt-token');
     });
 
     it('should throw UnauthorizedException with INVALID_CREDENTIALS errorCode for invalid credentials', async () => {
@@ -242,13 +258,13 @@ describe('AuthController', () => {
   });
 
   describe('refresh()', () => {
-    it('should call AuthService.refreshTokens() when cookie is present', async () => {
+    it('should call AuthService.refreshTokens() and write fresh auth cookies', async () => {
       const requestWithCookie = {
         ...mockRequestData,
         cookies: { refresh_token: 'valid-refresh-token' },
       } as unknown as Request;
 
-      const refreshResult = {
+      const serviceResult = {
         user: {
           id: 'test-uuid',
           email: 'test@example.com',
@@ -257,18 +273,26 @@ describe('AuthController', () => {
           locale: 'en',
         },
         accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
       };
-      mockAuthService.refreshTokens.mockResolvedValue(refreshResult);
+      mockAuthService.refreshTokens.mockResolvedValue(serviceResult);
 
       const result = await controller.refresh(mockResponse, requestWithCookie);
 
+      // Phase 6 · 6.18.1.4-hotfix — service receives only the refresh token
+      // (the cookie value), ip, and ua. No Response.
       expect(mockAuthService.refreshTokens).toHaveBeenCalledWith(
         'valid-refresh-token',
-        mockResponse,
         '127.0.0.1',
         'TestAgent/1.0',
       );
-      expect(result).toEqual(refreshResult);
+      // Controller rotates the cookies on success.
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
+        mockResponse,
+        'new-refresh-token',
+      );
+      expect(result).not.toHaveProperty('refreshToken');
+      expect(result.accessToken).toBe('new-access-token');
     });
 
     it('should throw UnauthorizedException with REFRESH_FAILED errorCode when no refresh token cookie', async () => {
@@ -310,7 +334,7 @@ describe('AuthController', () => {
   });
 
   describe('logout()', () => {
-    it('should call AuthService.logout() when refresh token cookie is present', async () => {
+    it('should call AuthService.logout() and clear both auth cookies when refresh token is present', async () => {
       const requestWithCookie = {
         ...mockRequestData,
         cookies: { refresh_token: 'some-refresh-token' },
@@ -321,7 +345,14 @@ describe('AuthController', () => {
 
       const result = await controller.logout(mockResponse, requestWithCookie);
 
-      expect(mockAuthService.logout).toHaveBeenCalledWith('some-refresh-token', mockResponse);
+      // Phase 6 · 6.18.1.4-hotfix — service no longer accepts Response.
+      expect(mockAuthService.logout).toHaveBeenCalledWith('some-refresh-token');
+      // Controller clears both cookies — refresh + access.
+      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith(
+        'access_token',
+        expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
+      );
       expect(result).toEqual(logoutResult);
     });
 
@@ -336,7 +367,8 @@ describe('AuthController', () => {
 
       const result = await controller.logout(mockResponse, requestWithoutCookie);
 
-      expect(mockAuthService.logout).toHaveBeenCalledWith('', mockResponse);
+      expect(mockAuthService.logout).toHaveBeenCalledWith('');
+      expect(mockTokenService.clearRefreshTokenCookie).toHaveBeenCalledWith(mockResponse);
       expect(result).toEqual(logoutResult);
     });
   });
@@ -437,16 +469,19 @@ describe('AuthController', () => {
           locale: mockUser.locale,
         },
         accessToken: 'mock-jwt-token',
+        refreshToken: 'mock-refresh-token',
       });
 
       await controller.googleCallback(requestWithUser, redirectResponse);
 
       expect(mockAuthService.findOrCreateGoogleUser).toHaveBeenCalledWith(googleProfile);
-      expect(mockAuthService.login).toHaveBeenCalledWith(
-        mockUser,
+      // Phase 6 · 6.18.1.4-hotfix — service no longer takes Response.
+      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser, '127.0.0.1', 'TestAgent/1.0');
+      // Controller still writes the auth cookies on the OAuth-callback path
+      // before redirecting back to the frontend.
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
         redirectResponse,
-        '127.0.0.1',
-        'TestAgent/1.0',
+        'mock-refresh-token',
       );
       expect(redirectResponse.redirect).toHaveBeenCalledWith(
         'https://localhost:3000/en/auth/callback?token=mock-jwt-token',
@@ -549,7 +584,7 @@ describe('AuthController', () => {
 
     it('should return tokens for valid Telegram hash-based auth data', async () => {
       const dto = { ...validDto };
-      const loginResponse = {
+      const serviceResult = {
         user: {
           id: mockUser.id,
           email: mockUser.email,
@@ -558,6 +593,7 @@ describe('AuthController', () => {
           locale: mockUser.locale,
         },
         accessToken: 'mock-jwt-token',
+        refreshToken: 'mock-refresh-token',
       };
 
       mockVerifyTelegramAuth.mockReturnValue({
@@ -569,7 +605,7 @@ describe('AuthController', () => {
       });
 
       mockAuthService.findOrCreateTelegramUser.mockResolvedValue(mockUser);
-      mockAuthService.login.mockResolvedValue(loginResponse);
+      mockAuthService.login.mockResolvedValue(serviceResult);
 
       const result = await controller.telegramCallback(dto, mockResponse, mockRequest);
 
@@ -581,13 +617,15 @@ describe('AuthController', () => {
         username: undefined,
         photoUrl: undefined,
       });
-      expect(mockAuthService.login).toHaveBeenCalledWith(
-        mockUser,
+      // Phase 6 · 6.18.1.4-hotfix — service signature no longer includes Response.
+      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser, '127.0.0.1', 'TestAgent/1.0');
+      expect(mockTokenService.setRefreshTokenCookie).toHaveBeenCalledWith(
         mockResponse,
-        '127.0.0.1',
-        'TestAgent/1.0',
+        'mock-refresh-token',
       );
-      expect(result).toEqual(loginResponse);
+      // The refresh token must NOT be echoed back to the client.
+      expect(result).not.toHaveProperty('refreshToken');
+      expect(result.accessToken).toBe('mock-jwt-token');
     });
 
     it('should pass optional profile fields from verified auth data', async () => {
@@ -610,6 +648,7 @@ describe('AuthController', () => {
       mockAuthService.login.mockResolvedValue({
         user: { id: mockUser.id },
         accessToken: 'token',
+        refreshToken: 'refresh-token',
       });
 
       await controller.telegramCallback(dto, mockResponse, mockRequest);
@@ -717,6 +756,7 @@ describe('AuthController', () => {
       mockAuthService.login.mockResolvedValue({
         user: { id: mockUser.id },
         accessToken: 'token',
+        refreshToken: 'refresh-token',
       });
 
       await controller.telegramCallback(dto, mockResponse, mockRequest);

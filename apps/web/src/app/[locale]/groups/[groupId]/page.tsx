@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { GroupPaymentsTab } from '@/components/group/GroupPaymentsTab';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import type { GroupDetail, GroupMember } from '@/lib/group/types';
+import { useResetOnLocaleChange } from '@/lib/ui';
 
 const isKnownType = (value: string): value is GroupType =>
   (GROUP_TYPES as readonly string[]).includes(value);
@@ -49,6 +51,9 @@ function GroupDashboardInner() {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  // Re-fetch trigger so the locale-change effect can refresh group data
+  // without remounting the inner component tree.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Leave group dialog state
   const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
@@ -78,7 +83,14 @@ function GroupDashboardInner() {
     return () => {
       cancelled = true;
     };
-  }, [groupId, getGroup]);
+  }, [groupId, getGroup, reloadKey]);
+
+  // Phase 6 · Iteration 6.16.5 — locale switch must clear errors and re-fetch
+  // quietly. Reusable hook avoids per-page copy-paste.
+  useResetOnLocaleChange(() => {
+    setHasError(false);
+    setReloadKey((k) => k + 1);
+  });
 
   const sortedMembers = useMemo(() => (group ? sortMembers(group.members) : []), [group]);
 
@@ -248,6 +260,11 @@ function GroupDashboardInner() {
           </p>
         </div>
       </section>
+
+      {/* Payments */}
+      <div className="mb-6">
+        <GroupPaymentsTab groupId={group.id} />
+      </div>
 
       {/* Members */}
       <section

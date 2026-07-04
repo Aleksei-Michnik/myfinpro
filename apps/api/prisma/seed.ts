@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
+import { seedSystemCategories } from '../src/payment/seed-system-categories';
 
 const prisma = new PrismaClient();
 
@@ -29,6 +30,10 @@ async function main() {
   });
 
   console.log(`✅ Dev user created/verified: ${devUser.email} (id: ${devUser.id})`);
+
+  // Phase 6: Default system-owned categories (idempotent).
+  const categoryIds = await seedSystemCategories(prisma);
+  console.log(`✅ System categories seeded: ${categoryIds.size} rows`);
 
   console.log('🌱 Seed completed successfully');
 }
