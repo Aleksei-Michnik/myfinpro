@@ -12,11 +12,13 @@
 import type { CommentResponseDto } from '../payment/dto/comment-response.dto';
 import type { PaymentSummaryDto } from '../payment/dto/payment-summary.dto';
 import type { ScheduleResponseDto } from '../payment/dto/schedule-response.dto';
+import type { ReceiptResponseDto } from '../receipt/dto/receipt-response.dto';
 
 /** Re-export aliases so consumers don't have to know the DTO suffix. */
 export type PaymentSummary = PaymentSummaryDto;
 export type CommentResponse = CommentResponseDto;
 export type ScheduleResponse = ScheduleResponseDto;
+export type ReceiptResponse = ReceiptResponseDto;
 
 export type AttributionScope = 'personal' | 'group';
 
@@ -54,6 +56,10 @@ export type RealtimeEvent =
   | { type: 'schedule.paused'; userIds: string[]; paymentId: string; schedule: ScheduleResponse }
   | { type: 'schedule.resumed'; userIds: string[]; paymentId: string; schedule: ScheduleResponse }
   | { type: 'schedule.cancelled'; userIds: string[]; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.deleted'; userIds: string[]; paymentId: string };
+  | { type: 'schedule.deleted'; userIds: string[]; paymentId: string }
+  // Phase 7.4 — receipt lifecycle. Recipients: the uploader only (receipts
+  // are private until confirmed; confirm reuses payment.created fan-out).
+  | { type: 'receipt.updated'; userIds: string[]; receipt: ReceiptResponse }
+  | { type: 'receipt.deleted'; userIds: string[]; receiptId: string };
 
 export type RealtimeEventType = RealtimeEvent['type'];

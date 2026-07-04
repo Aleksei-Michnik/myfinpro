@@ -16,6 +16,7 @@ import { PaymentModule } from './payment/payment.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { ReceiptModule } from './receipt/receipt.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     AuthModule,
     GroupModule,
     PaymentModule,
+    ReceiptModule,
     CategoryModule,
     RealtimeModule,
   ],
