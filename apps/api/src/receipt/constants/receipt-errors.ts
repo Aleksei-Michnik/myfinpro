@@ -1,0 +1,18 @@
+/**
+ * Phase 7 — structured error codes for the receipt pipeline (design §4).
+ * Mirrors the PAYMENT_ERRORS convention: the same const object also names
+ * audit-log actions where they overlap.
+ */
+export const RECEIPT_ERRORS = {
+  RECEIPT_NOT_FOUND: 'RECEIPT_NOT_FOUND',
+  RECEIPT_INVALID_STATE: 'RECEIPT_INVALID_STATE',
+  RECEIPT_INVALID_FILE_TYPE: 'RECEIPT_INVALID_FILE_TYPE',
+  RECEIPT_FILE_TOO_LARGE: 'RECEIPT_FILE_TOO_LARGE',
+  RECEIPT_INVALID_URL: 'RECEIPT_INVALID_URL',
+  RECEIPT_EXTRACTION_FAILED: 'RECEIPT_EXTRACTION_FAILED',
+  RECEIPT_ALREADY_CONFIRMED: 'RECEIPT_ALREADY_CONFIRMED',
+  RECEIPT_ITEMS_INVALID: 'RECEIPT_ITEMS_INVALID',
+  MERCHANT_NOT_FOUND: 'MERCHANT_NOT_FOUND',
+} as const;
+
+export type ReceiptErrorCode = (typeof RECEIPT_ERRORS)[keyof typeof RECEIPT_ERRORS];
