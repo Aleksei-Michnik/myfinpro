@@ -1,7 +1,8 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-07-04
-> **Current Phase:** Phase 6 — Payment Management (unified incomes + expenses) — **all 21 iterations complete**; verified on staging. Production merge (develop → main) deliberately held for manual trigger — see the 6.21 entry.
+> **Current Phase:** Phase 7 — Receipt Ingestion & LLM Extraction (kickoff 2026-07-04)
+> **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
 > **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
@@ -7300,7 +7301,9 @@ dialog backdrop matches the app-wide convention.
 **Commits.** 6.21: `b2bf0ca` (+ this docs entry).
 
 **Phase 6 status: 21 / 21 — COMPLETE.** ✅
-**Held for manual trigger:** merge `develop` → `main` (production deploy).
+**Update (2026-07-04, later):** merge executed — `13ea4c6` on main; production
+deploy `28705417883` ✅ (staging-test gate passed, blue-green green slot,
+post-switch health check passed). Phase 6 is live in production.
 Deferred (documented): LIMITED_PERIOD type; plan PATCH/attach endpoints;
 realtime `plan.*` events; `payments.propagate` period-change destructive
 warning (6.18.1.5.2).
