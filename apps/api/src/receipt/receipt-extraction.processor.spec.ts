@@ -155,12 +155,10 @@ describe('ReceiptExtractionProcessor', () => {
       }),
     );
     providerMock.extract.mockResolvedValue(okResult());
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('<html>receipt</html>'),
-      } as never);
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('<html>receipt</html>'),
+    } as never);
 
     await processor.process(makeJob());
     const input = providerMock.extract.mock.calls[0][0];
