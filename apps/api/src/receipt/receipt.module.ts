@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
+import { CategoryModule } from '../category/category.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.provider';
 import { extractionProviderFactory } from './extraction/extraction-provider.factory';
 import { MockExtractionProvider } from './extraction/mock-extraction.provider';
 import { OpenAiExtractionProvider } from './extraction/openai-extraction.provider';
+import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
 import { ReceiptService } from './receipt.service';
@@ -17,7 +19,7 @@ import { ReceiptService } from './receipt.service';
  * itself comes from the global `QueueModule`, so no extra import here.
  */
 @Module({
-  imports: [PrismaModule, RealtimeModule],
+  imports: [PrismaModule, RealtimeModule, CategoryModule],
   providers: [
     ReceiptService,
     ReceiptStorageService,
@@ -25,6 +27,7 @@ import { ReceiptService } from './receipt.service';
     AnthropicExtractionProvider,
     OpenAiExtractionProvider,
     extractionProviderFactory,
+    ReceiptExtractionProcessor,
   ],
   controllers: [ReceiptController],
   exports: [ReceiptService, ReceiptStorageService, extractionProviderFactory],

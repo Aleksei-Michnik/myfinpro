@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   RECEIPT_ALLOWED_MIME_TYPES,
@@ -120,6 +120,19 @@ export class ReceiptStorageService {
     await writeFile(absolute, buffer);
     this.logger.log(`Stored receipt file ${fileRef} (${mimeType}, ${buffer.length} bytes)`);
     return { fileRef, mimeType, sizeBytes: buffer.length };
+  }
+
+  /** Read the whole file — the extraction worker needs a buffer (≤ 10MB). */
+  async read(fileRef: string): Promise<Buffer> {
+    const absolute = this.resolveFileRef(fileRef);
+    try {
+      return await readFile(absolute);
+    } catch {
+      throw new NotFoundException({
+        message: 'Receipt file not found',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
+      });
+    }
   }
 
   /** Open a read stream for the download endpoint. 404s when missing. */
