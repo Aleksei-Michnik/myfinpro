@@ -7486,3 +7486,69 @@ tree in parallel — receipt commits stage files explicitly and leave
 
 **Next** — 7.8 (review page: header + items editing, merchant
 autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
+
+---
+
+## Phase 7 · Iteration 7.8 — Receipt review & edit (2026-07-05)
+
+**API.** Three REVIEW-only editing endpoints on the receipt resource:
+
+- `PATCH /receipts/:id` — header corrections (`extractedMerchantName`,
+  `merchantId` link/unlink, `purchasedAt`, `currency`, `totalCents`,
+  `discountCents`). All fields optional; an explicit `null` clears a
+  nullable column while omission leaves it untouched (DTO uses
+  `@IsOptional()` + `@ValidateIf((o) => o.field !== null)` so `null`
+  bypasses the value validators). Editing is gated to `REVIEW`
+  (`assertInReview`); merchant link is validated to exist.
+- `PUT /receipts/:id/items` — full line-item replacement (max 200 rows) in
+  a transaction (`deleteMany` + `createMany`, 1-based `position`). Each
+  row's `categoryId` is validated against the user's visible OUT
+  categories (`CategoryService.list(userId, { direction: 'OUT' })`), so
+  items can't be filed under a hidden/foreign category.
+- `GET /merchants?search=` — global merchant registry autocomplete;
+  normalized `contains` match (`take 10`).
+- `normalizeMerchantName` util (NFD → strip diacritics → lowercase →
+  collapse whitespace → trim → `slice(0, 200)`) backs both merchant
+  matching and dedup. `ReceiptModule` now imports `CategoryModule`;
+  `MerchantController` registered.
+
+**Web.** `/receipts/[receiptId]` review page (server shell → client under
+`ProtectedRoute`):
+
+- **Preview** — authenticated file fetch (`fetchFileBlob` → `Bearer`) piped
+  through `URL.createObjectURL` (an `<img src>` can't carry the token),
+  revoked on cleanup; PDFs render in `<object>`, URL-sourced receipts link
+  out instead of fetching.
+- **Header form** — merchant input with a 300ms-debounced autocomplete;
+  picking a suggestion pins the registry `merchantId` (shows a "linked"
+  hint), typing again unpins it. Date/currency/total/discount with a live
+  advisory **mismatch warning** (`total − (Σ items − discount)`), which
+  never blocks saving.
+- **Items table** — editable rows (name, qty, total, per-item category
+  select) with add/remove; client-side validation (non-empty name,
+  positive qty, parseable total) before save.
+- **Save** = `updateReceipt` (PATCH header) then `replaceItems` (PUT items),
+  both under one `saveOp`; success rehydrates from the PUT response.
+  Non-`REVIEW` statuses render read-only; `FAILED` shows a retry banner.
+  Realtime `receipt.updated` rehydrates unless mid-edit at the same status;
+  resync refetch is skipped while the form is dirty.
+- Context gained `updateReceipt` / `replaceItems` / `searchMerchants` /
+  `fetchFileBlob`; wire types `ReceiptItemInput` / `UpdateReceiptInput` /
+  `MerchantSuggestion`; list rows now link to the review page.
+  `receipts.review` i18n namespace added (EN/HE parity verified).
+
+### Tests
+
+API: 65 receipt-suite tests green (adds `update` / `replaceItems` /
+`searchMerchants` / normalization coverage). Web: review-client spec (17)
+covers hydrate, 404/500 load branches, save PATCH+PUT payloads, merchant
+debounce/pick/unpin, mismatch, read-only, FAILED retry, add/remove rows,
+blob preview vs URL link, realtime rehydrate + dirty-guarded resync; plus
+the list-row Link. **Web receipt specs 31 green; typecheck + lint clean.**
+
+**Coordination note:** budget work (Phase 10) still in the same tree —
+7.8 staged its 18 files explicitly; `apps/api/src/budget/*`,
+`app.module.ts`, and `realtime/events.types.ts` left untouched.
+
+**Next** — 7.9 (confirm → Payment OUT + PaymentDocument), 7.10 (closing
+pass: integration + E2E, i18n sweep).
