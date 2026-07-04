@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.provider';
+import { extractionProviderFactory } from './extraction/extraction-provider.factory';
+import { MockExtractionProvider } from './extraction/mock-extraction.provider';
+import { OpenAiExtractionProvider } from './extraction/openai-extraction.provider';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
 import { ReceiptService } from './receipt.service';
@@ -14,8 +18,15 @@ import { ReceiptService } from './receipt.service';
  */
 @Module({
   imports: [PrismaModule, RealtimeModule],
-  providers: [ReceiptService, ReceiptStorageService],
+  providers: [
+    ReceiptService,
+    ReceiptStorageService,
+    MockExtractionProvider,
+    AnthropicExtractionProvider,
+    OpenAiExtractionProvider,
+    extractionProviderFactory,
+  ],
   controllers: [ReceiptController],
-  exports: [ReceiptService, ReceiptStorageService],
+  exports: [ReceiptService, ReceiptStorageService, extractionProviderFactory],
 })
 export class ReceiptModule {}
