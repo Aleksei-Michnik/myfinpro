@@ -21,6 +21,7 @@ import type {
   PaymentListResponse,
   PaymentPropagateMode,
   PaymentSummary,
+  PlanResponse,
   ScheduleResponse,
   ScheduleSpec,
   ToggleStarResult,
@@ -119,6 +120,12 @@ interface PaymentContextValue {
   pauseSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
   resumeSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
   cancelSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+
+  // Plans (Phase 6 · Iteration 6.20). Creation is inline on createPayment
+  // (plan body); these cover the detail-page read + terminal cancel.
+  /** 404 (no plan) is translated to `null` so absence is not a UI error. */
+  getPlan(paymentId: string, signal?: AbortSignal): Promise<PlanResponse | null>;
+  cancelPlan(paymentId: string, signal?: AbortSignal): Promise<PlanResponse>;
 
   // Transient state
   isLoading: boolean;
@@ -527,6 +534,36 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     [scheduleLifecycle],
   );
 
+  // ── Plans (Phase 6 · Iteration 6.20) ────────────────────────────────────
+
+  const getPlan = useCallback(
+    (paymentId: string, signal?: AbortSignal): Promise<PlanResponse | null> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/plan`, {
+          headers: authHeaders(),
+          signal,
+        });
+        if (res.status === 404) return null;
+        if (!res.ok) await throwApiError(res, 'Failed to load plan');
+        return (await res.json()) as PlanResponse;
+      }),
+    [authHeaders, run],
+  );
+
+  const cancelPlan = useCallback(
+    (paymentId: string, signal?: AbortSignal): Promise<PlanResponse> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/plan`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to cancel plan');
+        return (await res.json()) as PlanResponse;
+      }),
+    [authHeaders, run],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<PaymentContextValue>(
@@ -551,6 +588,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       pauseSchedule,
       resumeSchedule,
       cancelSchedule,
+      getPlan,
+      cancelPlan,
       isLoading,
       error,
       clearError,
@@ -576,6 +615,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       pauseSchedule,
       resumeSchedule,
       cancelSchedule,
+      getPlan,
+      cancelPlan,
       isLoading,
       error,
       clearError,

@@ -1,8 +1,10 @@
 'use client';
 
 // Phase 6 · Iteration 6.13 — disclosure-based PaymentType picker.
-// ONE_TIME is the only enabled option in this iteration; others show a
-// "Coming soon" badge with iteration-hint tooltip (6.18 / 6.20).
+// 6.18.1 enabled RECURRING; 6.20 enables the plan kinds (INSTALLMENT /
+// LOAN / MORTGAGE) in CREATE mode — plan parents are not editable, so the
+// edit flow passes `planKindsEnabled={false}` and they fall back to the
+// disabled "coming soon"-style rendering. LIMITED_PERIOD still ships later.
 
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -13,15 +15,30 @@ export interface PaymentTypeSelectorProps {
   onChange(next: PaymentType): void;
   /** When true, every option — including ONE_TIME — is disabled. */
   disabled?: boolean;
+  /**
+   * Plan kinds are create-only (the API cannot convert an existing payment
+   * into a plan parent). Defaults to true; the edit flow passes false.
+   */
+  planKindsEnabled?: boolean;
 }
 
 // Phase 6 · Iteration 6.18.1 — RECURRING moves out of the "coming soon"
-// list; the schedule sub-form is the producer-facing UI for it. The
-// remaining types still ship later (LIMITED_PERIOD: 6.18.x, plans: 6.20).
-const ENABLED_ADVANCED_TYPES: PaymentType[] = ['RECURRING'];
-const COMING_SOON_TYPES: PaymentType[] = ['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE'];
+// list; 6.20 moves the plan kinds out too (create mode only).
+const PLAN_KIND_TYPES: PaymentType[] = ['INSTALLMENT', 'LOAN', 'MORTGAGE'];
+const ALWAYS_COMING_SOON: PaymentType[] = ['LIMITED_PERIOD'];
 
-export function PaymentTypeSelector({ value, onChange, disabled }: PaymentTypeSelectorProps) {
+export function PaymentTypeSelector({
+  value,
+  onChange,
+  disabled,
+  planKindsEnabled = true,
+}: PaymentTypeSelectorProps) {
+  const enabledAdvancedTypes: PaymentType[] = planKindsEnabled
+    ? ['RECURRING', ...PLAN_KIND_TYPES]
+    : ['RECURRING'];
+  const comingSoonTypes: PaymentType[] = planKindsEnabled
+    ? ALWAYS_COMING_SOON
+    : [...ALWAYS_COMING_SOON, ...PLAN_KIND_TYPES];
   const t = useTranslations('payments.types');
   const [expanded, setExpanded] = useState(false);
 
@@ -61,7 +78,7 @@ export function PaymentTypeSelector({ value, onChange, disabled }: PaymentTypeSe
 
       {expanded && (
         <div className="mt-2 space-y-1" data-testid="type-advanced-list">
-          {ENABLED_ADVANCED_TYPES.map((type) => (
+          {enabledAdvancedTypes.map((type) => (
             <label
               key={type}
               className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"
@@ -79,7 +96,7 @@ export function PaymentTypeSelector({ value, onChange, disabled }: PaymentTypeSe
               <span>{t(`options.${type}`)}</span>
             </label>
           ))}
-          {COMING_SOON_TYPES.map((type) => (
+          {comingSoonTypes.map((type) => (
             <label
               key={type}
               className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400"

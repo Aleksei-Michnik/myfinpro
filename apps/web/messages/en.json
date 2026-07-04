@@ -855,6 +855,67 @@
         "cancelledToast": "Schedule cancelled",
         "actionFailed": "Schedule action failed"
       }
+    },
+    "plan": {
+      "kind": {
+        "INSTALLMENT": "Installment plan",
+        "LOAN": "Loan",
+        "MORTGAGE": "Mortgage"
+      },
+      "statusActive": "Active",
+      "statusCancelled": "Cancelled",
+      "summary": "{principal} over {count} payments · {rate}% p.a. · {frequency} · {method}",
+      "table": {
+        "dueAt": "Due",
+        "principal": "Principal",
+        "interest": "Interest",
+        "total": "Payment",
+        "remaining": "Remaining",
+        "status": "Status"
+      },
+      "rowStatus": {
+        "PENDING": "Pending",
+        "POSTED": "Posted",
+        "DUE": "Due",
+        "CANCELLED": "Cancelled"
+      },
+      "cancelAction": "Cancel plan",
+      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending payments will be marked cancelled; nothing is deleted.",
+      "cancelConfirmYes": "Yes, cancel",
+      "cancelConfirmKeep": "Keep plan",
+      "cancelledToast": "Plan cancelled",
+      "cancelFailed": "Plan action failed",
+      "form": {
+        "legend": "Plan details",
+        "rateLabel": "Annual interest rate (%)",
+        "countLabel": "Number of payments",
+        "frequencyLabel": "Frequency",
+        "firstDueLabel": "First payment due",
+        "methodLabel": "Amortisation method",
+        "principalHint": "The amount above is the plan's principal; each payment is derived from it.",
+        "frequency": {
+          "DAILY": "Daily",
+          "WEEKLY": "Weekly",
+          "BIWEEKLY": "Every two weeks",
+          "MONTHLY": "Monthly",
+          "QUARTERLY": "Quarterly",
+          "ANNUAL": "Annual"
+        },
+        "method": {
+          "auto": "Automatic (by type)",
+          "equal": "Equal (no interest)",
+          "french": "Annuity (fixed payment)"
+        },
+        "validation": {
+          "rateInvalid": "Enter a rate of 0 or more",
+          "rateTooHigh": "Rate cannot exceed 100%",
+          "countInvalid": "Enter a whole number of payments (at least 1)",
+          "countTooHigh": "At most 600 payments",
+          "firstDueRequired": "Pick the first due date",
+          "firstDueInvalid": "Invalid date",
+          "equalRequiresZeroRate": "The equal method is interest-free — set the rate to 0 or pick the annuity method"
+        }
+      }
     }
   },
   "categories": {

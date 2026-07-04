@@ -8,10 +8,17 @@
 // with Retry. Domain errors (PAYMENT_INVALID_*) still map to per-field
 // errors.
 
-import { CURRENCY_CODES } from '@myfinpro/shared';
+import { CURRENCY_CODES, isPlanKind } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PaymentCategoryPicker } from './PaymentCategoryPicker';
+import {
+  PaymentPlanSubForm,
+  buildPlanSpec,
+  defaultPlanSubFormState,
+  type PlanSubFormErrors,
+  type PlanSubFormState,
+} from './PaymentPlanSubForm';
 import {
   PaymentScheduleSubForm,
   buildScheduleSpec,
@@ -252,6 +259,7 @@ export function PaymentFormDialog({
   const tSchedule = useTranslations('payments.schedule.form');
   const tScheduleValidation = useTranslations('payments.schedule.form.validation');
   const tPropagate = useTranslations('payments.propagate');
+  const tPlanValidation = useTranslations('payments.plan.form.validation');
   const { addToast } = useToast();
   const { user } = useAuth();
   const { groups } = useGroups();
@@ -316,6 +324,9 @@ export function PaymentFormDialog({
   const [state, setState] = useState<FormState>(initialState);
   const [scheduleState, setScheduleState] = useState<ScheduleSubFormState>(initialScheduleState);
   const [scheduleErrors, setScheduleErrors] = useState<ScheduleSubFormErrors>({});
+  // Plan sub-form state (6.20) — sticky across type toggles, create-only.
+  const [planState, setPlanState] = useState<PlanSubFormState>(defaultPlanSubFormState());
+  const [planErrors, setPlanErrors] = useState<PlanSubFormErrors>({});
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const initialStateRef = useRef(initialState);
@@ -347,6 +358,8 @@ export function PaymentFormDialog({
       setScheduleState(initialScheduleState);
       initialScheduleStateRef.current = initialScheduleState;
       setScheduleErrors({});
+      setPlanState(defaultPlanSubFormState());
+      setPlanErrors({});
       setErrors({});
       setConfirmDiscard(false);
       saveOp.reset();
@@ -561,8 +574,19 @@ export function PaymentFormDialog({
       setScheduleErrors({});
     }
 
+    // Plan sub-form (6.20) — create-only; plan parents are not editable.
+    const isPlanCreate = mode === 'create' && isPlanKind(state.type);
+    let planBuild: ReturnType<typeof buildPlanSpec> | null = null;
+    if (isPlanCreate) {
+      planBuild = buildPlanSpec(planState, state.type, tPlanValidation);
+      setPlanErrors(planBuild.errors);
+    } else {
+      setPlanErrors({});
+    }
+
     if (!ok) return;
     if (willBeRecurring && scheduleBuild && !scheduleBuild.ok) return;
+    if (isPlanCreate && planBuild && !planBuild.ok) return;
 
     // Phase 6 · 6.18.1.5 — when editing a RECURRING parent that has children,
     // and the diff touches a cascadeable non-period field, defer the submit
@@ -590,7 +614,12 @@ export function PaymentFormDialog({
           if (mode === 'create') {
             const payload: CreatePaymentInput = {
               direction: state.direction,
-              type: willBeRecurring ? 'RECURRING' : 'ONE_TIME',
+              type: isPlanCreate
+                ? (state.type as 'INSTALLMENT' | 'LOAN' | 'MORTGAGE')
+                : willBeRecurring
+                  ? 'RECURRING'
+                  : 'ONE_TIME',
+              ...(isPlanCreate && planBuild ? { plan: planBuild.spec } : {}),
               amountCents,
               currency: state.currency,
               occurredAt: occurredAtIso,
@@ -1042,6 +1071,7 @@ export function PaymentFormDialog({
               value={state.type}
               onChange={(next) => setState((s) => ({ ...s, type: next }))}
               disabled={allInputsDisabled}
+              planKindsEnabled={mode === 'create'}
             />
           </div>
 
@@ -1068,6 +1098,19 @@ export function PaymentFormDialog({
                 state={scheduleState}
                 errors={scheduleErrors}
                 onChange={setScheduleState}
+                disabled={allInputsDisabled}
+              />
+            </div>
+          )}
+
+          {/* Plan sub-form (6.20) — create-only for INSTALLMENT / LOAN /
+              MORTGAGE; plan parents are read-only in edit mode. */}
+          {mode === 'create' && isPlanKind(state.type) && (
+            <div className="mb-4">
+              <PaymentPlanSubForm
+                state={planState}
+                errors={planErrors}
+                onChange={setPlanState}
                 disabled={allInputsDisabled}
               />
             </div>

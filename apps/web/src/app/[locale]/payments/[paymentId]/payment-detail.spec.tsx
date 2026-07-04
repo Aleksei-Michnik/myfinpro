@@ -24,6 +24,8 @@ const mockListCategories = vi.fn();
 const mockPauseSchedule = vi.fn();
 const mockResumeSchedule = vi.fn();
 const mockCancelSchedule = vi.fn();
+const mockGetPlan = vi.fn();
+const mockCancelPlan = vi.fn();
 
 const mockRouterReplace = vi.fn();
 const mockRouterPush = vi.fn();
@@ -81,6 +83,8 @@ vi.mock('@/lib/payment/payment-context', () => ({
     pauseSchedule: mockPauseSchedule,
     resumeSchedule: mockResumeSchedule,
     cancelSchedule: mockCancelSchedule,
+    getPlan: mockGetPlan,
+    cancelPlan: mockCancelPlan,
   }),
 }));
 
@@ -132,6 +136,9 @@ describe('PaymentDetailClient', () => {
     mockPauseSchedule.mockReset();
     mockResumeSchedule.mockReset();
     mockCancelSchedule.mockReset();
+    mockGetPlan.mockReset();
+    mockGetPlan.mockResolvedValue(null);
+    mockCancelPlan.mockReset();
     mockRouterReplace.mockReset();
     mockRouterPush.mockReset();
     mockAddToast.mockReset();
@@ -267,8 +274,10 @@ describe('PaymentDetailClient', () => {
     );
   });
 
-  it('schedule/plan placeholder is shown for still-unsupported types (INSTALLMENT)', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
+  it('schedule/plan placeholder is shown for still-unsupported types (LIMITED_PERIOD)', async () => {
+    // 6.20 made the plan kinds first-class — LIMITED_PERIOD is the only
+    // remaining type that falls back to the placeholder.
+    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'LIMITED_PERIOD' }));
     render(<PaymentDetailClient paymentId="p-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('payment-schedule-plan-placeholder')).toBeInTheDocument(),
@@ -632,6 +641,65 @@ describe('PaymentDetailClient', () => {
       fireEvent.click(screen.getByTestId('schedule-action-pause'));
       await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('error', expect.any(String)));
       expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active');
+    });
+  });
+
+  // ── Phase 6 · Iteration 6.20 — plan section wiring ─────────────────────
+
+  describe('plan parents (6.20)', () => {
+    it('INSTALLMENT parent renders the plan section instead of the legacy placeholder', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
+      mockGetPlan.mockResolvedValueOnce({
+        id: 'plan-1',
+        paymentId: 'p-1',
+        kind: 'INSTALLMENT',
+        principalCents: 120_000,
+        interestRate: 0,
+        paymentsCount: 2,
+        frequency: 'MONTHLY',
+        firstDueAt: '2026-08-01T00:00:00.000Z',
+        amortizationMethod: 'equal',
+        cancelledAt: null,
+        createdAt: '2026-07-04T00:00:00.000Z',
+        rows: [
+          {
+            index: 1,
+            dueAt: '2026-08-01T00:00:00.000Z',
+            principalCents: 60_000,
+            interestCents: 0,
+            totalCents: 60_000,
+            remainingCents: 60_000,
+            occurrenceId: 'occ-1',
+            status: 'PENDING',
+          },
+          {
+            index: 2,
+            dueAt: '2026-09-01T00:00:00.000Z',
+            principalCents: 60_000,
+            interestCents: 0,
+            totalCents: 60_000,
+            remainingCents: 0,
+            occurrenceId: 'occ-2',
+            status: 'PENDING',
+          },
+        ],
+      });
+
+      render(<PaymentDetailClient paymentId="p-1" />);
+      await waitFor(() => expect(screen.getByTestId('plan-section')).toBeInTheDocument());
+      expect(mockGetPlan).toHaveBeenCalledWith('p-1', expect.anything());
+      expect(screen.getAllByTestId(/^plan-row-\d+$/)).toHaveLength(2);
+      // Neither the recurring machinery nor the legacy placeholder mounts.
+      expect(screen.queryByTestId('schedule-badge')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('schedule-plan-placeholder')).not.toBeInTheDocument();
+      expect(mockGetSchedule).not.toHaveBeenCalled();
+    });
+
+    it('ONE_TIME payments never fetch a plan', async () => {
+      mockGetPayment.mockResolvedValueOnce(makePayment());
+      render(<PaymentDetailClient paymentId="p-1" />);
+      await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+      expect(mockGetPlan).not.toHaveBeenCalled();
     });
   });
 });

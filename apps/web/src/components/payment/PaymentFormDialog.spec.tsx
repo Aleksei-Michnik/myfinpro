@@ -566,6 +566,79 @@ describe('PaymentFormDialog', () => {
     expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
   });
 
+  // ── Phase 6 · 6.20 — plan kinds (INSTALLMENT / LOAN / MORTGAGE) ───────────
+
+  describe('plans (6.20)', () => {
+    function pickPlanKind(kind: 'INSTALLMENT' | 'LOAN' | 'MORTGAGE') {
+      fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+      fireEvent.click(screen.getByTestId(`type-radio-${kind}`));
+    }
+
+    it('create: picking a plan kind reveals the plan sub-form', () => {
+      renderCreate();
+      pickPlanKind('INSTALLMENT');
+      expect(screen.getByTestId('payment-plan-subform')).toBeInTheDocument();
+      // Mutually exclusive with the schedule sub-form.
+      expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+    });
+
+    it('create: LOAN posts type + plan body with percent converted to a fraction', async () => {
+      createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'loan-1', type: 'LOAN' }));
+      const { onSaved } = renderCreate();
+      fillBaseFields();
+      pickPlanKind('LOAN');
+      fireEvent.change(screen.getByTestId('plan-rate'), { target: { value: '5' } });
+      fireEvent.change(screen.getByTestId('plan-count'), { target: { value: '60' } });
+      fireEvent.change(screen.getByTestId('plan-first-due'), { target: { value: '2026-08-01' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
+      const payload = createPaymentMock.mock.calls[0][0];
+      expect(payload.type).toBe('LOAN');
+      expect(payload.plan).toEqual({
+        interestRate: 0.05,
+        paymentsCount: 60,
+        frequency: 'MONTHLY',
+        firstDueAt: '2026-08-01T00:00:00.000Z',
+      });
+      // Single-step create: no schedule call for plan kinds.
+      expect(createScheduleMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    });
+
+    it('create: invalid plan (INSTALLMENT with non-zero rate) short-circuits the save', async () => {
+      renderCreate();
+      fillBaseFields();
+      pickPlanKind('INSTALLMENT');
+      fireEvent.change(screen.getByTestId('plan-rate'), { target: { value: '5' } });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('form-save'));
+      });
+      expect(await screen.findByTestId('plan-error-rate')).toBeInTheDocument();
+      expect(createPaymentMock).not.toHaveBeenCalled();
+    });
+
+    it('create: explicit method override is included in the payload', async () => {
+      createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'inst-1', type: 'INSTALLMENT' }));
+      renderCreate();
+      fillBaseFields();
+      pickPlanKind('INSTALLMENT');
+      fireEvent.change(screen.getByTestId('plan-method'), { target: { value: 'french' } });
+      fireEvent.change(screen.getByTestId('plan-rate'), { target: { value: '3' } });
+      fireEvent.change(screen.getByTestId('plan-first-due'), { target: { value: '2026-08-01' } });
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
+      expect(createPaymentMock.mock.calls[0][0].plan.amortizationMethod).toBe('french');
+    });
+
+    it('edit: plan kinds stay disabled (create-only)', () => {
+      renderEdit(makePayment({ type: 'ONE_TIME' }));
+      fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+      const radio = screen.getByTestId('type-radio-INSTALLMENT') as HTMLInputElement;
+      expect(radio.disabled).toBe(true);
+      expect(screen.getByTestId('type-badge-INSTALLMENT')).toBeInTheDocument();
+    });
+  });
+
   // ── Phase 6 · 6.18.1.5 — cascade edit with propagation choice ─────────────
 
   describe('propagation (6.18.1.5)', () => {

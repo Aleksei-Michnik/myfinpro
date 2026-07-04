@@ -24,13 +24,34 @@ describe('PaymentTypeSelector', () => {
     expect(radio.disabled).toBe(false);
   });
 
-  it('still-disabled advanced radios carry aria-disabled', () => {
+  it('still-disabled advanced radios carry aria-disabled (LIMITED_PERIOD only since 6.20)', () => {
     render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    for (const t of ['LIMITED_PERIOD', 'INSTALLMENT', 'LOAN', 'MORTGAGE']) {
+    const el = screen.getByTestId('type-radio-LIMITED_PERIOD') as HTMLInputElement;
+    expect(el.disabled).toBe(true);
+    expect(el).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('plan kinds are enabled by default (6.20 create flow)', () => {
+    const onChange = vi.fn();
+    render(<PaymentTypeSelector value="ONE_TIME" onChange={onChange} />);
+    fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+    for (const t of ['INSTALLMENT', 'LOAN', 'MORTGAGE']) {
+      const el = screen.getByTestId(`type-radio-${t}`) as HTMLInputElement;
+      expect(el.disabled).toBe(false);
+      expect(screen.queryByTestId(`type-badge-${t}`)).not.toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByTestId('type-radio-LOAN'));
+    expect(onChange).toHaveBeenCalledWith('LOAN');
+  });
+
+  it('planKindsEnabled=false demotes plan kinds to coming-soon (edit flow)', () => {
+    render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} planKindsEnabled={false} />);
+    fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
+    for (const t of ['INSTALLMENT', 'LOAN', 'MORTGAGE']) {
       const el = screen.getByTestId(`type-radio-${t}`) as HTMLInputElement;
       expect(el.disabled).toBe(true);
-      expect(el).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByTestId(`type-badge-${t}`)).toBeInTheDocument();
     }
   });
 
@@ -45,8 +66,7 @@ describe('PaymentTypeSelector', () => {
   it('still-disabled options render the coming-soon badge', () => {
     render(<PaymentTypeSelector value="ONE_TIME" onChange={() => {}} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    expect(screen.getByTestId('type-badge-INSTALLMENT')).toBeInTheDocument();
-    expect(screen.getByTestId('type-badge-MORTGAGE')).toBeInTheDocument();
+    expect(screen.getByTestId('type-badge-LIMITED_PERIOD')).toBeInTheDocument();
   });
 
   it('clicking RECURRING fires onChange with RECURRING', () => {
@@ -61,7 +81,7 @@ describe('PaymentTypeSelector', () => {
     const onChange = vi.fn();
     render(<PaymentTypeSelector value="ONE_TIME" onChange={onChange} />);
     fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
-    fireEvent.change(screen.getByTestId('type-radio-INSTALLMENT'));
+    fireEvent.change(screen.getByTestId('type-radio-LIMITED_PERIOD'));
     expect(onChange).not.toHaveBeenCalled();
   });
 

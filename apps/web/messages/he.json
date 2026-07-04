@@ -855,6 +855,67 @@
         "cancelledToast": "התזמון בוטל",
         "actionFailed": "פעולת התזמון נכשלה"
       }
+    },
+    "plan": {
+      "kind": {
+        "INSTALLMENT": "תוכנית תשלומים",
+        "LOAN": "הלוואה",
+        "MORTGAGE": "משכנתא"
+      },
+      "statusActive": "פעילה",
+      "statusCancelled": "בוטלה",
+      "summary": "{principal} על פני {count} תשלומים · {rate}% שנתי · {frequency} · {method}",
+      "table": {
+        "dueAt": "מועד",
+        "principal": "קרן",
+        "interest": "ריבית",
+        "total": "תשלום",
+        "remaining": "יתרה",
+        "status": "סטטוס"
+      },
+      "rowStatus": {
+        "PENDING": "ממתין",
+        "POSTED": "נרשם",
+        "DUE": "לתשלום",
+        "CANCELLED": "בוטל"
+      },
+      "cancelAction": "ביטול תוכנית",
+      "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תשלומים עתידיים יסומנו כמבוטלים; דבר לא יימחק.",
+      "cancelConfirmYes": "כן, לבטל",
+      "cancelConfirmKeep": "להשאיר את התוכנית",
+      "cancelledToast": "התוכנית בוטלה",
+      "cancelFailed": "פעולת התוכנית נכשלה",
+      "form": {
+        "legend": "פרטי התוכנית",
+        "rateLabel": "ריבית שנתית (%)",
+        "countLabel": "מספר תשלומים",
+        "frequencyLabel": "תדירות",
+        "firstDueLabel": "מועד התשלום הראשון",
+        "methodLabel": "שיטת סילוקין",
+        "principalHint": "הסכום שלמעלה הוא קרן התוכנית; כל תשלום נגזר ממנו.",
+        "frequency": {
+          "DAILY": "יומי",
+          "WEEKLY": "שבועי",
+          "BIWEEKLY": "דו־שבועי",
+          "MONTHLY": "חודשי",
+          "QUARTERLY": "רבעוני",
+          "ANNUAL": "שנתי"
+        },
+        "method": {
+          "auto": "אוטומטי (לפי הסוג)",
+          "equal": "שווה (ללא ריבית)",
+          "french": "שפיצר (תשלום קבוע)"
+        },
+        "validation": {
+          "rateInvalid": "יש להזין ריבית 0 או יותר",
+          "rateTooHigh": "הריבית לא יכולה לעלות על 100%",
+          "countInvalid": "יש להזין מספר שלם של תשלומים (לפחות 1)",
+          "countTooHigh": "עד 600 תשלומים",
+          "firstDueRequired": "יש לבחור את מועד התשלום הראשון",
+          "firstDueInvalid": "תאריך לא תקין",
+          "equalRequiresZeroRate": "השיטה השווה היא ללא ריבית — יש להגדיר ריבית 0 או לבחור בשיטת שפיצר"
+        }
+      }
     }
   },
   "categories": {

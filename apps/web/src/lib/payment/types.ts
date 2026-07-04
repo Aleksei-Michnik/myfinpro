@@ -128,8 +128,12 @@ export interface CreatePaymentInput {
    * itself is created by a separate POST /payments/:id/schedule call (see
    * the two-step create flow in `<PaymentFormDialog>`); the request body
    * therefore still carries no `schedule` payload.
+   *
+   * Iteration 6.20 adds the plan kinds — these DO carry an inline `plan`
+   * body (single-step create; the API pre-generates the occurrence rows in
+   * the same transaction).
    */
-  type: 'ONE_TIME' | 'RECURRING';
+  type: 'ONE_TIME' | 'RECURRING' | 'INSTALLMENT' | 'LOAN' | 'MORTGAGE';
   amountCents: number;
   currency: string;
   occurredAt: string;
@@ -137,7 +141,54 @@ export interface CreatePaymentInput {
   note?: string;
   attributions: AttributionScope[];
   schedule?: never;
-  plan?: never;
+  plan?: PlanSpec;
+}
+
+// ── Plan wire types (Phase 6 · Iteration 6.20) ──────────────────────────────
+
+/**
+ * Inline plan body on POST /payments when type ∈ {INSTALLMENT, LOAN,
+ * MORTGAGE}. The plan's principal is the payment's own `amountCents` and its
+ * kind is the payment `type` — deliberately no separate fields.
+ */
+export interface PlanSpec {
+  /** Annual rate as a decimal fraction (0.05 = 5%). Must be 0 for `equal`. */
+  interestRate: number;
+  /** 1..600. */
+  paymentsCount: number;
+  frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  /** ISO 8601 datetime. */
+  firstDueAt: string;
+  /** Defaults by kind: INSTALLMENT → 'equal', LOAN / MORTGAGE → 'french'. */
+  amortizationMethod?: 'equal' | 'french';
+}
+
+/** One amortisation-table row served by GET /payments/:id/plan. */
+export interface PlanRow {
+  index: number;
+  dueAt: string;
+  principalCents: number;
+  interestCents: number;
+  totalCents: number;
+  remainingCents: number;
+  occurrenceId: string | null;
+  status: string | null;
+}
+
+/** Wire shape returned by GET / DELETE /payments/:id/plan. */
+export interface PlanResponse {
+  id: string;
+  paymentId: string;
+  kind: 'INSTALLMENT' | 'LOAN' | 'MORTGAGE';
+  principalCents: number;
+  interestRate: number;
+  paymentsCount: number;
+  frequency: PlanSpec['frequency'];
+  firstDueAt: string;
+  amortizationMethod: 'equal' | 'french';
+  cancelledAt: string | null;
+  createdAt: string;
+  rows: PlanRow[];
 }
 
 // ── Schedule wire types (Phase 6 · Iteration 6.18.1) ────────────────────────

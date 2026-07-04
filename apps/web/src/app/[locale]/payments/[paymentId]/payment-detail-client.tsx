@@ -8,6 +8,7 @@
 //   - edit (PaymentFormDialog) + delete (DeletePaymentDialog) mounts
 //   - star-toggle bubble-up + comment-append bridging
 
+import { isPlanKind } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DeletePaymentDialog } from '@/components/payment/DeletePaymentDialog';
@@ -19,6 +20,7 @@ import {
 import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
 import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
 import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
+import { PaymentPlanSection } from '@/components/payment/PaymentPlanSection';
 import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
 import { RecurringOccurrencesSection } from '@/components/payment/RecurringOccurrencesSection';
 import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
@@ -299,14 +301,16 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
     );
   }
 
-  // 6.18.1: RECURRING parents render the live `<ScheduleBadge>`. The
-  // legacy "schedule/plan placeholder" stays visible only for the still-
-  // unsupported types (LIMITED_PERIOD, INSTALLMENT, LOAN, MORTGAGE) and
-  // for non-RECURRING child occurrences.
+  // 6.18.1: RECURRING parents render the live `<ScheduleBadge>`; 6.20: plan
+  // parents (INSTALLMENT / LOAN / MORTGAGE) render `<PaymentPlanSection>`.
+  // The legacy "schedule/plan placeholder" stays only for LIMITED_PERIOD
+  // and for child occurrences.
   const isRecurringParent = payment.type === 'RECURRING' && payment.parentPaymentId === null;
+  const isPlanParent = isPlanKind(payment.type) && payment.parentPaymentId === null;
   const isChildOccurrence = payment.parentPaymentId !== null;
   const showLegacyPlaceholder =
     !isRecurringParent &&
+    !isPlanParent &&
     (isChildOccurrence || (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING'));
 
   return (
@@ -352,6 +356,14 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
       )}
 
       {isRecurringParent && <RecurringOccurrencesSection paymentId={payment.id} />}
+
+      {isPlanParent && (
+        <PaymentPlanSection
+          paymentId={payment.id}
+          createdById={payment.createdById}
+          currency={payment.currency}
+        />
+      )}
 
       <PaymentDocumentsPlaceholder />
 
