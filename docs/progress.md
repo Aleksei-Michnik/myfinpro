@@ -7091,3 +7091,81 @@ amortisation), 6.21 (closing pass; production merge deliberately held for
 manual trigger).
 
 **Next** — 6.19 (Plans API + amortisation util).
+
+---
+
+## Phase 6 · Iteration 6.19 — Plans API + amortisation (2026-07-04)
+
+**Goal.** Light up the INSTALLMENT / LOAN / MORTGAGE payment types: pure
+amortisation math, inline plan creation on `POST /payments`, pre-generated
+occurrence rows, and the read/cancel REST surface.
+
+### Amortisation util ([`amortization.util.ts`](../apps/api/src/payment/utils/amortization.util.ts))
+
+- **`equal`** — zero-interest split; the first `principal % N` rows carry one
+  extra cent so Σ principal === principal exactly.
+- **`french`** — constant annuity `A = P·r/(1−(1+r)^−n)` with per-period rate
+  `annualRate / periodsPerYear`; per-row interest rounded on the declining
+  balance; the final row absorbs rounding so the balance closes on exactly 0.
+- Month-based frequencies anchor to the first due date's day-of-month and
+  clamp to shorter months (Jan 31 → Feb 28 → Mar 31, leap-safe).
+- 22 unit cases against hand-calculated fixtures — the design acceptance
+  values hold: $1200 @ 0% × 12 → twelve $100 rows; $10,000 @ 5% × 60 →
+  $188.71 annuity with $41.67 first-month interest.
+
+### API
+
+- `POST /payments` with `type ∈ {INSTALLMENT, LOAN, MORTGAGE}` now requires an
+  inline `plan` body (`interestRate`, `paymentsCount` ≤ 600, `frequency`,
+  `firstDueAt`, optional `amortizationMethod` — defaults `equal` for
+  INSTALLMENT, `french` for LOAN/MORTGAGE). Principal = the payment's own
+  `amountCents` (no separate field → cannot diverge); kind = the type itself.
+  Validation + schedule computation happen BEFORE the transaction; inside it
+  the `PaymentPlan` row + all N children are created (status `PENDING`,
+  attributions cloned, `idempotencyKey = plan:<planId>:<index>` mirroring the
+  6.17.3 worker convention; 30 s tx timeout for the 600-row worst case).
+- `GET /payments/:id/plan` (any accessor) — plan metadata + amortisation
+  table, recomputed from persisted params and joined with child occurrence
+  ids/statuses via the deterministic idempotency keys.
+- `DELETE /payments/:id/plan` (creator-only) — **terminal cancel**: stamps the
+  new `payment_plans.cancelled_at` column (expand-only migration
+  `20260704080000`) and flips remaining PENDING children to CANCELLED; rows
+  are never deleted, for audit. Repeat → 409 `PAYMENT_PLAN_ALREADY_CANCELLED`.
+- **Deferred**: `PATCH /plan` (regenerate) and `POST /plan` (attach to an
+  existing ONE_TIME) — design §5.6 marks these as advanced-edit endpoints; the
+  primary flow is inline create. Also no realtime `plan.*` events yet — views
+  refetch; the payment realtime events cover the parent.
+- New error codes: `PAYMENT_PLAN_REQUIRED`, `PAYMENT_PLAN_INVALID`,
+  `PAYMENT_PLAN_NOT_FOUND`, `PAYMENT_PLAN_ALREADY_CANCELLED`.
+
+### DRY / structure
+
+- Creation helpers live in
+  [`payment-plan.create.ts`](../apps/api/src/payment/payment-plan.create.ts)
+  as standalone functions so `PaymentService.create()` uses them without a
+  `PaymentService ⇄ PaymentPlanService` DI cycle (the plan service needs
+  `assertVisible` from the payment service).
+- `isPlanKind()` guard added to `@myfinpro/shared` (web reuses it in 6.20).
+
+### Tests
+
+- `amortization.util.spec` — 22 cases (fixtures, anchored dates, invariant
+  grid incl. 360-payment mortgage, validation rejects).
+- `payment.service.spec` — plan-path cases: guard matrix (required /
+  not-supported), full create with 12 children (counts, statuses, idempotency
+  keys, cloned attributions, 30 s timeout), invalid plan rejected pre-write.
+  166 total.
+- `payment-plan.service.spec` (9) + `payment-plan.controller.spec` (2).
+- Integration [`payments-plan`](../apps/api/test/integration/payments-plan.integration.spec.ts)
+  (5) — real-DB acceptance for both fixtures, error codes, terminal cancel,
+  visibility. Full api unit suite **841 green**. (The full integration run
+  also surfaced 59 pre-existing failures in auth/app suites — 409/429s from
+  fixed emails + throttling against the shared dev DB after repeated local
+  runs; unrelated to this iteration, all payment suites green.)
+
+**Commits.** Feat: `53abb7f`.
+
+**Phase 6 status: remaining — 6.20 (Plans UI), 6.21 (closing pass; production
+merge held for manual trigger).**
+
+**Next** — 6.20 (Plans UI: form disclosure, amortisation table, cancel plan).
