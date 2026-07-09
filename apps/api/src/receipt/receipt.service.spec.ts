@@ -147,6 +147,23 @@ describe('ReceiptService', () => {
       expect(dto.sourceUrl).toBe('https://r.example/x');
       expect(queueMock.add).toHaveBeenCalled();
     });
+
+    it('rejects non-public (SSRF) URLs before writing anything', async () => {
+      for (const url of [
+        'http://169.254.169.254/latest',
+        'http://localhost/x',
+        'http://10.0.0.5/x',
+      ]) {
+        try {
+          await service.createFromUrl('u-1', { url });
+          throw new Error(`should have rejected ${url}`);
+        } catch (err) {
+          expect(codeOf(err)).toBe('RECEIPT_INVALID_URL');
+        }
+      }
+      expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
   });
 
   describe('list', () => {

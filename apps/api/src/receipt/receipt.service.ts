@@ -21,6 +21,7 @@ import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { normalizeMerchantName } from './utils/merchant-name.util';
+import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
 /** Include set every read path uses — items + joined merchant name. */
 export const RECEIPT_INCLUDE = {
@@ -94,6 +95,20 @@ export class ReceiptService {
 
   /** POST /receipts/url — online receipt by URL. */
   async createFromUrl(userId: string, dto: CreateReceiptUrlDto): Promise<ReceiptResponseDto> {
+    // Reject non-public targets up front (SSRF guard); the fetcher re-checks
+    // every redirect hop before the worker downloads anything.
+    try {
+      assertPublicReceiptUrl(dto.url);
+    } catch (err) {
+      if (err instanceof UnsafeReceiptUrlError) {
+        throw new BadRequestException({
+          message: err.message,
+          errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_URL,
+        });
+      }
+      throw err;
+    }
+
     const row = await this.prisma.receipt.create({
       data: {
         status: 'UPLOADED',

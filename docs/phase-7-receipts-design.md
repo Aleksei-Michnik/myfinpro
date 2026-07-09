@@ -211,10 +211,26 @@ direction/visibility, attribution scopes) and runs in one transaction.
 `RECEIPT_EXTRACTION_FAILED`, `RECEIPT_ALREADY_CONFIRMED`,
 `RECEIPT_ITEMS_INVALID`, `MERCHANT_NOT_FOUND`.
 
-**Audit actions**: `RECEIPT_UPLOADED`, `RECEIPT_EXTRACTED` (worker),
-`RECEIPT_UPDATED`, `RECEIPT_ITEMS_REPLACED`, `RECEIPT_CONFIRMED` (+ the
-Phase 6 `PAYMENT_CREATED`), `RECEIPT_DELETED`, `RECEIPT_RETRIED`,
-`MERCHANT_CREATED`.
+**Audit matrix** (every lifecycle transition writes one row; all fire-and-
+forget so an audit failure never breaks the operation). Entity is `Receipt`
+unless noted:
+
+| Action                      | Trigger                                 | Entity   | Details                                          |
+| --------------------------- | --------------------------------------- | -------- | ------------------------------------------------ |
+| `RECEIPT_UPLOADED`          | `POST /receipts` / `POST /receipts/url` | Receipt  | `{mimeType, sizeBytes}` or `{sourceUrl}`         |
+| `RECEIPT_EXTRACTED`         | worker → REVIEW                         | Receipt  | `{provider, items, confidence}`                  |
+| `RECEIPT_EXTRACTION_FAILED` | worker terminal failure → FAILED        | Receipt  | `{provider, permanent, reason}`                  |
+| `RECEIPT_RETRIED`           | `POST /receipts/:id/retry`              | Receipt  | `{}`                                             |
+| `RECEIPT_UPDATED`           | `PATCH /receipts/:id`                   | Receipt  | `{changed: [field…]}`                            |
+| `RECEIPT_ITEMS_REPLACED`    | `PUT /receipts/:id/items`               | Receipt  | `{items: count}`                                 |
+| `RECEIPT_CONFIRMED`         | `POST /receipts/:id/confirm`            | Receipt  | `{paymentId, amountCents, currency, merchantId}` |
+| `MERCHANT_CREATED`          | confirm registers a new merchant        | Merchant | `{name}`                                         |
+| `RECEIPT_DELETED`           | `DELETE /receipts/:id`                  | Receipt  | `{status}`                                       |
+
+Note: confirmation does **not** write a separate `PAYMENT_CREATED` audit —
+`RECEIPT_CONFIRMED` records the new `paymentId`, and the payment is still
+announced live via the Phase 6 `payment.created` realtime event. (The
+standalone `POST /payments` path keeps its own `PAYMENT_CREATED` audit.)
 
 ## 5. File Storage
 

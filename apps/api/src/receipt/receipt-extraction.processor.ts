@@ -16,6 +16,7 @@ import {
 } from './extraction/extraction-provider.interface';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
+import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
 type ExtractionJobData = { receiptId: string };
 
@@ -26,6 +27,8 @@ type ProcessOutcome =
 /** Cap for fetched URL snapshots handed to the provider. */
 const URL_SNAPSHOT_MAX_CHARS = 500_000;
 const URL_FETCH_TIMEOUT_MS = 20_000;
+/** Redirect hops the fetcher will follow (each re-validated by the SSRF guard). */
+const URL_MAX_REDIRECTS = 5;
 
 /**
  * Phase 7, iteration 7.6 — the extraction worker (design §6.2).
@@ -161,22 +164,55 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     return { kind: 'image', data: buffer, mimeType: receipt.mimeType ?? 'image/jpeg' };
   }
 
-  /** Fetch the online receipt. Transient network errors ride the retry path. */
+  /**
+   * Fetch the online receipt. Redirects are followed manually so the SSRF
+   * guard runs on every hop (a `redirect: 'follow'` would let a public URL
+   * bounce to an internal address unchecked). Transient network / 5xx errors
+   * ride the BullMQ retry path; unsafe targets and 4xx are permanent.
+   */
   private async fetchUrlSnapshot(url: string): Promise<string> {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
-      redirect: 'follow',
-      headers: { 'User-Agent': 'myfinpro-receipt-fetcher/1.0' },
-    });
-    if (!res.ok) {
-      // Permanent for client errors (dead link), transient for 5xx.
-      if (res.status >= 400 && res.status < 500) {
-        throw new ExtractionFailedError(`Receipt URL returned ${res.status}`);
-      }
-      throw new Error(`Receipt URL fetch failed (${res.status})`);
+    let current: URL;
+    try {
+      current = assertPublicReceiptUrl(url);
+    } catch (err) {
+      throw new ExtractionFailedError(
+        err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid receipt URL',
+      );
     }
-    const text = await res.text();
-    return text.slice(0, URL_SNAPSHOT_MAX_CHARS);
+
+    for (let hop = 0; hop <= URL_MAX_REDIRECTS; hop++) {
+      const res = await fetch(current, {
+        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
+        redirect: 'manual',
+        headers: { 'User-Agent': 'myfinpro-receipt-fetcher/1.0' },
+      });
+
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location');
+        if (!location) throw new ExtractionFailedError('Redirect without a Location header');
+        if (hop === URL_MAX_REDIRECTS) throw new ExtractionFailedError('Too many redirects');
+        try {
+          current = assertPublicReceiptUrl(new URL(location, current).toString());
+        } catch (err) {
+          throw new ExtractionFailedError(
+            err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid redirect target',
+          );
+        }
+        continue;
+      }
+
+      if (!res.ok) {
+        // Permanent for client errors (dead link), transient for 5xx.
+        if (res.status >= 400 && res.status < 500) {
+          throw new ExtractionFailedError(`Receipt URL returned ${res.status}`);
+        }
+        throw new Error(`Receipt URL fetch failed (${res.status})`);
+      }
+      const text = await res.text();
+      return text.slice(0, URL_SNAPSHOT_MAX_CHARS);
+    }
+    // Unreachable — the loop returns or throws — but satisfies the type checker.
+    throw new ExtractionFailedError('Too many redirects');
   }
 
   /** Persist header + items and flip to REVIEW in one transaction. */
