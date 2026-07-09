@@ -7552,3 +7552,63 @@ the list-row Link. **Web receipt specs 31 green; typecheck + lint clean.**
 
 **Next** — 7.9 (confirm → Payment OUT + PaymentDocument), 7.10 (closing
 pass: integration + E2E, i18n sweep).
+
+---
+
+## Phase 7 · Iteration 7.9 — Confirm receipt → payment (2026-07-09)
+
+**API.** `POST /receipts/:id/confirm` turns a reviewed receipt into money.
+REVIEW-only; the receipt must already carry a total + currency (the review
+step fills them). One transaction creates:
+
+- a **Payment** (`OUT` / `ONE_TIME`, `POSTED`) from the receipt's total /
+  currency / purchase date (falling back to upload time), the body's primary
+  category, and its attribution scopes;
+- a **PaymentDocument** (`kind: 'receipt'`) pointing at the receipt's stored
+  `fileRef` (skipped for URL receipts with no snapshot yet);
+- the receipt→payment **link** (`status: CONFIRMED`, `paymentId`), plus a
+  **Merchant** in the global registry when the reviewed name isn't linked yet
+  (normalized-name find-or-create). Atomic, so a CONFIRMED receipt always
+  points at a real payment — no orphans, no double-confirm. Audits
+  `RECEIPT_CONFIRMED` (+ `MERCHANT_CREATED` when one is registered).
+
+The payment build reuses `PaymentService` rather than duplicating it. Three
+new public methods, all sharing the existing private validators:
+`validateExpenseInputs` (amount cap, supported currency, non-future date,
+category visibility + OUT direction, in-scope attributions — reads only, run
+before the tx), `createExpenseWithinTx` (payment + attributions + optional
+document inside a caller-provided transaction), and `publishCreated` (map →
+recipients → `payment.created` fan-out, now also used by `create()` so the
+fan-out lives in one place). `ReceiptModule` imports `PaymentModule`; no
+cycle (payment doesn't depend on receipts).
+
+**Web.** `ReceiptConfirmDialog` (portal, ESC/backdrop close) collects the
+primary OUT category (`PaymentCategoryPicker`, fed the review page's loaded
+categories) and attribution scopes (`PaymentScopeSelector`, last-used seeded
+from `remember.ts`) plus an optional note, POSTs confirm, and on success
+navigates to `/payments/:paymentId`. The review page gains a **Confirm**
+action beside Save — disabled while there are unsaved edits (confirm uses the
+server's stored values), with the primary category pre-selected from the most
+common line-item category. `confirmReceipt` context method + `ConfirmReceiptInput`
+wire type; `receipts.confirm` i18n namespace (EN/HE parity verified).
+
+### Tests
+
+API: +5 `PaymentService` (validate / create-within-tx / publishCreated), +5
+receipt-service confirm (payment+document+merchant+link+audits, merchant
+reuse, URL-no-document, REVIEW/total/currency guards, validation short-circuit),
+and a new **6-case confirm integration suite** (real app + Redis: full
+payment/document/merchant/link/audit/list assertions, existing-merchant reuse,
+double-confirm 400, missing-total 400, IN-category 400 with no write, non-uploader
+404). Web: +7 `ReceiptConfirmDialog` (seed, submit payload, note trim, scope
+change, missing-category guard, failure toast, cancel), +4 review-page confirm
+wiring (opens with receipt + default category, disabled-while-dirty, navigate,
+hidden for non-REVIEW). **api receipt+payment 446 green; web receipt specs 42
+green; typecheck + lint clean.**
+
+**Coordination note:** 7.9 staged its 16 files explicitly; the budget track's
+`apps/api/src/budget/*`, `app.module.ts`, and `realtime/events.types.ts`
+stayed untouched.
+
+**Next** — 7.10 (URL ingestion polish, audit-log matrix, Playwright E2E for
+upload → extract → review → confirm, i18n sweep).
