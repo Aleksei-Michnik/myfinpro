@@ -1,0 +1,123 @@
+/**
+ * Phase 7, iteration 7.5 — JSON schema handed to providers' structured-output
+ * modes. Mirrors the shared `ExtractionResult` contract (§6.3) within the
+ * structured-outputs subset: every object carries `additionalProperties:
+ * false` + `required`, and numeric range checks are left to the shared
+ * validator (`validateExtractionResult`) which the worker runs regardless.
+ */
+export const EXTRACTION_RESULT_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'merchantName',
+    'purchasedAt',
+    'currency',
+    'totalCents',
+    'discountCents',
+    'items',
+    'confidence',
+    'notes',
+  ],
+  properties: {
+    merchantName: {
+      type: ['string', 'null'],
+      description: 'The store/place name exactly as printed, or null if unreadable.',
+    },
+    purchasedAt: {
+      type: ['string', 'null'],
+      description: 'Purchase date-time as ISO 8601 (e.g. 2026-07-01T17:42:00Z), or null.',
+    },
+    currency: {
+      type: ['string', 'null'],
+      description: 'ISO 4217 code inferred from symbols/text (₪→ILS, $→USD, €→EUR), or null.',
+    },
+    totalCents: {
+      type: ['integer', 'null'],
+      description: 'Grand total paid, in integer cents/agorot. 45.90 → 4590.',
+    },
+    discountCents: {
+      type: ['integer', 'null'],
+      description: 'Receipt-level discount total in integer cents (NOT per-line), ≥ 0, or null.',
+    },
+    items: {
+      type: 'array',
+      description: 'Every line item on the receipt, in printed order.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'rawName',
+          'quantity',
+          'unitPriceCents',
+          'discountCents',
+          'totalCents',
+          'suggestedCategoryId',
+        ],
+        properties: {
+          rawName: {
+            type: 'string',
+            description: 'Item name exactly as printed (keep original language).',
+          },
+          quantity: {
+            type: 'number',
+            description: 'Quantity; decimals allowed for weighed goods (0.732 kg → 0.732).',
+          },
+          unitPriceCents: {
+            type: ['integer', 'null'],
+            description: 'Unit price in integer cents, or null when not printed.',
+          },
+          discountCents: {
+            type: 'integer',
+            description: 'Line-level discount in integer cents, 0 when none.',
+          },
+          totalCents: {
+            type: 'integer',
+            description: 'Line total AFTER discount, integer cents.',
+          },
+          suggestedCategoryId: {
+            type: ['string', 'null'],
+            description:
+              'The id of the best-matching category from the provided candidate list, or null. NEVER invent ids.',
+          },
+        },
+      },
+    },
+    confidence: {
+      type: 'string',
+      enum: ['high', 'medium', 'low'],
+      description: 'Overall extraction confidence.',
+    },
+    notes: {
+      type: ['string', 'null'],
+      description: 'Caveats: unreadable zones, guessed values, ambiguous dates. Null if none.',
+    },
+  },
+} as const;
+
+/** Builds the instruction prompt shared by the real providers. */
+export function buildExtractionPrompt(ctx: {
+  categories: { id: string; name: string }[];
+  locale?: string;
+}): string {
+  const categoryList =
+    ctx.categories.length > 0
+      ? ctx.categories.map((c) => `- ${c.id}: ${c.name}`).join('\n')
+      : '(no candidates provided — use null for every suggestedCategoryId)';
+  return [
+    'Extract the receipt data from the attached document.',
+    '',
+    'Rules:',
+    '- All money values are INTEGER cents (45.90 → 4590). Never use floats for money.',
+    '- Keep item names exactly as printed, in their original language.',
+    '- Line totals are AFTER line-level discounts; receipt-level discounts go in discountCents.',
+    '- Dates: prefer an explicit printed date/time; return ISO 8601. When the day/month order is' +
+      ` ambiguous, assume the ${ctx.locale ?? 'en'} locale convention.`,
+    '- For each item pick the best-matching category id from the candidates below, or null.',
+    '  Never invent ids that are not in the list.',
+    '- If part of the receipt is unreadable, extract what you can, lower the confidence, and',
+    '  describe the gap in notes.',
+    '',
+    'Category candidates:',
+    categoryList,
+  ].join('\n');
+}

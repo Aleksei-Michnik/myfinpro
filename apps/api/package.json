@@ -26,6 +26,7 @@
     "clean": "rm -rf dist coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@myfinpro/shared": "workspace:*",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.19",

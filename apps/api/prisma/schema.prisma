@@ -32,6 +32,8 @@ model User {
   defaultCurrency     String    @default("USD") @map("default_currency") @db.VarChar(3)
   locale              String    @default("en") @db.VarChar(5)
   timezone            String    @default("UTC") @db.VarChar(50)
+  // Phase 10 (10.10): due-payment reminder window in days; 0 disables.
+  dueReminderDays     Int       @default(3) @map("due_reminder_days")
   isActive            Boolean   @default(true) @map("is_active")
   emailVerified       Boolean   @default(false) @map("email_verified")
   lastLoginAt         DateTime? @map("last_login_at")
@@ -51,6 +53,7 @@ model User {
   paymentStars            PaymentStar[]
   paymentDocuments        PaymentDocument[]
   receiptsUploaded        Receipt[]                @relation("ReceiptUploader")
+  budgetsOwned            Budget[]                 @relation("BudgetOwner")
 
   @@index([email])
   @@index([createdAt])
@@ -157,6 +160,7 @@ model Group {
   memberships         GroupMembership[]
   inviteTokens        GroupInviteToken[]
   paymentAttributions PaymentAttribution[]
+  budgets             Budget[]
 
   @@index([createdById])
   @@map("groups")
@@ -226,6 +230,7 @@ model Payment {
   schedule     PaymentSchedule?
   plan         PaymentPlan?
   receipt      Receipt?
+  alertEvents  BudgetAlertEvent[]
 
   @@index([direction, occurredAt])
   @@index([categoryId])
@@ -268,6 +273,7 @@ model Category {
 
   payments     Payment[]
   receiptItems ReceiptItem[]
+  budgets      Budget[]
 
   @@unique([ownerType, ownerId, slug, direction], name: "category_owner_slug_unique")
   @@index([ownerType, ownerId])
@@ -451,4 +457,73 @@ model ReceiptItem {
   @@unique([receiptId, position])
   @@index([categoryId])
   @@map("receipt_items")
+}
+
+// ── Phase 10: Budgets & Spending Targets ──
+
+model Budget {
+  id          String @id @default(uuid()) @db.VarChar(36)
+  name        String @db.VarChar(100)
+  amountCents Int    @map("amount_cents")
+  currency    String @db.VarChar(3)
+
+  // Scope: exactly one of (ownerId) / (groupId) is set, mirroring
+  // payment_attributions. scopeType ∈ 'personal' | 'group'.
+  scopeType String  @map("scope_type") @db.VarChar(10)
+  ownerId   String? @map("owner_id") @db.VarChar(36)
+  owner     User?   @relation("BudgetOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  groupId   String? @map("group_id") @db.VarChar(36)
+  group     Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Optional narrowing to one category (direction OUT); SetNull on
+  // category delete so category cleanup never breaks budgets.
+  categoryId String?   @map("category_id") @db.VarChar(36)
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // Period: WEEKLY | MONTHLY | QUARTERLY | YEARLY | CUSTOM
+  period   String    @db.VarChar(10)
+  // CUSTOM only; both NULL for repeating periods.
+  startsAt DateTime? @map("starts_at")
+  endsAt   DateTime? @map("ends_at")
+
+  // Alerts (design §2.5). NULL threshold = no threshold alert.
+  alertThresholdPct Int?    @map("alert_threshold_pct") // 1..100
+  alertOverspend    Boolean @default(true) @map("alert_overspend")
+
+  // Soft-archive: archived budgets keep history but stop being evaluated,
+  // listed only with ?includeArchived=true.
+  archivedAt DateTime? @map("archived_at")
+
+  createdById String   @map("created_by_id") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  alertEvents BudgetAlertEvent[]
+
+  @@index([ownerId, scopeType, archivedAt])
+  @@index([groupId, scopeType, archivedAt])
+  @@index([categoryId])
+  @@map("budgets")
+}
+
+// Dedup + history for emitted alerts (design §2.5). One row per unique alert.
+model BudgetAlertEvent {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  // BUDGET_THRESHOLD | BUDGET_OVERSPENT | PAYMENT_DUE
+  kind      String   @db.VarChar(24)
+  budgetId  String?  @map("budget_id") @db.VarChar(36) // NULL for PAYMENT_DUE
+  budget    Budget?  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  paymentId String?  @map("payment_id") @db.VarChar(36) // NULL for budget kinds
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  // Period/date key the dedup is scoped to:
+  //   budget kinds  → period start date (yyyy-mm-dd)
+  //   PAYMENT_DUE   → due date (yyyy-mm-dd)
+  periodKey String   @map("period_key") @db.VarChar(10)
+  // Snapshot for history/emails (spentCents, pct, dueAt, …).
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([kind, budgetId, paymentId, periodKey], name: "alert_dedup_unique")
+  @@index([budgetId, createdAt])
+  @@map("budget_alert_events")
 }

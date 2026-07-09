@@ -2798,4 +2798,134 @@ describe('PaymentService', () => {
       }
     });
   });
+
+  // ── receipt-confirm helpers (7.9) ──
+  describe('receipt-confirm helpers (7.9)', () => {
+    describe('validateExpenseInputs', () => {
+      it('validates and returns the parsed occurredAt for a valid OUT expense', async () => {
+        categoryServiceMock.findById.mockResolvedValue(okCategory());
+        const occurredAt = await service.validateExpenseInputs('user-1', {
+          amountCents: 4590,
+          currency: 'USD',
+          occurredAt: '2026-04-25T00:00:00.000Z',
+          categoryId: 'cat-1',
+          attributions: [{ scope: 'personal' }],
+        });
+        expect(occurredAt).toBeInstanceOf(Date);
+        expect(occurredAt.toISOString()).toBe('2026-04-25T00:00:00.000Z');
+        expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-1');
+      });
+
+      it('rejects a category whose direction is not OUT', async () => {
+        categoryServiceMock.findById.mockResolvedValue(okCategory({ direction: 'IN' }));
+        await expect(
+          service.validateExpenseInputs('user-1', {
+            amountCents: 100,
+            currency: 'USD',
+            occurredAt: '2026-04-25',
+            categoryId: 'cat-1',
+            attributions: [{ scope: 'personal' }],
+          }),
+        ).rejects.toMatchObject({});
+      });
+
+      it('rejects an unsupported currency and an empty attribution list', async () => {
+        categoryServiceMock.findById.mockResolvedValue(okCategory());
+        await expect(
+          service.validateExpenseInputs('user-1', {
+            amountCents: 100,
+            currency: 'XyZ',
+            occurredAt: '2026-04-25',
+            categoryId: 'cat-1',
+            attributions: [{ scope: 'personal' }],
+          }),
+        ).rejects.toMatchObject({});
+        await expect(
+          service.validateExpenseInputs('user-1', {
+            amountCents: 100,
+            currency: 'USD',
+            occurredAt: '2026-04-25',
+            categoryId: 'cat-1',
+            attributions: [],
+          }),
+        ).rejects.toMatchObject({});
+      });
+    });
+
+    describe('createExpenseWithinTx', () => {
+      it('creates an OUT/ONE_TIME payment with mapped attributions and a document', async () => {
+        const txPaymentCreate = jest.fn().mockResolvedValue(makePersistedPayment());
+        await service.createExpenseWithinTx(
+          { payment: { create: txPaymentCreate } } as never,
+          'user-1',
+          {
+            amountCents: 4590,
+            currency: 'ILS',
+            occurredAt: new Date('2026-07-01T00:00:00Z'),
+            categoryId: 'cat-1',
+            note: 'Shufersal',
+            attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }],
+            document: {
+              kind: 'receipt',
+              fileRef: '2026/07/abc.jpg',
+              originalName: 'r.jpg',
+              mimeType: 'image/jpeg',
+              sizeBytes: 10,
+            },
+          },
+        );
+        const arg = txPaymentCreate.mock.calls[0][0] as {
+          data: {
+            direction: string;
+            type: string;
+            status: string;
+            attributions: {
+              create: Array<{ scopeType: string; userId: string | null; groupId: string | null }>;
+            };
+            documents?: { create: { kind: string; uploadedById: string } };
+          };
+        };
+        expect(arg.data.direction).toBe('OUT');
+        expect(arg.data.type).toBe('ONE_TIME');
+        expect(arg.data.status).toBe('POSTED');
+        expect(arg.data.attributions.create).toEqual([
+          { scopeType: 'personal', userId: 'user-1', groupId: null },
+          { scopeType: 'group', userId: null, groupId: 'g1' },
+        ]);
+        expect(arg.data.documents?.create).toMatchObject({
+          kind: 'receipt',
+          uploadedById: 'user-1',
+        });
+      });
+
+      it('omits the documents relation when no document is supplied', async () => {
+        const txPaymentCreate = jest.fn().mockResolvedValue(makePersistedPayment());
+        await service.createExpenseWithinTx(
+          { payment: { create: txPaymentCreate } } as never,
+          'user-1',
+          {
+            amountCents: 100,
+            currency: 'USD',
+            occurredAt: new Date('2026-07-01T00:00:00Z'),
+            categoryId: 'cat-1',
+            note: null,
+            attributions: [{ scope: 'personal' }],
+            document: null,
+          },
+        );
+        const arg = txPaymentCreate.mock.calls[0][0] as { data: { documents?: unknown } };
+        expect(arg.data.documents).toBeUndefined();
+      });
+    });
+
+    describe('publishCreated', () => {
+      it('maps, computes recipients, and fans out payment.created', async () => {
+        const summary = await service.publishCreated(makePersistedPayment());
+        expect(eventBusMock.publish).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'payment.created', userIds: ['user-1'] }),
+        );
+        expect(summary.id).toBe('pay-1');
+      });
+    });
+  });
 });

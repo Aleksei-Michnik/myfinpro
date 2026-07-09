@@ -44,7 +44,8 @@
     "logout": "התנתקות",
     "menu": "תפריט",
     "closeMenu": "סגירת תפריט",
-    "skipToContent": "דילוג לתוכן הראשי"
+    "skipToContent": "דילוג לתוכן הראשי",
+    "receipts": "קבלות"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
@@ -985,5 +986,85 @@
     },
     "empty": "אין קטגוריות מותאמות אישית עדיין.",
     "loading": "טוען קטגוריות…"
+  },
+  "receipts": {
+    "title": "קבלות",
+    "status": {
+      "UPLOADED": "הועלתה",
+      "EXTRACTING": "בחילוץ…",
+      "REVIEW": "ממתינה לאישור",
+      "CONFIRMED": "אושרה",
+      "FAILED": "נכשלה"
+    },
+    "upload": {
+      "title": "הוספת קבלה",
+      "dropLabel": "גררו קבלה לכאן או לחצו לבחירת קובץ",
+      "formats": "JPEG, PNG, WebP, HEIC או PDF — עד 10MB",
+      "browse": "בחירת קבצים",
+      "camera": "צילום תמונה",
+      "urlPlaceholder": "קישור https:// לקבלה מקוונת",
+      "urlSubmit": "הוספת קישור",
+      "uploadedToast": "{count, plural, =1 {הקבלה הועלתה} other {# קבלות הועלו}} — החילוץ החל",
+      "urlAddedToast": "קישור הקבלה נוסף — החילוץ החל",
+      "failedToast": "ההעלאה נכשלה"
+    },
+    "list": {
+      "title": "הקבלות שלך",
+      "empty": "אין קבלות עדיין — הוסיפו את הראשונה למעלה.",
+      "untitled": "קבלה",
+      "itemCount": "{count, plural, =1 {פריט אחד} other {# פריטים}}",
+      "retry": "ניסיון חוזר",
+      "retriedToast": "החילוץ הופעל מחדש",
+      "delete": "מחיקה",
+      "deleteConfirm": "אישור מחיקה",
+      "deleteKeep": "ביטול",
+      "deletedToast": "הקבלה נמחקה",
+      "loadMore": "טעינת עוד",
+      "actionFailed": "הפעולה נכשלה"
+    },
+    "review": {
+      "back": "חזרה לקבלות",
+      "notFound": "הקבלה לא נמצאה",
+      "loadFailed": "לא ניתן לטעון את הקבלה",
+      "previewTitle": "תצוגה מקדימה של הקבלה",
+      "previewLoading": "טוען תצוגה מקדימה…",
+      "headerTitle": "פרטים שחולצו",
+      "merchantLabel": "בית עסק",
+      "merchantLinked": "מקושר לבית עסק מוכר",
+      "purchasedAtLabel": "תאריך רכישה",
+      "currencyLabel": "מטבע",
+      "totalLabel": "סה\"כ",
+      "discountLabel": "הנחה",
+      "mismatchWarning": "הפריטים אינם מסתכמים לסכום הכולל (הפרש של {delta}). בדקו את הסכומים לפני אישור.",
+      "itemsTitle": "פריטים",
+      "itemName": "שם פריט",
+      "itemQty": "כמות",
+      "itemTotal": "סה\"כ",
+      "itemNoCategory": "ללא קטגוריה",
+      "itemAdd": "הוספת פריט",
+      "itemRemove": "הסרת פריט",
+      "itemsInvalid": "לכל פריט נדרשים שם, כמות חיובית וסכום.",
+      "save": "שמירת שינויים",
+      "savedToast": "הקבלה עודכנה",
+      "saveFailed": "לא ניתן לשמור את הקבלה",
+      "retry": "ניסיון חילוץ חוזר",
+      "retriedToast": "החילוץ הופעל מחדש",
+      "confirm": "אישור",
+      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור"
+    },
+    "confirm": {
+      "title": "אישור קבלה",
+      "description": "פעולה זו יוצרת תשלום מהקבלה שנבדקה.",
+      "categoryLabel": "קטגוריה ראשית",
+      "scopeLabel": "שיוך אל",
+      "noteLabel": "הערה (אופציונלי)",
+      "notePlaceholder": "ברירת מחדל: שם העסק",
+      "submit": "אישור ויצירת תשלום",
+      "cancel": "ביטול",
+      "missingCategory": "יש לבחור קטגוריה ראשית",
+      "missingScope": "יש לבחור לפחות שיוך אחד",
+      "confirmedToast": "הקבלה אושרה",
+      "confirmFailed": "לא ניתן לאשר את הקבלה"
+    }
   }
 }

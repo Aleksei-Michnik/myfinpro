@@ -44,7 +44,8 @@
     "logout": "Logout",
     "menu": "Menu",
     "closeMenu": "Close menu",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "receipts": "Receipts"
   },
   "home": {
     "title": "Personal & Family Finance Management",
@@ -985,5 +986,85 @@
     },
     "empty": "No custom categories yet.",
     "loading": "Loading categories…"
+  },
+  "receipts": {
+    "title": "Receipts",
+    "status": {
+      "UPLOADED": "Uploaded",
+      "EXTRACTING": "Extracting…",
+      "REVIEW": "Ready for review",
+      "CONFIRMED": "Confirmed",
+      "FAILED": "Failed"
+    },
+    "upload": {
+      "title": "Add a receipt",
+      "dropLabel": "Drop a receipt here or click to browse",
+      "formats": "JPEG, PNG, WebP, HEIC or PDF — up to 10MB",
+      "browse": "Browse files",
+      "camera": "Take a photo",
+      "urlPlaceholder": "https:// link to an online receipt",
+      "urlSubmit": "Add URL",
+      "uploadedToast": "{count, plural, =1 {Receipt uploaded} other {# receipts uploaded}} — extraction started",
+      "urlAddedToast": "Receipt URL added — extraction started",
+      "failedToast": "Upload failed"
+    },
+    "list": {
+      "title": "Your receipts",
+      "empty": "No receipts yet — add your first one above.",
+      "untitled": "Receipt",
+      "itemCount": "{count, plural, =1 {1 item} other {# items}}",
+      "retry": "Retry",
+      "retriedToast": "Extraction restarted",
+      "delete": "Delete",
+      "deleteConfirm": "Confirm delete",
+      "deleteKeep": "Keep",
+      "deletedToast": "Receipt deleted",
+      "loadMore": "Load more",
+      "actionFailed": "Action failed"
+    },
+    "review": {
+      "back": "Back to receipts",
+      "notFound": "Receipt not found",
+      "loadFailed": "Could not load the receipt",
+      "previewTitle": "Receipt preview",
+      "previewLoading": "Loading preview…",
+      "headerTitle": "Extracted details",
+      "merchantLabel": "Merchant",
+      "merchantLinked": "Linked to a known merchant",
+      "purchasedAtLabel": "Purchase date",
+      "currencyLabel": "Currency",
+      "totalLabel": "Total",
+      "discountLabel": "Discount",
+      "mismatchWarning": "Items don't add up to the total (off by {delta}). Double-check the amounts before confirming.",
+      "itemsTitle": "Items",
+      "itemName": "Item name",
+      "itemQty": "Qty",
+      "itemTotal": "Total",
+      "itemNoCategory": "No category",
+      "itemAdd": "Add item",
+      "itemRemove": "Remove item",
+      "itemsInvalid": "Each item needs a name, a positive quantity and a total.",
+      "save": "Save changes",
+      "savedToast": "Receipt updated",
+      "saveFailed": "Could not save the receipt",
+      "retry": "Retry extraction",
+      "retriedToast": "Extraction restarted",
+      "confirm": "Confirm",
+      "confirmSaveFirst": "Save your changes before confirming"
+    },
+    "confirm": {
+      "title": "Confirm receipt",
+      "description": "This creates a payment from the reviewed receipt.",
+      "categoryLabel": "Primary category",
+      "scopeLabel": "Attribute to",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Defaults to the merchant name",
+      "submit": "Confirm & create payment",
+      "cancel": "Cancel",
+      "missingCategory": "Choose a primary category",
+      "missingScope": "Choose at least one scope",
+      "confirmedToast": "Receipt confirmed",
+      "confirmFailed": "Could not confirm the receipt"
+    }
   }
 }

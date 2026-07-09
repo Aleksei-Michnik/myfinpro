@@ -14,3 +14,11 @@
  * Consumer: payment-occurrence processor (lands in 6.17.3).
  */
 export const PAYMENT_OCCURRENCES_QUEUE = 'payment-occurrences';
+
+/**
+ * Receipt extraction queue (Phase 7.4).
+ *
+ * Producer: receipt service (upload / url / retry).
+ * Consumer: receipt-extraction processor (lands in 7.6).
+ */
+export const RECEIPT_EXTRACTIONS_QUEUE = 'receipt-extractions';
