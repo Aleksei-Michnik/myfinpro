@@ -7612,3 +7612,52 @@ stayed untouched.
 
 **Next** — 7.10 (URL ingestion polish, audit-log matrix, Playwright E2E for
 upload → extract → review → confirm, i18n sweep).
+
+---
+
+## Phase 7 · Iteration 7.10 — Closing pass: SSRF guard, E2E, audit matrix (2026-07-09)
+
+**URL-ingestion SSRF guard.** A receipt URL is user-supplied and fetched
+server-side, so `assertPublicReceiptUrl` now gates it: reject non-http(s)
+schemes, embedded credentials, loopback / `.localhost` / `.internal` /
+`.local` hostnames, and IP literals inside loopback / private (10/8,
+172.16/12, 192.168/16) / link-local (169.254/16, incl. the cloud metadata
+address) / CGNAT (100.64/10) / multicast+reserved ranges — IPv4 and IPv6
+(loopback, ULA `fc/fd`, link-local `fe80`, and v4-mapped `::ffff:` in both
+dotted and hex-canonicalized forms). Applied at ingestion (`POST
+/receipts/url` → 400 `RECEIPT_INVALID_URL`) and again on **every redirect
+hop** — the extraction fetcher switched from `redirect: 'follow'` to manual
+following (max 5 hops) so a public URL can't bounce to an internal address
+unchecked. Known limitation (documented): DNS-rebinding to a private IP needs
+connection-time pinning and is out of scope.
+
+**Audit matrix.** The design doc's audit section is now an explicit
+action/trigger/entity/details table covering the full lifecycle
+(`RECEIPT_UPLOADED`, `RECEIPT_EXTRACTED`, `RECEIPT_EXTRACTION_FAILED`,
+`RECEIPT_RETRIED`, `RECEIPT_UPDATED`, `RECEIPT_ITEMS_REPLACED`,
+`RECEIPT_CONFIRMED`, `MERCHANT_CREATED`, `RECEIPT_DELETED`) — and corrects
+the earlier claim that confirm writes `PAYMENT_CREATED`: it records the new
+`paymentId` on `RECEIPT_CONFIRMED`, and the payment is announced live via the
+Phase 6 `payment.created` event.
+
+**i18n sweep.** Full EN/HE parity re-verified across the whole catalog — 778
+keys each, zero diffs, no untranslated receipt strings.
+
+**E2E.** `e2e/receipts.spec.ts` (Playwright, live stack + mock provider):
+register → upload a 1×1 PNG → wait for the row to reach REVIEW → open the
+review page (asserts the mock "Mock Grocery" / $16.60) → Confirm with a
+primary category → lands on `/payments/:id` showing $16.60. Runs against
+staging like the Phase 6 payments E2E.
+
+### Tests
+
++19 URL-guard unit cases (accepts public v4/v6; rejects every private /
+loopback / metadata / scheme / credential vector) + 1 `createFromUrl` SSRF
+rejection. **api receipt suite 92 green; typecheck + lint clean.** The new
+E2E runs in the live-stack/staging pipeline.
+
+**Phase 7 complete** — receipts upload → pluggable LLM extraction → review &
+edit → confirm → payment, with private-by-uploader receipts, a global
+merchant registry, per-item categories, realtime lifecycle, and an
+SSRF-guarded URL path. **Next: Phase 8** (product catalog & staged matching
+over the `receipt_items` this phase persists).
