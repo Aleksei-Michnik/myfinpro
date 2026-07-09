@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CategoryModule } from '../category/category.module';
+import { PaymentModule } from '../payment/payment.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.provider';
@@ -20,7 +21,7 @@ import { ReceiptService } from './receipt.service';
  * itself comes from the global `QueueModule`, so no extra import here.
  */
 @Module({
-  imports: [PrismaModule, RealtimeModule, CategoryModule],
+  imports: [PrismaModule, RealtimeModule, CategoryModule, PaymentModule],
   providers: [
     ReceiptService,
     ReceiptStorageService,

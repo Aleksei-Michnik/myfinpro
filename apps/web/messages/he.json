@@ -1048,7 +1048,23 @@
       "savedToast": "הקבלה עודכנה",
       "saveFailed": "לא ניתן לשמור את הקבלה",
       "retry": "ניסיון חילוץ חוזר",
-      "retriedToast": "החילוץ הופעל מחדש"
+      "retriedToast": "החילוץ הופעל מחדש",
+      "confirm": "אישור",
+      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור"
+    },
+    "confirm": {
+      "title": "אישור קבלה",
+      "description": "פעולה זו יוצרת תשלום מהקבלה שנבדקה.",
+      "categoryLabel": "קטגוריה ראשית",
+      "scopeLabel": "שיוך אל",
+      "noteLabel": "הערה (אופציונלי)",
+      "notePlaceholder": "ברירת מחדל: שם העסק",
+      "submit": "אישור ויצירת תשלום",
+      "cancel": "ביטול",
+      "missingCategory": "יש לבחור קטגוריה ראשית",
+      "missingScope": "יש לבחור לפחות שיוך אחד",
+      "confirmedToast": "הקבלה אושרה",
+      "confirmFailed": "לא ניתן לאשר את הקבלה"
     }
   }
 }

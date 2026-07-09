@@ -10,11 +10,12 @@
 import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { usePayments } from '@/lib/payment/payment-context';
 import type { CategoryDto } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
@@ -67,6 +68,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     useReceipts();
   const { listCategories } = usePayments();
   const { addToast } = useToast();
+  const router = useRouter();
 
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -82,6 +84,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [discountStr, setDiscountStr] = useState('');
   const [items, setItems] = useState<ItemRow[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const saveOp = useAsyncOperation<boolean>({ scope: 'control' });
@@ -209,6 +212,24 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     const discount = parseMoney(discountStr) ?? 0;
     return total - (itemsSum - discount);
   }, [items, totalStr, discountStr]);
+
+  // Pre-select the payment's primary category from the most common line-item
+  // category (confirm dialog default).
+  const defaultCategoryId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of items) {
+      if (row.categoryId) counts.set(row.categoryId, (counts.get(row.categoryId) ?? 0) + 1);
+    }
+    let best: string | null = null;
+    let bestCount = 0;
+    for (const [id, count] of counts) {
+      if (count > bestCount) {
+        best = id;
+        bestCount = count;
+      }
+    }
+    return best;
+  }, [items]);
 
   const save = () => {
     if (!receipt) return;
@@ -619,10 +640,18 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           </div>
 
           {editable && (
-            <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+              {dirty && (
+                <span
+                  className="mr-auto text-xs text-gray-500 dark:text-gray-400"
+                  data-testid="review-confirm-hint"
+                >
+                  {t('confirmSaveFirst')}
+                </span>
+              )}
               <Button
                 type="button"
-                variant="primary"
+                variant="secondary"
                 size="md"
                 onClick={save}
                 disabled={saveOp.isLoading || !dirty}
@@ -630,10 +659,32 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               >
                 {t('save')}
               </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={() => setConfirmOpen(true)}
+                disabled={saveOp.isLoading || dirty}
+                data-testid="review-confirm"
+              >
+                {t('confirm')}
+              </Button>
             </div>
           )}
         </section>
       </div>
+
+      <ReceiptConfirmDialog
+        open={confirmOpen}
+        receiptId={receiptId}
+        categories={categories}
+        defaultCategoryId={defaultCategoryId}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirmed={(paymentId) => {
+          setConfirmOpen(false);
+          router.push(`/payments/${paymentId}`);
+        }}
+      />
     </main>
   );
 }

@@ -373,22 +373,125 @@ export class PaymentService {
       `Payment ${created.id} (${dto.type}, ${dto.direction}) created by user ${userId}`,
     );
 
-    // 10. Serialize.
-    const summary = mapPaymentToSummary(created as PaymentWithRelations, { starredByMe: false });
-
-    // 11. Realtime fan-out — POST commit. Recipients = creator + all
+    // 10. Serialize + fan out (POST commit). Recipients = creator + all
     // members of any attributed group + every personal-attribution user.
+    return this.publishCreated(created as PaymentWithRelations);
+  }
+
+  /**
+   * Validate the inputs for a receipt-confirmation payment — a `ONE_TIME`
+   * `OUT` expense derived from a reviewed receipt (Phase 7.9). Reads only,
+   * so it runs before the write transaction; reuses the exact rules create()
+   * applies (amount cap, supported currency, non-future date, category
+   * visibility + direction, well-formed in-scope attributions). Returns the
+   * parsed `occurredAt`.
+   */
+  async validateExpenseInputs(
+    userId: string,
+    input: {
+      amountCents: number;
+      currency: string;
+      occurredAt: string;
+      categoryId: string;
+      attributions: AttributionDto[];
+    },
+  ): Promise<Date> {
+    this.validateAmount(input.amountCents);
+    if (!(CURRENCY_CODES as readonly string[]).includes(input.currency)) {
+      throw new BadRequestException({
+        message: `Unsupported currency '${input.currency}'`,
+        errorCode: PAYMENT_ERRORS.PAYMENT_INVALID_CURRENCY,
+      });
+    }
+    const occurredAt = this.parseAndValidateOccurredAt(input.occurredAt);
+    const category = await this.loadCategoryOrThrow(userId, input.categoryId);
+    this.ensureCategoryDirectionMatches(category, 'OUT');
+    await this.validateAttributions(userId, input.attributions);
+    return occurredAt;
+  }
+
+  /**
+   * Create a `ONE_TIME` `OUT` payment (attributions + an optional document)
+   * inside a caller-provided transaction. The receipt-confirm flow owns the
+   * transaction so the payment, its `PaymentDocument`, and the receipt→payment
+   * link all commit atomically. Validation is the caller's responsibility
+   * (see {@link validateExpenseInputs}); the post-commit fan-out is
+   * {@link publishCreated}.
+   */
+  async createExpenseWithinTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      amountCents: number;
+      currency: string;
+      occurredAt: Date;
+      categoryId: string;
+      note: string | null;
+      attributions: AttributionDto[];
+      document?: {
+        kind: string;
+        fileRef: string;
+        originalName: string | null;
+        mimeType: string | null;
+        sizeBytes: number | null;
+      } | null;
+    },
+  ): Promise<PaymentWithRelations> {
+    const payment = await tx.payment.create({
+      data: {
+        direction: 'OUT',
+        type: 'ONE_TIME',
+        amountCents: input.amountCents,
+        currency: input.currency,
+        occurredAt: input.occurredAt,
+        status: 'POSTED',
+        categoryId: input.categoryId,
+        note: input.note,
+        createdById: userId,
+        attributions: {
+          create: input.attributions.map((a) => ({
+            scopeType: a.scope,
+            userId: a.scope === 'personal' ? userId : null,
+            groupId: a.scope === 'group' ? (a.groupId ?? null) : null,
+          })),
+        },
+        ...(input.document
+          ? {
+              documents: {
+                create: {
+                  kind: input.document.kind,
+                  fileRef: input.document.fileRef,
+                  originalName: input.document.originalName,
+                  mimeType: input.document.mimeType,
+                  sizeBytes: input.document.sizeBytes,
+                  uploadedById: userId,
+                },
+              },
+            }
+          : {}),
+      },
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true, color: true } },
+        attributions: { include: { group: { select: { name: true } } } },
+      },
+    });
+    return payment as PaymentWithRelations;
+  }
+
+  /**
+   * Serialize a freshly-created payment and fan out `payment.created` to its
+   * recipients (creator + every personal-attribution user + all members of
+   * any attributed group). Shared by create() and the receipt-confirm flow.
+   * Returns the summary so callers can use it as their response body.
+   */
+  async publishCreated(payment: PaymentWithRelations): Promise<PaymentSummaryDto> {
+    const summary = mapPaymentToSummary(payment, { starredByMe: false });
     const recipients = await computePaymentRecipients(
       this.prisma,
-      created.attributions as RecipientAttribution[],
-      created.createdById,
+      payment.attributions as RecipientAttribution[],
+      payment.createdById,
     );
-    this.eventBus.publish({
-      type: 'payment.created',
-      userIds: recipients,
-      payment: summary,
-    });
-
+    this.eventBus.publish({ type: 'payment.created', userIds: recipients, payment: summary });
     return summary;
   }
 

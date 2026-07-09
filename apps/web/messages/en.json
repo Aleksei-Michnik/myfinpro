@@ -1048,7 +1048,23 @@
       "savedToast": "Receipt updated",
       "saveFailed": "Could not save the receipt",
       "retry": "Retry extraction",
-      "retriedToast": "Extraction restarted"
+      "retriedToast": "Extraction restarted",
+      "confirm": "Confirm",
+      "confirmSaveFirst": "Save your changes before confirming"
+    },
+    "confirm": {
+      "title": "Confirm receipt",
+      "description": "This creates a payment from the reviewed receipt.",
+      "categoryLabel": "Primary category",
+      "scopeLabel": "Attribute to",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "Defaults to the merchant name",
+      "submit": "Confirm & create payment",
+      "cancel": "Cancel",
+      "missingCategory": "Choose a primary category",
+      "missingScope": "Choose at least one scope",
+      "confirmedToast": "Receipt confirmed",
+      "confirmFailed": "Could not confirm the receipt"
     }
   }
 }

@@ -4,10 +4,12 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { CategoryService } from '../category/category.service';
+import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
+import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import {
@@ -54,6 +56,7 @@ export class ReceiptService {
     private readonly storage: ReceiptStorageService,
     private readonly eventBus: EventBus,
     private readonly categoryService: CategoryService,
+    private readonly paymentService: PaymentService,
     @InjectQueue(RECEIPT_EXTRACTIONS_QUEUE) private readonly queue: Queue,
   ) {}
 
@@ -331,6 +334,134 @@ export class ReceiptService {
     return rows;
   }
 
+  /**
+   * POST /receipts/:id/confirm — turn a reviewed receipt into a payment
+   * (Phase 7.9). Creates one `Payment` (OUT / ONE_TIME) with the caller's
+   * remembered attribution scopes, attaches the stored file as a
+   * `PaymentDocument` (kind `receipt`), links the receipt to the payment,
+   * and creates the merchant in the global registry when the review named
+   * one that isn't linked yet. Payment, document, and the receipt→payment
+   * link all commit in one transaction so a CONFIRMED receipt always points
+   * at a real payment (no orphans, no double-confirm).
+   */
+  async confirm(userId: string, id: string, dto: ConfirmReceiptDto): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, id);
+    this.assertInReview(row.status);
+
+    // A payment needs an amount + currency; the review step fills these in.
+    if (row.totalCents === null || row.totalCents <= 0) {
+      throw new BadRequestException({
+        message: 'Receipt total is required before confirmation',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+    if (!row.currency) {
+      throw new BadRequestException({
+        message: 'Receipt currency is required before confirmation',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+    const amountCents = row.totalCents;
+    const currency = row.currency;
+    // Fall back to the upload time when no purchase date was extracted/entered.
+    const occurredAt = row.purchasedAt ?? row.createdAt;
+
+    // Validate the payment inputs (category visibility + OUT direction,
+    // attributions, amount, currency, date) up front — reads only.
+    await this.paymentService.validateExpenseInputs(userId, {
+      amountCents,
+      currency,
+      occurredAt: occurredAt.toISOString(),
+      categoryId: dto.categoryId,
+      attributions: dto.attributions,
+    });
+
+    const merchantName = row.merchant?.name ?? row.extractedMerchantName ?? null;
+    const note = dto.note?.trim() || merchantName;
+
+    const { payment, merchantId, merchantCreated } = await this.prisma.$transaction(async (tx) => {
+      // Resolve the merchant: keep an existing link, otherwise create/find
+      // one in the global registry from the reviewed name.
+      let resolvedMerchantId = row.merchantId;
+      let created = false;
+      const rawName = row.extractedMerchantName?.trim();
+      if (!resolvedMerchantId && rawName) {
+        const name = rawName.slice(0, 200);
+        const normalizedName = normalizeMerchantName(name);
+        if (normalizedName) {
+          const existing = await tx.merchant.findUnique({ where: { normalizedName } });
+          if (existing) {
+            resolvedMerchantId = existing.id;
+          } else {
+            const merchant = await tx.merchant.create({ data: { name, normalizedName } });
+            resolvedMerchantId = merchant.id;
+            created = true;
+          }
+        }
+      }
+
+      const payment = await this.paymentService.createExpenseWithinTx(tx, userId, {
+        amountCents,
+        currency,
+        occurredAt,
+        categoryId: dto.categoryId,
+        note: note ?? null,
+        attributions: dto.attributions,
+        document: row.fileRef
+          ? {
+              kind: 'receipt',
+              fileRef: row.fileRef,
+              originalName: row.originalName,
+              mimeType: row.mimeType,
+              sizeBytes: row.sizeBytes,
+            }
+          : null,
+      });
+
+      await tx.receipt.update({
+        where: { id: row.id },
+        data: {
+          status: 'CONFIRMED',
+          paymentId: payment.id,
+          ...(resolvedMerchantId && resolvedMerchantId !== row.merchantId
+            ? { merchantId: resolvedMerchantId }
+            : {}),
+        },
+      });
+
+      return { payment, merchantId: resolvedMerchantId, merchantCreated: created };
+    });
+
+    void this.writeAudit(userId, row.id, 'RECEIPT_CONFIRMED', {
+      paymentId: payment.id,
+      amountCents,
+      currency,
+      merchantId,
+    });
+    if (merchantCreated && merchantId) {
+      void this.writeAudit(
+        userId,
+        merchantId,
+        'MERCHANT_CREATED',
+        { name: merchantName },
+        'Merchant',
+      );
+    }
+
+    // Fan out the new payment (all recipients) and the now-CONFIRMED receipt
+    // (the uploader) — both post-commit.
+    await this.paymentService.publishCreated(payment);
+    const fresh = await this.prisma.receipt.findUnique({
+      where: { id: row.id },
+      include: RECEIPT_INCLUDE,
+    });
+    const out = mapReceiptToDto(fresh as ReceiptWithRelations);
+    this.publishUpdated(userId, out);
+
+    this.logger.log(`Receipt ${row.id} confirmed by user ${userId} → payment ${payment.id}`);
+    return out;
+  }
+
   private assertInReview(status: string): void {
     if (status !== 'REVIEW') {
       throw new BadRequestException({
@@ -398,23 +529,24 @@ export class ReceiptService {
 
   private async writeAudit(
     userId: string,
-    receiptId: string,
+    entityId: string,
     action: string,
     details: Record<string, unknown>,
+    entity: 'Receipt' | 'Merchant' = 'Receipt',
   ): Promise<void> {
     try {
       await this.prisma.auditLog.create({
         data: {
           userId,
           action,
-          entity: 'Receipt',
-          entityId: receiptId,
+          entity,
+          entityId,
           details: details as Prisma.InputJsonValue,
         },
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to write ${action} audit log for receipt ${receiptId}: ${(err as Error).message}`,
+        `Failed to write ${action} audit log for ${entity.toLowerCase()} ${entityId}: ${(err as Error).message}`,
       );
     }
   }

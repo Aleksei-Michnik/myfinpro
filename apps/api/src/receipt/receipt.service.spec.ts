@@ -3,6 +3,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
+import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
@@ -23,11 +24,16 @@ describe('ReceiptService', () => {
       delete: jest.fn(),
     },
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn() },
-    merchant: { findUnique: jest.fn(), findMany: jest.fn() },
+    merchant: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
   };
   const categoryMock = { list: jest.fn() };
+  const paymentServiceMock = {
+    validateExpenseInputs: jest.fn(),
+    createExpenseWithinTx: jest.fn(),
+    publishCreated: jest.fn().mockResolvedValue({}),
+  };
   const storageMock = {
     save: jest.fn(),
     openStream: jest.fn(),
@@ -73,6 +79,7 @@ describe('ReceiptService', () => {
         { provide: ReceiptStorageService, useValue: storageMock },
         { provide: EventBus, useValue: eventBusMock },
         { provide: CategoryService, useValue: categoryMock },
+        { provide: PaymentService, useValue: paymentServiceMock },
         { provide: getQueueToken(RECEIPT_EXTRACTIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();
@@ -365,6 +372,166 @@ describe('ReceiptService', () => {
     it('empty/whitespace queries return [] without touching the DB', async () => {
       await expect(service.searchMerchants('   ')).resolves.toEqual([]);
       expect(prismaMock.merchant.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('confirm (7.9)', () => {
+    const reviewRow = (over: Record<string, unknown> = {}) =>
+      makeRow({
+        status: 'REVIEW',
+        totalCents: 4590,
+        currency: 'ILS',
+        purchasedAt: new Date('2026-07-01T12:00:00.000Z'),
+        extractedMerchantName: 'Shufersal',
+        merchantId: null,
+        ...over,
+      });
+
+    let txMerchant: { findUnique: jest.Mock; create: jest.Mock };
+    let txReceipt: { update: jest.Mock };
+
+    beforeEach(() => {
+      txMerchant = { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() };
+      txReceipt = { update: jest.fn().mockResolvedValue({}) };
+      prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ merchant: txMerchant, receipt: txReceipt }),
+      );
+      paymentServiceMock.validateExpenseInputs.mockResolvedValue(
+        new Date('2026-07-01T12:00:00.000Z'),
+      );
+      paymentServiceMock.createExpenseWithinTx.mockResolvedValue({
+        id: 'p-1',
+        createdById: 'u-1',
+        attributions: [{ scopeType: 'personal', userId: 'u-1', groupId: null, group: null }],
+      });
+    });
+
+    it('creates the payment + document, links the receipt, and creates a new merchant', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
+      txMerchant.create.mockResolvedValue({ id: 'm-new', name: 'Shufersal' });
+      prismaMock.receipt.findUnique.mockResolvedValue(
+        reviewRow({ status: 'CONFIRMED', paymentId: 'p-1', merchantId: 'm-new' }),
+      );
+
+      const out = await service.confirm('u-1', 'r-1', {
+        categoryId: 'cat-1',
+        attributions: [{ scope: 'personal' }],
+      });
+
+      expect(paymentServiceMock.validateExpenseInputs).toHaveBeenCalledWith(
+        'u-1',
+        expect.objectContaining({ amountCents: 4590, currency: 'ILS', categoryId: 'cat-1' }),
+      );
+      // New merchant created from the reviewed name.
+      expect(txMerchant.create).toHaveBeenCalledWith({
+        data: { name: 'Shufersal', normalizedName: 'shufersal' },
+      });
+      // Payment carries the money fields, merchant-name note, and the file document.
+      expect(paymentServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
+        expect.anything(),
+        'u-1',
+        expect.objectContaining({
+          amountCents: 4590,
+          currency: 'ILS',
+          note: 'Shufersal',
+          categoryId: 'cat-1',
+          document: expect.objectContaining({ kind: 'receipt', fileRef: '2026/07/abc.jpg' }),
+        }),
+      );
+      // Receipt linked to the payment + merchant, marked CONFIRMED.
+      expect(txReceipt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'CONFIRMED',
+            paymentId: 'p-1',
+            merchantId: 'm-new',
+          }),
+        }),
+      );
+      expect(paymentServiceMock.publishCreated).toHaveBeenCalled();
+      const actions = prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action);
+      expect(actions).toEqual(expect.arrayContaining(['RECEIPT_CONFIRMED', 'MERCHANT_CREATED']));
+      expect(out.status).toBe('CONFIRMED');
+      expect(out.paymentId).toBe('p-1');
+    });
+
+    it('reuses an existing registry merchant without creating one', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
+      txMerchant.findUnique.mockResolvedValue({ id: 'm-existing', name: 'Shufersal' });
+      prismaMock.receipt.findUnique.mockResolvedValue(
+        reviewRow({ status: 'CONFIRMED', paymentId: 'p-1', merchantId: 'm-existing' }),
+      );
+
+      await service.confirm('u-1', 'r-1', {
+        categoryId: 'cat-1',
+        attributions: [{ scope: 'personal' }],
+      });
+
+      expect(txMerchant.create).not.toHaveBeenCalled();
+      const actions = prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action);
+      expect(actions).toContain('RECEIPT_CONFIRMED');
+      expect(actions).not.toContain('MERCHANT_CREATED');
+    });
+
+    it('omits the document for a URL receipt with no stored file', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        reviewRow({ source: 'url', fileRef: null, extractedMerchantName: null }),
+      );
+      prismaMock.receipt.findUnique.mockResolvedValue(
+        reviewRow({ source: 'url', fileRef: null, status: 'CONFIRMED', paymentId: 'p-1' }),
+      );
+
+      await service.confirm('u-1', 'r-1', {
+        categoryId: 'cat-1',
+        attributions: [{ scope: 'personal' }],
+      });
+
+      expect(paymentServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
+        expect.anything(),
+        'u-1',
+        expect.objectContaining({ document: null }),
+      );
+      expect(txMerchant.create).not.toHaveBeenCalled(); // no name to register
+    });
+
+    it('rejects confirmation outside REVIEW or without total / currency', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'EXTRACTING' }));
+      await expect(
+        service.confirm('u-1', 'r-1', { categoryId: 'c', attributions: [{ scope: 'personal' }] }),
+      ).rejects.toMatchObject({});
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow({ totalCents: null }));
+      try {
+        await service.confirm('u-1', 'r-1', {
+          categoryId: 'c',
+          attributions: [{ scope: 'personal' }],
+        });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow({ currency: null }));
+      try {
+        await service.confirm('u-1', 'r-1', {
+          categoryId: 'c',
+          attributions: [{ scope: 'personal' }],
+        });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+      expect(paymentServiceMock.createExpenseWithinTx).not.toHaveBeenCalled();
+    });
+
+    it('propagates payment-input validation failures before writing', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
+      paymentServiceMock.validateExpenseInputs.mockRejectedValue(new Error('bad category'));
+      await expect(
+        service.confirm('u-1', 'r-1', { categoryId: 'c', attributions: [{ scope: 'personal' }] }),
+      ).rejects.toThrow('bad category');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
     });
   });
 

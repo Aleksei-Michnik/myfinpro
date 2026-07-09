@@ -1,6 +1,8 @@
 // Phase 7 · Iteration 7.7 — web-side receipt wire types (mirror of the API's
 // ReceiptResponseDto; see apps/api/src/receipt/dto/receipt-response.dto.ts).
 
+import type { AttributionScope } from '@myfinpro/shared';
+
 export const RECEIPT_STATUSES = [
   'UPLOADED',
   'EXTRACTING',
@@ -83,4 +85,13 @@ export interface UpdateReceiptInput {
 export interface MerchantSuggestion {
   id: string;
   name: string;
+}
+
+/** POST /receipts/:id/confirm body — turns a reviewed receipt into a payment. */
+export interface ConfirmReceiptInput {
+  /** Primary OUT category for the resulting payment. */
+  categoryId: string;
+  /** Attribution scopes to remember (personal / group), mirrors POST /payments. */
+  attributions: AttributionScope[];
+  note?: string;
 }

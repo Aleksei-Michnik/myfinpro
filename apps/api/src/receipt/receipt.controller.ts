@@ -38,6 +38,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
+import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
@@ -224,6 +225,33 @@ export class ReceiptController {
     @Body() dto: ReplaceItemsDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.replaceItems(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/confirm')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirm a reviewed receipt → create its payment',
+    description:
+      'Creates one OUT / ONE_TIME payment from the reviewed receipt (total, currency, date, ' +
+      'items) with the given primary category and attribution scopes, attaches the file as a ' +
+      'receipt document, and creates the merchant in the global registry when needed. REVIEW ' +
+      'only; total + currency must be set.',
+  })
+  @ApiOkResponse({
+    description: 'Confirmed receipt (now linked to its payment)',
+    type: ReceiptResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader / unknown category' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async confirm(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ConfirmReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.confirm(user.sub, id, dto);
   }
 
   @CustomThrottle({ limit: 20, ttl: 60_000 })

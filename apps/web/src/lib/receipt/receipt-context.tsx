@@ -6,6 +6,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {
+  ConfirmReceiptInput,
   ListReceiptsParams,
   MerchantSuggestion,
   ReceiptItemInput,
@@ -45,6 +46,12 @@ interface ReceiptContextValue {
   ): Promise<ReceiptSummary>;
   /** Global merchant registry lookup (7.8). */
   searchMerchants(search: string, signal?: AbortSignal): Promise<MerchantSuggestion[]>;
+  /** REVIEW → CONFIRMED: create the payment from the reviewed receipt (7.9). */
+  confirmReceipt(
+    id: string,
+    input: ConfirmReceiptInput,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
   /** Authenticated fetch of the stored file as a Blob (for previews). */
   fetchFileBlob(id: string, signal?: AbortSignal): Promise<Blob>;
   /** Authenticated-endpoint URL of the stored file (for <img>/<object>). */
@@ -267,6 +274,21 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const confirmReceipt = useCallback(
+    (id: string, input: ConfirmReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/confirm`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to confirm receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<ReceiptContextValue>(
@@ -281,6 +303,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       replaceItems,
       searchMerchants,
       fetchFileBlob,
+      confirmReceipt,
       fileUrl,
       isLoading,
       error,
@@ -297,6 +320,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       replaceItems,
       searchMerchants,
       fetchFileBlob,
+      confirmReceipt,
       fileUrl,
       isLoading,
       error,

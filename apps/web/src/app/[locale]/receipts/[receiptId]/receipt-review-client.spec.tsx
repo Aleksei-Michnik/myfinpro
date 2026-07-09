@@ -18,8 +18,10 @@ const replaceItemsMock = vi.fn();
 const searchMerchantsMock = vi.fn();
 const fetchFileBlobMock = vi.fn();
 const retryReceiptMock = vi.fn();
+const confirmReceiptMock = vi.fn();
 const addToastMock = vi.fn();
 const listCategoriesMock = vi.fn();
+const pushMock = vi.fn();
 
 vi.mock('@/lib/receipt/receipt-context', () => ({
   useReceipts: () => ({
@@ -29,6 +31,7 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
     searchMerchants: searchMerchantsMock,
     fetchFileBlob: fetchFileBlobMock,
     retryReceipt: retryReceiptMock,
+    confirmReceipt: confirmReceiptMock,
   }),
 }));
 
@@ -40,6 +43,33 @@ vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: addToastMock }),
 }));
 
+// Confirm dialog is exercised in its own spec — here we stub it to a marker
+// that surfaces its props and lets us fire onConfirmed.
+vi.mock('@/components/receipt/ReceiptConfirmDialog', () => ({
+  ReceiptConfirmDialog: ({
+    open,
+    receiptId,
+    defaultCategoryId,
+    onConfirmed,
+  }: {
+    open: boolean;
+    receiptId: string;
+    defaultCategoryId?: string | null;
+    onConfirmed: (paymentId: string) => void;
+  }) =>
+    open ? (
+      <div
+        data-testid="confirm-dialog"
+        data-receipt={receiptId}
+        data-default-cat={defaultCategoryId ?? ''}
+      >
+        <button data-testid="confirm-dialog-done" onClick={() => onConfirmed('p-9')}>
+          done
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (
     <a href={href as string} {...props}>
@@ -47,7 +77,7 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
   usePathname: () => '/',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: pushMock, replace: vi.fn() }),
 }));
 
 // Capture realtime handlers so tests can emit events.
@@ -363,5 +393,37 @@ describe('ReceiptReviewClient', () => {
     fireEvent.change(screen.getByTestId('review-total'), { target: { value: '99.00' } });
     act(() => resyncCallbacks[resyncCallbacks.length - 1]!());
     expect(getReceiptMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the confirm dialog with the receipt id and most-common item category', async () => {
+    await renderLoaded(makeReceipt());
+    expect(screen.getByTestId('review-confirm')).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId('review-confirm'));
+    const dialog = screen.getByTestId('confirm-dialog');
+    expect(dialog).toHaveAttribute('data-receipt', 'r-1');
+    // Item i-2 carries cat-1; i-1 has none → cat-1 is the default.
+    expect(dialog).toHaveAttribute('data-default-cat', 'cat-1');
+  });
+
+  it('disables Confirm while there are unsaved edits', async () => {
+    await renderLoaded(makeReceipt());
+    fireEvent.change(screen.getByTestId('review-total'), { target: { value: '50.00' } });
+    expect(screen.getByTestId('review-confirm')).toBeDisabled();
+    expect(screen.getByTestId('review-confirm-hint')).toBeInTheDocument();
+  });
+
+  it('navigates to the new payment once confirmation completes', async () => {
+    await renderLoaded(makeReceipt());
+    fireEvent.click(screen.getByTestId('review-confirm'));
+    fireEvent.click(screen.getByTestId('confirm-dialog-done'));
+
+    expect(pushMock).toHaveBeenCalledWith('/payments/p-9');
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+  });
+
+  it('non-REVIEW receipts do not offer Confirm', async () => {
+    await renderLoaded(makeReceipt({ status: 'CONFIRMED' }));
+    expect(screen.queryByTestId('review-confirm')).toBeNull();
   });
 });
