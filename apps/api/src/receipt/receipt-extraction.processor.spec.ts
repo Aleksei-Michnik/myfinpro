@@ -157,13 +157,19 @@ describe('ReceiptExtractionProcessor', () => {
     providerMock.extract.mockResolvedValue(okResult());
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('<html>receipt</html>'),
+      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+      text: () =>
+        Promise.resolve(
+          '<html><head><script>track()</script></head><body><p>Shufersal receipt 45.90</p></body></html>',
+        ),
     } as never);
 
     await processor.process(makeJob());
     const input = providerMock.extract.mock.calls[0][0];
     expect(input.kind).toBe('html');
     expect(input.sourceUrl).toBe('https://r.example/x');
+    // 7.12 — HTML reduces to readable text before the provider call.
+    expect(input.data).toBe('Shufersal receipt 45.90');
     fetchSpy.mockRestore();
   });
 

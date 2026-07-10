@@ -16,6 +16,7 @@ import {
 } from './extraction/extraction-provider.interface';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
+import { htmlToReceiptText } from './utils/html-to-text.util';
 import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
 type ExtractionJobData = { receiptId: string };
@@ -208,8 +209,15 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         }
         throw new Error(`Receipt URL fetch failed (${res.status})`);
       }
-      const text = await res.text();
-      return text.slice(0, URL_SNAPSHOT_MAX_CHARS);
+      const raw = (await res.text()).slice(0, URL_SNAPSHOT_MAX_CHARS);
+      // HTML pages reduce to readable text before the provider call —
+      // markup/script noise measurably degrades extraction (Phase 7.12).
+      // Sniff the body as well as the header: receipt hosts frequently
+      // mislabel HTML as text/plain.
+      const contentType = res.headers.get('content-type') ?? '';
+      const looksLikeHtml =
+        contentType.includes('html') || /^\s*(?:<!doctype\s+html|<html)/i.test(raw);
+      return looksLikeHtml ? htmlToReceiptText(raw) : raw;
     }
     // Unreachable — the loop returns or throws — but satisfies the type checker.
     throw new ExtractionFailedError('Too many redirects');
