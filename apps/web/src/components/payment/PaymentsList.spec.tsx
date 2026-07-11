@@ -83,6 +83,12 @@ vi.mock('@/lib/payment/payment-context', () => ({
   }),
 }));
 
+// The create dialog offers receipt intake (7.13); this spec renders the real
+// dialog, so the hook needs a provider stand-in.
+vi.mock('@/lib/receipt/receipt-context', () => ({
+  useReceipts: () => ({ uploadReceipt: vi.fn() }),
+}));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {

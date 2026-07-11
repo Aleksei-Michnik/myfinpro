@@ -365,6 +365,25 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         />
       )}
 
+      {/* 7.13 — a confirmed receipt is this payment's proving document. */}
+      {payment.receiptId && (
+        <section
+          className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
+          data-testid="payment-detail-receipt"
+        >
+          <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {tDetail('receiptTitle')}
+          </h2>
+          <Link
+            href={`/receipts/${payment.receiptId}`}
+            className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+            data-testid="payment-detail-receipt-link"
+          >
+            {tDetail('receiptLink')}
+          </Link>
+        </section>
+      )}
+
       <PaymentDocumentsPlaceholder />
 
       <section

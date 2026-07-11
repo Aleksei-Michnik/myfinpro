@@ -88,6 +88,12 @@ vi.mock('@/lib/payment/payment-context', () => ({
   }),
 }));
 
+// The edit dialog offers receipt intake in create mode (7.13); the detail
+// page renders the real dialog, so the hook needs a provider stand-in.
+vi.mock('@/lib/receipt/receipt-context', () => ({
+  useReceipts: () => ({ uploadReceipt: vi.fn() }),
+}));
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
@@ -180,6 +186,18 @@ describe('PaymentDetailClient', () => {
     expect(screen.getByTestId('payment-documents-placeholder')).toBeInTheDocument();
     expect(screen.getByTestId('payment-comment-list')).toBeInTheDocument();
     expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
+    // Manual payments carry no source receipt (7.13).
+    expect(screen.queryByTestId('payment-detail-receipt')).not.toBeInTheDocument();
+  });
+
+  it('links to the source receipt when the payment came from a confirm (7.13)', async () => {
+    mockGetPayment.mockResolvedValueOnce(makePayment({ receiptId: 'r-42' }));
+    render(<PaymentDetailClient paymentId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('payment-detail-receipt')).toBeInTheDocument());
+    expect(screen.getByTestId('payment-detail-receipt-link')).toHaveAttribute(
+      'href',
+      '/receipts/r-42',
+    );
   });
 
   it('edit button opens the <PaymentFormDialog>', async () => {

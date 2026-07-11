@@ -667,7 +667,10 @@
       "addAction": "+ Add payment",
       "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
       "othersPreserved": "Other users' attributions on this payment will not be touched.",
-      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved."
+      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved.",
+      "fromReceipt": "From receipt",
+      "fromReceiptHint": "Have a receipt? Upload it and we will fill the payment in for you.",
+      "fromReceiptFailed": "Failed to upload the receipt"
     },
     "types": {
       "label": "Type",
@@ -735,7 +738,9 @@
         "countSingular": "1 occurrence",
         "countPlural": "{n} occurrences",
         "empty": "No occurrences yet — they will appear here as the schedule runs."
-      }
+      },
+      "receiptTitle": "Receipt",
+      "receiptLink": "View the source receipt"
     },
     "comments": {
       "title": "Comments",

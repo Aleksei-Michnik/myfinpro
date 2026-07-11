@@ -39,6 +39,8 @@ export class PaymentSummaryDto {
   @ApiProperty({ default: 0 }) commentCount!: number;
   @ApiProperty({ default: false }) starredByMe!: boolean;
   @ApiProperty({ default: false }) hasDocuments!: boolean;
+  /** Source receipt when the payment came from confirming one (7.13); loaded on the detail endpoint. */
+  @ApiPropertyOptional({ nullable: true }) receiptId?: string | null;
   @ApiPropertyOptional({ nullable: true }) parentPaymentId?: string | null;
   @ApiProperty() createdById!: string;
   @ApiProperty() createdAt!: string;

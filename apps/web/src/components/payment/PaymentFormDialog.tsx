@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
+import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
@@ -56,6 +57,7 @@ import type {
   ScheduleResponse,
   UpdatePaymentInput,
 } from '@/lib/payment/types';
+import { useReceipts } from '@/lib/receipt/receipt-context';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface PaymentFormDialogProps {
@@ -273,6 +275,32 @@ export function PaymentFormDialog({
     getPayment,
     listOccurrences,
   } = usePayments();
+
+  // Phase 7.13 — payment-first receipt intake: a receipt is the payment's
+  // proving document, so its upload starts here. Picking a file creates the
+  // receipt and hands off to the extract → review → confirm pipeline, which
+  // ends in the payment this dialog would otherwise create by hand.
+  const router = useRouter();
+  const { uploadReceipt } = useReceipts();
+  const receiptFileRef = useRef<HTMLInputElement | null>(null);
+  const receiptOp = useAsyncOperation<boolean>({ scope: 'control' });
+  const handleReceiptFile = (file: File | undefined) => {
+    if (!file) return;
+    void receiptOp
+      .run(async (signal) => {
+        const created = await uploadReceipt(file, signal);
+        router.push(`/receipts/${created.id}`);
+        return true;
+      })
+      .then((r) => {
+        if (r !== undefined) onClose();
+      });
+  };
+  useEffect(() => {
+    if (receiptOp.error && receiptOp.error.reason !== 'aborted') {
+      addToast('error', receiptOp.error.message || t('fromReceiptFailed'));
+    }
+  }, [receiptOp.error, addToast, t]);
 
   // Phase 6 · 6.18.1.4-hotfix — refetch the freshest copy of the payment
   // when the dialog opens in edit mode. Without this we'd render stale
@@ -840,6 +868,37 @@ export function PaymentFormDialog({
             ✕
           </button>
         </div>
+
+        {mode === 'create' && (
+          <div
+            className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
+            data-testid="payment-form-from-receipt"
+          >
+            <span className="text-xs text-gray-600 dark:text-gray-300">{t('fromReceiptHint')}</span>
+            <input
+              ref={receiptFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                handleReceiptFile(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+              data-testid="payment-form-receipt-input"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={receiptOp.isLoading}
+              onClick={() => receiptFileRef.current?.click()}
+              data-testid="payment-form-receipt-button"
+            >
+              {receiptOp.isLoading ? <ButtonSpinner /> : null}
+              {t('fromReceipt')}
+            </Button>
+          </div>
+        )}
 
         {isGeneratedOccurrence && (
           <div

@@ -66,6 +66,8 @@ export interface PaymentSummary {
   commentCount: number;
   starredByMe: boolean;
   hasDocuments: boolean;
+  /** Source receipt when the payment came from confirming one (7.13); loaded on the detail endpoint. */
+  receiptId?: string | null;
   parentPaymentId: string | null;
   createdById: string;
   createdAt: string;

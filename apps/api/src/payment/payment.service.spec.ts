@@ -1243,6 +1243,16 @@ describe('PaymentService', () => {
       expect(r.attributions[0].groupId).toBe('g1');
     });
 
+    it('exposes the source receipt back-link when the payment came from a confirm (7.13)', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow({ receipt: { id: 'r-9' } }));
+      const withReceipt = await service.findByIdForUser('user-1', 'pay-1');
+      expect(withReceipt.receiptId).toBe('r-9');
+
+      prismaMock.payment.findFirst.mockResolvedValue(makeFullRow());
+      const manual = await service.findByIdForUser('user-1', 'pay-1');
+      expect(manual.receiptId).toBeNull();
+    });
+
     it('throws PAYMENT_NOT_FOUND when prisma returns null (non-member on group payment)', async () => {
       prismaMock.payment.findFirst.mockResolvedValue(null);
       await expect(service.findByIdForUser('user-1', 'pay-1')).rejects.toThrow(NotFoundException);

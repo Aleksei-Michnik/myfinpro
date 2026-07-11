@@ -667,7 +667,10 @@
       "addAction": "+ הוסף תשלום",
       "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
       "othersPreserved": "השיוכים של משתמשים אחרים לתשלום זה לא ישונו.",
-      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו."
+      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו.",
+      "fromReceipt": "מקבלה",
+      "fromReceiptHint": "יש קבלה? העלו אותה ואנחנו נמלא את התשלום עבורכם.",
+      "fromReceiptFailed": "העלאת הקבלה נכשלה"
     },
     "types": {
       "label": "סוג",
@@ -735,7 +738,9 @@
         "countSingular": "מופע אחד",
         "countPlural": "{n} מופעים",
         "empty": "עדיין אין מופעים — הם יופיעו כאן ככל שלוח הזמנים יפעל."
-      }
+      },
+      "receiptTitle": "קבלה",
+      "receiptLink": "צפייה בקבלת המקור"
     },
     "comments": {
       "title": "תגובות",

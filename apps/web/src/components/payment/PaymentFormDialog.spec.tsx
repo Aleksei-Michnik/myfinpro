@@ -53,6 +53,18 @@ vi.mock('@/lib/payment/payment-context', () => ({
   }),
 }));
 
+// Phase 7.13 — receipt intake from the create dialog.
+const uploadReceiptMock = vi.fn();
+vi.mock('@/lib/receipt/receipt-context', () => ({
+  useReceipts: () => ({ uploadReceipt: uploadReceiptMock }),
+}));
+
+const routerPushMock = vi.fn();
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push: routerPushMock, replace: vi.fn() }),
+  usePathname: () => '/',
+}));
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 function cat(partial: Partial<CategoryDto>): CategoryDto {
@@ -159,6 +171,8 @@ describe('PaymentFormDialog', () => {
     editPaymentWithPropagationMock.mockReset();
     listOccurrencesMock.mockReset();
     addToastMock.mockReset();
+    uploadReceiptMock.mockReset();
+    routerPushMock.mockReset();
     // Default: no children → edits of RECURRING parents submit directly.
     // Propagation tests override with a non-empty page.
     listOccurrencesMock.mockResolvedValue({ data: [], cursor: null, hasMore: false });
@@ -175,6 +189,42 @@ describe('PaymentFormDialog', () => {
     localStorage.setItem('myfin.payment.lastDirection', 'IN');
     renderCreate();
     expect(screen.getByTestId('form-direction-in').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  // ── From receipt (7.13) ────────────────────────────────────────────────────
+
+  it('create: picking a receipt file uploads it, routes to review, and closes', async () => {
+    uploadReceiptMock.mockResolvedValue({ id: 'r-77' });
+    const { onClose } = renderCreate();
+
+    const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByTestId('payment-form-receipt-input'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(uploadReceiptMock).toHaveBeenCalledWith(file, expect.anything()));
+    await waitFor(() => expect(routerPushMock).toHaveBeenCalledWith('/receipts/r-77'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('create: a failed receipt upload toasts and keeps the dialog open', async () => {
+    uploadReceiptMock.mockRejectedValue(new Error('Unsupported file type'));
+    const { onClose } = renderCreate();
+
+    fireEvent.change(screen.getByTestId('payment-form-receipt-input'), {
+      target: { files: [new File(['x'], 'x.gif', { type: 'image/gif' })] },
+    });
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Unsupported')),
+    );
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('edit: the from-receipt intake is not offered', () => {
+    renderEdit(makePayment());
+    expect(screen.queryByTestId('payment-form-from-receipt')).toBeNull();
   });
 
   it('create: defaults.direction overrides remember', () => {

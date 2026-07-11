@@ -68,6 +68,9 @@ export const PAYMENT_DETAIL_INCLUDE = {
   attributions: { include: { group: { select: { name: true } } } },
   stars: { select: { id: true }, where: {} as { userId?: string } },
   _count: { select: { comments: true, documents: true } },
+  // Back-link to the source receipt when the payment came from confirming
+  // one (7.13) — a receipt is the payment's proving document.
+  receipt: { select: { id: true } },
 } as const;
 
 /** Build the include with the `stars.where.userId` set to the viewer. */
@@ -77,6 +80,7 @@ function buildDetailInclude(userId: string) {
     attributions: PAYMENT_DETAIL_INCLUDE.attributions,
     stars: { where: { userId }, select: { id: true } },
     _count: PAYMENT_DETAIL_INCLUDE._count,
+    receipt: PAYMENT_DETAIL_INCLUDE.receipt,
   } satisfies Prisma.PaymentInclude;
 }
 
@@ -118,6 +122,8 @@ export type PaymentWithRelations = {
     groupId: string | null;
     group: { name: string } | null;
   }>;
+  /** Loaded by the detail include only; undefined on list rows. */
+  receipt?: { id: string } | null;
 };
 
 /**
@@ -157,6 +163,7 @@ export function mapPaymentToSummary(
     commentCount: opts.commentCount ?? 0,
     starredByMe: opts.starredByMe,
     hasDocuments: opts.hasDocuments ?? false,
+    receiptId: payment.receipt?.id ?? null,
     parentPaymentId: payment.parentPaymentId,
     createdById: payment.createdById,
     createdAt: payment.createdAt.toISOString(),
