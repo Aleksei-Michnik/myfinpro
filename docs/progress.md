@@ -7661,3 +7661,39 @@ edit → confirm → payment, with private-by-uploader receipts, a global
 merchant registry, per-item categories, realtime lifecycle, and an
 SSRF-guarded URL path. **Next: Phase 8** (product catalog & staged matching
 over the `receipt_items` this phase persists).
+
+---
+
+## Phase 7 · Iterations 7.11–7.13 — recognition fixes + payment-first intake (2026-07-11)
+
+Follow-ups from staging verification (documented as a re-plan block in
+IMPLEMENTATION-PLAN.md before implementation):
+
+- **7.11 HEIC → JPEG at storage.** `image/heic` (the iPhone camera default)
+  passed the upload whitelist but failed everywhere downstream — vision LLM
+  APIs reject HEIC and browsers can't preview it. `ReceiptStorageService`
+  now decodes HEIC via `heic-convert` (WASM, no native image libs in the
+  container) and stores a JPEG (quality 0.9), fixing extraction, the review
+  preview, and the confirm-time `PaymentDocument` in one place. Undecodable
+  HEIC → structured `RECEIPT_INVALID_FILE_TYPE` 400.
+- **7.12 Readable URL snapshots.** The fetcher handed raw HTML to the
+  extraction model. New dependency-free `htmlToReceiptText()` drops
+  invisible subtrees, turns block boundaries into newlines and table cells
+  into tabs, decodes entities (incl. numeric Hebrew + ₪), collapses
+  whitespace, caps at 100k chars; applied when the response is HTML by
+  header or body sniff. Plain text passes through.
+- **7.13 Payment-first intake.** A receipt is an **attribute of a payment**
+  (the document that proves it), not a parallel object. The Add-payment
+  dialog now offers **From receipt** (create mode): picking a file uploads
+  it and hands off to extract → review → confirm, which ends in the payment.
+  The payment detail endpoint exposes the `receiptId` back-link (detail
+  include only) and the detail page renders a Receipt section linking to the
+  source receipt — the connection is visible in both directions. `/receipts`
+  remains the pipeline view. i18n EN+HE, parity clean.
+
+Tests: storage spec 15 (HEIC convert + reject), html-to-text 7, processor
+reduction assertion, payment-service back-link, dialog from-receipt ×3,
+detail receipt-link ×2. **api 1031 green; web 1131 green; lint 0 errors.**
+
+Runbook troubleshooting updated (HEIC + URL rows now describe the fixed
+behaviour).
