@@ -34,6 +34,10 @@ model User {
   timezone            String    @default("UTC") @db.VarChar(50)
   // Phase 10 (10.10): due-payment reminder window in days; 0 disables.
   dueReminderDays     Int       @default(3) @map("due_reminder_days")
+  // Phase 8.11 — per-user LLM selection (runbook §9). Both null = deployment
+  // default provider. Values are validated against the shared model catalog.
+  llmProvider         String?   @map("llm_provider") @db.VarChar(20)
+  llmModel            String?   @map("llm_model") @db.VarChar(60)
   isActive            Boolean   @default(true) @map("is_active")
   emailVerified       Boolean   @default(false) @map("email_verified")
   lastLoginAt         DateTime? @map("last_login_at")
@@ -54,11 +58,34 @@ model User {
   paymentDocuments        PaymentDocument[]
   receiptsUploaded        Receipt[]                @relation("ReceiptUploader")
   budgetsOwned            Budget[]                 @relation("BudgetOwner")
+  llmCredentials          UserLlmCredential[]
 
   @@index([email])
   @@index([createdAt])
   @@index([scheduledDeletionAt])
   @@map("users")
+}
+
+// Phase 8.11 — BYOK LLM API keys (runbook §9.4 layer 1). Secrets live only
+// here, AES-256-GCM encrypted under LLM_SECRETS_ENCRYPTION_KEY with a `v1:`
+// version prefix; plaintext never reaches other tables, logs, or responses.
+// `keyHint` (last 4 chars) is the only human-readable trace.
+model UserLlmCredential {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  userId         String   @map("user_id") @db.VarChar(36)
+  provider       String   @db.VarChar(20)
+  // 'api_key' today; 'oauth' when provider OAuth connectors land (§9.2b).
+  credentialKind String   @default("api_key") @map("credential_kind") @db.VarChar(10)
+  // Encoded as v1:<iv>:<tag>:<ciphertext>, all base64.
+  encryptedValue String   @map("encrypted_value") @db.Text
+  keyHint        String   @map("key_hint") @db.VarChar(8)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("user_llm_credentials")
 }
 
 model RefreshToken {
