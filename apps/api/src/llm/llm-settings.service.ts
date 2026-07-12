@@ -1,9 +1,9 @@
 import { findLlmModel, LLM_MODEL_CATALOG, LLM_PROVIDERS, type LlmProvider } from '@myfinpro/shared';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 import { LLM_ERRORS } from './constants/llm-errors';
 import { LlmCredentialsService, type LlmCredentialHint } from './llm-credentials.service';
-import { PrismaService } from '../prisma/prisma.service';
 
 /** Deployment-level ("shared") API key env var per provider. */
 export const LLM_SHARED_KEY_ENV: Record<LlmProvider, string> = {

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
-import { LLM_ERRORS } from '../constants/llm-errors';
 import type { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
+import { LLM_ERRORS } from '../constants/llm-errors';
 
 /** Access tokens older than this cannot mutate stored API keys. */
 export const FRESH_AUTH_MAX_AGE_SECONDS = 600;

@@ -5,8 +5,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import { LlmCredentialsService } from './llm-credentials.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import { LlmCredentialsService } from './llm-credentials.service';
 
 describe('LlmCredentialsService', () => {
   const masterKey = randomBytes(32).toString('base64');

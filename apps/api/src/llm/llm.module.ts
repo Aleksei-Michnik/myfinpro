@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
 import { FreshAuthGuard } from './guards/fresh-auth.guard';
-import { LlmController } from './llm.controller';
 import { LlmCredentialsService } from './llm-credentials.service';
 import { LlmSettingsService } from './llm-settings.service';
-import { PrismaModule } from '../prisma/prisma.module';
+import { LlmController } from './llm.controller';
 
 /**
  * Phase 8.11 — per-user LLM settings (runbook §9): curated model catalog,

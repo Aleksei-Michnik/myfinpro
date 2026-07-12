@@ -1,12 +1,12 @@
 import type { ConfigService } from '@nestjs/config';
+import type { LlmCredentialsService } from '../../llm/llm-credentials.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import {
   ExtractionFailedError,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
 import { ExtractionResolverService } from './extraction-resolver.service';
 import { ResilientExtractionProvider } from './resilient-extraction.provider';
-import type { LlmCredentialsService } from '../../llm/llm-credentials.service';
-import type { PrismaService } from '../../prisma/prisma.service';
 
 describe('ExtractionResolverService', () => {
   const prismaMock = { user: { findUnique: jest.fn() } };

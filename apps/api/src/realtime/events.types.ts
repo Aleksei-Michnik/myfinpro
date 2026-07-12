@@ -60,6 +60,11 @@ export type RealtimeEvent =
   // Phase 7.4 — receipt lifecycle. Recipients: the uploader only (receipts
   // are private until confirmed; confirm reuses payment.created fan-out).
   | { type: 'receipt.updated'; userIds: string[]; receipt: ReceiptResponse }
-  | { type: 'receipt.deleted'; userIds: string[]; receiptId: string };
+  | { type: 'receipt.deleted'; userIds: string[]; receiptId: string }
+  // Phase 10.2 — budget lifecycle. Advisory (design §2.6): fired on every
+  // budget mutation (create / edit / delete / archive / unarchive); clients
+  // refetch budget lists on receipt. Recipients: the owner (personal) or
+  // all group members (group).
+  | { type: 'budget.updated'; userIds: string[]; budgetId: string };
 
 export type RealtimeEventType = RealtimeEvent['type'];

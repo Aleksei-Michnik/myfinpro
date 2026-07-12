@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { BudgetModule } from './budget/budget.module';
 import { CategoryModule } from './category/category.module';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
 import { LoggerModule } from './common/logger/logger.module';
@@ -36,6 +37,7 @@ import { ReceiptModule } from './receipt/receipt.module';
     GroupModule,
     PaymentModule,
     ReceiptModule,
+    BudgetModule,
     CategoryModule,
     RealtimeModule,
   ],

@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import type { PrismaService } from '../prisma/prisma.service';
 import { LLM_ERRORS } from './constants/llm-errors';
 import type { LlmCredentialsService } from './llm-credentials.service';
 import { LlmSettingsService } from './llm-settings.service';
-import type { PrismaService } from '../prisma/prisma.service';
 
 describe('LlmSettingsService', () => {
   const prismaMock = {

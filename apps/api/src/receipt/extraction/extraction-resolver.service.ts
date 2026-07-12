@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { findLlmModel, isLlmProvider } from '@myfinpro/shared';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LlmCredentialsService } from '../../llm/llm-credentials.service';
+import { LLM_SHARED_KEY_ENV } from '../../llm/llm-settings.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AnthropicExtractionProvider } from './anthropic-extraction.provider';
 import {
   ExtractionFailedError,
@@ -10,9 +13,6 @@ import {
 } from './extraction-provider.interface';
 import { OpenAiExtractionProvider } from './openai-extraction.provider';
 import { ResilientExtractionProvider } from './resilient-extraction.provider';
-import { LlmCredentialsService } from '../../llm/llm-credentials.service';
-import { LLM_SHARED_KEY_ENV } from '../../llm/llm-settings.service';
-import { PrismaService } from '../../prisma/prisma.service';
 
 export interface ResolvedExtraction {
   provider: ReceiptExtractionProvider;

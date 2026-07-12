@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 import { LLM_ERRORS } from './constants/llm-errors';
 import {
   decryptLlmSecret,
@@ -14,7 +15,6 @@ import {
   llmKeyHint,
   parseLlmMasterKey,
 } from './llm-crypto.util';
-import { PrismaService } from '../prisma/prisma.service';
 
 /** What reads are allowed to see — never the key material (§9.4 layer 2). */
 export interface LlmCredentialHint {
