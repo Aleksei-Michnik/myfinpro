@@ -7833,10 +7833,12 @@ user × provider, `credential_kind` ready for OAuth later, unique
 `(user_id, provider)`, `onDelete: Cascade`).
 
 **8.11 Shared.** `llm.types.ts` — the one catalog constant
-(`LLM_MODEL_CATALOG`: claude-fable-5 / claude-sonnet-5 / claude-opus-4-8 /
-claude-haiku-4-5 / gpt-5.6 / gpt-5.2), `findLlmModel`, `isLlmProvider`,
-and per-provider key shape gates (`LLM_API_KEY_PATTERNS`, OpenAI pattern
-excludes `sk-ant-` so cross-provider pastes fail fast).
+(`LLM_MODEL_CATALOG`, verified against provider lineups 2026-07-12:
+claude-fable-5 / claude-sonnet-5 / claude-opus-4-8 / claude-haiku-4-5 +
+the OpenAI GPT-5.6 family gpt-5.6 (=sol) / gpt-5.6-terra / gpt-5.6-luna /
+gpt-5.2), `findLlmModel`, `isLlmProvider`, and per-provider key shape
+gates (`LLM_API_KEY_PATTERNS`, OpenAI pattern excludes `sk-ant-` so
+cross-provider pastes fail fast).
 
 **8.11 API (`src/llm/`).** `llm-crypto.util` (AES-256-GCM,
 `v1:<iv>:<tag>:<cipher>` envelope, 32-byte base64 master key from

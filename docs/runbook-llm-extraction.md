@@ -218,7 +218,14 @@ free-typed model ids are rejected). Initial catalog:
 | `anthropic` | `claude-opus-4-8`  | Anthropic Claude Opus 4.8  |
 | `anthropic` | `claude-haiku-4-5` | Anthropic Claude Haiku 4.5 |
 | `openai`    | `gpt-5.6`          | OpenAI GPT-5.6             |
+| `openai`    | `gpt-5.6-terra`    | OpenAI GPT-5.6 Terra       |
+| `openai`    | `gpt-5.6-luna`     | OpenAI GPT-5.6 Luna        |
 | `openai`    | `gpt-5.2`          | OpenAI GPT-5.2             |
+
+(Verified against provider lineups on 2026-07-12: the Anthropic rows are
+the full current lineup; `gpt-5.6` is OpenAI's alias for the flagship
+`gpt-5.6-sol`, with Terra/Luna as the balanced/efficient sizes and GPT-5.2
+kept as the previous generation.)
 
 Only Anthropic and OpenAI are offered for now; adding a provider (Google
 Gemini and others are planned) means a new **provider connector** plus

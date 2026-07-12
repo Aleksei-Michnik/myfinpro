@@ -21,12 +21,19 @@ export interface LlmCatalogModel {
   label: string;
 }
 
+// Verified against provider lineups 2026-07-12: Anthropic — Fable 5,
+// Sonnet 5, Opus 4.8, Haiku 4.5; OpenAI — the GPT-5.6 family (GA
+// 2026-07-09: `gpt-5.6` is the alias for the flagship gpt-5.6-sol, with
+// Terra and Luna as the balanced/efficient sizes) plus GPT-5.2 as the
+// previous-generation option.
 export const LLM_MODEL_CATALOG: readonly LlmCatalogModel[] = [
   { provider: 'anthropic', id: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
   { provider: 'anthropic', id: 'claude-sonnet-5', label: 'Anthropic Claude Sonnet 5' },
   { provider: 'anthropic', id: 'claude-opus-4-8', label: 'Anthropic Claude Opus 4.8' },
   { provider: 'anthropic', id: 'claude-haiku-4-5', label: 'Anthropic Claude Haiku 4.5' },
   { provider: 'openai', id: 'gpt-5.6', label: 'OpenAI GPT-5.6' },
+  { provider: 'openai', id: 'gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra' },
+  { provider: 'openai', id: 'gpt-5.6-luna', label: 'OpenAI GPT-5.6 Luna' },
   { provider: 'openai', id: 'gpt-5.2', label: 'OpenAI GPT-5.2' },
 ];
 
