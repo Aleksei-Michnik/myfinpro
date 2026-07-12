@@ -10,6 +10,7 @@
 import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { Button } from '@/components/ui/Button';
@@ -85,6 +86,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const saveOp = useAsyncOperation<boolean>({ scope: 'control' });
@@ -212,6 +214,14 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     const discount = parseMoney(discountStr) ?? 0;
     return total - (itemsSum - discount);
   }, [items, totalStr, discountStr]);
+
+  // Walkthrough backlog — PENDING + SKIPPED are the resumable set (8.4).
+  const unresolvedCount = useMemo(
+    () =>
+      receipt?.items.filter((i) => i.matchStatus === 'PENDING' || i.matchStatus === 'SKIPPED')
+        .length ?? 0,
+    [receipt],
+  );
 
   // Pre-select the payment's primary category from the most common line-item
   // category (confirm dialog default).
@@ -552,9 +562,35 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
 
           {/* ── Items ───────────────────────────────────────────────── */}
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {t('itemsTitle')}
-            </h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {t('itemsTitle')}
+              </h2>
+              {/* Walkthrough entry (Phase 8.4) — REVIEW and CONFIRMED; server
+                  state is the source of truth, so unsaved edits gate it. */}
+              {(receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED') &&
+                receipt.items.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {dirty && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {t('confirmSaveFirst')}
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant={unresolvedCount > 0 ? 'primary' : 'outline'}
+                      size="sm"
+                      onClick={() => setWalkthroughOpen(true)}
+                      disabled={dirty}
+                      data-testid="review-walkthrough"
+                    >
+                      {unresolvedCount > 0
+                        ? t('matchProducts', { count: unresolvedCount })
+                        : t('matchProductsDone')}
+                    </Button>
+                  </div>
+                )}
+            </div>
             <div className="space-y-2" data-testid="review-items">
               {items.map((row, index) => (
                 <div
@@ -562,15 +598,40 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                   className="grid grid-cols-12 items-center gap-1.5"
                   data-testid={`review-item-${index}`}
                 >
-                  <input
-                    type="text"
-                    value={row.rawName}
-                    onChange={(e) => setItem(index, { rawName: e.target.value })}
-                    placeholder={t('itemName')}
-                    disabled={!editable}
-                    data-testid={`item-name-${index}`}
-                    className={`${inputClass} col-span-4`}
-                  />
+                  <div className="col-span-4 flex items-center gap-1.5">
+                    {/* Product-match state dot (Phase 8) — server truth, so
+                        it hides while there are unsaved row edits. */}
+                    {!dirty && receipt.items[index] && (
+                      <span
+                        aria-label={t(
+                          `matchState.${receipt.items[index].matchStatus.toLowerCase()}`,
+                        )}
+                        title={
+                          receipt.items[index].productName ??
+                          t(`matchState.${receipt.items[index].matchStatus.toLowerCase()}`)
+                        }
+                        data-testid={`item-match-${index}`}
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          receipt.items[index].matchStatus === 'CONFIRMED'
+                            ? 'bg-green-500'
+                            : receipt.items[index].matchStatus === 'AUTO'
+                              ? 'bg-blue-500'
+                              : receipt.items[index].matchStatus === 'SKIPPED'
+                                ? 'bg-gray-300 dark:bg-gray-600'
+                                : 'bg-amber-400'
+                        }`}
+                      />
+                    )}
+                    <input
+                      type="text"
+                      value={row.rawName}
+                      onChange={(e) => setItem(index, { rawName: e.target.value })}
+                      placeholder={t('itemName')}
+                      disabled={!editable}
+                      data-testid={`item-name-${index}`}
+                      className={inputClass}
+                    />
+                  </div>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -685,6 +746,18 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           router.push(`/payments/${paymentId}`);
         }}
       />
+
+      {/* Mounted only while open — keeps the dialog (and its product-context
+          dependency) entirely off the tree for plain review flows. */}
+      {walkthroughOpen && (
+        <ItemWalkthroughDialog
+          open
+          receipt={receipt}
+          categories={categories}
+          onClose={() => setWalkthroughOpen(false)}
+          onReceiptUpdated={hydrate}
+        />
+      )}
     </main>
   );
 }

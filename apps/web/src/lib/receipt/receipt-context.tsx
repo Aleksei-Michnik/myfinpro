@@ -15,6 +15,7 @@ import type {
   UpdateReceiptInput,
 } from './types';
 import { useAuth } from '@/lib/auth/auth-context';
+import type { MatchItemInput } from '@/lib/product/types';
 
 export interface ReceiptApiError extends Error {
   errorCode?: string;
@@ -46,6 +47,15 @@ interface ReceiptContextValue {
   ): Promise<ReceiptSummary>;
   /** Global merchant registry lookup (7.8). */
   searchMerchants(search: string, signal?: AbortSignal): Promise<MerchantSuggestion[]>;
+  /** Walkthrough confirm — link/create a registry product for one item (8.4). */
+  matchItem(
+    receiptId: string,
+    itemId: string,
+    input: MatchItemInput,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Walkthrough skip/unlink — always resumable (8.4). */
+  skipItemMatch(receiptId: string, itemId: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** REVIEW → CONFIRMED: create the payment from the reviewed receipt (7.9). */
   confirmReceipt(
     id: string,
@@ -261,6 +271,37 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const matchItem = useCallback(
+    (
+      receiptId: string,
+      itemId: string,
+      input: MatchItemInput,
+      signal?: AbortSignal,
+    ): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/receipts/${encodeURIComponent(receiptId)}/items/${encodeURIComponent(itemId)}/match`,
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify(input), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to match item');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const skipItemMatch = useCallback(
+    (receiptId: string, itemId: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/receipts/${encodeURIComponent(receiptId)}/items/${encodeURIComponent(itemId)}/skip-match`,
+          { method: 'POST', headers: authHeaders(), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to skip item');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
   const fetchFileBlob = useCallback(
     (id: string, signal?: AbortSignal): Promise<Blob> =>
       run(async () => {
@@ -302,6 +343,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       updateReceipt,
       replaceItems,
       searchMerchants,
+      matchItem,
+      skipItemMatch,
       fetchFileBlob,
       confirmReceipt,
       fileUrl,
@@ -319,6 +362,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       updateReceipt,
       replaceItems,
       searchMerchants,
+      matchItem,
+      skipItemMatch,
       fetchFileBlob,
       confirmReceipt,
       fileUrl,

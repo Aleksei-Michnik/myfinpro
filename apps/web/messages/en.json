@@ -45,7 +45,8 @@
     "menu": "Menu",
     "closeMenu": "Close menu",
     "skipToContent": "Skip to main content",
-    "receipts": "Receipts"
+    "receipts": "Receipts",
+    "products": "Products"
   },
   "home": {
     "title": "Personal & Family Finance Management",
@@ -1055,7 +1056,15 @@
       "retry": "Retry extraction",
       "retriedToast": "Extraction restarted",
       "confirm": "Confirm",
-      "confirmSaveFirst": "Save your changes before confirming"
+      "confirmSaveFirst": "Save your changes before confirming",
+      "matchProducts": "Match products ({count})",
+      "matchProductsDone": "Products matched",
+      "matchState": {
+        "pending": "Product match pending",
+        "auto": "Product auto-matched",
+        "confirmed": "Product match confirmed",
+        "skipped": "Product match skipped"
+      }
     },
     "confirm": {
       "title": "Confirm receipt",
@@ -1070,6 +1079,115 @@
       "missingScope": "Choose at least one scope",
       "confirmedToast": "Receipt confirmed",
       "confirmFailed": "Could not confirm the receipt"
+    }
+  },
+  "products": {
+    "title": "Products",
+    "list": {
+      "searchLabel": "Search products",
+      "searchPlaceholder": "Search by name in any language, or a barcode…",
+      "scan": "Scan barcode",
+      "create": "New product",
+      "loading": "Loading products…",
+      "empty": "You haven't purchased any products yet — confirm a receipt and match its items to build your catalog.",
+      "noResults": "No products match “{query}”.",
+      "resultCount": "{count, plural, =1 {1 product} other {# products}} shown",
+      "loadMore": "Load more",
+      "lookupFailed": "Barcode lookup failed"
+    },
+    "card": {
+      "timesPurchased": "{count, plural, =1 {bought once} other {bought # times}}"
+    },
+    "scanner": {
+      "title": "Scan a barcode",
+      "close": "Close scanner",
+      "starting": "Starting camera…",
+      "scanning": "Point the camera at the barcode",
+      "noCamera": "Camera is unavailable — type the barcode below instead.",
+      "manualLabel": "Enter the barcode manually",
+      "manualSubmit": "Use",
+      "manualInvalid": "Not a valid EAN/UPC barcode (check the digits)."
+    },
+    "form": {
+      "createTitle": "New product",
+      "editTitle": "Edit product",
+      "nameLabel": "Name",
+      "brandLabel": "Brand",
+      "barcodeLabel": "Barcode (EAN/UPC)",
+      "scan": "Scan",
+      "categoryLabel": "Default category",
+      "noCategory": "No default category",
+      "categoryHint": "Products are shared by everyone, so only common (system) categories apply.",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "create": "Create product",
+      "nameRequired": "The product needs a name",
+      "barcodeInvalid": "Not a valid EAN/UPC barcode (check the digits).",
+      "saveFailed": "Could not save the product",
+      "createdToast": "Product created",
+      "updatedToast": "Product updated",
+      "offChecking": "Looking up the barcode…",
+      "offFilled": "Details prefilled from Open Food Facts — please review.",
+      "barcodeExists": "This barcode already belongs to “{name}”."
+    },
+    "walkthrough": {
+      "title": "Match products",
+      "close": "Close walkthrough",
+      "progressLabel": "Items resolved",
+      "progress": "Item {current} of {total} · {resolved} resolved",
+      "status": {
+        "pending": "Needs a match",
+        "auto": "Auto-matched",
+        "confirmed": "Confirmed",
+        "skipped": "Skipped"
+      },
+      "linkedTo": "Linked to {name}",
+      "searchLabel": "Search the product registry",
+      "searchPlaceholder": "Search products…",
+      "noCandidates": "No matches proposed — search, scan, or create a new product.",
+      "candidatesLabel": "Match candidates",
+      "prev": "Previous item",
+      "next": "Next item",
+      "scan": "Scan",
+      "createNew": "New product",
+      "skip": "Skip",
+      "confirm": "Confirm match",
+      "keyboardHint": "↑↓ choose · Enter confirm · S skip · N new · ←→ navigate · Esc close",
+      "actionFailed": "Could not update the item"
+    },
+    "detail": {
+      "back": "Back to products",
+      "notFound": "Product not found",
+      "loadFailed": "Could not load the product",
+      "loading": "Loading product…",
+      "edit": "Edit",
+      "imageTitle": "Product image",
+      "uploadImage": "Upload image",
+      "imageQueuedToast": "Image uploaded — it will appear once processed",
+      "barcodeLabel": "Barcode",
+      "categoryLabel": "Default category",
+      "timesPurchasedLabel": "Times purchased",
+      "lastPurchasedLabel": "Last purchased",
+      "aliasesTitle": "Names & aliases",
+      "noAliases": "No aliases recorded yet.",
+      "aliasLabel": "New alias",
+      "aliasPlaceholder": "Add a name in any language…",
+      "aliasAdd": "Add",
+      "aliasAddedToast": "Alias recorded",
+      "aliasConfirmations": "{count, plural, =1 {confirmed once} other {confirmed # times}}",
+      "actionFailed": "Action failed",
+      "merchantsTitle": "Price by merchant (your purchases)",
+      "merchantCol": "Merchant",
+      "purchasesCol": "Purchases",
+      "lastPriceCol": "Last price",
+      "priceRangeCol": "Range",
+      "unknownMerchant": "Unknown merchant",
+      "purchasesTitle": "Your purchase history",
+      "dateCol": "Date",
+      "qtyCol": "Qty",
+      "unitPriceCol": "Unit price",
+      "totalCol": "Total",
+      "noPurchases": "No confirmed purchases of this product yet."
     }
   }
 }

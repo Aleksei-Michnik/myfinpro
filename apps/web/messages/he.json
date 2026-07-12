@@ -45,7 +45,8 @@
     "menu": "תפריט",
     "closeMenu": "סגירת תפריט",
     "skipToContent": "דילוג לתוכן הראשי",
-    "receipts": "קבלות"
+    "receipts": "קבלות",
+    "products": "מוצרים"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
@@ -1055,7 +1056,15 @@
       "retry": "ניסיון חילוץ חוזר",
       "retriedToast": "החילוץ הופעל מחדש",
       "confirm": "אישור",
-      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור"
+      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור",
+      "matchProducts": "התאמת מוצרים ({count})",
+      "matchProductsDone": "המוצרים הותאמו",
+      "matchState": {
+        "pending": "ממתין להתאמת מוצר",
+        "auto": "המוצר הותאם אוטומטית",
+        "confirmed": "התאמת המוצר אושרה",
+        "skipped": "התאמת המוצר דולגה"
+      }
     },
     "confirm": {
       "title": "אישור קבלה",
@@ -1070,6 +1079,115 @@
       "missingScope": "יש לבחור לפחות שיוך אחד",
       "confirmedToast": "הקבלה אושרה",
       "confirmFailed": "לא ניתן לאשר את הקבלה"
+    }
+  },
+  "products": {
+    "title": "מוצרים",
+    "list": {
+      "searchLabel": "חיפוש מוצרים",
+      "searchPlaceholder": "חיפוש לפי שם בכל שפה, או ברקוד…",
+      "scan": "סריקת ברקוד",
+      "create": "מוצר חדש",
+      "loading": "טוען מוצרים…",
+      "empty": "עדיין לא רכשתם מוצרים — אשרו קבלה והתאימו את הפריטים כדי לבנות את הקטלוג.",
+      "noResults": "אין מוצרים שמתאימים ל‏“{query}”.",
+      "resultCount": "{count, plural, =1 {מוצר אחד} other {# מוצרים}} מוצגים",
+      "loadMore": "טעינת עוד",
+      "lookupFailed": "חיפוש הברקוד נכשל"
+    },
+    "card": {
+      "timesPurchased": "{count, plural, =1 {נרכש פעם אחת} other {נרכש # פעמים}}"
+    },
+    "scanner": {
+      "title": "סריקת ברקוד",
+      "close": "סגירת הסורק",
+      "starting": "מפעיל את המצלמה…",
+      "scanning": "כוונו את המצלמה אל הברקוד",
+      "noCamera": "המצלמה אינה זמינה — הקלידו את הברקוד למטה.",
+      "manualLabel": "הזנת ברקוד ידנית",
+      "manualSubmit": "שימוש",
+      "manualInvalid": "ברקוד EAN/UPC לא תקין (בדקו את הספרות)."
+    },
+    "form": {
+      "createTitle": "מוצר חדש",
+      "editTitle": "עריכת מוצר",
+      "nameLabel": "שם",
+      "brandLabel": "מותג",
+      "barcodeLabel": "ברקוד (EAN/UPC)",
+      "scan": "סריקה",
+      "categoryLabel": "קטגוריית ברירת מחדל",
+      "noCategory": "ללא קטגוריית ברירת מחדל",
+      "categoryHint": "המוצרים משותפים לכולם, ולכן רק קטגוריות מערכת משותפות רלוונטיות.",
+      "cancel": "ביטול",
+      "save": "שמירת שינויים",
+      "create": "יצירת מוצר",
+      "nameRequired": "למוצר נדרש שם",
+      "barcodeInvalid": "ברקוד EAN/UPC לא תקין (בדקו את הספרות).",
+      "saveFailed": "לא ניתן לשמור את המוצר",
+      "createdToast": "המוצר נוצר",
+      "updatedToast": "המוצר עודכן",
+      "offChecking": "מחפש את הברקוד…",
+      "offFilled": "הפרטים מולאו מ‏Open Food Facts — נא לבדוק.",
+      "barcodeExists": "הברקוד הזה כבר שייך ל‏“{name}”."
+    },
+    "walkthrough": {
+      "title": "התאמת מוצרים",
+      "close": "סגירת ההתאמה",
+      "progressLabel": "פריטים שטופלו",
+      "progress": "פריט {current} מתוך {total} · {resolved} טופלו",
+      "status": {
+        "pending": "דורש התאמה",
+        "auto": "הותאם אוטומטית",
+        "confirmed": "אושר",
+        "skipped": "דולג"
+      },
+      "linkedTo": "מקושר ל‏{name}",
+      "searchLabel": "חיפוש במאגר המוצרים",
+      "searchPlaceholder": "חיפוש מוצרים…",
+      "noCandidates": "לא הוצעו התאמות — חפשו, סרקו או צרו מוצר חדש.",
+      "candidatesLabel": "הצעות התאמה",
+      "prev": "הפריט הקודם",
+      "next": "הפריט הבא",
+      "scan": "סריקה",
+      "createNew": "מוצר חדש",
+      "skip": "דילוג",
+      "confirm": "אישור התאמה",
+      "keyboardHint": "↑↓ בחירה · Enter אישור · S דילוג · N חדש · ←→ ניווט · Esc סגירה",
+      "actionFailed": "לא ניתן לעדכן את הפריט"
+    },
+    "detail": {
+      "back": "חזרה למוצרים",
+      "notFound": "המוצר לא נמצא",
+      "loadFailed": "לא ניתן לטעון את המוצר",
+      "loading": "טוען מוצר…",
+      "edit": "עריכה",
+      "imageTitle": "תמונת המוצר",
+      "uploadImage": "העלאת תמונה",
+      "imageQueuedToast": "התמונה הועלתה — היא תופיע לאחר העיבוד",
+      "barcodeLabel": "ברקוד",
+      "categoryLabel": "קטגוריית ברירת מחדל",
+      "timesPurchasedLabel": "מספר רכישות",
+      "lastPurchasedLabel": "נרכש לאחרונה",
+      "aliasesTitle": "שמות וכינויים",
+      "noAliases": "עדיין לא נרשמו כינויים.",
+      "aliasLabel": "כינוי חדש",
+      "aliasPlaceholder": "הוסיפו שם בכל שפה…",
+      "aliasAdd": "הוספה",
+      "aliasAddedToast": "הכינוי נרשם",
+      "aliasConfirmations": "{count, plural, =1 {אושר פעם אחת} other {אושר # פעמים}}",
+      "actionFailed": "הפעולה נכשלה",
+      "merchantsTitle": "מחיר לפי בית עסק (הרכישות שלך)",
+      "merchantCol": "בית עסק",
+      "purchasesCol": "רכישות",
+      "lastPriceCol": "מחיר אחרון",
+      "priceRangeCol": "טווח",
+      "unknownMerchant": "בית עסק לא ידוע",
+      "purchasesTitle": "היסטוריית הרכישות שלך",
+      "dateCol": "תאריך",
+      "qtyCol": "כמות",
+      "unitPriceCol": "מחיר ליחידה",
+      "totalCol": "סה״כ",
+      "noPurchases": "אין עדיין רכישות מאושרות של המוצר הזה."
     }
   }
 }

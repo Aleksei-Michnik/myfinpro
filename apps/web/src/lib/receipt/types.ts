@@ -1,7 +1,8 @@
 // Phase 7 · Iteration 7.7 — web-side receipt wire types (mirror of the API's
 // ReceiptResponseDto; see apps/api/src/receipt/dto/receipt-response.dto.ts).
+// Phase 8 adds the product-match fields on items.
 
-import type { AttributionScope } from '@myfinpro/shared';
+import type { AttributionScope, ProductMatchCandidate, ProductMatchStatus } from '@myfinpro/shared';
 
 export const RECEIPT_STATUSES = [
   'UPLOADED',
@@ -23,6 +24,12 @@ export interface ReceiptItem {
   discountCents: number;
   totalCents: number;
   categoryId: string | null;
+  /** Phase 8 — registry link + walkthrough state. */
+  productId: string | null;
+  productName: string | null;
+  productBrand: string | null;
+  matchStatus: ProductMatchStatus;
+  matchCandidates: ProductMatchCandidate[];
 }
 
 export interface ReceiptSummary {
