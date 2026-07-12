@@ -22,6 +22,9 @@ export class MockExtractionProvider implements ReceiptExtractionProvider {
   extract(input: ExtractionInput, ctx: ExtractionContext): Promise<ExtractionResult> {
     this.logger.log(`Mock extraction for input kind=${input.kind}`);
     const categoryId = ctx.categories[0]?.id ?? null;
+    // Deterministic LLM-stage fixture: the first known product is "matched"
+    // to the first line, mirroring how a real provider ranks candidates.
+    const productId = ctx.products[0]?.id ?? null;
     return Promise.resolve({
       merchantName: 'Mock Grocery',
       purchasedAt: '2026-07-01T12:00:00.000Z',
@@ -36,6 +39,7 @@ export class MockExtractionProvider implements ReceiptExtractionProvider {
           discountCents: 0,
           totalCents: 880,
           suggestedCategoryId: categoryId,
+          suggestedProductId: productId,
         },
         {
           rawName: 'Tomatoes',
@@ -44,6 +48,7 @@ export class MockExtractionProvider implements ReceiptExtractionProvider {
           discountCents: 0,
           totalCents: 880,
           suggestedCategoryId: categoryId,
+          suggestedProductId: null,
         },
       ],
       confidence: 'high',

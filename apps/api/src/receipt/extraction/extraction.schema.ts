@@ -52,6 +52,7 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
           'discountCents',
           'totalCents',
           'suggestedCategoryId',
+          'suggestedProductId',
         ],
         properties: {
           rawName: {
@@ -79,6 +80,13 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
             description:
               'The id of the best-matching category from the provided candidate list, or null. NEVER invent ids.',
           },
+          suggestedProductId: {
+            type: ['string', 'null'],
+            description:
+              'The id of the known product this line most likely is, from the provided product ' +
+              'list, or null. Match across languages (e.g. a Hebrew line for an English-named ' +
+              'product). NEVER invent ids.',
+          },
         },
       },
     },
@@ -97,12 +105,17 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
 /** Builds the instruction prompt shared by the real providers. */
 export function buildExtractionPrompt(ctx: {
   categories: { id: string; name: string }[];
+  products: { id: string; name: string; brand: string | null }[];
   locale?: string;
 }): string {
   const categoryList =
     ctx.categories.length > 0
       ? ctx.categories.map((c) => `- ${c.id}: ${c.name}`).join('\n')
       : '(no candidates provided — use null for every suggestedCategoryId)';
+  const productList =
+    ctx.products.length > 0
+      ? ctx.products.map((p) => `- ${p.id}: ${p.name}${p.brand ? ` (${p.brand})` : ''}`).join('\n')
+      : '(no known products — use null for every suggestedProductId)';
   return [
     'Extract the receipt data from the attached document.',
     '',
@@ -114,10 +127,17 @@ export function buildExtractionPrompt(ctx: {
       ` ambiguous, assume the ${ctx.locale ?? 'en'} locale convention.`,
     '- For each item pick the best-matching category id from the candidates below, or null.',
     '  Never invent ids that are not in the list.',
+    '- For each item also check whether the line refers to one of the known products below and',
+    '  set suggestedProductId accordingly, or null. Product names may be in a DIFFERENT language',
+    '  than the receipt line — match by meaning (e.g. "חלב 3%" ↔ "Milk 3%"), brand, and size.',
+    '  Only suggest a product when you are reasonably sure; never invent ids.',
     '- If part of the receipt is unreadable, extract what you can, lower the confidence, and',
     '  describe the gap in notes.',
     '',
     'Category candidates:',
     categoryList,
+    '',
+    'Known products:',
+    productList,
   ].join('\n');
 }

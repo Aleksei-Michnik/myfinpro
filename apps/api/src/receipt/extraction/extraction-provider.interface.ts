@@ -20,6 +20,13 @@ export interface CategoryCandidate {
   name: string;
 }
 
+/** One registry product the provider may rank item matches against (8.3). */
+export interface ProductCandidate {
+  id: string;
+  name: string;
+  brand: string | null;
+}
+
 export interface ExtractionContext {
   /**
    * The uploader's visible OUT-direction categories. `suggestedCategoryId`
@@ -27,6 +34,12 @@ export interface ExtractionContext {
    * drops anything else.
    */
   categories: CategoryCandidate[];
+  /**
+   * Phase 8 — the uploader's recently purchased registry products.
+   * `suggestedProductId` values MUST come from this list (or be null);
+   * this is the cross-language matching stage (design §1.2).
+   */
+  products: ProductCandidate[];
   /** BCP-47 hint for date/number disambiguation (e.g. 'he-IL'). */
   locale?: string;
 }

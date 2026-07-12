@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import type { Job } from 'bullmq';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductMatchingService } from '../product/product-matching.service';
 import { EventBus } from '../realtime/event-bus.service';
 import {
   ExtractionFailedError,
@@ -14,6 +15,7 @@ describe('ReceiptExtractionProcessor', () => {
   const prismaMock = {
     receipt: { findUnique: jest.fn(), update: jest.fn() },
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn() },
+    product: { findMany: jest.fn().mockResolvedValue([]) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
   };
@@ -21,6 +23,10 @@ describe('ReceiptExtractionProcessor', () => {
   const categoryMock = { list: jest.fn() };
   const eventBusMock = { publish: jest.fn() };
   const providerMock = { name: 'mock', extract: jest.fn() };
+  const matcherMock = {
+    getUserProductCandidates: jest.fn(),
+    matchItems: jest.fn(),
+  };
 
   let processor: ReceiptExtractionProcessor;
 
@@ -54,6 +60,7 @@ describe('ReceiptExtractionProcessor', () => {
         discountCents: 0,
         totalCents: 880,
         suggestedCategoryId: 'cat-1',
+        suggestedProductId: null,
       },
       {
         rawName: 'Mystery',
@@ -62,6 +69,7 @@ describe('ReceiptExtractionProcessor', () => {
         discountCents: 0,
         totalCents: 0,
         suggestedCategoryId: 'cat-INVENTED',
+        suggestedProductId: 'prod-INVENTED',
       },
     ],
     confidence: 'high' as const,
@@ -84,6 +92,13 @@ describe('ReceiptExtractionProcessor', () => {
       { id: 'cat-2', name: 'Household' },
     ]);
     storageMock.read.mockResolvedValue(Buffer.from('image-bytes'));
+    prismaMock.product.findMany.mockResolvedValue([]);
+    matcherMock.getUserProductCandidates.mockResolvedValue([
+      { id: 'prod-1', name: 'Milk 3%', brand: null },
+    ]);
+    matcherMock.matchItems.mockImplementation((items: unknown[]) =>
+      Promise.resolve(items.map(() => ({ candidates: [], autoProductId: null }))),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -91,6 +106,7 @@ describe('ReceiptExtractionProcessor', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: ReceiptStorageService, useValue: storageMock },
         { provide: CategoryService, useValue: categoryMock },
+        { provide: ProductMatchingService, useValue: matcherMock },
         { provide: EventBus, useValue: eventBusMock },
         { provide: RECEIPT_EXTRACTION_PROVIDER, useValue: providerMock },
       ],
@@ -115,6 +131,18 @@ describe('ReceiptExtractionProcessor', () => {
     ]);
     expect(ctx.locale).toBe('en');
     expect(categoryMock.list).toHaveBeenCalledWith('u-1', { direction: 'OUT' });
+    // Phase 8 — product candidates ride the same extraction call.
+    expect(ctx.products).toEqual([{ id: 'prod-1', name: 'Milk 3%', brand: null }]);
+
+    // Phase 8 — the staged matcher runs per item, with invented LLM product
+    // ids dropped before they reach it.
+    expect(matcherMock.matchItems).toHaveBeenCalledWith(
+      [
+        { rawName: 'Milk', suggestedProductId: null },
+        { rawName: 'Mystery', suggestedProductId: null }, // prod-INVENTED dropped
+      ],
+      'high',
+    );
 
     // Header persisted + REVIEW; items replaced with positions; the invented
     // category id got dropped to null.
@@ -123,13 +151,48 @@ describe('ReceiptExtractionProcessor', () => {
     );
     expect(reviewUpdate[0].data.extractedMerchantName).toBe('Store');
     const created = prismaMock.receiptItem.createMany.mock.calls[0][0].data;
-    expect(created[0]).toMatchObject({ position: 1, categoryId: 'cat-1' });
-    expect(created[1]).toMatchObject({ position: 2, categoryId: null });
+    expect(created[0]).toMatchObject({ position: 1, categoryId: 'cat-1', matchStatus: 'PENDING' });
+    expect(created[1]).toMatchObject({ position: 2, categoryId: null, productId: null });
 
     // Realtime fan-out on both transitions.
     expect(eventBusMock.publish).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'receipt.updated', userIds: ['u-1'] }),
     );
+  });
+
+  it('auto-links deterministic high-confidence matches and backfills the default category', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    providerMock.extract.mockResolvedValue(okResult());
+    matcherMock.matchItems.mockResolvedValue([
+      { candidates: [], autoProductId: null },
+      {
+        candidates: [
+          {
+            productId: 'prod-9',
+            name: 'Mystery Snack',
+            brand: null,
+            stage: 'alias',
+            confidence: 0.96,
+          },
+        ],
+        autoProductId: 'prod-9',
+      },
+    ]);
+    // The auto-linked product's default category backfills the empty line —
+    // but only because cat-2 is in the uploader's candidate set.
+    prismaMock.product.findMany.mockResolvedValue([{ id: 'prod-9', defaultCategoryId: 'cat-2' }]);
+
+    await processor.process(makeJob());
+
+    const created = prismaMock.receiptItem.createMany.mock.calls[0][0].data;
+    expect(created[1]).toMatchObject({
+      productId: 'prod-9',
+      matchStatus: 'AUTO',
+      categoryId: 'cat-2',
+    });
+    expect(created[1].matchCandidates).toEqual([
+      { productId: 'prod-9', name: 'Mystery Snack', brand: null, stage: 'alias', confidence: 0.96 },
+    ]);
   });
 
   it('pdf uploads become document inputs; url sources fetch a snapshot', async () => {

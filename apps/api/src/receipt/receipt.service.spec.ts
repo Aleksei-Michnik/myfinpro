@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
 import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductService } from '../product/product.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { ReceiptStorageService } from './receipt-storage.service';
@@ -23,7 +24,7 @@ describe('ReceiptService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
-    receiptItem: { deleteMany: jest.fn(), createMany: jest.fn() },
+    receiptItem: { deleteMany: jest.fn(), createMany: jest.fn(), updateMany: jest.fn() },
     merchant: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
@@ -41,6 +42,10 @@ describe('ReceiptService', () => {
   };
   const eventBusMock = { publish: jest.fn() };
   const queueMock = { add: jest.fn().mockResolvedValue({}) };
+  const productServiceMock = {
+    create: jest.fn(),
+    recordAlias: jest.fn().mockResolvedValue(undefined),
+  };
 
   let service: ReceiptService;
 
@@ -80,6 +85,7 @@ describe('ReceiptService', () => {
         { provide: EventBus, useValue: eventBusMock },
         { provide: CategoryService, useValue: categoryMock },
         { provide: PaymentService, useValue: paymentServiceMock },
+        { provide: ProductService, useValue: productServiceMock },
         { provide: getQueueToken(RECEIPT_EXTRACTIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();
@@ -411,7 +417,11 @@ describe('ReceiptService', () => {
       txMerchant = { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() };
       txReceipt = { update: jest.fn().mockResolvedValue({}) };
       prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
-        cb({ merchant: txMerchant, receipt: txReceipt }),
+        cb({
+          merchant: txMerchant,
+          receipt: txReceipt,
+          receiptItem: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        }),
       );
       paymentServiceMock.validateExpenseInputs.mockResolvedValue(
         new Date('2026-07-01T12:00:00.000Z'),

@@ -28,7 +28,10 @@ const IMAGE_INPUT: ExtractionInput = {
   data: Buffer.from('fake-image'),
   mimeType: 'image/jpeg',
 };
-const CTX = { categories: [{ id: 'cat-1', name: 'Groceries' }] };
+const CTX = {
+  categories: [{ id: 'cat-1', name: 'Groceries' }],
+  products: [{ id: 'prod-1', name: 'Milk 3%', brand: 'Tnuva' }],
+};
 
 const configWith = (values: Record<string, string>) =>
   ({
@@ -46,26 +49,36 @@ describe('MockExtractionProvider', () => {
     expect(itemsSum - (result.discountCents ?? 0)).toBe(result.totalCents);
     // Suggested categories come from the candidate list.
     expect(result.items[0].suggestedCategoryId).toBe('cat-1');
+    // Phase 8: the LLM-stage product suggestion comes from the known list.
+    expect(result.items[0].suggestedProductId).toBe('prod-1');
   });
 
-  it('suggests null categories when no candidates are provided', async () => {
+  it('suggests null categories/products when no candidates are provided', async () => {
     const provider = new MockExtractionProvider();
-    const result = await provider.extract(IMAGE_INPUT, { categories: [] });
+    const result = await provider.extract(IMAGE_INPUT, { categories: [], products: [] });
     expect(result.items.every((i) => i.suggestedCategoryId === null)).toBe(true);
+    expect(result.items.every((i) => i.suggestedProductId === null)).toBe(true);
   });
 });
 
 describe('buildExtractionPrompt', () => {
   it('lists the candidates and pins the integer-cents rule', () => {
-    const prompt = buildExtractionPrompt({ categories: CTX.categories, locale: 'he-IL' });
+    const prompt = buildExtractionPrompt({
+      categories: CTX.categories,
+      products: CTX.products,
+      locale: 'he-IL',
+    });
     expect(prompt).toContain('- cat-1: Groceries');
+    expect(prompt).toContain('- prod-1: Milk 3% (Tnuva)');
+    expect(prompt).toContain('DIFFERENT language');
     expect(prompt).toContain('INTEGER cents');
     expect(prompt).toContain('he-IL');
   });
 
-  it('degrades to null-category guidance without candidates', () => {
-    const prompt = buildExtractionPrompt({ categories: [] });
+  it('degrades to null-candidate guidance without candidates', () => {
+    const prompt = buildExtractionPrompt({ categories: [], products: [] });
     expect(prompt).toContain('no candidates provided');
+    expect(prompt).toContain('no known products');
   });
 });
 

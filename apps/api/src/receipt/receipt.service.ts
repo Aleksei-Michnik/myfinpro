@@ -1,4 +1,9 @@
-import { decodeCursor, encodeCursor, PAGINATION_DEFAULTS } from '@myfinpro/shared';
+import {
+  decodeCursor,
+  encodeCursor,
+  normalizeLookupName,
+  PAGINATION_DEFAULTS,
+} from '@myfinpro/shared';
 import { InjectQueue } from '@nestjs/bullmq';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -6,12 +11,15 @@ import type { Queue } from 'bullmq';
 import { CategoryService } from '../category/category.service';
 import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRODUCT_ERRORS } from '../product/constants/product-errors';
+import { ProductService } from '../product/product.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
+import { MatchItemDto } from './dto/match-item.dto';
 import {
   mapReceiptToDto,
   ReceiptResponseDto,
@@ -20,12 +28,11 @@ import {
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptStorageService } from './receipt-storage.service';
-import { normalizeMerchantName } from './utils/merchant-name.util';
 import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
-/** Include set every read path uses — items + joined merchant name. */
+/** Include set every read path uses — items (+ product join) + merchant. */
 export const RECEIPT_INCLUDE = {
-  items: true,
+  items: { include: { product: { select: { name: true, brand: true } } } },
   merchant: { select: { name: true } },
 } satisfies Prisma.ReceiptInclude;
 
@@ -58,6 +65,7 @@ export class ReceiptService {
     private readonly eventBus: EventBus,
     private readonly categoryService: CategoryService,
     private readonly paymentService: PaymentService,
+    private readonly productService: ProductService,
     @InjectQueue(RECEIPT_EXTRACTIONS_QUEUE) private readonly queue: Queue,
   ) {}
 
@@ -275,6 +283,13 @@ export class ReceiptService {
       data,
       include: RECEIPT_INCLUDE,
     });
+    // Keep the denormalized item purchase date in sync (Phase 8, design §2).
+    if (dto.purchasedAt !== undefined) {
+      await this.prisma.receiptItem.updateMany({
+        where: { receiptId: row.id },
+        data: { purchasedAt: updated.purchasedAt ?? updated.createdAt },
+      });
+    }
     void this.writeAudit(userId, row.id, 'RECEIPT_UPDATED', { changed: Object.keys(data) });
 
     const out = mapReceiptToDto(updated as ReceiptWithRelations);
@@ -308,20 +323,63 @@ export class ReceiptService {
       }
     }
 
+    // Replacement is content-level; product-match state (Phase 8) is
+    // carried over for lines whose name is unchanged — an edited name
+    // invalidates its match by definition. Exact (position, name) pairs
+    // win; leftover same-name rows cover reordered lines.
+    type MatchCarry = Pick<
+      (typeof row.items)[number],
+      'productId' | 'matchStatus' | 'matchCandidates'
+    >;
+    const byPositionAndName = new Map<string, MatchCarry>();
+    const byName = new Map<string, MatchCarry[]>();
+    for (const item of row.items) {
+      const name = item.rawName.trim();
+      byPositionAndName.set(`${item.position}:${name}`, item);
+      const list = byName.get(name) ?? [];
+      list.push(item);
+      byName.set(name, list);
+    }
+    const consumed = new Set<MatchCarry>();
+    const carryFor = (position: number, name: string): MatchCarry | null => {
+      const exact = byPositionAndName.get(`${position}:${name}`);
+      if (exact && !consumed.has(exact)) {
+        consumed.add(exact);
+        return exact;
+      }
+      const fallback = (byName.get(name) ?? []).find((c) => !consumed.has(c));
+      if (fallback) {
+        consumed.add(fallback);
+        return fallback;
+      }
+      return null;
+    };
+
     await this.prisma.$transaction(async (tx) => {
       await tx.receiptItem.deleteMany({ where: { receiptId: row.id } });
       if (dto.items.length > 0) {
         await tx.receiptItem.createMany({
-          data: dto.items.map((item, index) => ({
-            receiptId: row.id,
-            position: index + 1,
-            rawName: item.rawName.trim().slice(0, 300),
-            quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
-            unitPriceCents: item.unitPriceCents ?? null,
-            discountCents: item.discountCents ?? 0,
-            totalCents: item.totalCents,
-            categoryId: item.categoryId ?? null,
-          })),
+          data: dto.items.map((item, index) => {
+            const rawName = item.rawName.trim().slice(0, 300);
+            const carry = carryFor(index + 1, rawName);
+            return {
+              receiptId: row.id,
+              position: index + 1,
+              rawName,
+              quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
+              unitPriceCents: item.unitPriceCents ?? null,
+              discountCents: item.discountCents ?? 0,
+              totalCents: item.totalCents,
+              categoryId: item.categoryId ?? null,
+              productId: carry?.productId ?? null,
+              matchStatus: carry?.matchStatus ?? 'PENDING',
+              matchCandidates:
+                carry && carry.matchCandidates !== null
+                  ? (carry.matchCandidates as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
+              purchasedAt: row.purchasedAt ?? row.createdAt,
+            };
+          }),
         });
       }
     });
@@ -338,7 +396,7 @@ export class ReceiptService {
 
   /** GET /merchants?search= — global registry lookup (Phase 7.8). */
   async searchMerchants(search: string): Promise<{ id: string; name: string }[]> {
-    const normalized = normalizeMerchantName(search);
+    const normalized = normalizeLookupName(search);
     if (!normalized) return [];
     const rows = await this.prisma.merchant.findMany({
       where: { normalizedName: { contains: normalized } },
@@ -402,7 +460,7 @@ export class ReceiptService {
       const rawName = row.extractedMerchantName?.trim();
       if (!resolvedMerchantId && rawName) {
         const name = rawName.slice(0, 200);
-        const normalizedName = normalizeMerchantName(name);
+        const normalizedName = normalizeLookupName(name);
         if (normalizedName) {
           const existing = await tx.merchant.findUnique({ where: { normalizedName } });
           if (existing) {
@@ -443,6 +501,12 @@ export class ReceiptService {
             : {}),
         },
       });
+      // Freeze the denormalized purchase date to the payment's date — the
+      // (product_id, purchased_at) price-history key (Phase 8, design §2).
+      await tx.receiptItem.updateMany({
+        where: { receiptId: row.id },
+        data: { purchasedAt: occurredAt },
+      });
 
       return { payment, merchantId: resolvedMerchantId, merchantCreated: created };
     });
@@ -474,6 +538,139 @@ export class ReceiptService {
     this.publishUpdated(userId, out);
 
     this.logger.log(`Receipt ${row.id} confirmed by user ${userId} → payment ${payment.id}`);
+    return out;
+  }
+
+  /**
+   * POST /receipts/:id/items/:itemId/match — the walkthrough confirm
+   * (Phase 8.4/8.5). Links the item to a registry product (existing or
+   * created in the same call), records the raw spelling as an alias with
+   * the confirmer's locale (registry auto-update, design §1.3), and
+   * optionally overrides the item category. Allowed in REVIEW and
+   * CONFIRMED — matching after payment creation is still valuable.
+   */
+  async matchItem(
+    userId: string,
+    receiptId: string,
+    itemId: string,
+    dto: MatchItemDto,
+  ): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, receiptId);
+    this.assertMatchable(row.status);
+    const item = row.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new NotFoundException({
+        message: 'Receipt item not found',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
+      });
+    }
+    if (!dto.productId === !dto.createProduct) {
+      throw new BadRequestException({
+        message: 'Provide exactly one of productId / createProduct',
+        errorCode: PRODUCT_ERRORS.PRODUCT_MATCH_INVALID,
+      });
+    }
+    if (dto.categoryId) {
+      const visible = await this.categoryService.list(userId, { direction: 'OUT' });
+      if (!visible.some((c) => c.id === dto.categoryId)) {
+        throw new BadRequestException({
+          message: 'Unknown or inaccessible category',
+          errorCode: RECEIPT_ERRORS.RECEIPT_ITEMS_INVALID,
+        });
+      }
+    }
+
+    // Resolve the registry product. Creation publishes globally and is
+    // audited by ProductService; a stale-id link 404s cleanly.
+    let productId: string;
+    if (dto.createProduct) {
+      const created = await this.productService.create(userId, dto.createProduct);
+      productId = created.id;
+    } else {
+      const exists = await this.prisma.product.findUnique({
+        where: { id: dto.productId! },
+        select: { id: true },
+      });
+      if (!exists) {
+        throw new NotFoundException({
+          message: 'Product not found',
+          errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
+        });
+      }
+      productId = exists.id;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { locale: true },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.receiptItem.update({
+        where: { id: item.id },
+        data: {
+          productId,
+          matchStatus: 'CONFIRMED',
+          ...(dto.categoryId ? { categoryId: dto.categoryId } : {}),
+        },
+      });
+      await this.productService.recordAlias(
+        tx,
+        userId,
+        productId,
+        item.rawName,
+        user?.locale ?? null,
+        'confirmation',
+      );
+    });
+    void this.writeAudit(userId, row.id, 'RECEIPT_ITEM_MATCHED', {
+      itemId: item.id,
+      productId,
+      created: !!dto.createProduct,
+    });
+
+    return this.refresh(userId, row.id);
+  }
+
+  /** POST /receipts/:id/items/:itemId/skip-match — resumable skip/unlink. */
+  async skipItemMatch(
+    userId: string,
+    receiptId: string,
+    itemId: string,
+  ): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, receiptId);
+    this.assertMatchable(row.status);
+    const item = row.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new NotFoundException({
+        message: 'Receipt item not found',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
+      });
+    }
+    await this.prisma.receiptItem.update({
+      where: { id: item.id },
+      data: { productId: null, matchStatus: 'SKIPPED' },
+    });
+    return this.refresh(userId, row.id);
+  }
+
+  /** Walkthrough is available while reviewing and after confirmation. */
+  private assertMatchable(status: string): void {
+    if (status !== 'REVIEW' && status !== 'CONFIRMED') {
+      throw new BadRequestException({
+        message: `Receipt items can be matched in REVIEW or CONFIRMED (status: ${status})`,
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+  }
+
+  /** Reload + map + fan out — shared tail of the walkthrough mutations. */
+  private async refresh(userId: string, receiptId: string): Promise<ReceiptResponseDto> {
+    const fresh = await this.prisma.receipt.findUnique({
+      where: { id: receiptId },
+      include: RECEIPT_INCLUDE,
+    });
+    const out = mapReceiptToDto(fresh as ReceiptWithRelations);
+    this.publishUpdated(userId, out);
     return out;
   }
 

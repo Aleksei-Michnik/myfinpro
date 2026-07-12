@@ -41,6 +41,7 @@ import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
+import { MatchItemDto } from './dto/match-item.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
@@ -252,6 +253,50 @@ export class ReceiptController {
     @Body() dto: ConfirmReceiptDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.confirm(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items/:itemId/match')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirm a product match for one line item (walkthrough)',
+    description:
+      'Links the item to a registry product — exactly one of productId (existing) or ' +
+      'createProduct (publish + link). Records the raw spelling as an alias with the ' +
+      "caller's locale and optionally overrides the item category. REVIEW or CONFIRMED.",
+  })
+  @ApiOkResponse({ description: 'Updated receipt incl. items', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Receipt/item/product not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async matchItem(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+    @Body() dto: MatchItemDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.matchItem(user.sub, id, itemId, dto);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items/:itemId/skip-match')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Skip / unlink a line item in the walkthrough',
+    description: 'Marks the item SKIPPED and clears any product link. Always resumable.',
+  })
+  @ApiOkResponse({ description: 'Updated receipt incl. items', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Receipt/item not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async skipItemMatch(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.skipItemMatch(user.sub, id, itemId);
   }
 
   @CustomThrottle({ limit: 20, ttl: 60_000 })

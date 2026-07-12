@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CategoryModule } from '../category/category.module';
 import { PaymentModule } from '../payment/payment.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ProductModule } from '../product/product.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.provider';
 import { extractionProviderFactory } from './extraction/extraction-provider.factory';
@@ -19,9 +20,12 @@ import { ReceiptService } from './receipt.service';
  * 7.3 storage + 7.4 CRUD/producer surface. The extraction provider layer
  * (7.5) and the queue consumer (7.6) land next; the `RECEIPT_EXTRACTIONS_QUEUE`
  * itself comes from the global `QueueModule`, so no extra import here.
+ *
+ * Phase 8 imports ProductModule: the worker feeds the staged product
+ * matcher and the walkthrough endpoints write to the global registry.
  */
 @Module({
-  imports: [PrismaModule, RealtimeModule, CategoryModule, PaymentModule],
+  imports: [PrismaModule, RealtimeModule, CategoryModule, PaymentModule, ProductModule],
   providers: [
     ReceiptService,
     ReceiptStorageService,
