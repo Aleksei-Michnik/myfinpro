@@ -2,7 +2,11 @@ import { BullModule } from '@nestjs/bullmq';
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { buildRedisConnection } from '../config/redis.config';
-import { PAYMENT_OCCURRENCES_QUEUE, RECEIPT_EXTRACTIONS_QUEUE } from './queue.constants';
+import {
+  PAYMENT_OCCURRENCES_QUEUE,
+  PRODUCT_IMAGES_QUEUE,
+  RECEIPT_EXTRACTIONS_QUEUE,
+} from './queue.constants';
 
 /**
  * Phase 6.17.1 — BullMQ infrastructure module.
@@ -33,6 +37,7 @@ import { PAYMENT_OCCURRENCES_QUEUE, RECEIPT_EXTRACTIONS_QUEUE } from './queue.co
     }),
     BullModule.registerQueue({ name: PAYMENT_OCCURRENCES_QUEUE }),
     BullModule.registerQueue({ name: RECEIPT_EXTRACTIONS_QUEUE }),
+    BullModule.registerQueue({ name: PRODUCT_IMAGES_QUEUE }),
   ],
   exports: [BullModule],
 })
