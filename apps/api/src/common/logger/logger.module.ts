@@ -47,6 +47,8 @@ interface PinoSerializedResponse {
                 'req.body.accessToken',
                 'req.body.currentPassword',
                 'req.body.newPassword',
+                // Phase 8.11 — BYOK LLM keys (runbook §9.4 layer 4).
+                'req.body.apiKey',
               ],
               censor: '[REDACTED]',
             },
