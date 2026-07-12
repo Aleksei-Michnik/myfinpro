@@ -5,13 +5,15 @@
 > roll back. Applies to staging and production (blue-green Docker on the
 > deploy server) and to local dev.
 
-> **Direction (accepted 2026-07-12)**: LLM access is becoming a **per-user
-> setting** — each user picks their model from a curated Anthropic/OpenAI
-> catalog, and every LLM-powered feature (Phase 7 extraction, the Phase 8
-> product-candidate ranking that rides the same call, and future phases)
-> uses the uploader's choice. See **§9** for the target design and how the
-> env vars below are reinterpreted once it lands. Until that iteration
-> ships, selection is still per-deployment exactly as §§1–8 describe.
+> **Per-user selection (shipped 2026-07-12, Phase 8.11)**: LLM access is a
+> **per-user setting** — each user picks their model from a curated
+> Anthropic/OpenAI catalog in **Settings → Account → AI model**, optionally
+> with their own API key (BYOK, stored encrypted), and every LLM-powered
+> feature (Phase 7 extraction, the Phase 8 product-candidate ranking that
+> rides the same call, and future phases) uses the uploader's choice. See
+> **§9** for the design and the reinterpreted env vars. §§1–8 below still
+> describe the **deployment default** used by users who never picked a
+> model.
 
 ## 0. Current state (read this first)
 
@@ -170,11 +172,14 @@ and CI — the mock is what the unit/integration/E2E suites rely on.
   by design (a typo is a config error, not a silent mock) — check the API
   container logs if it won't start after a change.
 
-## 9. Per-user LLM selection (accepted direction — next iteration)
+## 9. Per-user LLM selection
 
-> **Status**: design accepted 2026-07-12; implementation is the next
-> LLM-track iteration. Everything in this section describes the target
-> behavior; §§1–8 stay authoritative until it ships.
+> **Status**: shipped 2026-07-12 as **Phase 8.11** (design accepted the same
+> day). API surface: `GET /llm/catalog`, `PUT /llm/selection`,
+> `GET /llm/credentials`, `PUT|DELETE /llm/credentials/:provider`
+> (`apps/api/src/llm/`); per-call resolution lives in
+> `ExtractionResolverService`. The `oauth` connection method in §9.2b is
+> still future work — `api_key` (BYOK) and `shared` are live.
 
 ### 9.1 What changes
 
@@ -190,8 +195,9 @@ user.llmProvider/llmModel  →  else RECEIPT_EXTRACTION_PROVIDER/MODEL (deployme
 ```
 
 - The choice is stored on the `users` row (`llm_provider`, `llm_model`) and
-  editable via `PATCH /users/me`; changes take effect on the **next** LLM
-  call — no redeploy.
+  editable via `PUT /llm/selection` (the picker reads `GET /llm/catalog`,
+  which also reports per-provider availability and the stored key hints);
+  changes take effect on the **next** LLM call — no redeploy.
 - Optionally the user stores a **personal provider API key** (BYOK) so
   their calls run on their own account — handled under the §9.4 security
   model, which is a hard requirement for shipping this.
@@ -243,13 +249,14 @@ verifier never persisted, minimal scopes, and disconnect = local wipe
 
 ### 9.3 What the env vars mean afterwards
 
-| Var                           | Meaning after per-user selection lands                                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ANTHROPIC_API_KEY`           | Server-side **shared** key funding Anthropic calls for users without their own; unset → Anthropic entries hidden unless the user stored a personal key |
-| `OPENAI_API_KEY`              | Same for OpenAI                                                                                                                                        |
-| `RECEIPT_EXTRACTION_PROVIDER` | Deployment **default** for users who never picked (and dev/CI: keep `mock`)                                                                            |
-| `RECEIPT_EXTRACTION_MODEL`    | Model for that default provider                                                                                                                        |
-| `LLM_SECRETS_ENCRYPTION_KEY`  | **New secret** — 32-byte base64 master key for encrypting user-held LLM keys at rest (§9.4). Required once BYOK ships; boot fails without it           |
+| Var                           | Meaning after per-user selection lands                                                                                                                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`           | Server-side **shared** key funding Anthropic calls for users without their own; unset → Anthropic entries hidden unless the user stored a personal key                                                   |
+| `OPENAI_API_KEY`              | Same for OpenAI                                                                                                                                                                                          |
+| `RECEIPT_EXTRACTION_PROVIDER` | Deployment **default** for users who never picked (and dev/CI: keep `mock`)                                                                                                                              |
+| `RECEIPT_EXTRACTION_MODEL`    | Model for that default provider                                                                                                                                                                          |
+| `LLM_SECRETS_ENCRYPTION_KEY`  | **New secret** — 32-byte base64 master key for encrypting user-held LLM keys at rest (§9.4). With `NODE_ENV=production` the boot **fails** without it; elsewhere BYOK storage is disabled with a warning |
+| `LLM_KEY_LIVE_VALIDATION`     | `true` (default) probes a user key against the provider at save time; set `false` only in tests/offline dev                                                                                              |
 
 Key resolution per call: **user's own key** (if stored, for the chosen
 provider) → **shared server key** → provider hidden/call refused. Users may
@@ -270,10 +277,10 @@ passwords. All of the following are **required**, not optional:
    comes from `LLM_SECRETS_ENCRYPTION_KEY` (GitHub **secret** → container
    env), is never written to the DB, the repo, or logs, and is therefore
    absent from DB dumps/backups by construction.
-2. **Write-only API surface.** `PUT /users/me/llm-credentials/:provider`
-   stores; `DELETE` revokes; reads return only `{ provider, keyHint }`
-   (last 4 chars) + timestamps. The plaintext is **never** returned to any
-   client after save — including the owner, including admins.
+2. **Write-only API surface.** `PUT /llm/credentials/:provider` stores;
+   `DELETE` revokes; reads return only `{ provider, keyHint }` (last 4
+   chars) + timestamps. The plaintext is **never** returned to any client
+   after save — including the owner, including admins.
 3. **Single decryption boundary.** One `LlmCredentialsService` owns
    decrypt; plaintext exists only inside the provider call path, resolved
    at call time, never cached, never put on request/job payloads (BullMQ
@@ -287,8 +294,9 @@ passwords. All of the following are **required**, not optional:
    save — a typo fails at save time with a clear message, not at the next
    receipt.
 6. **Abuse controls.** Strict throttle on the credential endpoints
-   (mirrors the password-change limits); re-auth (fresh session) required
-   to set or delete a key.
+   (5 writes / 10 min); a **fresh session** is required to set or delete a
+   key — the bearer token must have been issued within the last 10 minutes
+   (`FreshAuthGuard`), so a stolen long-idle token can't quietly swap keys.
 7. **Lifecycle.** `onDelete: Cascade` from the user + explicit wipe when an
    account-deletion request is accepted (credentials are purged at request
    time, not after the grace period — a pending deletion must not keep a
@@ -308,7 +316,9 @@ touch the DB.
 ### 9.5 Ops checklist for the rollout
 
 1. Generate and set `LLM_SECRETS_ENCRYPTION_KEY` (staging first):
-   `openssl rand -base64 32` → `gh secret set … --env staging`.
+   `openssl rand -base64 32` → `gh secret set … --env staging`. Do this
+   **before** deploying the iteration — production boots refuse to start
+   without it (§9.3).
 2. Set the shared `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` you intend to
    offer as the funded default — §2.
 3. Deploy the iteration (expand-only migrations: `users` selection columns

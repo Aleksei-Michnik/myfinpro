@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-04
-> **Current Phase:** Phase 8 — Product Catalog, Matching & Barcode (kickoff 2026-07-11)
+> **Last updated:** 2026-07-12
+> **Current Phase:** Phase 8 — Product Catalog, Matching & Barcode (kickoff 2026-07-11; 8.1–8.10 complete, 8.11 per-user LLM shipped 2026-07-12)
 > **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
@@ -7817,3 +7817,64 @@ LLM-track iteration.
 registry with staged + LLM matching, barcode/OFF enrichment, images, and a
 private purchase catalog. **Next: Phase 9** (purchase analytics over
 `(product_id, purchased_at)`).
+
+---
+
+## 2026-07-12 — Phase 8.11: Per-user LLM selection + BYOK (runbook §9 implemented)
+
+**Shipped the §9 design end-to-end.** Every LLM call now resolves the
+model per uploader at call time: `user selection (own key → shared env
+key)` → `deployment default (RECEIPT_EXTRACTION_PROVIDER)` → mock.
+
+**8.11 Schema.** Expand-only migration
+`20260712100000_phase8_11_user_llm_settings`: nullable
+`users.llm_provider/llm_model` + new `user_llm_credentials` (one row per
+user × provider, `credential_kind` ready for OAuth later, unique
+`(user_id, provider)`, `onDelete: Cascade`).
+
+**8.11 Shared.** `llm.types.ts` — the one catalog constant
+(`LLM_MODEL_CATALOG`: claude-fable-5 / claude-sonnet-5 / claude-opus-4-8 /
+claude-haiku-4-5 / gpt-5.6 / gpt-5.2), `findLlmModel`, `isLlmProvider`,
+and per-provider key shape gates (`LLM_API_KEY_PATTERNS`, OpenAI pattern
+excludes `sk-ant-` so cross-provider pastes fail fast).
+
+**8.11 API (`src/llm/`).** `llm-crypto.util` (AES-256-GCM,
+`v1:<iv>:<tag>:<cipher>` envelope, 32-byte base64 master key from
+`LLM_SECRETS_ENCRYPTION_KEY` — production boot fails without it);
+`LlmCredentialsService` as the **single decrypt boundary** (shape gate +
+save-time live probe where only a definite 401/403 rejects, hint-only
+reads/audit, `resolveApiKey` internal-only, decrypt failures degrade to
+the shared key); `LlmSettingsService` (catalog availability = shared env
+key ∪ user key; selection validated against catalog **and** availability);
+`LlmController` — `GET /llm/catalog`, `PUT /llm/selection`,
+`GET /llm/credentials`, `PUT|DELETE /llm/credentials/:provider` with
+`FreshAuthGuard` (token ≤10 min old) + 5/10 min throttle on writes; pino
+`redact` gains `req.body.apiKey`; account-deletion request wipes
+credentials immediately (not after the grace period).
+
+**8.11 Extraction.** Anthropic/OpenAI providers now take explicit
+`{apiKey, model}` (built by the factory for the deployment default or by
+the new `ExtractionResolverService` per user); resolver caches resilient
+instances per `(provider, model, key-digest)` so breaker state stays
+coherent, and fails **permanently** with settings-facing messages when the
+selected model left the catalog or no key exists. Worker logs/audits
+`provider/model/keySource` — never key material.
+
+**8.11 Web.** Settings → Account gains the **AI model** card
+(`LlmSettingsSection`): catalog picker with unavailable models disabled
+until a key unlocks them, per-provider key rows (masked input, last-4
+hint, replace/remove, shared-key notice), 401 on credential writes mapped
+to a "sign in again" message; EN/HE parity (`settings.account.llm.*`).
+
+**8.11 Tests.** Shared 157 green (catalog + patterns); api **1089** unit
+green (crypto roundtrip/tamper/rotation-version, credentials service
+incl. probe verdicts + unconfigured/production boot, settings
+availability/selection, resolver precedence/cache/permanent failures,
+fresh-auth guard, deletion wipe) + new `llm-settings.integration.spec.ts`
+(6 green: encrypted-at-rest row assertions, hint-only reads, availability
+gating, isolation, clear/delete); web **1150** green incl.
+`LlmSettingsSection` spec; typecheck clean everywhere.
+
+**Runbook** §9 updated to shipped status with the real endpoints; §9.2b
+OAuth connectors remain the next LLM-track step. Ops: set
+`LLM_SECRETS_ENCRYPTION_KEY` on staging/production **before** deploying.
