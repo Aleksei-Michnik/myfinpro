@@ -5,6 +5,14 @@
 > roll back. Applies to staging and production (blue-green Docker on the
 > deploy server) and to local dev.
 
+> **Direction (accepted 2026-07-12)**: LLM access is becoming a **per-user
+> setting** — each user picks their model from a curated Anthropic/OpenAI
+> catalog, and every LLM-powered feature (Phase 7 extraction, the Phase 8
+> product-candidate ranking that rides the same call, and future phases)
+> uses the uploader's choice. See **§9** for the target design and how the
+> env vars below are reinterpreted once it lands. Until that iteration
+> ships, selection is still per-deployment exactly as §§1–8 describe.
+
 ## 0. Current state (read this first)
 
 Receipt extraction is **pluggable** and defaults to a deterministic **mock**
@@ -161,3 +169,152 @@ and CI — the mock is what the unit/integration/E2E suites rely on.
 - An unknown `RECEIPT_EXTRACTION_PROVIDER` value **fails the container boot**
   by design (a typo is a config error, not a silent mock) — check the API
   container logs if it won't start after a change.
+
+## 9. Per-user LLM selection (accepted direction — next iteration)
+
+> **Status**: design accepted 2026-07-12; implementation is the next
+> LLM-track iteration. Everything in this section describes the target
+> behavior; §§1–8 stay authoritative until it ships.
+
+### 9.1 What changes
+
+Model choice moves from the deployment to the **user profile**. Each user
+selects one entry from a **curated model catalog** in
+**Settings → Account → AI model**; every LLM call made on that user's
+behalf (receipt extraction incl. product-candidate ranking, and any later
+LLM feature) resolves the model at call time:
+
+```
+user.llmProvider/llmModel  →  else RECEIPT_EXTRACTION_PROVIDER/MODEL (deployment default)
+                           →  else mock
+```
+
+- The choice is stored on the `users` row (`llm_provider`, `llm_model`) and
+  editable via `PATCH /users/me`; changes take effect on the **next** LLM
+  call — no redeploy.
+- Optionally the user stores a **personal provider API key** (BYOK) so
+  their calls run on their own account — handled under the §9.4 security
+  model, which is a hard requirement for shipping this.
+- Extraction log lines and audit details gain the resolved
+  `provider`/`model` (and whether a user or shared key was used — never
+  key material), so per-user usage stays attributable.
+
+### 9.2 Model catalog
+
+The catalog is a code-maintained allowlist (one shared constant — the
+settings picker, the DTO validator, and the provider factory all read it;
+free-typed model ids are rejected). Initial catalog:
+
+| Provider    | Model id           | Shown to the user as       |
+| ----------- | ------------------ | -------------------------- |
+| `anthropic` | `claude-fable-5`   | Anthropic Claude Fable 5   |
+| `anthropic` | `claude-sonnet-5`  | Anthropic Claude Sonnet 5  |
+| `anthropic` | `claude-opus-4-8`  | Anthropic Claude Opus 4.8  |
+| `anthropic` | `claude-haiku-4-5` | Anthropic Claude Haiku 4.5 |
+| `openai`    | `gpt-5.6`          | OpenAI GPT-5.6             |
+| `openai`    | `gpt-5.2`          | OpenAI GPT-5.2             |
+
+Only Anthropic and OpenAI are offered for now; adding a provider (Google
+Gemini and others are planned) means a new **provider connector** plus
+catalog rows — the Phase 7 pluggable extraction interface is unchanged.
+
+### 9.2b Connecting a provider — auth methods
+
+Pasting an API key is the baseline, not the goal. Each catalog provider
+declares its supported **connection methods**, and the Settings UI renders
+the easiest one first:
+
+| Method          | Flow                                                                                                                    | Used for                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `oauth`         | Authorization-code **with PKCE** + `state`, server-side token exchange, encrypted refresh-token storage, silent renewal | Providers with end-user OAuth (e.g. "Sign in with Claude" / "Sign in with ChatGPT" subscription flows; Google account auth when Gemini lands) |
+| `api_key`       | §9.4 BYOK — paste once, validated live, stored encrypted                                                                | All providers (fallback)                                                                                                                      |
+| `shared` (none) | No user credential — the deployment's funded key (§9.3)                                                                 | Default experience                                                                                                                            |
+
+Connector contract per provider: `{ authMethods, startOAuth(), exchange(),
+refresh(), buildClient(credential) }` — so adding Gemini later is one
+connector + catalog rows, no changes to callers. OAuth tokens
+(access + refresh) are **user LLM secrets like any other** and go through
+the full §9.4 pipeline: same encrypted table (`credential_kind:
+'api_key' | 'oauth'`), same write-only surface (the UI only ever sees
+"Connected as …" + scopes), same redaction, plus OAuth-specific layers:
+exact-match redirect-URI allowlist, per-request `state` nonce, PKCE
+verifier never persisted, minimal scopes, and disconnect = local wipe
+**and** best-effort remote token revocation.
+
+### 9.3 What the env vars mean afterwards
+
+| Var                           | Meaning after per-user selection lands                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`           | Server-side **shared** key funding Anthropic calls for users without their own; unset → Anthropic entries hidden unless the user stored a personal key |
+| `OPENAI_API_KEY`              | Same for OpenAI                                                                                                                                        |
+| `RECEIPT_EXTRACTION_PROVIDER` | Deployment **default** for users who never picked (and dev/CI: keep `mock`)                                                                            |
+| `RECEIPT_EXTRACTION_MODEL`    | Model for that default provider                                                                                                                        |
+| `LLM_SECRETS_ENCRYPTION_KEY`  | **New secret** — 32-byte base64 master key for encrypting user-held LLM keys at rest (§9.4). Required once BYOK ships; boot fails without it           |
+
+Key resolution per call: **user's own key** (if stored, for the chosen
+provider) → **shared server key** → provider hidden/call refused. Users may
+optionally bring their own provider key (BYOK) in Settings; billing for
+their calls then rides their key.
+
+### 9.4 Security model for user-held LLM secrets (required layers)
+
+User API keys are credentials to the user's paid account — treat them like
+passwords. All of the following are **required**, not optional:
+
+1. **Dedicated table, application-layer encryption at rest.** Keys live in
+   `user_llm_credentials` (one row per user × provider), NEVER on the
+   `users` row — an accidental `SELECT *`/serialize of a user must not be
+   able to leak them. Values are encrypted **before** they reach the DB:
+   AES-256-GCM, random 96-bit IV per write, auth tag stored, ciphertext
+   prefixed with a key-version tag (`v1:…`) for rotation. The master key
+   comes from `LLM_SECRETS_ENCRYPTION_KEY` (GitHub **secret** → container
+   env), is never written to the DB, the repo, or logs, and is therefore
+   absent from DB dumps/backups by construction.
+2. **Write-only API surface.** `PUT /users/me/llm-credentials/:provider`
+   stores; `DELETE` revokes; reads return only `{ provider, keyHint }`
+   (last 4 chars) + timestamps. The plaintext is **never** returned to any
+   client after save — including the owner, including admins.
+3. **Single decryption boundary.** One `LlmCredentialsService` owns
+   decrypt; plaintext exists only inside the provider call path, resolved
+   at call time, never cached, never put on request/job payloads (BullMQ
+   jobs carry the user id, the worker resolves the key when it runs).
+4. **Log + audit redaction.** The credentials endpoints are added to the
+   pino `redact` paths (request bodies never logged); audit logs record
+   `LLM_CREDENTIAL_SET/DELETED` with the key **hint only**; provider errors
+   are sanitized so a 401 from Anthropic/OpenAI can't echo the key back.
+5. **Format validation + live probe.** Keys are shape-checked per provider
+   (`sk-ant-…` / `sk-…`) and verified with one cheap authenticated call on
+   save — a typo fails at save time with a clear message, not at the next
+   receipt.
+6. **Abuse controls.** Strict throttle on the credential endpoints
+   (mirrors the password-change limits); re-auth (fresh session) required
+   to set or delete a key.
+7. **Lifecycle.** `onDelete: Cascade` from the user + explicit wipe when an
+   account-deletion request is accepted (credentials are purged at request
+   time, not after the grace period — a pending deletion must not keep a
+   usable key). Users can rotate by overwriting and revoke by deleting.
+8. **Master-key rotation runbook.** New env key version → background
+   re-encrypt of all rows (decrypt with vN, encrypt with vN+1, verify, then
+   retire vN). The version prefix on each row makes this incremental and
+   restartable.
+9. **Transport & storage hygiene already in place** still applies: HTTPS
+   only, keys never in URLs/query strings, `.env` untracked, no secrets in
+   commits or compose files (deployment rules).
+
+Shared server keys (§9.3) keep their existing handling: GitHub secrets →
+env at container start; they are configuration, not user data, and never
+touch the DB.
+
+### 9.5 Ops checklist for the rollout
+
+1. Generate and set `LLM_SECRETS_ENCRYPTION_KEY` (staging first):
+   `openssl rand -base64 32` → `gh secret set … --env staging`.
+2. Set the shared `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` you intend to
+   offer as the funded default — §2.
+3. Deploy the iteration (expand-only migrations: `users` selection columns
+   - `user_llm_credentials`; settings UI).
+4. Verify: pick a model in Settings, upload a receipt, and check the log
+   line reports the chosen `provider=… model=…` (and `key=user|shared` —
+   never the key itself).
+5. Rollback semantics: clearing a user's choice falls back to the
+   deployment default — §6 still applies unchanged.

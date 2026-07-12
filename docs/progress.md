@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-07-04
-> **Current Phase:** Phase 7 — Receipt Ingestion & LLM Extraction (kickoff 2026-07-04)
+> **Current Phase:** Phase 8 — Product Catalog, Matching & Barcode (kickoff 2026-07-11)
 > **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
@@ -7697,3 +7697,123 @@ detail receipt-link ×2. **api 1031 green; web 1131 green; lint 0 errors.**
 
 Runbook troubleshooting updated (HEIC + URL rows now describe the fixed
 behaviour).
+
+---
+
+## Phase 8 · Iterations 8.1–8.10 — Product Catalog, Matching & Barcode (2026-07-12)
+
+Full phase in one pass (design doc at `docs/phase-8-products-design.md`,
+written at kickoff per the plan). Implements the **two-layer product DB**:
+a global registry (barcode-keyed `products` + multi-language
+`product_aliases`) shared by all users, and private purchase data derived
+from each user's confirmed `receipt_items` — the registry never records who
+bought what.
+
+**8.1 Schema** (`20260711100000_phase8_81_products`, expand-only):
+`products` (unique nullable GTIN barcode, canonical + normalized name,
+brand, image ref, system-only default category), `product_aliases`
+(normalized spelling unique per product, locale, source, confirmation
+count), `receipt_items` gains `product_id` (SetNull), `match_status`
+(`PENDING|AUTO|CONFIRMED|SKIPPED`), `match_candidates` JSON, and a
+**denormalized `purchased_at`** (backfilled in the migration; kept in sync
+by extraction/PATCH/PUT and frozen to the payment date on confirm) so the
+Phase 9 price queries hit `(product_id, purchased_at)` without joining
+receipts. Shared package: `product.types.ts` (match enums/candidate shape,
+`PRODUCT_AUTO_MATCH_THRESHOLD`, GTIN mod-10 validation) and
+`normalizeLookupName` — the one normalization rule for both registries;
+`merchant-name.util` deleted, receipt service now uses the shared fn.
+
+**8.2 Product API.** `ProductModule` (imported by `ReceiptModule` — the
+worker and walkthrough are its consumers): list = ranked global search
+(`?search`, any recorded language or barcode) / caller's purchased products
+(groupBy on the new index, keyset-paginated, per-product stats via two
+batched queries — no N+1); get w/ aliases + caller stats; create/update
+(GTIN checksum + uniqueness, **system-OUT-only default category** — a
+global row must never reference a private category); alias add (upsert →
+count bump); `GET /products/barcode/:code`; purchases endpoint with
+per-merchant price aggregates, always scoped `uploadedById` + CONFIRMED.
+Registry writes audited (`PRODUCT_CREATED/UPDATED`,
+`PRODUCT_ALIAS_RECORDED`, `RECEIPT_ITEM_MATCHED`).
+
+**8.3 Staged matcher.** `ProductMatchingService`: barcode(1.0) →
+confirmed-alias (0.95 + per-confirmation bonus) → normalized-exact (0.9) →
+trigram fuzzy (dependency-free Dice over token-prefiltered pools,
+0.35–0.85). Batch-first: one alias + one product + one capped LIKE pool
+query per receipt, scoring in-process. The extraction call now carries the
+uploader's ~150 most recent products and the schema gains
+`suggestedProductId` (validated against the injected list — the
+**cross-language stage**: `חלב 3%` ↔ "Milk 3%"). Worker merges all stages
+into per-item candidates; deterministic top ≥ 0.9 **auto-links**
+(`AUTO`) and backfills the product's default category when the item came
+back uncategorized.
+
+**8.4 Walkthrough UI.** `ItemWalkthroughDialog` on the review page (REVIEW
+
+- CONFIRMED): steps through items with ranked candidates + confidence
+  meters, registry search, scan-to-find, create-new, skip. Keyboard-first
+  (↑↓/1-9 choose, Enter confirm, S skip, N new, ←→ navigate, Esc close);
+  every action is one per-item POST so progress is server-persisted and
+  SKIPPED stays resumable. Focus-trapped dialog, `aria-live` progress,
+  reduced-motion-safe. Item rows show match-state dots; PUT /items carries
+  match state over for unchanged names (an edited name invalidates its
+  match).
+
+**8.5 Registry auto-update.** Confirm records the raw spelling as an alias
+(uploader's locale, `confirmation` source) via upsert-increment inside the
+link transaction; creating publishes globally + seeds the canonical alias.
+Verified live: second upload of the same receipt **auto-matched** the item
+confirmed the first time (alias stage, 0.955).
+
+**8.6 Barcode scanning.** `BarcodeScannerDialog`: `getUserMedia` +
+native `BarcodeDetector` where present, `@zxing/browser` dynamic-imported
+fallback (never in the main bundle), GTIN-validated accepts only. Camera
+denial degrades to an always-present manual-entry input (also the AT/
+keyboard path). Scan-to-find in walkthrough + catalog; scan-to-attach in
+the product form.
+
+**8.7 Open Food Facts.** `OpenFoodFactsService` behind a circuit breaker
+(3 failures → 60s open) + min-interval rate limit; unknown barcodes
+prefill name/brand/image in the create form; outage/disabled degrade to
+`unavailable`/`disabled` — manual entry, never an error. Live-verified
+(Nutella barcode → prefill).
+
+**8.8 Product images.** One image per product. Uploads magic-byte-checked
+and staged, then a `product-images` BullMQ worker re-encodes via sharp
+(auto-rotate, ≤512px, WebP — EXIF/GPS stripped by construction); OFF
+prefill images ride the same queue as https fetch jobs. Served with strong
+ETag → verified 304 revalidation; `?v=` cache-busting on re-upload.
+
+**8.9 Catalog UI.** `/products` (sidebar entry): debounced registry search
+vs. "my products" grid (lazy images, purchase stats, skeletons with the
+same cell geometry — no CLS), barcode scan-to-find, create dialog.
+`/products/:id`: image upload, aliases with locale tags, barcode, default
+category, per-merchant price table + purchase history linking back to
+receipts.
+
+**8.10 Tests + polish.** Shared 151 (GTIN/normalize/validator), api
+**1057** unit green (matcher stages, trigram, OFF breaker, service rules,
+worker auto-link) + new `products.integration.spec.ts` (6 green:
+registry CRUD/search/cross-language alias/barcode, walkthrough
+confirm/skip/guards, privacy boundary) + receipts-confirm integration
+re-green; web **1143** green incl. walkthrough + scanner specs; EN/HE
+parity for the full `products` namespace; typecheck/lint/Next build clean.
+Live E2E against the dev stack: upload → extract → walkthrough
+create-and-link → second-upload auto-match → confirm → catalog/purchases →
+image pipeline → OFF prefill.
+
+**Also:** `docs/runbook-llm-extraction.md` gains §9 — accepted direction
+(2026-07-12) to move LLM access to a **per-user setting**: curated
+Anthropic/OpenAI model catalog (Gemini and others later), per-provider
+connection methods with **OAuth (PKCE) preferred** over pasted API keys,
+optional BYOK, deployment env demoted to default/fallback. §9.4 fixes the
+**mandatory security model for user-held LLM secrets** (dedicated
+encrypted table — AES-256-GCM under a versioned master key, write-only API
+with hint-only reads, single decrypt boundary, log/audit redaction,
+save-time validation, re-auth + throttling, deletion-request wipe,
+master-key + OAuth-token rotation/revocation). Implementation is the next
+LLM-track iteration.
+
+**Phase 8 complete** — receipt items now resolve into a shared product
+registry with staged + LLM matching, barcode/OFF enrichment, images, and a
+private purchase catalog. **Next: Phase 9** (purchase analytics over
+`(product_id, purchased_at)`).
