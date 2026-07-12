@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { CategoryModule } from '../category/category.module';
+import { LlmModule } from '../llm/llm.module';
 import { PaymentModule } from '../payment/payment.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ProductModule } from '../product/product.module';
 import { RealtimeModule } from '../realtime/realtime.module';
-import { AnthropicExtractionProvider } from './extraction/anthropic-extraction.provider';
 import { extractionProviderFactory } from './extraction/extraction-provider.factory';
+import { ExtractionResolverService } from './extraction/extraction-resolver.service';
 import { MockExtractionProvider } from './extraction/mock-extraction.provider';
-import { OpenAiExtractionProvider } from './extraction/openai-extraction.provider';
 import { MerchantController } from './merchant.controller';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
@@ -23,16 +23,20 @@ import { ReceiptService } from './receipt.service';
  *
  * Phase 8 imports ProductModule: the worker feeds the staged product
  * matcher and the walkthrough endpoints write to the global registry.
+ *
+ * Phase 8.11 imports LlmModule: ExtractionResolverService picks the
+ * uploader's selected model + key (user's own or shared), with the factory
+ * binding as the deployment default. The concrete Anthropic/OpenAI providers
+ * are no longer DI-managed — the factory and the resolver construct them.
  */
 @Module({
-  imports: [PrismaModule, RealtimeModule, CategoryModule, PaymentModule, ProductModule],
+  imports: [PrismaModule, RealtimeModule, CategoryModule, PaymentModule, ProductModule, LlmModule],
   providers: [
     ReceiptService,
     ReceiptStorageService,
     MockExtractionProvider,
-    AnthropicExtractionProvider,
-    OpenAiExtractionProvider,
     extractionProviderFactory,
+    ExtractionResolverService,
     ReceiptExtractionProcessor,
   ],
   controllers: [ReceiptController, MerchantController],

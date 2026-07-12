@@ -1,10 +1,10 @@
 import { validateExtractionResult, type ExtractionResult } from '@myfinpro/shared';
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import {
   ExtractionFailedError,
   type ExtractionContext,
   type ExtractionInput,
+  type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
 import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extraction.schema';
@@ -19,10 +19,9 @@ import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extracti
  * clear reason. Structured output via `response_format: json_schema`
  * (strict), re-validated with the shared validator.
  *
- * Env: OPENAI_API_KEY (required), RECEIPT_EXTRACTION_MODEL (default gpt-4o),
- * OPENAI_BASE_URL (optional, for proxies).
+ * Built by the module factory (env key/model) or the per-user resolver
+ * (Phase 8.11) — never injected directly.
  */
-@Injectable()
 export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
   readonly name = 'openai';
   private readonly logger = new Logger(OpenAiExtractionProvider.name);
@@ -30,10 +29,10 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
   private readonly model: string;
   private readonly baseUrl: string;
 
-  constructor(configService: ConfigService) {
-    this.apiKey = configService.get<string>('OPENAI_API_KEY', '');
-    this.model = configService.get<string>('RECEIPT_EXTRACTION_MODEL') || 'gpt-4o';
-    this.baseUrl = configService.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+  constructor(options: LlmClientOptions = {}) {
+    this.apiKey = options.apiKey ?? '';
+    this.model = options.model || 'gpt-4o';
+    this.baseUrl = options.baseUrl || 'https://api.openai.com/v1';
   }
 
   async extract(input: ExtractionInput, ctx: ExtractionContext): Promise<ExtractionResult> {

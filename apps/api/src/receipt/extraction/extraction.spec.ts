@@ -86,8 +86,6 @@ describe('extractionProviderFactory', () => {
   type FactoryFn = (
     config: ConfigService,
     mock: MockExtractionProvider,
-    anthropic: unknown,
-    openai: unknown,
   ) => ReceiptExtractionProvider;
   const factory = (
     extractionProviderFactory as unknown as {
@@ -95,34 +93,25 @@ describe('extractionProviderFactory', () => {
     }
   ).useFactory;
   const mock = new MockExtractionProvider();
-  const fakeReal = { name: 'anthropic', extract: jest.fn() };
-  const fakeOpenAi = { name: 'openai', extract: jest.fn() };
 
   it('defaults to the bare mock provider', () => {
-    const provider = factory(configWith({}), mock, fakeReal, fakeOpenAi);
+    const provider = factory(configWith({}), mock);
     expect(provider).toBe(mock);
   });
 
   it('wraps real providers in the resilience decorator', () => {
     const provider = factory(
-      configWith({ RECEIPT_EXTRACTION_PROVIDER: 'anthropic' }),
+      configWith({ RECEIPT_EXTRACTION_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-test' }),
       mock,
-      fakeReal,
-      fakeOpenAi,
     );
     expect(provider).toBeInstanceOf(ResilientExtractionProvider);
     expect(provider.name).toBe('anthropic');
   });
 
   it('fails the boot on an unknown provider name', () => {
-    expect(() =>
-      factory(
-        configWith({ RECEIPT_EXTRACTION_PROVIDER: 'gemini5000' }),
-        mock,
-        fakeReal,
-        fakeOpenAi,
-      ),
-    ).toThrow(/Unknown RECEIPT_EXTRACTION_PROVIDER/);
+    expect(() => factory(configWith({ RECEIPT_EXTRACTION_PROVIDER: 'gemini5000' }), mock)).toThrow(
+      /Unknown RECEIPT_EXTRACTION_PROVIDER/,
+    );
     expect(SUPPORTED_EXTRACTION_PROVIDERS).toEqual(['mock', 'anthropic', 'openai']);
   });
 });
@@ -212,9 +201,7 @@ describe('AnthropicExtractionProvider', () => {
   });
 
   const makeProvider = () =>
-    new AnthropicExtractionProvider(
-      configWith({ ANTHROPIC_API_KEY: 'sk-test', RECEIPT_EXTRACTION_MODEL: 'claude-opus-4-8' }),
-    );
+    new AnthropicExtractionProvider({ apiKey: 'sk-test', model: 'claude-opus-4-8' });
 
   it('sends the image before the prompt with json_schema structured output', async () => {
     anthropicCreateMock.mockResolvedValue(validPayload());

@@ -1,6 +1,6 @@
 import type { ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 import { CategoryService } from '../category/category.service';
@@ -11,10 +11,12 @@ import { EventBus } from '../realtime/event-bus.service';
 import { mapReceiptToDto, type ReceiptWithRelations } from './dto/receipt-response.dto';
 import {
   ExtractionFailedError,
-  RECEIPT_EXTRACTION_PROVIDER,
   type ExtractionInput,
-  type ReceiptExtractionProvider,
 } from './extraction/extraction-provider.interface';
+import {
+  ExtractionResolverService,
+  type ResolvedExtraction,
+} from './extraction/extraction-resolver.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
 import { htmlToReceiptText } from './utils/html-to-text.util';
@@ -55,7 +57,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     private readonly categoryService: CategoryService,
     private readonly productMatcher: ProductMatchingService,
     private readonly eventBus: EventBus,
-    @Inject(RECEIPT_EXTRACTION_PROVIDER) private readonly provider: ReceiptExtractionProvider,
+    private readonly extractionResolver: ExtractionResolverService,
   ) {
     super();
   }
@@ -89,7 +91,11 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     }
 
     const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+    // Phase 8.11 — resolved inside the try so a permanent resolver failure
+    // (selected model retired, no API key) rides the normal FAILED path.
+    let resolved: ResolvedExtraction | null = null;
     try {
+      resolved = await this.extractionResolver.resolveForUser(receipt.uploadedById);
       const input = await this.buildInput(receipt);
 
       // Candidate categories: the uploader's visible OUT set (BOTH matches).
@@ -106,7 +112,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       );
       const productCandidateIds = new Set(productCandidates.map((p) => p.id));
 
-      const result = await this.provider.extract(input, {
+      const result = await resolved.provider.extract(input, {
         categories: candidates,
         products: productCandidates,
         locale: receipt.uploadedBy?.locale ?? undefined,
@@ -127,13 +133,17 @@ export class ReceiptExtractionProcessor extends WorkerHost {
 
       const itemCount = await this.persistResult(receiptId, result, candidateIds, proposals);
       void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTED', {
-        provider: this.provider.name,
+        provider: resolved.providerName,
+        model: resolved.model,
+        keySource: resolved.keySource,
         items: itemCount,
         confidence: result.confidence,
       });
       await this.publishUpdated(receipt.uploadedById, receiptId);
       this.logger.log(
-        `Receipt ${receiptId} extracted via '${this.provider.name}' (${itemCount} items) → REVIEW`,
+        `Receipt ${receiptId} extracted via '${resolved.providerName}' ` +
+          `(model=${resolved.model ?? 'default'} keySource=${resolved.keySource}, ` +
+          `${itemCount} items) → REVIEW`,
       );
       return { extracted: true, receiptId, items: itemCount };
     } catch (err) {
@@ -145,7 +155,9 @@ export class ReceiptExtractionProcessor extends WorkerHost {
           data: { status: 'FAILED', failureReason: reason },
         });
         void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTION_FAILED', {
-          provider: this.provider.name,
+          provider: resolved?.providerName ?? 'unresolved',
+          model: resolved?.model ?? null,
+          keySource: resolved?.keySource ?? null,
           permanent,
           reason,
         });

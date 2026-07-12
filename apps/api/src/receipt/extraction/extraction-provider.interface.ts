@@ -49,6 +49,19 @@ export interface ReceiptExtractionProvider {
   extract(input: ExtractionInput, ctx: ExtractionContext): Promise<ExtractionResult>;
 }
 
+/**
+ * Constructor options for the concrete LLM providers. Instances are built
+ * either by the module factory (deployment default, keys/model from env) or
+ * by the per-user resolver (Phase 8.11, runbook §9) with the uploader's
+ * selected model and resolved API key.
+ */
+export interface LlmClientOptions {
+  apiKey?: string;
+  model?: string;
+  /** OpenAI-compatible base URL override (proxies); openai provider only. */
+  baseUrl?: string;
+}
+
 /** Nest DI token — bound by the factory in receipt.module.ts. */
 export const RECEIPT_EXTRACTION_PROVIDER = Symbol('RECEIPT_EXTRACTION_PROVIDER');
 

@@ -4,10 +4,8 @@ import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductMatchingService } from '../product/product-matching.service';
 import { EventBus } from '../realtime/event-bus.service';
-import {
-  ExtractionFailedError,
-  RECEIPT_EXTRACTION_PROVIDER,
-} from './extraction/extraction-provider.interface';
+import { ExtractionFailedError } from './extraction/extraction-provider.interface';
+import { ExtractionResolverService } from './extraction/extraction-resolver.service';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
 
@@ -23,6 +21,15 @@ describe('ReceiptExtractionProcessor', () => {
   const categoryMock = { list: jest.fn() };
   const eventBusMock = { publish: jest.fn() };
   const providerMock = { name: 'mock', extract: jest.fn() };
+  // Phase 8.11 — the worker resolves the provider per uploader.
+  const resolverMock = {
+    resolveForUser: jest.fn().mockResolvedValue({
+      provider: providerMock,
+      providerName: 'mock',
+      model: null,
+      keySource: 'default',
+    }),
+  };
   const matcherMock = {
     getUserProductCandidates: jest.fn(),
     matchItems: jest.fn(),
@@ -108,7 +115,7 @@ describe('ReceiptExtractionProcessor', () => {
         { provide: CategoryService, useValue: categoryMock },
         { provide: ProductMatchingService, useValue: matcherMock },
         { provide: EventBus, useValue: eventBusMock },
-        { provide: RECEIPT_EXTRACTION_PROVIDER, useValue: providerMock },
+        { provide: ExtractionResolverService, useValue: resolverMock },
       ],
     }).compile();
     processor = module.get(ReceiptExtractionProcessor);
