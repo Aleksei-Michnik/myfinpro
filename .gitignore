@@ -58,3 +58,6 @@ infrastructure/backup/backup.env
 
 # ── DKIM private keys (deployed via GitHub Secrets) ──
 infrastructure/haraka/dkim-keys/private
+
+# Local file storage (receipts, product images) written by a locally-run API
+apps/api/storage/
