@@ -50,6 +50,12 @@ export interface ExtractedItem {
    * provider in the extraction context, or null.
    */
   suggestedCategoryId: string | null;
+  /**
+   * Phase 8 — product match ranked by the extraction LLM. MUST be one of
+   * the product-candidate ids handed to the provider, or null. This is the
+   * cross-language stage of the matcher (design §1.2).
+   */
+  suggestedProductId: string | null;
 }
 
 /**
@@ -159,6 +165,9 @@ export function validateExtractionResult(value: unknown): {
       if (!isStringOrNull(it.suggestedCategoryId ?? null)) {
         fail(`${p}.suggestedCategoryId`, 'must be string or null');
       }
+      if (!isStringOrNull(it.suggestedProductId ?? null)) {
+        fail(`${p}.suggestedProductId`, 'must be string or null');
+      }
     });
   }
 
@@ -172,6 +181,7 @@ export function validateExtractionResult(value: unknown): {
       discountCents: (it.discountCents ?? 0) as number,
       totalCents: it.totalCents as number,
       suggestedCategoryId: (it.suggestedCategoryId ?? null) as string | null,
+      suggestedProductId: (it.suggestedProductId ?? null) as string | null,
     }),
   );
   return {

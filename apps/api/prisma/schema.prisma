@@ -274,6 +274,7 @@ model Category {
   payments     Payment[]
   receiptItems ReceiptItem[]
   budgets      Budget[]
+  products     Product[]
 
   @@unique([ownerType, ownerId, slug, direction], name: "category_owner_slug_unique")
   @@index([ownerType, ownerId])
@@ -447,16 +448,83 @@ model ReceiptItem {
   totalCents     Int     @map("total_cents")
 
   // Suggested by extraction / confirmed at review. SetNull so category
-  // cleanup never orphan-fails a receipt. Phase 8 adds product_id here.
+  // cleanup never orphan-fails a receipt.
   categoryId String?   @map("category_id") @db.VarChar(36)
   category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // ── Phase 8: product matching ──
+  // Registry link. SetNull so registry maintenance never breaks receipts.
+  productId String?  @map("product_id") @db.VarChar(36)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  // Walkthrough lifecycle: PENDING | AUTO | CONFIRMED | SKIPPED (design §1.3).
+  matchStatus String @default("PENDING") @map("match_status") @db.VarChar(12)
+  // Staged-matcher proposals: [{productId,name,brand,stage,confidence}].
+  matchCandidates Json? @map("match_candidates")
+  // Denormalized from the receipt header so the Phase 9 price queries hit
+  // (product_id, purchased_at) without joining receipts (design §2).
+  purchasedAt DateTime? @map("purchased_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([receiptId, position])
   @@index([categoryId])
+  @@index([productId, purchasedAt])
   @@map("receipt_items")
+}
+
+// ── Phase 8: Product Catalog, Matching & Barcode ──
+
+// Global registry row — shared by ALL users (like merchants). Private
+// purchase data stays on receipt_items; the registry never records who
+// bought what. See docs/phase-8-products-design.md §1.1.
+model Product {
+  id      String  @id @default(uuid()) @db.VarChar(36)
+  // GTIN-8/12/13/14, digits only, checksum-validated at the API boundary.
+  // Nullable — loose goods have no barcode; unique when present.
+  barcode String? @unique @db.VarChar(14)
+  name    String  @db.VarChar(300)
+  // normalizeLookupName(name) — the exact-stage matching key (design §1.2).
+  normalizedName String  @map("normalized_name") @db.VarChar(300)
+  brand          String? @db.VarChar(200)
+  // Processed WebP under PRODUCT_IMAGE_STORAGE_DIR; immutable per version.
+  imageRef String? @map("image_ref") @db.VarChar(500)
+
+  // Default OUT category proposed for matched items. SetNull on delete.
+  defaultCategoryId String?   @map("default_category_id") @db.VarChar(36)
+  defaultCategory   Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  aliases      ProductAlias[]
+  receiptItems ReceiptItem[]
+
+  @@index([normalizedName])
+  @@map("products")
+}
+
+// Multi-language alias — one row per distinct normalized spelling. Each
+// walkthrough confirmation upserts (name + confirmer locale) and bumps the
+// counter, strengthening future alias-stage matches (design §1.3).
+model ProductAlias {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  productId String  @map("product_id") @db.VarChar(36)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name           String  @db.VarChar(300)
+  normalizedName String  @map("normalized_name") @db.VarChar(300)
+  locale         String? @db.VarChar(5)
+  // 'confirmation' | 'manual' | 'extraction' | 'off'
+  source            String @default("confirmation") @db.VarChar(16)
+  confirmationCount Int    @default(1) @map("confirmation_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([productId, normalizedName])
+  @@index([normalizedName])
+  @@map("product_aliases")
 }
 
 // ── Phase 10: Budgets & Spending Targets ──

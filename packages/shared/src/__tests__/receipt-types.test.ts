@@ -24,6 +24,7 @@ const validResult = () => ({
       discountCents: 0,
       totalCents: 1380,
       suggestedCategoryId: 'cat-1',
+      suggestedProductId: 'prod-1',
     },
     {
       rawName: 'Tomatoes',
@@ -32,6 +33,7 @@ const validResult = () => ({
       discountCents: 120,
       totalCents: 880,
       suggestedCategoryId: null,
+      suggestedProductId: null,
     },
   ],
   confidence: 'high',
@@ -71,12 +73,24 @@ describe('validateExtractionResult', () => {
     delete input.notes;
     delete (input.items as Record<string, unknown>[])[0].discountCents;
     delete (input.items as Record<string, unknown>[])[0].suggestedCategoryId;
+    // Pre-Phase-8 payloads have no suggestedProductId — must stay valid.
+    delete (input.items as Record<string, unknown>[])[0].suggestedProductId;
     const r = validateExtractionResult(input);
     expect(r.ok).toBe(true);
     expect(r.result!.confidence).toBe('low');
     expect(r.result!.notes).toBeNull();
     expect(r.result!.items[0].discountCents).toBe(0);
     expect(r.result!.items[0].suggestedCategoryId).toBeNull();
+    expect(r.result!.items[0].suggestedProductId).toBeNull();
+    expect(r.result!.items[1].suggestedProductId).toBeNull();
+  });
+
+  it('rejects a non-string suggestedProductId', () => {
+    const input = validResult() as Record<string, unknown>;
+    (input.items as Record<string, unknown>[])[0].suggestedProductId = 42;
+    const r = validateExtractionResult(input);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.path === 'items[0].suggestedProductId')).toBe(true);
   });
 
   it('accepts an all-null header (blurry photo with only items)', () => {
