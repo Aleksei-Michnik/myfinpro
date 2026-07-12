@@ -364,6 +364,32 @@
           "passwordNotSet": "You need to set a password first. Use the password reset flow.",
           "generic": "Failed to change password"
         }
+      },
+      "llm": {
+        "title": "AI model",
+        "description": "Choose which AI model reads your receipts. Add your own API key to unlock a provider and use it at your own cost.",
+        "loading": "Loading…",
+        "loadFailed": "Could not load AI settings",
+        "retry": "Retry",
+        "modelLabel": "Extraction model",
+        "defaultOption": "Server default",
+        "requiresKey": "requires API key",
+        "modelHint": "Models without a usable API key are disabled. Add a key below to unlock them.",
+        "saveModel": "Save model",
+        "modelSaved": "AI model updated",
+        "saveFailed": "Could not save",
+        "keysTitle": "API keys",
+        "keysDescription": "Keys are encrypted on the server and never shown again — only the last 4 characters stay visible. Your key is used only to process your receipts.",
+        "keyInputLabel": "{provider} API key",
+        "keySet": "Key ending in …{hint}",
+        "noKey": "No key stored",
+        "sharedAvailable": "Included with your account",
+        "saveKey": "Save key",
+        "replaceKey": "Replace key",
+        "deleteKey": "Remove",
+        "keySaved": "API key saved",
+        "keyDeleted": "API key removed",
+        "reauthRequired": "Please sign in again to manage API keys"
       }
     }
   },
