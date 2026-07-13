@@ -17,6 +17,7 @@ import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
+import { CreateManualReceiptDto } from './dto/create-manual-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { MatchItemDto } from './dto/match-item.dto';
@@ -136,6 +137,83 @@ export class ReceiptService {
     return out;
   }
 
+  /**
+   * POST /receipts/manual — a receipt composed by scanning product barcodes
+   * (Phase 8.14). No extraction job runs (the user IS the extractor): the
+   * receipt is born in REVIEW with every line pre-linked to its registry
+   * product (matchStatus CONFIRMED, stage `barcode`, confidence 1.0) and
+   * totals summed server-side. Review → confirm then creates the payment
+   * exactly like any other receipt.
+   */
+  async createManual(userId: string, dto: CreateManualReceiptDto): Promise<ReceiptResponseDto> {
+    const productIds = [...new Set(dto.items.map((i) => i.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, brand: true, defaultCategoryId: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const missing = productIds.filter((pid) => !byId.has(pid));
+    if (missing.length > 0) {
+      throw new NotFoundException({
+        message: `Unknown products: ${missing.join(', ')}`,
+        errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
+      });
+    }
+
+    const purchasedAt = dto.purchasedAt ? new Date(dto.purchasedAt) : new Date();
+    const lines = dto.items.map((item, index) => {
+      const product = byId.get(item.productId)!;
+      return {
+        position: index + 1,
+        rawName: product.name.slice(0, 300),
+        quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
+        unitPriceCents: item.unitPriceCents,
+        discountCents: 0,
+        totalCents: Math.round(item.quantity * item.unitPriceCents),
+        categoryId: product.defaultCategoryId,
+        productId: product.id,
+        matchStatus: 'CONFIRMED',
+        matchCandidates: [
+          {
+            productId: product.id,
+            name: product.name,
+            brand: product.brand,
+            stage: 'barcode',
+            confidence: 1,
+          },
+        ] as Prisma.InputJsonValue,
+        purchasedAt,
+      };
+    });
+
+    const row = await this.prisma.receipt.create({
+      data: {
+        status: 'REVIEW',
+        source: 'manual',
+        extractedMerchantName: dto.merchantName?.trim().slice(0, 200) || null,
+        purchasedAt,
+        currency: dto.currency.toUpperCase(),
+        totalCents: lines.reduce((sum, line) => sum + line.totalCents, 0),
+        uploadedById: userId,
+        items: { create: lines },
+      },
+      include: RECEIPT_INCLUDE,
+    });
+
+    void this.writeAudit(userId, row.id, 'RECEIPT_MANUAL_CREATED', {
+      items: lines.length,
+      totalCents: row.totalCents,
+      currency: row.currency,
+    });
+    this.logger.log(
+      `Receipt ${row.id} composed manually by user ${userId} (${lines.length} items)`,
+    );
+
+    const out = mapReceiptToDto(row as ReceiptWithRelations);
+    this.publishUpdated(userId, out);
+    return out;
+  }
+
   /** GET /receipts — uploader's receipts, newest first, cursor-paginated. */
   async list(userId: string, q: ListReceiptsQueryDto): Promise<ReceiptListResponse> {
     const limit = q.limit ?? PAGINATION_DEFAULTS.DEFAULT_LIMIT;
@@ -213,6 +291,13 @@ export class ReceiptService {
   /** POST /receipts/:id/retry — FAILED → back through the pipeline. */
   async retry(userId: string, id: string): Promise<ReceiptResponseDto> {
     const row = await this.loadOwnedOrThrow(userId, id);
+    // Manual receipts never ran extraction — nothing to retry (8.14).
+    if (row.source === 'manual') {
+      throw new BadRequestException({
+        message: 'Manually composed receipts have no extraction to retry',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
     if (row.status !== 'FAILED') {
       throw new BadRequestException({
         message: `Only FAILED receipts can be retried (status: ${row.status})`,

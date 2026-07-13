@@ -43,7 +43,7 @@ const validResult = () => ({
 describe('receipt shared types', () => {
   it('exposes the lifecycle statuses in order', () => {
     expect(RECEIPT_STATUSES).toEqual(['UPLOADED', 'EXTRACTING', 'REVIEW', 'CONFIRMED', 'FAILED']);
-    expect(RECEIPT_SOURCES).toEqual(['upload', 'url']);
+    expect(RECEIPT_SOURCES).toEqual(['upload', 'url', 'manual']);
     expect(EXTRACTION_CONFIDENCES).toEqual(['high', 'medium', 'low']);
   });
 

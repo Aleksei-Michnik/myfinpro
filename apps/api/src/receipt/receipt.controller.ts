@@ -39,6 +39,7 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
+import { CreateManualReceiptDto } from './dto/create-manual-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { MatchItemDto } from './dto/match-item.dto';
@@ -129,6 +130,29 @@ export class ReceiptController {
     @Body() dto: CreateReceiptUrlDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.createFromUrl(user.sub, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('manual')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Compose a receipt manually from scanned products',
+    description:
+      'No extraction runs — the receipt is created in REVIEW with every line pre-linked to ' +
+      'its registry product and the total summed server-side. Confirm creates the payment ' +
+      'like any other receipt.',
+  })
+  @ApiOkResponse({ description: 'Receipt created in REVIEW', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Unknown product id' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async createManual(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateManualReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.createManual(user.sub, dto);
   }
 
   @CustomThrottle({ limit: 60, ttl: 60_000 })

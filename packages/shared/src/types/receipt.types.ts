@@ -13,7 +13,7 @@ export const RECEIPT_STATUSES = [
 ] as const;
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 
-export const RECEIPT_SOURCES = ['upload', 'url'] as const;
+export const RECEIPT_SOURCES = ['upload', 'url', 'manual'] as const;
 export type ReceiptSource = (typeof RECEIPT_SOURCES)[number];
 
 /**

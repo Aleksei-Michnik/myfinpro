@@ -8,6 +8,7 @@ describe('ReceiptController', () => {
   let service: {
     createFromUpload: jest.Mock;
     createFromUrl: jest.Mock;
+    createManual: jest.Mock;
     list: jest.Mock;
     getOne: jest.Mock;
     openFile: jest.Mock;
@@ -19,6 +20,7 @@ describe('ReceiptController', () => {
     service = {
       createFromUpload: jest.fn(),
       createFromUrl: jest.fn(),
+      createManual: jest.fn(),
       list: jest.fn(),
       getOne: jest.fn(),
       openFile: jest.fn(),
@@ -55,6 +57,16 @@ describe('ReceiptController', () => {
     service.createFromUrl.mockResolvedValue({ id: 'r1' });
     await controller.createFromUrl(user as never, { url: 'https://r.example/x' });
     expect(service.createFromUrl).toHaveBeenCalledWith('u1', { url: 'https://r.example/x' });
+  });
+
+  it('POST /manual → service.createManual', async () => {
+    service.createManual.mockResolvedValue({ id: 'r1' });
+    const dto = {
+      currency: 'ILS',
+      items: [{ productId: 'p-1', quantity: 1, unitPriceCents: 500 }],
+    };
+    await controller.createManual(user as never, dto as never);
+    expect(service.createManual).toHaveBeenCalledWith('u1', dto);
   });
 
   it('GET → service.list; GET /:id → service.getOne; POST /:id/retry; DELETE', async () => {

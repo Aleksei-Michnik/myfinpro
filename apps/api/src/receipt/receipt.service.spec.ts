@@ -26,6 +26,7 @@ describe('ReceiptService', () => {
     },
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn(), updateMany: jest.fn() },
     merchant: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+    product: { findMany: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
   };
@@ -168,6 +169,100 @@ describe('ReceiptService', () => {
         }
       }
       expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createManual (8.14)', () => {
+    const productRows = [
+      { id: 'p-1', name: 'Milk 3%', brand: 'Tnuva', defaultCategoryId: 'c-groceries' },
+      { id: 'p-2', name: 'Bread', brand: null, defaultCategoryId: null },
+    ];
+
+    it('creates a REVIEW receipt with pre-linked barcode-confirmed items, no extraction', async () => {
+      prismaMock.product.findMany.mockResolvedValue(productRows);
+      prismaMock.receipt.create.mockImplementation(({ data }: { data: never }) =>
+        Promise.resolve(makeRow({ ...(data as object), id: 'r-9', items: [] })),
+      );
+
+      const dto = await service.createManual('u-1', {
+        currency: 'ils',
+        merchantName: '  Corner shop  ',
+        items: [
+          { productId: 'p-1', quantity: 2, unitPriceCents: 750 },
+          { productId: 'p-2', quantity: 0.5, unitPriceCents: 1200 },
+        ],
+      });
+
+      const createArg = prismaMock.receipt.create.mock.calls[0][0].data;
+      expect(createArg).toEqual(
+        expect.objectContaining({
+          status: 'REVIEW',
+          source: 'manual',
+          currency: 'ILS',
+          extractedMerchantName: 'Corner shop',
+          totalCents: 2100, // 2×750 + round(0.5×1200)
+          uploadedById: 'u-1',
+        }),
+      );
+      const lines = createArg.items.create;
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toEqual(
+        expect.objectContaining({
+          position: 1,
+          rawName: 'Milk 3%',
+          unitPriceCents: 750,
+          totalCents: 1500,
+          categoryId: 'c-groceries',
+          productId: 'p-1',
+          matchStatus: 'CONFIRMED',
+          matchCandidates: [
+            expect.objectContaining({ productId: 'p-1', stage: 'barcode', confidence: 1 }),
+          ],
+        }),
+      );
+      expect(lines[1]).toEqual(
+        expect.objectContaining({ position: 2, totalCents: 600, categoryId: null }),
+      );
+
+      expect(queueMock.add).not.toHaveBeenCalled();
+      expect(storageMock.save).not.toHaveBeenCalled();
+      expect(eventBusMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'receipt.updated', userIds: ['u-1'] }),
+      );
+      expect(dto.status).toBe('REVIEW');
+      expect(dto.source).toBe('manual');
+    });
+
+    it('404s on unknown products before writing anything', async () => {
+      prismaMock.product.findMany.mockResolvedValue([productRows[0]]);
+      try {
+        await service.createManual('u-1', {
+          currency: 'USD',
+          items: [
+            { productId: 'p-1', quantity: 1, unitPriceCents: 100 },
+            { productId: 'p-missing', quantity: 1, unitPriceCents: 100 },
+          ],
+        });
+        throw new Error('should have rejected');
+      } catch (err) {
+        expect(err).toBeInstanceOf(NotFoundException);
+        expect(codeOf(err)).toBe('PRODUCT_NOT_FOUND');
+      }
+      expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+    });
+
+    it('retry is rejected for manual receipts — nothing to extract', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ source: 'manual', status: 'REVIEW' }),
+      );
+      try {
+        await service.retry('u-1', 'r-1');
+        throw new Error('should have rejected');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
       expect(queueMock.add).not.toHaveBeenCalled();
     });
   });

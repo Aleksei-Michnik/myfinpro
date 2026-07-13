@@ -1,5 +1,7 @@
 import {
   computeTotalsMismatch,
+  RECEIPT_SOURCES,
+  RECEIPT_STATUSES,
   type ProductMatchCandidate,
   type ProductMatchStatus,
   type ReceiptSource,
@@ -64,10 +66,10 @@ export class ReceiptResponseDto {
   @ApiProperty()
   id!: string;
 
-  @ApiProperty({ enum: ['UPLOADED', 'EXTRACTING', 'REVIEW', 'CONFIRMED', 'FAILED'] })
+  @ApiProperty({ enum: [...RECEIPT_STATUSES] })
   status!: ReceiptStatus;
 
-  @ApiProperty({ enum: ['upload', 'url'] })
+  @ApiProperty({ enum: [...RECEIPT_SOURCES] })
   source!: ReceiptSource;
 
   @ApiPropertyOptional({ nullable: true, type: String })
