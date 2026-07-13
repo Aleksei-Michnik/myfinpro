@@ -70,6 +70,25 @@ vi.mock('@/components/receipt/ReceiptConfirmDialog', () => ({
     ) : null,
 }));
 
+// Reconcile dialog (8.15) has its own spec — stub it to a marker that lets
+// tests fire onReconciled.
+vi.mock('@/components/receipt/ReconcileReceiptDialog', () => ({
+  ReconcileReceiptDialog: ({
+    open,
+    onReconciled,
+  }: {
+    open: boolean;
+    onReconciled: (paymentId: string) => void;
+  }) =>
+    open ? (
+      <div data-testid="reconcile-dialog">
+        <button data-testid="reconcile-dialog-done" onClick={() => onReconciled('pay-1')}>
+          done
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (
     <a href={href as string} {...props}>
@@ -435,5 +454,23 @@ describe('ReceiptReviewClient', () => {
   it('non-REVIEW receipts do not offer Confirm', async () => {
     await renderLoaded(makeReceipt({ status: 'CONFIRMED' }));
     expect(screen.queryByTestId('review-confirm')).toBeNull();
+  });
+
+  // ── Attached receipts reconcile instead of confirm (8.15) ──────────────────
+
+  it('an attached receipt offers Reconcile (not Confirm) and auto-opens the dialog', async () => {
+    await renderLoaded(makeReceipt({ paymentId: 'pay-1' }));
+    // Confirm is replaced by Reconcile.
+    expect(screen.queryByTestId('review-confirm')).toBeNull();
+    expect(screen.getByTestId('review-reconcile')).toBeInTheDocument();
+    // Reaching REVIEW while attached auto-opens the reconcile dialog.
+    await waitFor(() => expect(screen.getByTestId('reconcile-dialog')).toBeInTheDocument());
+  });
+
+  it('completing reconciliation routes to the linked payment', async () => {
+    await renderLoaded(makeReceipt({ paymentId: 'pay-1' }));
+    fireEvent.click(screen.getByTestId('reconcile-dialog-done'));
+    expect(pushMock).toHaveBeenCalledWith('/payments/pay-1');
+    await waitFor(() => expect(screen.queryByTestId('reconcile-dialog')).toBeNull());
   });
 });

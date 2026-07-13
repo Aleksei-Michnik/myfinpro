@@ -615,7 +615,8 @@
     "controls": {
       "edit": "Edit",
       "delete": "Delete",
-      "open": "Open"
+      "open": "Open",
+      "attachReceipt": "Attach receipt"
     },
     "row": {
       "starAdd": "Add to starred",
@@ -1069,6 +1070,33 @@
       "lookupFailed": "Barcode lookup failed",
       "createFailed": "Could not create the receipt"
     },
+    "attach": {
+      "title": "Attach a receipt",
+      "hint": "Add the receipt for this payment. We'll read it and check it against what you entered.",
+      "device": "Upload from this device",
+      "urlLabel": "Or add from a URL",
+      "urlPlaceholder": "https://…",
+      "urlSubmit": "Add",
+      "close": "Close",
+      "failed": "Failed to attach the receipt"
+    },
+    "reconcile": {
+      "title": "Update the payment?",
+      "hint": "The receipt differs from the payment. Choose what to keep for each field.",
+      "totalLabel": "Total",
+      "categoryLabel": "Category",
+      "keep": "Keep",
+      "update": "Use receipt:",
+      "none": "None",
+      "noDifferences": "The receipt matches the payment. Confirm to finish.",
+      "itemsNote": "Products and item details are saved either way.",
+      "loading": "Loading the payment…",
+      "loadFailed": "Could not load the payment.",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "close": "Close",
+      "failed": "Failed to reconcile the receipt"
+    },
     "list": {
       "title": "Your receipts",
       "empty": "No receipts yet — add your first one above.",
@@ -1111,6 +1139,7 @@
       "retry": "Retry extraction",
       "retriedToast": "Extraction restarted",
       "confirm": "Confirm",
+      "reconcile": "Reconcile with payment",
       "confirmSaveFirst": "Save your changes before confirming",
       "matchProducts": "Match products ({count})",
       "matchProductsDone": "Products matched",

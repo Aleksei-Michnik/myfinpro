@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
+import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
@@ -86,7 +87,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+  // Attached receipts (Phase 8.15) finish via reconcile, not confirm. Auto-open
+  // the reconcile dialog the first time such a receipt reaches REVIEW.
+  const autoReconciledRef = useRef(false);
 
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const saveOp = useAsyncOperation<boolean>({ scope: 'control' });
@@ -116,6 +121,15 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Attached receipt reaches REVIEW → pop the reconciliation dialog once, so
+  // the comparison surfaces the moment extraction lands (design §3).
+  useEffect(() => {
+    if (receipt?.paymentId && receipt.status === 'REVIEW' && !autoReconciledRef.current) {
+      autoReconciledRef.current = true;
+      setReconcileOpen(true);
+    }
+  }, [receipt?.paymentId, receipt?.status]);
 
   useRealtimeResync(() => {
     // Don't clobber in-progress edits on reconnect; refetch otherwise.
@@ -720,16 +734,29 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               >
                 {t('save')}
               </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                onClick={() => setConfirmOpen(true)}
-                disabled={saveOp.isLoading || dirty}
-                data-testid="review-confirm"
-              >
-                {t('confirm')}
-              </Button>
+              {receipt.paymentId ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  onClick={() => setReconcileOpen(true)}
+                  disabled={saveOp.isLoading || dirty}
+                  data-testid="review-reconcile"
+                >
+                  {t('reconcile')}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={saveOp.isLoading || dirty}
+                  data-testid="review-confirm"
+                >
+                  {t('confirm')}
+                </Button>
+              )}
             </div>
           )}
         </section>
@@ -746,6 +773,21 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           router.push(`/payments/${paymentId}`);
         }}
       />
+
+      {/* Attached-receipt finish (Phase 8.15). Mounted only while open — its
+          payment fetch shouldn't run for plain confirm flows. */}
+      {reconcileOpen && receipt.paymentId && (
+        <ReconcileReceiptDialog
+          open
+          receipt={receipt}
+          categories={categories}
+          onCancel={() => setReconcileOpen(false)}
+          onReconciled={(paymentId) => {
+            setReconcileOpen(false);
+            router.push(`/payments/${paymentId}`);
+          }}
+        />
+      )}
 
       {/* Mounted only while open — keeps the dialog (and its product-context
           dependency) entirely off the tree for plain review flows. */}

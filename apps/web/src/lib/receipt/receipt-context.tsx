@@ -30,6 +30,16 @@ interface ReceiptContextValue {
   createFromUrl(url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Compose a receipt from scanned products — born in REVIEW (8.14). */
   createManual(input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Attach a receipt file to an existing payment — born linked (8.15). */
+  attachFileToPayment(paymentId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Attach an online receipt by URL to an existing payment (8.15). */
+  attachUrlToPayment(paymentId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Finish an attached receipt: REVIEW → CONFIRMED, apply chosen fields (8.15). */
+  reconcileReceipt(
+    id: string,
+    input: { applyTotal: boolean; applyCategory: boolean },
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
   fetchList(params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse>;
   getReceipt(id: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** FAILED → back through the extraction pipeline. */
@@ -183,6 +193,55 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
           signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to create receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const attachFileToPayment = useCallback(
+    (paymentId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/receipt`, {
+          method: 'POST',
+          headers: authHeaders(false),
+          body: form,
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const attachUrlToPayment = useCallback(
+    (paymentId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/receipt-url`,
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify({ url }), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const reconcileReceipt = useCallback(
+    (
+      id: string,
+      input: { applyTotal: boolean; applyCategory: boolean },
+      signal?: AbortSignal,
+    ): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/reconcile`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to reconcile receipt');
         return (await res.json()) as ReceiptSummary;
       }),
     [authHeaders, run],
@@ -355,6 +414,9 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       uploadReceipt,
       createFromUrl,
       createManual,
+      attachFileToPayment,
+      attachUrlToPayment,
+      reconcileReceipt,
       fetchList,
       getReceipt,
       retryReceipt,
@@ -375,6 +437,9 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       uploadReceipt,
       createFromUrl,
       createManual,
+      attachFileToPayment,
+      attachUrlToPayment,
+      reconcileReceipt,
       fetchList,
       getReceipt,
       retryReceipt,

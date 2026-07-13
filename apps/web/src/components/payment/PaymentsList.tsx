@@ -24,6 +24,7 @@ import { DeletePaymentDialog } from './DeletePaymentDialog';
 import { PaymentFormDialog } from './PaymentFormDialog';
 import { PaymentRow } from './PaymentRow';
 import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
+import { AttachReceiptDialog } from '@/components/receipt/AttachReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { useRouter } from '@/i18n/navigation';
@@ -172,6 +173,7 @@ export function PaymentsList({
   // Dialog state.
   const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
   const [paymentToEdit, setPaymentToEdit] = useState<PaymentSummary | null>(null);
+  const [paymentToAttach, setPaymentToAttach] = useState<PaymentSummary | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Track whether the very first self-fetch has completed (used to render
@@ -489,6 +491,7 @@ export function PaymentsList({
                     onClick={effectiveClick}
                     onEditClick={handleEditClick}
                     onDeleteClick={(payment) => setPaymentToDelete(payment)}
+                    onAttachClick={(payment) => setPaymentToAttach(payment)}
                     onStarToggled={handleStarToggled}
                   />
                 ))}
@@ -507,6 +510,7 @@ export function PaymentsList({
                 onClick={effectiveClick}
                 onEditClick={handleEditClick}
                 onDeleteClick={(payment) => setPaymentToDelete(payment)}
+                onAttachClick={(payment) => setPaymentToAttach(payment)}
                 onStarToggled={handleStarToggled}
               />
             ))}
@@ -565,6 +569,20 @@ export function PaymentsList({
           }}
           onSaved={handleDialogSaved}
           categories={categories}
+        />
+      )}
+
+      {/* Attach a receipt to an existing expense payment (Phase 8.15) — the
+          linked receipt hands off to review → reconcile. */}
+      {paymentToAttach && (
+        <AttachReceiptDialog
+          open
+          paymentId={paymentToAttach.id}
+          onClose={() => setPaymentToAttach(null)}
+          onAttached={(receipt) => {
+            setPaymentToAttach(null);
+            router.push(`/receipts/${receipt.id}`);
+          }}
         />
       )}
     </div>

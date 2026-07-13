@@ -33,6 +33,8 @@ export interface PaymentRowProps {
   /** Open the edit dialog (6.13). In 6.12 we wire to a no-op pass-through. */
   onEditClick?(id: string): void;
   onDeleteClick?(payment: PaymentSummary): void;
+  /** Attach a receipt to this (expense) payment (8.15). Absent → no menu item. */
+  onAttachClick?(payment: PaymentSummary): void;
   /** Reports the new starred state so the parent list can update / remove. */
   onStarToggled?(id: string, starred: boolean): void;
 }
@@ -53,6 +55,7 @@ export function PaymentRow({
   onClick,
   onEditClick,
   onDeleteClick,
+  onAttachClick,
   onStarToggled,
 }: PaymentRowProps) {
   const t = useTranslations('payments');
@@ -90,6 +93,10 @@ export function PaymentRow({
 
   const handleDelete = () => {
     onDeleteClick?.(payment);
+  };
+
+  const handleAttach = () => {
+    onAttachClick?.(payment);
   };
 
   // Prepare derived values shared between variants.
@@ -146,6 +153,18 @@ export function PaymentRow({
           disabled: !formCanEdit,
           testId: `row-edit-${payment.id}`,
         },
+        // Attach a receipt — expense payments only (receipts are OUT proving
+        // documents) and only when the parent wires the handler.
+        ...(onAttachClick && payment.direction === 'OUT'
+          ? [
+              {
+                key: 'attach',
+                label: t('controls.attachReceipt'),
+                onClick: handleAttach,
+                testId: `row-attach-${payment.id}`,
+              },
+            ]
+          : []),
         {
           key: 'delete',
           label: t('controls.delete'),

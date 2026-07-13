@@ -182,6 +182,27 @@ describe('PaymentRow', () => {
     expect(onDelete).toHaveBeenCalledWith(payment);
   });
 
+  it('onAttachClick fires for an expense payment and passes the payload', () => {
+    const onAttach = vi.fn();
+    const payment = makePayment({ direction: 'OUT' });
+    renderDesktop({ payment, onAttachClick: onAttach });
+    fireEvent.click(screen.getByTestId('row-controls-p-1'));
+    fireEvent.click(screen.getByTestId('row-attach-p-1'));
+    expect(onAttach).toHaveBeenCalledWith(payment);
+  });
+
+  it('the attach action is hidden for income payments', () => {
+    renderDesktop({ payment: makePayment({ direction: 'IN' }), onAttachClick: vi.fn() });
+    fireEvent.click(screen.getByTestId('row-controls-p-1'));
+    expect(screen.queryByTestId('row-attach-p-1')).not.toBeInTheDocument();
+  });
+
+  it('the attach action is absent when no handler is wired', () => {
+    renderDesktop({ payment: makePayment({ direction: 'OUT' }) });
+    fireEvent.click(screen.getByTestId('row-controls-p-1'));
+    expect(screen.queryByTestId('row-attach-p-1')).not.toBeInTheDocument();
+  });
+
   it('onClick fires with the id when the row is clicked', () => {
     const onClick = vi.fn();
     renderDesktop({ onClick });
