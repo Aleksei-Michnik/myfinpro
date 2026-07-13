@@ -34,6 +34,15 @@ describe('ReceiptUrlIntakeService', () => {
 
   const spyFetch = () => jest.spyOn(global, 'fetch');
 
+  /** A minimal Pairzon document body the adapter reduces to receipt text. */
+  const pairzonDoc = (merchant: string) =>
+    JSON.stringify({
+      total: 23.9,
+      createdDate: '2026-07-08T21:03:41',
+      store: { name: 'Branch', business: { name: merchant, currency: 'ILS' } },
+      items: [{ name: 'Cola', code: '7290', quantity: 1, price: 23.9, total: 23.9 }],
+    });
+
   beforeEach(() => {
     jest.clearAllMocks();
     prismaMock.receiptUrlIntake.count.mockResolvedValue(0);
@@ -204,20 +213,18 @@ describe('ReceiptUrlIntakeService', () => {
   // ── Provider dispatch (Pairzon) ───────────────────────────────────────────
 
   it('dispatches a Pairzon link with ids in the query straight to its JSON endpoint', async () => {
-    const fetchSpy = spyFetch().mockResolvedValue(
-      ok('{"merchant":"Rami Levy","total":59395}', 'application/json'),
-    );
+    const fetchSpy = spyFetch().mockResolvedValue(ok(pairzonDoc('Rami Levy'), 'application/json'));
 
     const input = await makeService([new PairzonProvider()]).resolve(
       'https://public.pairzon.com/0351.html?id=DOC123&p=1331',
     );
 
-    // Fetched the data endpoint (not the HTML shell), raw JSON handed through.
+    // Fetched the data endpoint (not the HTML shell); JSON reduced to text.
     expect(String(fetchSpy.mock.calls[0][0])).toBe(
       'https://public.pairzon.com/v1.0/documents/DOC123?p=1331',
     );
     expect(input).toMatchObject({ kind: 'html' });
-    expect(input.kind === 'html' && input.data).toContain('Rami Levy');
+    expect(input.kind === 'html' && input.data).toContain('Merchant: Rami Levy');
     expect(lastIntake()).toMatchObject({
       host: 'public.pairzon.com',
       provider: 'pairzon',
@@ -238,7 +245,7 @@ describe('ReceiptUrlIntakeService', () => {
         return Promise.resolve(ok('<html><body>Loading...</body></html>', 'text/html'));
       // 3) the JSON data endpoint the browser would have called
       if (u.startsWith('https://public.pairzon.com/v1.0/documents/DOC9'))
-        return Promise.resolve(ok('{"merchant":"Keshet Teamim","total":8830}', 'application/json'));
+        return Promise.resolve(ok(pairzonDoc('Keshet Teamim'), 'application/json'));
       return Promise.reject(new Error(`unexpected fetch ${u}`));
     });
 
@@ -246,7 +253,7 @@ describe('ReceiptUrlIntakeService', () => {
       'https://public.pairzon.com/1331/3s70TWnbWeywEHEs5MPR05',
     );
 
-    expect(input.kind === 'html' && input.data).toContain('Keshet Teamim');
+    expect(input.kind === 'html' && input.data).toContain('Merchant: Keshet Teamim');
     expect(String(fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1][0])).toBe(
       'https://public.pairzon.com/v1.0/documents/DOC9?p=1331',
     );

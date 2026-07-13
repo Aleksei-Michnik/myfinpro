@@ -8,7 +8,11 @@ import {
   type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
-import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extraction.schema';
+import {
+  buildExtractionPrompt,
+  EXTRACTION_MAX_OUTPUT_TOKENS,
+  EXTRACTION_RESULT_JSON_SCHEMA,
+} from './extraction.schema';
 
 /**
  * Phase 7, iteration 7.5 — Anthropic vision extraction.
@@ -64,7 +68,7 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
     const started = Date.now();
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 8192,
+      max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
       thinking: { type: 'adaptive' },
       output_config: {
         format: {

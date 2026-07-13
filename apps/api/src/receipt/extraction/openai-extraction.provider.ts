@@ -7,7 +7,11 @@ import {
   type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
-import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extraction.schema';
+import {
+  buildExtractionPrompt,
+  EXTRACTION_MAX_OUTPUT_TOKENS,
+  EXTRACTION_RESULT_JSON_SCHEMA,
+} from './extraction.schema';
 
 /**
  * Phase 7, iteration 7.5 — OpenAI vision extraction (raw HTTP on purpose:
@@ -65,7 +69,7 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 8192,
+        max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
         messages: [{ role: 'user', content: userContent }],
         response_format: {
           type: 'json_schema',

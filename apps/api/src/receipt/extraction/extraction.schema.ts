@@ -5,6 +5,14 @@
  * false` + `required`, and numeric range checks are left to the shared
  * validator (`validateExtractionResult`) which the worker runs regardless.
  */
+/**
+ * Output-token ceiling for the extraction call, shared by both providers.
+ * A real grocery receipt runs to dozens of line items (plus the provider's
+ * adaptive thinking); the earlier 8192 truncated large receipts mid-JSON,
+ * surfacing as a "non-JSON output" parse failure (Phase 8.17).
+ */
+export const EXTRACTION_MAX_OUTPUT_TOKENS = 16384;
+
 export const EXTRACTION_RESULT_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,

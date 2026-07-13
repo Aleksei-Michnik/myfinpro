@@ -18,25 +18,23 @@ export interface SafeFetchResult {
 /** Fetch primitive handed to adapters — SSRF-guarded + size-capped. */
 export type SafeFetch = (url: string) => Promise<SafeFetchResult>;
 
-/** Where an adapter says the extractable data actually lives. */
-export interface ResolvedDataUrl {
-  dataUrl: string;
-  /** 'json'/'text' skip binary sniffing; 'auto' runs the normal pipeline. */
-  kind: 'json' | 'auto';
-}
-
 export interface ReceiptUrlProvider {
   /** Stable identifier recorded in the anonymized intake log. */
   readonly name: string;
   /** True if this adapter knows how to read the given receipt URL. */
   matches(url: URL): boolean;
   /**
-   * Resolve the URL that actually returns extractable receipt data. May use
-   * `fetchSafe` to follow the provider's redirects and discover ids. Return
-   * `null` to defer to the generic HTML pipeline (which then applies the
-   * JS-shell guard).
+   * Return the receipt as a compact, extractable text snapshot — the adapter
+   * owns BOTH where the data lives (usually a JSON endpoint reached via
+   * `fetchSafe`, following the provider's redirects to discover ids) AND how
+   * to reduce it: it must strip the provider's payload down to the receipt
+   * essentials (merchant, date, currency, total, per-line name/qty/price),
+   * not hand the raw document to the model — the bulk of a provider's JSON is
+   * noise that bloats input tokens and truncates the structured output.
+   * Return `null` to defer to the generic HTML pipeline (which then applies
+   * the JS-shell empty-result guard).
    */
-  resolveDataUrl(url: URL, fetchSafe: SafeFetch): Promise<ResolvedDataUrl | null>;
+  resolveContent(url: URL, fetchSafe: SafeFetch): Promise<string | null>;
 }
 
 export const RECEIPT_URL_PROVIDERS = Symbol('RECEIPT_URL_PROVIDERS');

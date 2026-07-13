@@ -76,18 +76,13 @@ export class ReceiptUrlIntakeService {
 
     if (provider) {
       try {
-        const resolved = await provider.resolveDataUrl(target, fetchSafe);
-        if (resolved) {
-          const res = await this.safeFetch(resolved.dataUrl);
-          // 'json'/'text' data endpoints skip binary sniffing — the body is
-          // already the receipt payload the model reads directly.
-          const text =
-            resolved.kind === 'json'
-              ? res.body.toString('utf8')
-              : this.reduceHtml(res.body, res.contentType);
+        // The adapter returns the receipt already reduced to a compact text
+        // snapshot (it owns the provider's data endpoint AND its shape).
+        const content = await provider.resolveContent(target, fetchSafe);
+        if (content !== null) {
           await this.record(target, provider.name, 'provider_ok');
           this.logger.log(`Receipt URL resolved via '${provider.name}' adapter`);
-          return { kind: 'html', data: text.slice(0, URL_SNAPSHOT_MAX_CHARS), sourceUrl: url };
+          return { kind: 'html', data: content.slice(0, URL_SNAPSHOT_MAX_CHARS), sourceUrl: url };
         }
         // Adapter deferred → fall through to the generic path.
       } catch (err) {
