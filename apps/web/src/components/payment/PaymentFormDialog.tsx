@@ -30,12 +30,14 @@ import {
 import { PaymentScopeSelector } from './PaymentScopeSelector';
 import { PaymentTypeSelector } from './PaymentTypeSelector';
 import { PropagationChoiceDialog } from './PropagationChoiceDialog';
+import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
+import { isoToLocalInput, localInputToIso, nowLocalIso } from '@/lib/datetime';
 import { useGroups } from '@/lib/group/group-context';
 import { usePayments } from '@/lib/payment/payment-context';
 import {
@@ -107,35 +109,6 @@ interface ValidationErrors {
   category?: string;
   scopes?: string;
   note?: string;
-}
-
-/**
- * Default value for the `<input type="datetime-local">` field — the
- * current local date+time formatted as `YYYY-MM-DDTHH:mm` (the only
- * shape the input control accepts; no seconds, no timezone). Phase 6 ·
- * Iteration 6.18.1.2.
- */
-function nowLocalIso(): string {
-  const now = new Date();
-  const off = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - off).toISOString().slice(0, 16);
-}
-
-/** Convert an ISO UTC timestamp to the local-zone datetime-local value. */
-function isoToLocalInput(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return nowLocalIso();
-  const off = d.getTimezoneOffset() * 60_000;
-  return new Date(d.getTime() - off).toISOString().slice(0, 16);
-}
-
-/** Convert a local-zone datetime-local value back to an ISO UTC timestamp. */
-function localInputToIso(local: string): string {
-  // `Date(local)` interprets a bare `YYYY-MM-DDTHH:mm` as local time,
-  // so toISOString() yields the correct UTC counterpart.
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return new Date().toISOString();
-  return d.toISOString();
 }
 
 function paymentToState(p: PaymentSummary): FormState {
@@ -288,7 +261,12 @@ export function PaymentFormDialog({
   const receiptUrlInputRef = useRef<HTMLInputElement | null>(null);
   const [receiptUrlOpen, setReceiptUrlOpen] = useState(false);
   const [receiptUrl, setReceiptUrl] = useState('');
+  const [manualReceiptOpen, setManualReceiptOpen] = useState(false);
   const receiptOp = useAsyncOperation<boolean>({ scope: 'control' });
+  const routeToReview = (receiptId: string) => {
+    router.push(`/receipts/${receiptId}`);
+    onClose();
+  };
   const handoffToReview = (create: (signal: AbortSignal) => Promise<{ id: string }>) => {
     void receiptOp
       .run(async (signal) => {
@@ -929,6 +907,16 @@ export function PaymentFormDialog({
                 >
                   {t('fromReceiptUrl')}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={receiptOp.isLoading}
+                  onClick={() => setManualReceiptOpen(true)}
+                  data-testid="payment-form-receipt-barcodes"
+                >
+                  {t('fromReceiptBarcodes')}
+                </Button>
               </div>
             </div>
             {receiptUrlOpen && (
@@ -966,6 +954,20 @@ export function PaymentFormDialog({
                   {t('fromReceiptUrlSubmit')}
                 </Button>
               </div>
+            )}
+            {/* Mounted only while open so its product/receipt hooks (and their
+                providers) aren't required by every payment-form host. */}
+            {manualReceiptOpen && (
+              <ManualReceiptDialog
+                open
+                defaultCurrency={user?.defaultCurrency ?? 'USD'}
+                categories={categories ?? []}
+                onClose={() => setManualReceiptOpen(false)}
+                onCreated={(receipt) => {
+                  setManualReceiptOpen(false);
+                  routeToReview(receipt.id);
+                }}
+              />
             )}
           </div>
         )}

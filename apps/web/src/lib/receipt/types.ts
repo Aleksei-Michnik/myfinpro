@@ -13,7 +13,7 @@ export const RECEIPT_STATUSES = [
 ] as const;
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 
-export type ReceiptSource = 'upload' | 'url';
+export type ReceiptSource = 'upload' | 'url' | 'manual';
 
 export interface ReceiptItem {
   id: string;
@@ -92,6 +92,15 @@ export interface UpdateReceiptInput {
 export interface MerchantSuggestion {
   id: string;
   name: string;
+}
+
+/** POST /receipts/manual body — a receipt composed by scanning products (8.14). */
+export interface ManualReceiptInput {
+  currency: string;
+  merchantName?: string;
+  /** ISO 8601; the API defaults to now. */
+  purchasedAt?: string;
+  items: Array<{ productId: string; quantity: number; unitPriceCents: number }>;
 }
 
 /** POST /receipts/:id/confirm body — turns a reviewed receipt into a payment. */

@@ -53,11 +53,23 @@ vi.mock('@/lib/payment/payment-context', () => ({
   }),
 }));
 
-// Phase 7.13 — receipt intake from the create dialog; 8.13 adds the URL path.
+// Phase 7.13 — receipt intake from the create dialog; 8.13 adds the URL path,
+// 8.14 the barcode-composed manual receipt.
 const uploadReceiptMock = vi.fn();
 const createFromUrlMock = vi.fn();
+const createManualMock = vi.fn();
 vi.mock('@/lib/receipt/receipt-context', () => ({
-  useReceipts: () => ({ uploadReceipt: uploadReceiptMock, createFromUrl: createFromUrlMock }),
+  useReceipts: () => ({
+    uploadReceipt: uploadReceiptMock,
+    createFromUrl: createFromUrlMock,
+    createManual: createManualMock,
+  }),
+}));
+
+// The barcode dialog has its own spec; here we only need to see it mount.
+vi.mock('@/components/receipt/ManualReceiptDialog', () => ({
+  ManualReceiptDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="manual-receipt-stub" /> : null,
 }));
 
 const routerPushMock = vi.fn();
@@ -174,6 +186,7 @@ describe('PaymentFormDialog', () => {
     addToastMock.mockReset();
     uploadReceiptMock.mockReset();
     createFromUrlMock.mockReset();
+    createManualMock.mockReset();
     routerPushMock.mockReset();
     // Default: no children → edits of RECURRING parents submit directly.
     // Propagation tests override with a non-empty page.
@@ -287,6 +300,16 @@ describe('PaymentFormDialog', () => {
     );
     expect(routerPushMock).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ── From receipt via barcodes (8.14) ───────────────────────────────────────
+
+  it('create: the barcode option opens the manual-receipt dialog', () => {
+    renderCreate();
+
+    expect(screen.queryByTestId('manual-receipt-stub')).toBeNull();
+    fireEvent.click(screen.getByTestId('payment-form-receipt-barcodes'));
+    expect(screen.getByTestId('manual-receipt-stub')).toBeTruthy();
   });
 
   it('edit: the from-receipt intake is not offered', () => {

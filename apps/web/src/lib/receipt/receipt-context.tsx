@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type {
   ConfirmReceiptInput,
   ListReceiptsParams,
+  ManualReceiptInput,
   MerchantSuggestion,
   ReceiptItemInput,
   ReceiptListResponse,
@@ -27,6 +28,8 @@ interface ReceiptContextValue {
   uploadReceipt(file: File, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Ingest an online receipt by URL. */
   createFromUrl(url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Compose a receipt from scanned products — born in REVIEW (8.14). */
+  createManual(input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary>;
   fetchList(params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse>;
   getReceipt(id: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** FAILED → back through the extraction pipeline. */
@@ -165,6 +168,21 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
           signal,
         });
         if (!res.ok) await throwApiError(res, 'Failed to add receipt URL');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const createManual = useCallback(
+    (input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/manual`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to create receipt');
         return (await res.json()) as ReceiptSummary;
       }),
     [authHeaders, run],
@@ -336,6 +354,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     () => ({
       uploadReceipt,
       createFromUrl,
+      createManual,
       fetchList,
       getReceipt,
       retryReceipt,
@@ -355,6 +374,7 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [
       uploadReceipt,
       createFromUrl,
+      createManual,
       fetchList,
       getReceipt,
       retryReceipt,
