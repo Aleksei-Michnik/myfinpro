@@ -53,10 +53,11 @@ vi.mock('@/lib/payment/payment-context', () => ({
   }),
 }));
 
-// Phase 7.13 — receipt intake from the create dialog.
+// Phase 7.13 — receipt intake from the create dialog; 8.13 adds the URL path.
 const uploadReceiptMock = vi.fn();
+const createFromUrlMock = vi.fn();
 vi.mock('@/lib/receipt/receipt-context', () => ({
-  useReceipts: () => ({ uploadReceipt: uploadReceiptMock }),
+  useReceipts: () => ({ uploadReceipt: uploadReceiptMock, createFromUrl: createFromUrlMock }),
 }));
 
 const routerPushMock = vi.fn();
@@ -172,6 +173,7 @@ describe('PaymentFormDialog', () => {
     listOccurrencesMock.mockReset();
     addToastMock.mockReset();
     uploadReceiptMock.mockReset();
+    createFromUrlMock.mockReset();
     routerPushMock.mockReset();
     // Default: no children → edits of RECURRING parents submit directly.
     // Propagation tests override with a non-empty page.
@@ -217,6 +219,71 @@ describe('PaymentFormDialog', () => {
 
     await waitFor(() =>
       expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Unsupported')),
+    );
+    expect(routerPushMock).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ── From receipt via URL (8.13) ────────────────────────────────────────────
+
+  it('create: the URL row is hidden until the toggle opens it', () => {
+    renderCreate();
+
+    expect(screen.queryByTestId('payment-form-receipt-url-input')).toBeNull();
+    const toggle = screen.getByTestId('payment-form-receipt-url-toggle');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('payment-form-receipt-url-input')).toBeTruthy();
+  });
+
+  it('create: submitting a receipt URL creates it, routes to review, and closes', async () => {
+    createFromUrlMock.mockResolvedValue({ id: 'r-88' });
+    const { onClose } = renderCreate();
+
+    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
+    fireEvent.change(screen.getByTestId('payment-form-receipt-url-input'), {
+      target: { value: '  https://shop.example/e-receipt/42  ' },
+    });
+    fireEvent.click(screen.getByTestId('payment-form-receipt-url-submit'));
+
+    await waitFor(() =>
+      expect(createFromUrlMock).toHaveBeenCalledWith(
+        'https://shop.example/e-receipt/42',
+        expect.anything(),
+      ),
+    );
+    await waitFor(() => expect(routerPushMock).toHaveBeenCalledWith('/receipts/r-88'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('create: Enter in the URL field adds the receipt without submitting the payment form', async () => {
+    createFromUrlMock.mockResolvedValue({ id: 'r-88' });
+    renderCreate();
+
+    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
+    const input = screen.getByTestId('payment-form-receipt-url-input');
+    fireEvent.change(input, { target: { value: 'https://shop.example/e-receipt/42' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(createFromUrlMock).toHaveBeenCalled());
+    expect(createPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it('create: a failed URL receipt toasts and keeps the dialog open', async () => {
+    createFromUrlMock.mockRejectedValue(new Error('Only http(s) URLs are supported'));
+    const { onClose } = renderCreate();
+
+    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
+    fireEvent.change(screen.getByTestId('payment-form-receipt-url-input'), {
+      target: { value: 'ftp://nope' },
+    });
+    fireEvent.click(screen.getByTestId('payment-form-receipt-url-submit'));
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('http(s)')),
     );
     expect(routerPushMock).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();

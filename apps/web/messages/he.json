@@ -695,9 +695,13 @@
       "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
       "othersPreserved": "השיוכים של משתמשים אחרים לתשלום זה לא ישונו.",
       "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו.",
-      "fromReceipt": "מקבלה",
-      "fromReceiptHint": "יש קבלה? העלו אותה ואנחנו נמלא את התשלום עבורכם.",
-      "fromReceiptFailed": "העלאת הקבלה נכשלה"
+      "fromReceiptHint": "יש קבלה? הוסיפו אותה ואנחנו נמלא את התשלום עבורכם.",
+      "fromReceiptDevice": "העלאה מהמכשיר הזה",
+      "fromReceiptUrl": "הוספה מכתובת URL",
+      "fromReceiptUrlLabel": "כתובת הקבלה",
+      "fromReceiptUrlPlaceholder": "https://…",
+      "fromReceiptUrlSubmit": "הוספת קבלה",
+      "fromReceiptFailed": "הוספת הקבלה נכשלה"
     },
     "types": {
       "label": "סוג",

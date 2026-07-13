@@ -695,9 +695,13 @@
       "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
       "othersPreserved": "Other users' attributions on this payment will not be touched.",
       "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved.",
-      "fromReceipt": "From receipt",
-      "fromReceiptHint": "Have a receipt? Upload it and we will fill the payment in for you.",
-      "fromReceiptFailed": "Failed to upload the receipt"
+      "fromReceiptHint": "Have a receipt? Add it and we will fill the payment in for you.",
+      "fromReceiptDevice": "Upload from this device",
+      "fromReceiptUrl": "Add from URL",
+      "fromReceiptUrlLabel": "Receipt URL",
+      "fromReceiptUrlPlaceholder": "https://…",
+      "fromReceiptUrlSubmit": "Add receipt",
+      "fromReceiptFailed": "Failed to add the receipt"
     },
     "types": {
       "label": "Type",

@@ -277,24 +277,37 @@ export function PaymentFormDialog({
   } = usePayments();
 
   // Phase 7.13 — payment-first receipt intake: a receipt is the payment's
-  // proving document, so its upload starts here. Picking a file creates the
-  // receipt and hands off to the extract → review → confirm pipeline, which
-  // ends in the payment this dialog would otherwise create by hand.
+  // proving document, so its upload starts here. Phase 8.13 turns the single
+  // file picker into an intake chooser (device upload / e-receipt URL —
+  // design: docs/phase-8-receipt-intake-design.md §1). Either path creates
+  // the receipt and hands off to the extract → review → confirm pipeline,
+  // which ends in the payment this dialog would otherwise create by hand.
   const router = useRouter();
-  const { uploadReceipt } = useReceipts();
+  const { uploadReceipt, createFromUrl } = useReceipts();
   const receiptFileRef = useRef<HTMLInputElement | null>(null);
+  const receiptUrlInputRef = useRef<HTMLInputElement | null>(null);
+  const [receiptUrlOpen, setReceiptUrlOpen] = useState(false);
+  const [receiptUrl, setReceiptUrl] = useState('');
   const receiptOp = useAsyncOperation<boolean>({ scope: 'control' });
-  const handleReceiptFile = (file: File | undefined) => {
-    if (!file) return;
+  const handoffToReview = (create: (signal: AbortSignal) => Promise<{ id: string }>) => {
     void receiptOp
       .run(async (signal) => {
-        const created = await uploadReceipt(file, signal);
+        const created = await create(signal);
         router.push(`/receipts/${created.id}`);
         return true;
       })
       .then((r) => {
         if (r !== undefined) onClose();
       });
+  };
+  const handleReceiptFile = (file: File | undefined) => {
+    if (!file) return;
+    handoffToReview((signal) => uploadReceipt(file, signal));
+  };
+  const handleReceiptUrl = () => {
+    const url = receiptUrl.trim();
+    if (!url) return;
+    handoffToReview((signal) => createFromUrl(url, signal));
   };
   useEffect(() => {
     if (receiptOp.error && receiptOp.error.reason !== 'aborted') {
@@ -871,32 +884,89 @@ export function PaymentFormDialog({
 
         {mode === 'create' && (
           <div
-            className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
+            className="mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
             data-testid="payment-form-from-receipt"
           >
-            <span className="text-xs text-gray-600 dark:text-gray-300">{t('fromReceiptHint')}</span>
-            <input
-              ref={receiptFileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-              className="hidden"
-              onChange={(e) => {
-                handleReceiptFile(e.target.files?.[0]);
-                e.target.value = '';
-              }}
-              data-testid="payment-form-receipt-input"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={receiptOp.isLoading}
-              onClick={() => receiptFileRef.current?.click()}
-              data-testid="payment-form-receipt-button"
-            >
-              {receiptOp.isLoading ? <ButtonSpinner /> : null}
-              {t('fromReceipt')}
-            </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-gray-600 dark:text-gray-300">
+                {t('fromReceiptHint')}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={receiptFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    handleReceiptFile(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                  data-testid="payment-form-receipt-input"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={receiptOp.isLoading}
+                  onClick={() => receiptFileRef.current?.click()}
+                  data-testid="payment-form-receipt-button"
+                >
+                  {receiptOp.isLoading ? <ButtonSpinner /> : null}
+                  {t('fromReceiptDevice')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={receiptOp.isLoading}
+                  aria-expanded={receiptUrlOpen}
+                  aria-controls="payment-form-receipt-url-row"
+                  onClick={() => {
+                    setReceiptUrlOpen((v) => !v);
+                    setTimeout(() => receiptUrlInputRef.current?.focus(), 0);
+                  }}
+                  data-testid="payment-form-receipt-url-toggle"
+                >
+                  {t('fromReceiptUrl')}
+                </Button>
+              </div>
+            </div>
+            {receiptUrlOpen && (
+              <div id="payment-form-receipt-url-row" className="mt-2 flex gap-2">
+                <label htmlFor="payment-form-receipt-url" className="sr-only">
+                  {t('fromReceiptUrlLabel')}
+                </label>
+                <input
+                  id="payment-form-receipt-url"
+                  ref={receiptUrlInputRef}
+                  type="url"
+                  inputMode="url"
+                  value={receiptUrl}
+                  onChange={(e) => setReceiptUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter adds the receipt; never submits the payment form.
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleReceiptUrl();
+                    }
+                  }}
+                  placeholder={t('fromReceiptUrlPlaceholder')}
+                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  data-testid="payment-form-receipt-url-input"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={receiptOp.isLoading || receiptUrl.trim().length === 0}
+                  onClick={handleReceiptUrl}
+                  data-testid="payment-form-receipt-url-submit"
+                >
+                  {receiptOp.isLoading ? <ButtonSpinner /> : null}
+                  {t('fromReceiptUrlSubmit')}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

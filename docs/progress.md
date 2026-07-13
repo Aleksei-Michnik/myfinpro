@@ -7883,7 +7883,7 @@ gating, isolation, clear/delete); web **1150** green incl.
 OAuth connectors remain the next LLM-track step. Ops: set
 `LLM_SECRETS_ENCRYPTION_KEY` on staging/production **before** deploying.
 
-## 8.12 - URL receipts routed by actual content
+### 8.12 - URL receipts routed by actual content
 
 URL intake (Phase 7: paste an e-receipt link on the Receipts page →
 `POST /receipts/url` → SSRF-guarded server fetch → LLM) previously treated
@@ -7910,3 +7910,24 @@ image URL mislabelled as HTML, oversized/unsupported binary → permanent
 failure with reason, receipt lines after a 600 KB script blob survive);
 api suite **1097** green. Live E2E on the dev stack: real HTML page, PDF
 and PNG URLs all fetched, extracted and reached REVIEW.
+
+### 8.13 - Add Payment: receipt intake chooser (device upload + URL)
+
+The "From receipt" strip in the Add Payment dialog used to jump straight
+into the file picker — e-receipt links from text messages had no path from
+here (design: `docs/phase-8-receipt-intake-design.md` §1; 8.14 adds the
+barcode option next).
+
+**Web.** The strip is now a chooser: **Upload from this device** (the
+existing file input) and **Add from URL** — a toggle
+(`aria-expanded`/`aria-controls`) that reveals a labelled URL field;
+Enter adds the receipt and never submits the payment form. Both paths
+share one `useAsyncOperation` handoff: create the receipt
+(`uploadReceipt` / `createFromUrl`), route to `/receipts/<id>` review,
+close the dialog; failures toast and keep the dialog open. Dark-mode
+variants on every new element; EN+HE strings added (unused legacy
+`fromReceipt` key removed).
+
+**Tests.** 4 new dialog cases (toggle reveals the row, URL submit routes
+to review and closes, Enter is contained to the intake, failure toasts and
+keeps the dialog); web suite **1154** green.
