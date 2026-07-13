@@ -1,4 +1,4 @@
-import { RECEIPT_MAX_FILE_SIZE_BYTES, type ExtractionResult } from '@myfinpro/shared';
+import { type ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -19,21 +19,13 @@ import {
 } from './extraction/extraction-resolver.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
-import { htmlToReceiptText } from './utils/html-to-text.util';
-import { looksBinary, sniffBinaryReceipt } from './utils/receipt-content-sniff.util';
-import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
+import { ReceiptUrlIntakeService } from './url-intake/receipt-url-intake.service';
 
 type ExtractionJobData = { receiptId: string };
 
 type ProcessOutcome =
   | { extracted: true; receiptId: string; items: number }
   | { extracted: false; reason: string };
-
-/** Cap for fetched URL snapshots handed to the provider. */
-const URL_SNAPSHOT_MAX_CHARS = 500_000;
-const URL_FETCH_TIMEOUT_MS = 20_000;
-/** Redirect hops the fetcher will follow (each re-validated by the SSRF guard). */
-const URL_MAX_REDIRECTS = 5;
 
 /**
  * Phase 7, iteration 7.6 — the extraction worker (design §6.2).
@@ -59,6 +51,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     private readonly productMatcher: ProductMatchingService,
     private readonly eventBus: EventBus,
     private readonly extractionResolver: ExtractionResolverService,
+    private readonly urlIntake: ReceiptUrlIntakeService,
   ) {
     super();
   }
@@ -118,6 +111,23 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         products: productCandidates,
         locale: receipt.uploadedBy?.locale ?? undefined,
       });
+
+      // Phase 8.17 — never land a receipt in REVIEW with nothing in it. A
+      // JS-rendered page we can't read, or an unrelated link, yields an
+      // all-empty result; fail it with actionable guidance instead of a
+      // silent empty review. (For URL receipts, also record the empty
+      // outcome in the anonymized log so we can spot providers to adapt.)
+      if (isEmptyExtraction(result)) {
+        if (receipt.source === 'url' && receipt.sourceUrl) {
+          void this.urlIntake.recordUrlOutcome(receipt.sourceUrl, null, 'empty_result');
+        }
+        throw new ExtractionFailedError(
+          receipt.source === 'url'
+            ? 'Could not read this receipt from the link (it may load its content in the browser). ' +
+                'Open the link and upload a screenshot or PDF instead.'
+            : 'Could not read any receipt details from this file.',
+        );
+      }
 
       // Providers must pick product ids from the injected list; drop drift,
       // then run the deterministic stages and merge (Phase 8.3).
@@ -188,7 +198,10 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       if (!receipt.sourceUrl) {
         throw new ExtractionFailedError('URL receipt has no sourceUrl');
       }
-      return this.fetchUrlContent(receipt.sourceUrl);
+      // Phase 8.17 — provider adapters (client-rendered SPAs → their JSON
+      // data endpoint), generic PDF/image/HTML routing, egress politeness and
+      // anonymized analysis logging all live in the intake service.
+      return this.urlIntake.resolve(receipt.sourceUrl);
     }
     if (!receipt.fileRef) {
       throw new ExtractionFailedError('Receipt has no stored file');
@@ -198,92 +211,6 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       return { kind: 'pdf', data: buffer };
     }
     return { kind: 'image', data: buffer, mimeType: receipt.mimeType ?? 'image/jpeg' };
-  }
-
-  /**
-   * Fetch the online receipt. Redirects are followed manually so the SSRF
-   * guard runs on every hop (a `redirect: 'follow'` would let a public URL
-   * bounce to an internal address unchecked). Transient network / 5xx errors
-   * ride the BullMQ retry path; unsafe targets and 4xx are permanent.
-   *
-   * Phase 8.12 — the response is routed by its ACTUAL content: e-receipt
-   * links often serve a PDF or an image directly, which goes to the same
-   * native vision inputs as a direct upload; HTML/text reduces to a readable
-   * snapshot as before.
-   */
-  private async fetchUrlContent(url: string): Promise<ExtractionInput> {
-    let current: URL;
-    try {
-      current = assertPublicReceiptUrl(url);
-    } catch (err) {
-      throw new ExtractionFailedError(
-        err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid receipt URL',
-      );
-    }
-
-    for (let hop = 0; hop <= URL_MAX_REDIRECTS; hop++) {
-      const res = await fetch(current, {
-        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
-        redirect: 'manual',
-        headers: { 'User-Agent': 'myfinpro-receipt-fetcher/1.0' },
-      });
-
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location');
-        if (!location) throw new ExtractionFailedError('Redirect without a Location header');
-        if (hop === URL_MAX_REDIRECTS) throw new ExtractionFailedError('Too many redirects');
-        try {
-          current = assertPublicReceiptUrl(new URL(location, current).toString());
-        } catch (err) {
-          throw new ExtractionFailedError(
-            err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid redirect target',
-          );
-        }
-        continue;
-      }
-
-      if (!res.ok) {
-        // Permanent for client errors (dead link), transient for 5xx.
-        if (res.status >= 400 && res.status < 500) {
-          throw new ExtractionFailedError(`Receipt URL returned ${res.status}`);
-        }
-        throw new Error(`Receipt URL fetch failed (${res.status})`);
-      }
-      const body = Buffer.from(await res.arrayBuffer());
-      if (body.byteLength > RECEIPT_MAX_FILE_SIZE_BYTES) {
-        throw new ExtractionFailedError(
-          `Receipt URL content exceeds the ${Math.round(RECEIPT_MAX_FILE_SIZE_BYTES / 1024 / 1024)} MB limit`,
-        );
-      }
-      const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-
-      // PDFs and images ride the native vision inputs — same as an upload.
-      const binary = sniffBinaryReceipt(contentType, body);
-      if (binary?.kind === 'pdf') return { kind: 'pdf', data: body };
-      if (binary?.kind === 'image') {
-        return { kind: 'image', data: body, mimeType: binary.mimeType };
-      }
-      if (looksBinary(body)) {
-        throw new ExtractionFailedError(
-          'Receipt URL returned an unsupported file type (expected a web page, PDF or image)',
-        );
-      }
-
-      // HTML is the dominant online-receipt shape; it reduces to readable
-      // text before the provider call — markup/script noise measurably
-      // degrades extraction (Phase 7.12). Sniff the body as well as the
-      // header: receipt hosts frequently mislabel HTML as text/plain. The
-      // FULL page is reduced first and only the readable text is capped —
-      // receipt lines often sit after hundreds of KB of inline script/CSS,
-      // which a pre-reduction slice would silently cut off (Phase 8.12).
-      const raw = body.toString('utf8');
-      const looksLikeHtml =
-        contentType.includes('html') || /^\s*(?:<!doctype\s+html|<html)/i.test(raw);
-      const text = looksLikeHtml ? htmlToReceiptText(raw) : raw;
-      return { kind: 'html', data: text.slice(0, URL_SNAPSHOT_MAX_CHARS), sourceUrl: url };
-    }
-    // Unreachable — the loop returns or throws — but satisfies the type checker.
-    throw new ExtractionFailedError('Too many redirects');
   }
 
   /** Persist header + items and flip to REVIEW in one transaction. */
@@ -406,4 +333,17 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       );
     }
   }
+}
+
+/**
+ * True when extraction yielded nothing usable — no merchant, no positive
+ * total, and no line items. Such a result is worthless as a review (it can't
+ * become a payment) and usually means the content was never actually read
+ * (a JS-rendered page, an unrelated link). Phase 8.17.
+ */
+export function isEmptyExtraction(result: ExtractionResult): boolean {
+  const noMerchant = !result.merchantName || result.merchantName.trim().length === 0;
+  const noTotal = result.totalCents === null || result.totalCents <= 0;
+  const noItems = result.items.length === 0;
+  return noMerchant && noTotal && noItems;
 }

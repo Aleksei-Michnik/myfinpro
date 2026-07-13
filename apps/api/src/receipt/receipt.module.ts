@@ -14,6 +14,9 @@ import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
 import { ReceiptService } from './receipt.service';
+import { PairzonProvider } from './url-intake/pairzon.provider';
+import { ReceiptUrlIntakeService } from './url-intake/receipt-url-intake.service';
+import { RECEIPT_URL_PROVIDERS } from './url-intake/receipt-url-provider.interface';
 
 /**
  * Phase 7 — Receipt Ingestion & LLM Extraction module.
@@ -39,6 +42,16 @@ import { ReceiptService } from './receipt.service';
     extractionProviderFactory,
     ExtractionResolverService,
     ReceiptExtractionProcessor,
+    // Phase 8.17 — online-receipt URL intake: provider adapters (client-side
+    // rendered SPAs → their JSON data endpoint) + generic fetch + egress
+    // politeness + anonymized analysis logging.
+    PairzonProvider,
+    ReceiptUrlIntakeService,
+    {
+      provide: RECEIPT_URL_PROVIDERS,
+      useFactory: (pairzon: PairzonProvider) => [pairzon],
+      inject: [PairzonProvider],
+    },
   ],
   controllers: [ReceiptController, PaymentReceiptController, MerchantController],
   exports: [ReceiptService, ReceiptStorageService, extractionProviderFactory],

@@ -622,3 +622,23 @@ model BudgetAlertEvent {
   @@index([budgetId, createdAt])
   @@map("budget_alert_events")
 }
+
+// Phase 8.17 — anonymized log of online-receipt URL fetches. Deliberately
+// NOT linked to a user: it exists only to (a) spot which receipt providers
+// show up often so we can add a dedicated adapter, and (b) rate-limit our
+// egress per host so we don't get blocked by a provider's guard systems.
+// `pathTemplate` stores the URL *shape* with token/id segments masked — the
+// analyzable pattern, never a live receipt bearer-link.
+model ReceiptUrlIntake {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  host         String   @db.VarChar(255)
+  pathTemplate String   @map("path_template") @db.VarChar(500)
+  // Adapter that handled it (e.g. 'pairzon'), or NULL for the generic path.
+  provider String? @db.VarChar(50)
+  // fetched | provider_ok | js_shell | binary_unsupported | throttled | error
+  outcome   String   @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([host, createdAt])
+  @@map("receipt_url_intakes")
+}
