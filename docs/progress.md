@@ -8009,3 +8009,49 @@ duplicate-400, reconcile applies, reconcile no-op, attached-can't-confirm).
 Web: `AttachReceiptDialog` (3), `ReconcileReceiptDialog` (4), PaymentRow
 attach-item visibility (3), review-page reconcile branch (2). api unit
 **1113** (+6 integration) / web **1174** green.
+
+### 8.17 - Online-receipt URL intake: provider adapters + empty-result guard
+
+Bug fix (design §5). A real online receipt — a Pairzon e-receipt link —
+imported **blank**: the review opened with nothing extracted. Root cause:
+the page is a **client-side-rendered SPA**. The short link 302s to an HTML
+shell with no receipt data; the browser then loads it over XHR from a JSON
+endpoint (`/v1.0/documents/<docId>?p=<prefix>`). Our server fetch only saw
+the shell (reduced to a few hundred chars of chrome ending "Loading…"), so
+the model read nothing and the receipt landed in REVIEW empty. Automated
+tests and a green deploy missed it — none exercised a real SPA receipt.
+
+**API.** URL resolution moved out of the worker into a new
+`ReceiptUrlIntakeService` fronted by a **provider registry**. An adapter
+`matches(host)` and `resolveDataUrl(url, fetchSafe)` points the fetcher at
+the real data endpoint (returns `null` to defer to the generic path). The
+**Pairzon** adapter follows the short-link redirect to learn `docId` +
+`prefix` then reads the JSON document — exactly what the browser does, **no
+headless browser**. The generic path (PDF/image → native inputs, HTML →
+readable text, all from 8.12) is unchanged but now wrapped by an
+**empty-result guard**: an all-empty extraction (no merchant/total/items)
+fails fast with guidance ("open the link and upload a screenshot or PDF
+instead") instead of a silent empty REVIEW — the net for any un-adapted SPA
+or junk link. Abuse guards: per-host egress rate-limit across ALL users
+(DB-counted window → **transient** back-off, not failure, so a provider's
+own defences can't get our IP blocked for everyone); SSRF guard still runs
+per redirect hop; 10 MB cap unchanged. Every attempt logs one anonymized,
+**user-unlinked** `receipt_url_intakes` row (host + path masked to its
+shape `/:token/:token` + provider + outcome) to spot providers worth
+adapting, without hoarding live bearer-links. Migration
+`20260713190000_phase8_17_receipt_url_intake`.
+
+**Deferred.** Headless-render fallback for unknown SPA hosts — the provider
+interface is the seam; the anonymized log will tell us which hosts justify
+it. Until then those hit the empty-result guard.
+
+**Tests.** URL fetch/route tests moved from the processor spec into a new
+`receipt-url-intake.service.spec.ts` (HTML reduce, PDF/image by magic
+bytes, unsupported/oversized/4xx permanent vs 5xx transient, redirect +
+per-hop SSRF, loopback reject, host-politeness back-off, path-shape
+logging, Pairzon dispatch incl. the reported short-link case) +
+`pairzon.provider.spec.ts` (host match, id-in-query, redirect discovery,
+drift → null) + `maskPath` + processor delegation/empty-guard cases. api
+unit **1133** green. **Live pairzon URL verification on staging is the next
+step** (per the miss above, manual verification is required before this is
+considered done).

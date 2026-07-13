@@ -1,4 +1,4 @@
-# Phase 8.13–8.16 — Receipt Intake & Payment Integration
+# Phase 8.13–8.17 — Receipt Intake & Payment Integration
 
 > **Principle**: a receipt is a payment's proving document. The target model
 > is **every receipt belongs to a payment** — a receipt without a payment has
@@ -14,6 +14,11 @@ Increments ship in this order (8.14 immediately after 8.13 by request):
 | 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)  | shipped |
 | 8.15 | Attach receipts to **existing payments** + LLM reconciliation       | shipped |
 | 8.16 | Invariant: no receipt without a payment; directory mirrors payments | planned |
+| 8.17 | Online-receipt URL intake: provider adapters (SPA → JSON) + guards  | shipped |
+
+8.17 jumped ahead of the still-planned 8.16: a user-reported bug (a real
+online receipt imported blank) made the URL path a correctness fix, not a
+nice-to-have.
 
 ## 1. 8.13 — Intake chooser in Add Payment
 
@@ -124,3 +129,57 @@ exist while extraction runs. Two designs considered:
 Decision (b) to be revisited when 8.16 starts; migration then reduces to a
 UI/listing change plus a cleanup job — existing CONFIRMED receipts already
 all carry `paymentId`.
+
+## 5. 8.17 — Online-receipt URL intake: provider adapters + guards
+
+**Why.** A real online receipt (a Pairzon e-receipt link) imported blank:
+the review opened with nothing extracted. Root cause: the page is a
+**client-side-rendered SPA**. The short link 302-redirects to an HTML
+shell that carries no receipt data; the browser then loads it over XHR
+from a JSON endpoint (`/v1.0/documents/<docId>?p=<prefix>`). Our
+server-side fetch only ever saw the shell — reduced to a few hundred chars
+of chrome ending in "Loading…" — so the model had nothing to read and the
+receipt landed in REVIEW empty. A green test suite and a green deploy did
+not catch it because no test exercised a real SPA receipt.
+
+**Provider adapters.** URL resolution moves out of the worker into a
+`ReceiptUrlIntakeService` fronted by a small **provider registry**. Each
+adapter `matches(url)` a known host and `resolveDataUrl(url, fetchSafe)`
+points the fetcher at the endpoint that actually returns receipt data
+(usually clean JSON), returning `null` to defer to the generic path. The
+**Pairzon** adapter — Pairzon powers a large share of Israeli retail
+e-receipts (Rami Levy, Keshet Teamim, …) — follows the short-link redirect
+to learn `docId` + `prefix`, then reads the JSON document. This is exactly
+what the browser does; **no headless browser is required**. New providers
+are one small class + one registry entry.
+
+**Empty-result guard (provider-agnostic).** After extraction, an
+all-empty result (no merchant, no positive total, no items) no longer
+becomes a silent REVIEW. It fails fast with actionable guidance — for URL
+receipts, "open the link and upload a screenshot or PDF instead". This is
+the safety net for any SPA we haven't adapted yet and for unrelated/junk
+links, independent of the provider layer.
+
+**Guarding the data sources.** Receipt providers run their own abuse
+defences; one user pasting many links (or several users hitting one
+provider) must not get our egress IP blocked for everyone. So, across ALL
+users, fetches to a single host are rate-limited within a short window
+(DB-counted); over the limit is a **transient** back-off (BullMQ retries,
+spreading load) rather than a failure. The existing SSRF guard still runs
+at ingestion and again on **every redirect hop**, and the 10 MB cap still
+applies.
+
+**Anonymized analysis log.** Every attempt records one row in
+`receipt_url_intakes`: `host`, the path **masked to its shape**
+(id/token-like segments → `:token`, so `/1331/3s70…` → `/:token/:token`),
+the matched provider (if any) and an `outcome`
+(`provider_ok` / `fetched` / `binary_*` / `empty_result` / `throttled` /
+…). Deliberately **user-unlinked and token-free**: enough to spot a
+provider worth adapting when we see repeated `empty_result`s from one host,
+without hoarding live receipt bearer-links or tying browsing to a user.
+
+**Deferred — headless fallback for unknown SPAs.** Unknown providers
+currently hit the empty-result guard (fail-fast with guidance). The
+provider interface is the seam to later add a real renderer (headless
+Chromium) for hosts we see often but can't reach via a data endpoint; the
+anonymized log is what will tell us which hosts justify it.
