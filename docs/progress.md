@@ -7931,3 +7931,40 @@ variants on every new element; EN+HE strings added (unused legacy
 **Tests.** 4 new dialog cases (toggle reveals the row, URL submit routes
 to review and closes, Enter is contained to the intake, failure toasts and
 keeps the dialog); web suite **1154** green.
+
+### 8.14 - Manual receipt via barcode scanning
+
+The third intake path (design §2): for purchases with no scannable or
+linkable slip, compose the receipt by scanning the products themselves. No
+LLM — the user is the extractor, so the receipt is born straight in REVIEW.
+
+**API.** `POST /receipts/manual` `{ currency, merchantName?, purchasedAt?,
+items: [{ productId, quantity, unitPriceCents }] }` (≥1 item). Resolves
+every product (404 on any unknown id), then creates a `source: 'manual'`
+receipt in **REVIEW** with each line pre-linked (`matchStatus` CONFIRMED,
+stage `barcode`, confidence 1.0, `rawName` = product name, `categoryId`
+from the product default), `totalCents` = Σ. No extraction job is
+enqueued, and retry-extraction is rejected for manual receipts. Confirm
+creates the payment through the unchanged path. Shared `RECEIPT_SOURCES`
+gains `'manual'`; the response DTO's `source`/`status` enums now derive
+from the shared arrays (DRY).
+
+**Web.** New `ManualReceiptDialog` (opened by the "Scan product barcodes"
+chooser button) reuses `BarcodeScannerDialog` (camera + manual-GTIN AT
+path) and `ProductFormDialog` (unknown barcode → create). Each scan adds a
+line = product × quantity × unit price; **price memory** — re-scanning a
+product bumps its quantity, and a new line's price prefills from the
+product's most recent purchase (`GET /products/:id/purchases`,
+`merchants[].lastUnitPriceCents`). Submit posts the receipt and hands off
+to review. The datetime-local helpers were extracted to `@/lib/datetime`
+and shared with the payment form (DRY). Dialog semantics, focus management,
+Esc/backdrop close, `aria-live` scan feedback, dark-mode variants; EN+HE
+strings.
+
+**Tests.** Service (pre-linked items + summed total, 404 on unknown
+product, retry rejected), controller, and 5 integration cases (REVIEW with
+CONFIRMED items + no queued job, 404, empty-list 400, retry 400, confirm →
+payment). Web: 7 `ManualReceiptDialog` cases (scan adds + price prefill,
+re-scan increments, unknown-barcode create, submit payload + handoff,
+price-required gating, remove) + chooser-opens-dialog. api unit **1101**
+(+5 manual-receipt integration) / web **1162** green.

@@ -11,7 +11,7 @@ Increments ship in this order (8.14 immediately after 8.13 by request):
 | Iter | Scope                                                               | Status  |
 | ---- | ------------------------------------------------------------------- | ------- |
 | 8.13 | Intake chooser in Add Payment: device upload + **Add from URL**     | shipped |
-| 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)  | planned |
+| 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)  | shipped |
 | 8.15 | Attach receipts to **existing payments** + LLM reconciliation       | planned |
 | 8.16 | Invariant: no receipt without a payment; directory mirrors payments | planned |
 
