@@ -8051,7 +8051,22 @@ bytes, unsupported/oversized/4xx permanent vs 5xx transient, redirect +
 per-hop SSRF, loopback reject, host-politeness back-off, path-shape
 logging, Pairzon dispatch incl. the reported short-link case) +
 `pairzon.provider.spec.ts` (host match, id-in-query, redirect discovery,
-drift → null) + `maskPath` + processor delegation/empty-guard cases. api
-unit **1133** green. **Live pairzon URL verification on staging is the next
-step** (per the miss above, manual verification is required before this is
-considered done).
+drift → null, JSON reduction) + `maskPath` + processor delegation/empty-guard
+cases. api unit **1138** green.
+
+**Staging verification found a second bug (fixed).** With the adapter live,
+the reported URL stopped landing blank but now **failed** with "Provider
+returned non-JSON output". Cause (from staging logs): the adapter handed the
+model the **raw** ~30 KB Pairzon JSON (~21 K input tokens of hashes, ids,
+loyalty and per-item category trees); the model thought over the noise and
+hit the output ceiling, truncating the structured JSON mid-array
+(`stop=max_tokens`). Fix: the adapter now **reduces** the document to a
+compact receipt text (merchant/date/currency/total + one line per item with
+barcode/qty/price/discount, ~1.4 K tokens for a 39-line receipt), dropping
+the shopper's loyalty name and masked card/voucher `notes` so that PII never
+reaches the model; and the shared extraction output cap was raised
+(8192 → 16384, `EXTRACTION_MAX_OUTPUT_TOKENS`, DRY across both providers) for
+large grocery receipts. The provider interface became `resolveContent` (the
+adapter owns both the endpoint and the reduction). Verified the reducer
+against the real captured document (30495 → 4101 chars, no PII leak). **Live
+staging re-verification is the remaining step.**

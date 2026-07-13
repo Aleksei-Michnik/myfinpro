@@ -144,14 +144,27 @@ not catch it because no test exercised a real SPA receipt.
 
 **Provider adapters.** URL resolution moves out of the worker into a
 `ReceiptUrlIntakeService` fronted by a small **provider registry**. Each
-adapter `matches(url)` a known host and `resolveDataUrl(url, fetchSafe)`
-points the fetcher at the endpoint that actually returns receipt data
-(usually clean JSON), returning `null` to defer to the generic path. The
-**Pairzon** adapter — Pairzon powers a large share of Israeli retail
-e-receipts (Rami Levy, Keshet Teamim, …) — follows the short-link redirect
-to learn `docId` + `prefix`, then reads the JSON document. This is exactly
-what the browser does; **no headless browser is required**. New providers
-are one small class + one registry entry.
+adapter `matches(url)` a known host and `resolveContent(url, fetchSafe)`
+returns the receipt as a compact **text snapshot** (or `null` to defer to
+the generic path). The **Pairzon** adapter — Pairzon powers a large share
+of Israeli retail e-receipts (Rami Levy, Keshet Teamim, …) — follows the
+short-link redirect to learn `docId` + `prefix`, reads the JSON document,
+and **reduces it** to merchant/date/currency/total + one line per item
+(name, barcode, qty, unit, line total, discount). This is exactly what the
+browser reads; **no headless browser is required**. New providers are one
+small class + one registry entry.
+
+The reduction is load-bearing, not cosmetic: the raw Pairzon document is
+~30 KB (~21 K input tokens) of hashes, ids, loyalty data and per-item
+category trees. Handing it verbatim to the model made it think over the
+noise and hit the output-token ceiling, truncating the structured JSON
+mid-array — surfacing as a "non-JSON output" parse failure (found in
+staging verification, not by the test suite or the green deploy). The
+adapter therefore strips the payload to the receipt essentials (~1.4 K
+tokens for a 39-line receipt), and the shared extraction output cap was
+raised (8192 → 16384) to give large grocery receipts headroom. The adapter
+also deliberately drops the shopper's loyalty name, masked card and voucher
+numbers from `notes` — that PII never reaches the model.
 
 **Empty-result guard (provider-agnostic).** After extraction, an
 all-empty result (no merchant, no positive total, no items) no longer
