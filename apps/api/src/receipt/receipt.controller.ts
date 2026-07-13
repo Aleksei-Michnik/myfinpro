@@ -44,6 +44,7 @@ import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { MatchItemDto } from './dto/match-item.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
+import { ReconcileReceiptDto } from './dto/reconcile-receipt.dto';
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptService, type ReceiptListResponse } from './receipt.service';
@@ -277,6 +278,30 @@ export class ReceiptController {
     @Body() dto: ConfirmReceiptDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.confirm(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/reconcile')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reconcile an attached receipt with its payment',
+    description:
+      'Confirm step for a receipt attached to an existing payment: flips REVIEW → CONFIRMED ' +
+      'without creating a payment, and per the flags overwrites the payment total (and ' +
+      'currency) and/or category from the reviewed receipt. Item/product links are saved ' +
+      'regardless. REVIEW only; the receipt must be attached to a payment.',
+  })
+  @ApiOkResponse({ description: 'Reconciled receipt (now CONFIRMED)', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async reconcile(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReconcileReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.reconcile(user.sub, id, dto);
   }
 
   @CustomThrottle({ limit: 120, ttl: 60_000 })

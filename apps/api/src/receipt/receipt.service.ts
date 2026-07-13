@@ -1,5 +1,6 @@
 import {
   decodeCursor,
+  dominantReceiptCategoryId,
   encodeCursor,
   normalizeLookupName,
   PAGINATION_DEFAULTS,
@@ -9,6 +10,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { CategoryService } from '../category/category.service';
+import { UpdatePaymentDto } from '../payment/dto/update-payment.dto';
 import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_ERRORS } from '../product/constants/product-errors';
@@ -26,6 +28,7 @@ import {
   ReceiptResponseDto,
   type ReceiptWithRelations,
 } from './dto/receipt-response.dto';
+import { ReconcileReceiptDto } from './dto/reconcile-receipt.dto';
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptStorageService } from './receipt-storage.service';
@@ -70,12 +73,19 @@ export class ReceiptService {
     @InjectQueue(RECEIPT_EXTRACTIONS_QUEUE) private readonly queue: Queue,
   ) {}
 
-  /** POST /receipts — multipart upload. */
+  /**
+   * POST /receipts — multipart upload. When `paymentId` is set (Phase 8.15,
+   * `POST /payments/:id/receipt`) the receipt is born linked to that payment
+   * and confirmed via reconcile rather than confirm; otherwise it's a
+   * standalone receipt that creates its payment at confirm.
+   */
   async createFromUpload(
     userId: string,
     buffer: Buffer,
     originalName: string | null,
+    paymentId: string | null = null,
   ): Promise<ReceiptResponseDto> {
+    if (paymentId) await this.assertAttachablePayment(userId, paymentId);
     const saved = await this.storage.save(buffer);
     const row = await this.prisma.receipt.create({
       data: {
@@ -86,24 +96,36 @@ export class ReceiptService {
         mimeType: saved.mimeType,
         sizeBytes: saved.sizeBytes,
         uploadedById: userId,
+        ...(paymentId ? { paymentId } : {}),
       },
       include: RECEIPT_INCLUDE,
     });
 
     await this.enqueueExtraction(row.id);
-    void this.writeAudit(userId, row.id, 'RECEIPT_UPLOADED', {
+    void this.writeAudit(userId, row.id, paymentId ? 'RECEIPT_ATTACHED' : 'RECEIPT_UPLOADED', {
       mimeType: saved.mimeType,
       sizeBytes: saved.sizeBytes,
+      ...(paymentId ? { paymentId } : {}),
     });
-    this.logger.log(`Receipt ${row.id} uploaded by user ${userId} (${saved.mimeType})`);
+    this.logger.log(
+      `Receipt ${row.id} uploaded by user ${userId} (${saved.mimeType})` +
+        (paymentId ? ` → attached to payment ${paymentId}` : ''),
+    );
 
     const dto = mapReceiptToDto(row as ReceiptWithRelations);
     this.publishUpdated(userId, dto);
     return dto;
   }
 
-  /** POST /receipts/url — online receipt by URL. */
-  async createFromUrl(userId: string, dto: CreateReceiptUrlDto): Promise<ReceiptResponseDto> {
+  /**
+   * POST /receipts/url — online receipt by URL. `paymentId` attaches it to an
+   * existing payment (Phase 8.15, `POST /payments/:id/receipt-url`).
+   */
+  async createFromUrl(
+    userId: string,
+    dto: CreateReceiptUrlDto,
+    paymentId: string | null = null,
+  ): Promise<ReceiptResponseDto> {
     // Reject non-public targets up front (SSRF guard); the fetcher re-checks
     // every redirect hop before the worker downloads anything.
     try {
@@ -118,19 +140,27 @@ export class ReceiptService {
       throw err;
     }
 
+    if (paymentId) await this.assertAttachablePayment(userId, paymentId);
     const row = await this.prisma.receipt.create({
       data: {
         status: 'UPLOADED',
         source: 'url',
         sourceUrl: dto.url,
         uploadedById: userId,
+        ...(paymentId ? { paymentId } : {}),
       },
       include: RECEIPT_INCLUDE,
     });
 
     await this.enqueueExtraction(row.id);
-    void this.writeAudit(userId, row.id, 'RECEIPT_UPLOADED', { sourceUrl: dto.url });
-    this.logger.log(`Receipt ${row.id} created from URL by user ${userId}`);
+    void this.writeAudit(userId, row.id, paymentId ? 'RECEIPT_ATTACHED' : 'RECEIPT_UPLOADED', {
+      sourceUrl: dto.url,
+      ...(paymentId ? { paymentId } : {}),
+    });
+    this.logger.log(
+      `Receipt ${row.id} created from URL by user ${userId}` +
+        (paymentId ? ` → attached to payment ${paymentId}` : ''),
+    );
 
     const out = mapReceiptToDto(row as ReceiptWithRelations);
     this.publishUpdated(userId, out);
@@ -506,6 +536,15 @@ export class ReceiptService {
     const row = await this.loadOwnedOrThrow(userId, id);
     this.assertInReview(row.status);
 
+    // A receipt already attached to a payment (Phase 8.15) is finished via
+    // reconcile — confirm would try to create a second payment.
+    if (row.paymentId) {
+      throw new BadRequestException({
+        message: 'This receipt is attached to a payment; reconcile it instead of confirming',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+
     // A payment needs an amount + currency; the review step fills these in.
     if (row.totalCents === null || row.totalCents <= 0) {
       throw new BadRequestException({
@@ -624,6 +663,86 @@ export class ReceiptService {
 
     this.logger.log(`Receipt ${row.id} confirmed by user ${userId} → payment ${payment.id}`);
     return out;
+  }
+
+  /**
+   * POST /receipts/:id/reconcile — the confirm step for a receipt attached to
+   * an existing payment (Phase 8.15, design §3). Flips REVIEW → CONFIRMED
+   * WITHOUT creating a payment, and — per the flags — overwrites the linked
+   * payment's amount/currency and/or category from the reviewed receipt.
+   * Item/product links are kept regardless of the flags; only the payment
+   * header is up for negotiation. The payment mutation goes through
+   * {@link PaymentService.update} so category/currency validation, audit, and
+   * realtime fan-out all match a normal edit.
+   */
+  async reconcile(
+    userId: string,
+    id: string,
+    dto: ReconcileReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, id);
+    this.assertInReview(row.status);
+    if (!row.paymentId) {
+      throw new BadRequestException({
+        message: 'Receipt is not attached to a payment',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_ATTACHED,
+      });
+    }
+
+    const patch: UpdatePaymentDto = {};
+    if (dto.applyTotal) {
+      if (row.totalCents === null || row.totalCents <= 0) {
+        throw new BadRequestException({
+          message: 'Receipt total is required to apply it to the payment',
+          errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+        });
+      }
+      patch.amountCents = row.totalCents;
+      // Applying the total also applies the receipt's currency (design §3).
+      if (row.currency) patch.currency = row.currency;
+    }
+    if (dto.applyCategory) {
+      const categoryId = dominantReceiptCategoryId(
+        row.items.map((i) => ({ categoryId: i.categoryId, totalCents: i.totalCents })),
+      );
+      if (categoryId) patch.categoryId = categoryId;
+    }
+
+    // Apply the chosen payment changes first (validates + audits + publishes).
+    // A validation failure here leaves the receipt in REVIEW to retry.
+    if (Object.keys(patch).length > 0) {
+      await this.paymentService.update(userId, row.paymentId, patch);
+    }
+
+    // Flip the receipt to CONFIRMED and freeze the item purchase date to the
+    // payment's — the (product_id, purchased_at) price-history key (design §2).
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: row.paymentId },
+      select: { occurredAt: true },
+    });
+    const occurredAt = payment?.occurredAt ?? row.purchasedAt ?? row.createdAt;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.receipt.update({ where: { id: row.id }, data: { status: 'CONFIRMED' } });
+      await tx.receiptItem.updateMany({
+        where: { receiptId: row.id },
+        data: { purchasedAt: occurredAt },
+      });
+    });
+
+    void this.writeAudit(userId, row.id, 'RECEIPT_RECONCILED', {
+      paymentId: row.paymentId,
+      appliedTotal: dto.applyTotal,
+      appliedCategory: dto.applyCategory,
+      ...(patch.amountCents !== undefined ? { amountCents: patch.amountCents } : {}),
+      ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
+      ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
+    });
+    this.logger.log(
+      `Receipt ${row.id} reconciled by user ${userId} → payment ${row.paymentId} ` +
+        `(total=${dto.applyTotal}, category=${dto.applyCategory})`,
+    );
+
+    return this.refresh(userId, row.id);
   }
 
   /**
@@ -769,6 +888,41 @@ export class ReceiptService {
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
+
+  /**
+   * Guard for attaching a receipt to an existing payment (Phase 8.15). The
+   * payment must be an expense (OUT) the caller created, and must not already
+   * carry a receipt (`receipts.payment_id` is unique). Missing/foreign
+   * payments read as 404 — no existence leak (the Phase 6 convention).
+   */
+  private async assertAttachablePayment(userId: string, paymentId: string): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, createdById: userId },
+      select: { id: true, direction: true },
+    });
+    if (!payment) {
+      throw new NotFoundException({
+        message: 'Payment not found',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
+      });
+    }
+    if (payment.direction !== 'OUT') {
+      throw new BadRequestException({
+        message: 'Receipts can only be attached to expense payments',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+    const existing = await this.prisma.receipt.findUnique({
+      where: { paymentId },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException({
+        message: 'This payment already has a receipt',
+        errorCode: RECEIPT_ERRORS.PAYMENT_ALREADY_HAS_RECEIPT,
+      });
+    }
+  }
 
   private async loadOwnedOrThrow(userId: string, id: string): Promise<ReceiptWithRelations> {
     const row = await this.prisma.receipt.findFirst({

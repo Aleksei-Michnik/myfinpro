@@ -9,6 +9,7 @@ describe('ReceiptController', () => {
     createFromUpload: jest.Mock;
     createFromUrl: jest.Mock;
     createManual: jest.Mock;
+    reconcile: jest.Mock;
     list: jest.Mock;
     getOne: jest.Mock;
     openFile: jest.Mock;
@@ -21,6 +22,7 @@ describe('ReceiptController', () => {
       createFromUpload: jest.fn(),
       createFromUrl: jest.fn(),
       createManual: jest.fn(),
+      reconcile: jest.fn(),
       list: jest.fn(),
       getOne: jest.fn(),
       openFile: jest.fn(),
@@ -67,6 +69,13 @@ describe('ReceiptController', () => {
     };
     await controller.createManual(user as never, dto as never);
     expect(service.createManual).toHaveBeenCalledWith('u1', dto);
+  });
+
+  it('POST /:id/reconcile → service.reconcile', async () => {
+    service.reconcile.mockResolvedValue({ id: 'r1' });
+    const dto = { applyTotal: true, applyCategory: false };
+    await controller.reconcile(user as never, 'r1', dto);
+    expect(service.reconcile).toHaveBeenCalledWith('u1', 'r1', dto);
   });
 
   it('GET → service.list; GET /:id → service.getOne; POST /:id/retry; DELETE', async () => {

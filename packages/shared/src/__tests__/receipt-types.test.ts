@@ -2,6 +2,7 @@
 
 import {
   computeTotalsMismatch,
+  dominantReceiptCategoryId,
   EXTRACTION_CONFIDENCES,
   RECEIPT_ALLOWED_MIME_TYPES,
   RECEIPT_MAX_FILE_SIZE_BYTES,
@@ -52,6 +53,38 @@ describe('receipt shared types', () => {
     expect(RECEIPT_ALLOWED_MIME_TYPES).toContain('application/pdf');
     expect(RECEIPT_ALLOWED_MIME_TYPES).not.toContain('image/gif');
     expect(RECEIPT_MAX_FILE_SIZE_BYTES).toBe(10 * 1024 * 1024);
+  });
+});
+
+describe('dominantReceiptCategoryId', () => {
+  it('picks the category with the largest summed spend', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: 'a', totalCents: 300 },
+        { categoryId: 'b', totalCents: 500 },
+        { categoryId: 'a', totalCents: 400 }, // a: 700 > b: 500
+      ]),
+    ).toBe('a');
+  });
+
+  it('ignores uncategorised lines and returns null when none carry a category', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: null, totalCents: 900 },
+        { categoryId: 'x', totalCents: 100 },
+      ]),
+    ).toBe('x');
+    expect(dominantReceiptCategoryId([{ categoryId: null, totalCents: 900 }])).toBeNull();
+    expect(dominantReceiptCategoryId([])).toBeNull();
+  });
+
+  it('breaks ties by first appearance', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: 'first', totalCents: 500 },
+        { categoryId: 'second', totalCents: 500 },
+      ]),
+    ).toBe('first');
   });
 });
 

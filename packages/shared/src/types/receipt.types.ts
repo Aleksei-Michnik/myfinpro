@@ -201,6 +201,36 @@ export function validateExtractionResult(value: unknown): {
 }
 
 /**
+ * The single category that best represents a receipt for payment
+ * reconciliation (Phase 8.15) — the categorised line items' category with
+ * the largest summed spend. Ties break by first appearance. Returns null
+ * when no line carries a category. Used by both the reconcile endpoint
+ * (what `applyCategory` writes) and the web reconcile dialog (what it
+ * offers), so the two never disagree.
+ */
+export function dominantReceiptCategoryId(
+  items: Array<{ categoryId: string | null; totalCents: number }>,
+): string | null {
+  const spendByCategory = new Map<string, number>();
+  for (const item of items) {
+    if (!item.categoryId) continue;
+    spendByCategory.set(
+      item.categoryId,
+      (spendByCategory.get(item.categoryId) ?? 0) + item.totalCents,
+    );
+  }
+  let winner: string | null = null;
+  let best = -1;
+  for (const [categoryId, spend] of spendByCategory) {
+    if (spend > best) {
+      best = spend;
+      winner = categoryId;
+    }
+  }
+  return winner;
+}
+
+/**
  * Sum of item totals minus the receipt-level discount vs. the extracted
  * total — the review UI shows a warning when they diverge (never a hard
  * block; real receipts carry rounding, deposits, and tips).

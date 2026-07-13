@@ -9,6 +9,7 @@ import { extractionProviderFactory } from './extraction/extraction-provider.fact
 import { ExtractionResolverService } from './extraction/extraction-resolver.service';
 import { MockExtractionProvider } from './extraction/mock-extraction.provider';
 import { MerchantController } from './merchant.controller';
+import { PaymentReceiptController } from './payment-receipt.controller';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
@@ -39,7 +40,7 @@ import { ReceiptService } from './receipt.service';
     ExtractionResolverService,
     ReceiptExtractionProcessor,
   ],
-  controllers: [ReceiptController, MerchantController],
+  controllers: [ReceiptController, PaymentReceiptController, MerchantController],
   exports: [ReceiptService, ReceiptStorageService, extractionProviderFactory],
 })
 export class ReceiptModule {}

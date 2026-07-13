@@ -27,6 +27,7 @@ describe('ReceiptService', () => {
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn(), updateMany: jest.fn() },
     merchant: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     product: { findMany: jest.fn() },
+    payment: { findFirst: jest.fn(), findUnique: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
   };
@@ -35,6 +36,7 @@ describe('ReceiptService', () => {
     validateExpenseInputs: jest.fn(),
     createExpenseWithinTx: jest.fn(),
     publishCreated: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
   };
   const storageMock = {
     save: jest.fn(),
@@ -654,6 +656,142 @@ describe('ReceiptService', () => {
         service.confirm('u-1', 'r-1', { categoryId: 'c', attributions: [{ scope: 'personal' }] }),
       ).rejects.toThrow('bad category');
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects confirming a receipt already attached to a payment', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow({ paymentId: 'pay-1' }));
+      try {
+        await service.confirm('u-1', 'r-1', {
+          categoryId: 'c',
+          attributions: [{ scope: 'personal' }],
+        });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+      expect(paymentServiceMock.validateExpenseInputs).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('attach to payment (8.15)', () => {
+    it('createFromUpload with a paymentId links the receipt after guarding the payment', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
+      prismaMock.receipt.findUnique.mockResolvedValue(null); // no receipt yet
+      storageMock.save.mockResolvedValue({
+        fileRef: '2026/07/x.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 10,
+      });
+      prismaMock.receipt.create.mockImplementation(({ data }: { data: never }) =>
+        Promise.resolve(makeRow({ ...(data as object), id: 'r-att' })),
+      );
+
+      const dto = await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
+
+      expect(prismaMock.payment.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'pay-1', createdById: 'u-1' } }),
+      );
+      expect(prismaMock.receipt.create.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({ paymentId: 'pay-1', source: 'upload' }),
+      );
+      expect(queueMock.add).toHaveBeenCalled();
+      expect(dto.paymentId).toBe('pay-1');
+    });
+
+    it('404s attaching to a payment the caller did not create', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue(null);
+      await expect(
+        service.createFromUrl('u-1', { url: 'https://r.example/x' }, 'pay-x'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects attaching a second receipt to the same payment', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
+      prismaMock.receipt.findUnique.mockResolvedValue({ id: 'r-existing' });
+      try {
+        await service.createFromUrl('u-1', { url: 'https://r.example/x' }, 'pay-1');
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('PAYMENT_ALREADY_HAS_RECEIPT');
+      }
+      expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects attaching to a non-expense (IN) payment', async () => {
+      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'IN' });
+      try {
+        await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+      expect(storageMock.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reconcile (8.15)', () => {
+    const attachedReview = (over: Record<string, unknown> = {}) =>
+      makeRow({
+        status: 'REVIEW',
+        paymentId: 'pay-1',
+        currency: 'EUR',
+        totalCents: 3400,
+        items: [
+          { id: 'i-1', categoryId: 'cat-food', totalCents: 3000, rawName: 'A' },
+          { id: 'i-2', categoryId: 'cat-misc', totalCents: 400, rawName: 'B' },
+        ],
+        ...over,
+      });
+
+    beforeEach(() => {
+      prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ receipt: prismaMock.receipt, receiptItem: prismaMock.receiptItem }),
+      );
+      prismaMock.payment.findUnique.mockResolvedValue({
+        occurredAt: new Date('2026-07-02T00:00:00.000Z'),
+      });
+      prismaMock.receipt.findUnique.mockResolvedValue(attachedReview());
+    });
+
+    it('applies total (+currency) and dominant category to the payment, then CONFIRMS', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview());
+
+      await service.reconcile('u-1', 'r-1', { applyTotal: true, applyCategory: true });
+
+      expect(paymentServiceMock.update).toHaveBeenCalledWith('u-1', 'pay-1', {
+        amountCents: 3400,
+        currency: 'EUR',
+        categoryId: 'cat-food', // 3000 > 400
+      });
+      expect(prismaMock.receipt.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'r-1' }, data: { status: 'CONFIRMED' } }),
+      );
+      expect(prismaMock.receiptItem.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { receiptId: 'r-1' } }),
+      );
+    });
+
+    it('keeps the payment untouched when both flags are false', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview());
+
+      await service.reconcile('u-1', 'r-1', { applyTotal: false, applyCategory: false });
+
+      expect(paymentServiceMock.update).not.toHaveBeenCalled();
+      expect(prismaMock.receipt.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'CONFIRMED' } }),
+      );
+    });
+
+    it('rejects reconciling a receipt with no linked payment', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview({ paymentId: null }));
+      try {
+        await service.reconcile('u-1', 'r-1', { applyTotal: true, applyCategory: false });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_NOT_ATTACHED');
+      }
+      expect(paymentServiceMock.update).not.toHaveBeenCalled();
     });
   });
 
