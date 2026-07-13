@@ -62,12 +62,20 @@ function receipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
   } as ReceiptSummary;
 }
 
+const cat = (id: string, name: string): PaymentSummary['category'] => ({
+  id,
+  name,
+  slug: id,
+  icon: null,
+  color: null,
+});
+
 function payment(over: Partial<PaymentSummary> = {}): PaymentSummary {
   return {
     id: 'pay-1',
     amountCents: 1000,
     currency: 'USD',
-    category: { id: 'cat-food', name: 'Food' },
+    category: cat('cat-food', 'Food'),
     ...over,
   } as PaymentSummary;
 }
@@ -128,11 +136,7 @@ describe('ReconcileReceiptDialog (8.15)', () => {
 
   it('shows the no-differences state when the receipt matches the payment', async () => {
     getPaymentMock.mockResolvedValue(
-      payment({
-        amountCents: 4200,
-        currency: 'USD',
-        category: { id: 'cat-dining', name: 'Dining' },
-      }),
+      payment({ amountCents: 4200, currency: 'USD', category: cat('cat-dining', 'Dining') }),
     );
     renderDialog();
 
