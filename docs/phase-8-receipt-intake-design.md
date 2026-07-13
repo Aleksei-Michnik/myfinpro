@@ -12,7 +12,7 @@ Increments ship in this order (8.14 immediately after 8.13 by request):
 | ---- | ------------------------------------------------------------------- | ------- |
 | 8.13 | Intake chooser in Add Payment: device upload + **Add from URL**     | shipped |
 | 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)  | shipped |
-| 8.15 | Attach receipts to **existing payments** + LLM reconciliation       | planned |
+| 8.15 | Attach receipts to **existing payments** + LLM reconciliation       | shipped |
 | 8.16 | Invariant: no receipt without a payment; directory mirrors payments | planned |
 
 ## 1. 8.13 — Intake chooser in Add Payment
@@ -86,14 +86,19 @@ boolean }` — the confirm step for attached receipts: flips REVIEW →
 
 **Web**
 
-- "Attach receipt" action on a payment (row menu + details) → the same
-  8.13 chooser (device / URL / barcodes).
-- When extraction lands (realtime `receipt.updated`), a
-  **reconciliation dialog** compares, per field, the payment's current
-  value vs the receipt's extracted value — total and category — and the
-  user picks keep-current or take-receipt for each. Item/product links
+- "Attach receipt" action on an expense payment (row menu) →
+  `AttachReceiptDialog`: **device upload / add-from-URL**. Only the two
+  LLM-analysed paths are offered — a barcode-composed manual receipt has
+  no extraction to reconcile against, so it stays a standalone-intake path.
+- When extraction lands (the attached receipt reaches REVIEW), a
+  **reconciliation dialog** auto-opens and compares, per field, the
+  payment's current value vs the receipt's extracted value — total and
+  category (the receipt's dominant item category by spend) — and the user
+  picks keep-current or take-receipt for each. Item/product links
   (walkthrough, registry aliases, purchase history) are saved **regardless
-  of the choices** — reconciliation only decides the payment header.
+  of the choices** — reconciliation only decides the payment header. The
+  receipt review page swaps its Confirm action for Reconcile whenever the
+  receipt carries a `paymentId`.
 - Currency mismatch (receipt currency ≠ payment currency) is surfaced as a
   warning; applying the total then also applies the receipt currency.
 

@@ -7968,3 +7968,44 @@ payment). Web: 7 `ManualReceiptDialog` cases (scan adds + price prefill,
 re-scan increments, unknown-barcode create, submit payload + handoff,
 price-required gating, remove) + chooser-opens-dialog. api unit **1101**
 (+5 manual-receipt integration) / web **1162** green.
+
+### 8.15 - Attach receipts to existing payments + LLM reconciliation
+
+Closes the loop the user asked for: existing payments can have a receipt
+attached, it's analysed by the LLM, and if the extracted total/category
+differ from the payment a confirmation dialog lets the user keep or update
+each — products update regardless (design §3).
+
+**API.** `POST /payments/:id/receipt` (file) and `/receipt-url` create the
+receipt with `paymentId` set **at creation** — a `PaymentReceiptController`
+in the receipt module (routed under `/payments` to dodge a circular import
+into PaymentModule). Guards: expense payments the caller created only
+(404-not-403), one receipt per payment (unique `payment_id`). Extraction
+runs unchanged; `confirm` now rejects attached receipts (they finish via
+reconcile). `POST /receipts/:id/reconcile` `{ applyTotal, applyCategory }`
+flips REVIEW → CONFIRMED **without creating a payment** and, per the flags,
+overwrites the payment's amount (+currency) and/or category — the payment
+mutation reuses `PaymentService.update` for validation/audit/realtime.
+The receipt's category is its **dominant item category by spend**, a new
+shared `dominantReceiptCategoryId` used by both the endpoint and the web
+dialog so they never disagree. Item `purchasedAt` is frozen to the
+payment date; audit `RECEIPT_RECONCILED`.
+
+**Web.** `AttachReceiptDialog` (device + URL — the LLM-analysed paths)
+opens from a new expense-only "Attach receipt" row-menu action and hands
+off to the receipt review page. `ReconcileReceiptDialog` fetches the
+payment, compares total + category, and offers keep/update per differing
+field (defaulting to the receipt); it auto-opens the moment an attached
+receipt reaches REVIEW, and the review page swaps Confirm → Reconcile for
+any receipt carrying a `paymentId`. The datetime helpers extracted in 8.14
+are reused. Full a11y (dialog semantics, radio groups, focus, Esc) + dark
+mode; EN+HE strings.
+
+**Tests.** Service (attach guards: ownership 404, duplicate, non-expense;
+reconcile applies total+currency+dominant category then CONFIRMS, no-op
+when both false, not-attached rejected; confirm rejects attached),
+`PaymentReceiptController`, and 6 integration cases (attach, foreign-404,
+duplicate-400, reconcile applies, reconcile no-op, attached-can't-confirm).
+Web: `AttachReceiptDialog` (3), `ReconcileReceiptDialog` (4), PaymentRow
+attach-item visibility (3), review-page reconcile branch (2). api unit
+**1113** (+6 integration) / web **1174** green.
