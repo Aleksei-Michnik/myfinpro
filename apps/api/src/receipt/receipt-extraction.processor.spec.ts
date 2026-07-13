@@ -1,4 +1,3 @@
-import { RECEIPT_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Job } from 'bullmq';
 import { CategoryService } from '../category/category.service';
@@ -9,6 +8,7 @@ import { ExtractionFailedError } from './extraction/extraction-provider.interfac
 import { ExtractionResolverService } from './extraction/extraction-resolver.service';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
 import { ReceiptStorageService } from './receipt-storage.service';
+import { ReceiptUrlIntakeService } from './url-intake/receipt-url-intake.service';
 
 describe('ReceiptExtractionProcessor', () => {
   const prismaMock = {
@@ -35,6 +35,10 @@ describe('ReceiptExtractionProcessor', () => {
     getUserProductCandidates: jest.fn(),
     matchItems: jest.fn(),
   };
+  // Phase 8.17 — URL fetch/route/politeness/logging lives in the intake
+  // service now; the worker only delegates. Its own routing is covered by
+  // receipt-url-intake.service.spec.ts.
+  const urlIntakeMock = { resolve: jest.fn(), recordUrlOutcome: jest.fn() };
 
   let processor: ReceiptExtractionProcessor;
 
@@ -84,12 +88,24 @@ describe('ReceiptExtractionProcessor', () => {
     notes: null,
   });
 
+  /** Phase 8.17 — nothing usable read: no merchant, no total, no items. */
+  const emptyResult = () => ({
+    merchantName: null,
+    purchasedAt: null,
+    currency: null,
+    totalCents: null,
+    discountCents: 0,
+    items: [],
+    confidence: 'low' as const,
+    notes: null,
+  });
+
   const makeJob = (attemptsMade = 0, attempts = 3) =>
     ({ data: { receiptId: 'r-1' }, attemptsMade, opts: { attempts } }) as Job<{
       receiptId: string;
     }>;
 
-  /** Phase 8.12 — URL receipts are fetched as bytes and routed by content. */
+  /** A URL-sourced receipt — its content resolution is delegated to the intake service. */
   const urlReceipt = (over: Record<string, unknown> = {}) =>
     makeReceipt({
       source: 'url',
@@ -98,15 +114,6 @@ describe('ReceiptExtractionProcessor', () => {
       sourceUrl: 'https://r.example/x',
       ...over,
     });
-  const urlFetchResponse = (body: string | Buffer, contentType: string) => {
-    const buf = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
-    return {
-      ok: true,
-      headers: new Headers({ 'content-type': contentType }),
-      arrayBuffer: () =>
-        Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)),
-    } as unknown as Response;
-  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -126,6 +133,7 @@ describe('ReceiptExtractionProcessor', () => {
     matcherMock.matchItems.mockImplementation((items: unknown[]) =>
       Promise.resolve(items.map(() => ({ candidates: [], autoProductId: null }))),
     );
+    urlIntakeMock.recordUrlOutcome.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -136,6 +144,7 @@ describe('ReceiptExtractionProcessor', () => {
         { provide: ProductMatchingService, useValue: matcherMock },
         { provide: EventBus, useValue: eventBusMock },
         { provide: ExtractionResolverService, useValue: resolverMock },
+        { provide: ReceiptUrlIntakeService, useValue: urlIntakeMock },
       ],
     }).compile();
     processor = module.get(ReceiptExtractionProcessor);
@@ -222,125 +231,91 @@ describe('ReceiptExtractionProcessor', () => {
     ]);
   });
 
-  it('pdf uploads become document inputs; url sources fetch a snapshot', async () => {
+  it('pdf uploads become native document inputs', async () => {
     prismaMock.receipt.findUnique.mockResolvedValue(
       makeReceipt({ mimeType: 'application/pdf', fileRef: '2026/07/x.pdf' }),
     );
     providerMock.extract.mockResolvedValue(okResult());
     await processor.process(makeJob());
     expect(providerMock.extract.mock.calls[0][0].kind).toBe('pdf');
+  });
 
-    jest.clearAllMocks();
-    prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ receipt: prismaMock.receipt, receiptItem: prismaMock.receiptItem }),
-    );
-    categoryMock.list.mockResolvedValue([]);
-    prismaMock.receipt.update.mockResolvedValue({});
+  it('url sources delegate resolution to the intake service', async () => {
     prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    urlIntakeMock.resolve.mockResolvedValue({
+      kind: 'html',
+      data: 'Shufersal receipt 45.90',
+      sourceUrl: 'https://r.example/x',
+    });
     providerMock.extract.mockResolvedValue(okResult());
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        urlFetchResponse(
-          '<html><head><script>track()</script></head><body><p>Shufersal receipt 45.90</p></body></html>',
-          'text/html; charset=utf-8',
-        ),
-      );
 
     await processor.process(makeJob());
+
+    expect(urlIntakeMock.resolve).toHaveBeenCalledWith('https://r.example/x');
     const input = providerMock.extract.mock.calls[0][0];
     expect(input.kind).toBe('html');
-    expect(input.sourceUrl).toBe('https://r.example/x');
-    // 7.12 — HTML reduces to readable text before the provider call.
     expect(input.data).toBe('Shufersal receipt 45.90');
-    fetchSpy.mockRestore();
+    expect(input.sourceUrl).toBe('https://r.example/x');
   });
 
-  it('a URL serving a PDF routes to the native document input', async () => {
+  it('an intake-service failure fails the receipt permanently with its guidance', async () => {
     prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
-    providerMock.extract.mockResolvedValue(okResult());
-    const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from([0x00, 0x01, 0x02])]);
-    // Deliberately vague content-type — the magic bytes must decide.
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(urlFetchResponse(pdf, 'application/octet-stream'));
+    urlIntakeMock.resolve.mockRejectedValue(
+      new ExtractionFailedError('Receipt URL returned an unsupported file type'),
+    );
 
-    await processor.process(makeJob());
-    const input = providerMock.extract.mock.calls[0][0];
-    expect(input.kind).toBe('pdf');
-    expect(Buffer.from(input.data).subarray(0, 5).toString()).toBe('%PDF-');
-    fetchSpy.mockRestore();
-  });
+    const outcome = await processor.process(makeJob());
 
-  it('a URL serving an image (even mislabelled as HTML) routes to the vision input', async () => {
-    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
-    providerMock.extract.mockResolvedValue(okResult());
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(64),
-    ]);
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(urlFetchResponse(png, 'text/html'));
-
-    await processor.process(makeJob());
-    const input = providerMock.extract.mock.calls[0][0];
-    expect(input.kind).toBe('image');
-    expect(input.mimeType).toBe('image/png');
-    fetchSpy.mockRestore();
-  });
-
-  it('oversized and unsupported binary URL content fail permanently', async () => {
-    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        urlFetchResponse(Buffer.alloc(RECEIPT_MAX_FILE_SIZE_BYTES + 1), 'application/pdf'),
-      );
-    await expect(processor.process(makeJob())).resolves.toEqual({
-      extracted: false,
-      reason: 'permanent_failure',
-    });
-    let failUpdate = prismaMock.receipt.update.mock.calls.find(
+    expect(outcome).toEqual({ extracted: false, reason: 'permanent_failure' });
+    const failUpdate = prismaMock.receipt.update.mock.calls.find(
       (c) => c[0].data.status === 'FAILED',
     );
-    expect(failUpdate[0].data.failureReason).toContain('limit');
-
-    jest.clearAllMocks();
-    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
-    prismaMock.receipt.update.mockResolvedValue({});
-    categoryMock.list.mockResolvedValue([]);
-    matcherMock.getUserProductCandidates.mockResolvedValue([]);
-    // Unknown binary (NUL bytes, no recognised magic) — never mojibake at
-    // the model, always a clear failure reason.
-    fetchSpy.mockResolvedValue(
-      urlFetchResponse(Buffer.from('BLOB\0\0\0garbage'), 'application/octet-stream'),
-    );
-    await expect(processor.process(makeJob())).resolves.toEqual({
-      extracted: false,
-      reason: 'permanent_failure',
-    });
-    failUpdate = prismaMock.receipt.update.mock.calls.find((c) => c[0].data.status === 'FAILED');
     expect(failUpdate[0].data.failureReason).toContain('unsupported file type');
     expect(providerMock.extract).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
   });
 
-  it('HTML receipt lines deep past huge script blobs still reach the provider', async () => {
-    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
-    providerMock.extract.mockResolvedValue(okResult());
-    // 600 KB of inline script BEFORE the items — a raw-HTML cap would have
-    // cut the receipt content off; reduce-then-cap keeps it (Phase 8.12).
-    const html = `<html><body><script>${'x'.repeat(600_000)}</script><p>Total 45.90</p></body></html>`;
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(urlFetchResponse(html, 'text/html'));
+  it('an all-empty extraction fails with guidance instead of a blank REVIEW (upload)', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    providerMock.extract.mockResolvedValue(emptyResult());
 
-    await processor.process(makeJob());
-    const input = providerMock.extract.mock.calls[0][0];
-    expect(input.kind).toBe('html');
-    expect(input.data).toContain('Total 45.90');
-    fetchSpy.mockRestore();
+    const outcome = await processor.process(makeJob());
+
+    expect(outcome).toEqual({ extracted: false, reason: 'permanent_failure' });
+    const failUpdate = prismaMock.receipt.update.mock.calls.find(
+      (c) => c[0].data.status === 'FAILED',
+    );
+    expect(failUpdate[0].data.failureReason).toContain('Could not read any receipt details');
+    // No REVIEW transition, no items written.
+    expect(
+      prismaMock.receipt.update.mock.calls.find((c) => c[0].data.status === 'REVIEW'),
+    ).toBeUndefined();
+    expect(prismaMock.receiptItem.createMany).not.toHaveBeenCalled();
+    // Upload source → nothing to record in the URL intake log.
+    expect(urlIntakeMock.recordUrlOutcome).not.toHaveBeenCalled();
+  });
+
+  it('an all-empty extraction on a URL records the anonymized outcome and guides to upload', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    urlIntakeMock.resolve.mockResolvedValue({
+      kind: 'html',
+      data: 'Loading...',
+      sourceUrl: 'https://r.example/x',
+    });
+    providerMock.extract.mockResolvedValue(emptyResult());
+
+    const outcome = await processor.process(makeJob());
+
+    expect(outcome).toEqual({ extracted: false, reason: 'permanent_failure' });
+    const failUpdate = prismaMock.receipt.update.mock.calls.find(
+      (c) => c[0].data.status === 'FAILED',
+    );
+    expect(failUpdate[0].data.failureReason).toContain('load its content in the browser');
+    // Anonymized signal so we can spot a provider worth adapting.
+    expect(urlIntakeMock.recordUrlOutcome).toHaveBeenCalledWith(
+      'https://r.example/x',
+      null,
+      'empty_result',
+    );
   });
 
   it('duplicate fires are no-ops for REVIEW / CONFIRMED / FAILED receipts', async () => {
@@ -393,18 +368,5 @@ describe('ReceiptExtractionProcessor', () => {
       (c) => c[0].data.status === 'FAILED',
     );
     expect(failUpdate[0].data.failureReason).toContain('529');
-  });
-
-  it('a dead receipt URL (404) is a permanent failure', async () => {
-    prismaMock.receipt.findUnique.mockResolvedValue(
-      makeReceipt({ source: 'url', fileRef: null, sourceUrl: 'https://r.example/gone' }),
-    );
-    const fetchSpy = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue({ ok: false, status: 404 } as never);
-
-    const outcome = await processor.process(makeJob());
-    expect(outcome).toEqual({ extracted: false, reason: 'permanent_failure' });
-    fetchSpy.mockRestore();
   });
 });
