@@ -1,4 +1,4 @@
-import type { ExtractionResult } from '@myfinpro/shared';
+import { RECEIPT_MAX_FILE_SIZE_BYTES, type ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -20,6 +20,7 @@ import {
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
 import { htmlToReceiptText } from './utils/html-to-text.util';
+import { looksBinary, sniffBinaryReceipt } from './utils/receipt-content-sniff.util';
 import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
 type ExtractionJobData = { receiptId: string };
@@ -187,8 +188,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       if (!receipt.sourceUrl) {
         throw new ExtractionFailedError('URL receipt has no sourceUrl');
       }
-      const snapshot = await this.fetchUrlSnapshot(receipt.sourceUrl);
-      return { kind: 'html', data: snapshot, sourceUrl: receipt.sourceUrl };
+      return this.fetchUrlContent(receipt.sourceUrl);
     }
     if (!receipt.fileRef) {
       throw new ExtractionFailedError('Receipt has no stored file');
@@ -205,8 +205,13 @@ export class ReceiptExtractionProcessor extends WorkerHost {
    * guard runs on every hop (a `redirect: 'follow'` would let a public URL
    * bounce to an internal address unchecked). Transient network / 5xx errors
    * ride the BullMQ retry path; unsafe targets and 4xx are permanent.
+   *
+   * Phase 8.12 — the response is routed by its ACTUAL content: e-receipt
+   * links often serve a PDF or an image directly, which goes to the same
+   * native vision inputs as a direct upload; HTML/text reduces to a readable
+   * snapshot as before.
    */
-  private async fetchUrlSnapshot(url: string): Promise<string> {
+  private async fetchUrlContent(url: string): Promise<ExtractionInput> {
     let current: URL;
     try {
       current = assertPublicReceiptUrl(url);
@@ -244,15 +249,38 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         }
         throw new Error(`Receipt URL fetch failed (${res.status})`);
       }
-      const raw = (await res.text()).slice(0, URL_SNAPSHOT_MAX_CHARS);
-      // HTML pages reduce to readable text before the provider call —
-      // markup/script noise measurably degrades extraction (Phase 7.12).
-      // Sniff the body as well as the header: receipt hosts frequently
-      // mislabel HTML as text/plain.
-      const contentType = res.headers.get('content-type') ?? '';
+      const body = Buffer.from(await res.arrayBuffer());
+      if (body.byteLength > RECEIPT_MAX_FILE_SIZE_BYTES) {
+        throw new ExtractionFailedError(
+          `Receipt URL content exceeds the ${Math.round(RECEIPT_MAX_FILE_SIZE_BYTES / 1024 / 1024)} MB limit`,
+        );
+      }
+      const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+
+      // PDFs and images ride the native vision inputs — same as an upload.
+      const binary = sniffBinaryReceipt(contentType, body);
+      if (binary?.kind === 'pdf') return { kind: 'pdf', data: body };
+      if (binary?.kind === 'image') {
+        return { kind: 'image', data: body, mimeType: binary.mimeType };
+      }
+      if (looksBinary(body)) {
+        throw new ExtractionFailedError(
+          'Receipt URL returned an unsupported file type (expected a web page, PDF or image)',
+        );
+      }
+
+      // HTML is the dominant online-receipt shape; it reduces to readable
+      // text before the provider call — markup/script noise measurably
+      // degrades extraction (Phase 7.12). Sniff the body as well as the
+      // header: receipt hosts frequently mislabel HTML as text/plain. The
+      // FULL page is reduced first and only the readable text is capped —
+      // receipt lines often sit after hundreds of KB of inline script/CSS,
+      // which a pre-reduction slice would silently cut off (Phase 8.12).
+      const raw = body.toString('utf8');
       const looksLikeHtml =
         contentType.includes('html') || /^\s*(?:<!doctype\s+html|<html)/i.test(raw);
-      return looksLikeHtml ? htmlToReceiptText(raw) : raw;
+      const text = looksLikeHtml ? htmlToReceiptText(raw) : raw;
+      return { kind: 'html', data: text.slice(0, URL_SNAPSHOT_MAX_CHARS), sourceUrl: url };
     }
     // Unreachable — the loop returns or throws — but satisfies the type checker.
     throw new ExtractionFailedError('Too many redirects');

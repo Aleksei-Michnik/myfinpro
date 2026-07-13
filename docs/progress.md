@@ -1,6 +1,6 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-12
+> **Last updated:** 2026-07-13
 > **Current Phase:** Phase 8 — Product Catalog, Matching & Barcode (kickoff 2026-07-11; 8.1–8.10 complete, 8.11 per-user LLM shipped 2026-07-12)
 > **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
@@ -7880,3 +7880,33 @@ gating, isolation, clear/delete); web **1150** green incl.
 **Runbook** §9 updated to shipped status with the real endpoints; §9.2b
 OAuth connectors remain the next LLM-track step. Ops: set
 `LLM_SECRETS_ENCRYPTION_KEY` on staging/production **before** deploying.
+
+---
+
+## 2026-07-13 — Phase 8.12: URL receipts routed by actual content
+
+URL intake (Phase 7: paste an e-receipt link on the Receipts page →
+`POST /receipts/url` → SSRF-guarded server fetch → LLM) previously treated
+every response as text. Real e-receipt links from text messages often
+serve a **PDF or an image directly** — those bytes were mangled through
+`res.text()` into mojibake before reaching the model.
+
+**Fix.** The worker now fetches bytes and routes by ACTUAL content
+(`receipt-content-sniff.util`: magic bytes first, Content-Type header only
+as a fallback — receipt hosts frequently mislabel): PDF → native document
+input, JPEG/PNG/GIF/WebP → native vision input (same path as direct
+uploads), HTML/text → the Phase 7.12 readable-text snapshot. Unknown
+binary fails permanently with a clear reason instead of feeding garbage to
+the model; downloads are capped at the same 10 MB as direct uploads.
+
+**HTML (the dominant online-receipt shape) also got more robust**: the
+full page is reduced to readable text FIRST and only the text is capped —
+previously the raw HTML was sliced at 500 K chars before reduction, so
+receipt lines sitting after large inline script/CSS blobs were silently
+cut off.
+
+**Tests.** New sniffer spec + 4 processor cases (PDF URL via magic bytes,
+image URL mislabelled as HTML, oversized/unsupported binary → permanent
+failure with reason, receipt lines after a 600 KB script blob survive);
+api suite **1097** green. Live E2E on the dev stack: real HTML page, PDF
+and PNG URLs all fetched, extracted and reached REVIEW.

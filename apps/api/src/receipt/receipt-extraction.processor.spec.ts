@@ -1,3 +1,4 @@
+import { RECEIPT_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Job } from 'bullmq';
 import { CategoryService } from '../category/category.service';
@@ -87,6 +88,25 @@ describe('ReceiptExtractionProcessor', () => {
     ({ data: { receiptId: 'r-1' }, attemptsMade, opts: { attempts } }) as Job<{
       receiptId: string;
     }>;
+
+  /** Phase 8.12 — URL receipts are fetched as bytes and routed by content. */
+  const urlReceipt = (over: Record<string, unknown> = {}) =>
+    makeReceipt({
+      source: 'url',
+      fileRef: null,
+      mimeType: null,
+      sourceUrl: 'https://r.example/x',
+      ...over,
+    });
+  const urlFetchResponse = (body: string | Buffer, contentType: string) => {
+    const buf = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
+    return {
+      ok: true,
+      headers: new Headers({ 'content-type': contentType }),
+      arrayBuffer: () =>
+        Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)),
+    } as unknown as Response;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -216,23 +236,16 @@ describe('ReceiptExtractionProcessor', () => {
     );
     categoryMock.list.mockResolvedValue([]);
     prismaMock.receipt.update.mockResolvedValue({});
-    prismaMock.receipt.findUnique.mockResolvedValue(
-      makeReceipt({
-        source: 'url',
-        fileRef: null,
-        mimeType: null,
-        sourceUrl: 'https://r.example/x',
-      }),
-    );
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
     providerMock.extract.mockResolvedValue(okResult());
-    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
-      text: () =>
-        Promise.resolve(
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        urlFetchResponse(
           '<html><head><script>track()</script></head><body><p>Shufersal receipt 45.90</p></body></html>',
+          'text/html; charset=utf-8',
         ),
-    } as never);
+      );
 
     await processor.process(makeJob());
     const input = providerMock.extract.mock.calls[0][0];
@@ -240,6 +253,93 @@ describe('ReceiptExtractionProcessor', () => {
     expect(input.sourceUrl).toBe('https://r.example/x');
     // 7.12 — HTML reduces to readable text before the provider call.
     expect(input.data).toBe('Shufersal receipt 45.90');
+    fetchSpy.mockRestore();
+  });
+
+  it('a URL serving a PDF routes to the native document input', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    providerMock.extract.mockResolvedValue(okResult());
+    const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from([0x00, 0x01, 0x02])]);
+    // Deliberately vague content-type — the magic bytes must decide.
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(urlFetchResponse(pdf, 'application/octet-stream'));
+
+    await processor.process(makeJob());
+    const input = providerMock.extract.mock.calls[0][0];
+    expect(input.kind).toBe('pdf');
+    expect(Buffer.from(input.data).subarray(0, 5).toString()).toBe('%PDF-');
+    fetchSpy.mockRestore();
+  });
+
+  it('a URL serving an image (even mislabelled as HTML) routes to the vision input', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    providerMock.extract.mockResolvedValue(okResult());
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(64),
+    ]);
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(urlFetchResponse(png, 'text/html'));
+
+    await processor.process(makeJob());
+    const input = providerMock.extract.mock.calls[0][0];
+    expect(input.kind).toBe('image');
+    expect(input.mimeType).toBe('image/png');
+    fetchSpy.mockRestore();
+  });
+
+  it('oversized and unsupported binary URL content fail permanently', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        urlFetchResponse(Buffer.alloc(RECEIPT_MAX_FILE_SIZE_BYTES + 1), 'application/pdf'),
+      );
+    await expect(processor.process(makeJob())).resolves.toEqual({
+      extracted: false,
+      reason: 'permanent_failure',
+    });
+    let failUpdate = prismaMock.receipt.update.mock.calls.find(
+      (c) => c[0].data.status === 'FAILED',
+    );
+    expect(failUpdate[0].data.failureReason).toContain('limit');
+
+    jest.clearAllMocks();
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    prismaMock.receipt.update.mockResolvedValue({});
+    categoryMock.list.mockResolvedValue([]);
+    matcherMock.getUserProductCandidates.mockResolvedValue([]);
+    // Unknown binary (NUL bytes, no recognised magic) — never mojibake at
+    // the model, always a clear failure reason.
+    fetchSpy.mockResolvedValue(
+      urlFetchResponse(Buffer.from('BLOB\0\0\0garbage'), 'application/octet-stream'),
+    );
+    await expect(processor.process(makeJob())).resolves.toEqual({
+      extracted: false,
+      reason: 'permanent_failure',
+    });
+    failUpdate = prismaMock.receipt.update.mock.calls.find((c) => c[0].data.status === 'FAILED');
+    expect(failUpdate[0].data.failureReason).toContain('unsupported file type');
+    expect(providerMock.extract).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('HTML receipt lines deep past huge script blobs still reach the provider', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(urlReceipt());
+    providerMock.extract.mockResolvedValue(okResult());
+    // 600 KB of inline script BEFORE the items — a raw-HTML cap would have
+    // cut the receipt content off; reduce-then-cap keeps it (Phase 8.12).
+    const html = `<html><body><script>${'x'.repeat(600_000)}</script><p>Total 45.90</p></body></html>`;
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(urlFetchResponse(html, 'text/html'));
+
+    await processor.process(makeJob());
+    const input = providerMock.extract.mock.calls[0][0];
+    expect(input.kind).toBe('html');
+    expect(input.data).toContain('Total 45.90');
     fetchSpy.mockRestore();
   });
 
