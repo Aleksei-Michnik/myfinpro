@@ -7651,6 +7651,7 @@ SSRF-guarded URL path. **Next: Phase 8** (product catalog & staged matching
 over the `receipt_items` this phase persists).
 
 ### 7.11–7.13 — recognition fixes + payment-first intake
+
 Follow-ups from staging verification (documented as a re-plan block in
 IMPLEMENTATION-PLAN.md before implementation):
 
@@ -7711,6 +7712,7 @@ receipts. Shared package: `product.types.ts` (match enums/candidate shape,
 `merchant-name.util` deleted, receipt service now uses the shared fn.
 
 ### 8.2 - Product API `ProductModule` (imported by `ReceiptModule` — the
+
 worker and walkthrough are its consumers): list = ranked global search
 (`?search`, any recorded language or barcode) / caller's purchased products
 (groupBy on the new index, keyset-paginated, per-product stats via two
@@ -7722,7 +7724,8 @@ per-merchant price aggregates, always scoped `uploadedById` + CONFIRMED.
 Registry writes audited (`PRODUCT_CREATED/UPDATED`,
 `PRODUCT_ALIAS_RECORDED`, `RECEIPT_ITEM_MATCHED`).
 
-### 8.3 - Staged matcher 
+### 8.3 - Staged matcher
+
 `ProductMatchingService`: barcode(1.0) →
 confirmed-alias (0.95 + per-confirmation bonus) → normalized-exact (0.9) →
 trigram fuzzy (dependency-free Dice over token-prefiltered pools,
@@ -7737,7 +7740,7 @@ back uncategorized.
 
 ### 8.4 - Walkthrough UI
 
-`ItemWalkthroughDialog` on the review page (REVIEW CONFIRMED): 
+`ItemWalkthroughDialog` on the review page (REVIEW CONFIRMED):
 steps through items with ranked candidates + confidence
 meters, registry search, scan-to-find, create-new, skip. Keyboard-first
 (↑↓/1-9 choose, Enter confirm, S skip, N new, ←→ navigate, Esc close);
@@ -7748,6 +7751,7 @@ match state over for unchanged names (an edited name invalidates its
 match).
 
 ### 8.5 - Registry auto-update
+
 Confirm records the raw spelling as an alias
 (uploader's locale, `confirmation` source) via upsert-increment inside the
 link transaction; creating publishes globally + seeds the canonical alias.
@@ -7755,6 +7759,7 @@ Verified live: second upload of the same receipt **auto-matched** the item
 confirmed the first time (alias stage, 0.955).
 
 ### 8.6 - Barcode scanning
+
 `BarcodeScannerDialog`: `getUserMedia` +
 native `BarcodeDetector` where present, `@zxing/browser` dynamic-imported
 fallback (never in the main bundle), GTIN-validated accepts only. Camera
@@ -7763,6 +7768,7 @@ keyboard path). Scan-to-find in walkthrough + catalog; scan-to-attach in
 the product form.
 
 ### 8.7 - Open Food Facts
+
 `OpenFoodFactsService` behind a circuit breaker
 (3 failures → 60s open) + min-interval rate limit; unknown barcodes
 prefill name/brand/image in the create form; outage/disabled degrade to
@@ -7770,13 +7776,14 @@ prefill name/brand/image in the create form; outage/disabled degrade to
 (Nutella barcode → prefill).
 
 ### 8.8 - Product images
+
 One image per product. Uploads magic-byte-checked
 and staged, then a `product-images` BullMQ worker re-encodes via sharp
 (auto-rotate, ≤512px, WebP — EXIF/GPS stripped by construction); OFF
 prefill images ride the same queue as https fetch jobs. Served with strong
 ETag → verified 304 revalidation; `?v=` cache-busting on re-upload.
 
-### 8.9 - Catalog UI** `/products` (sidebar entry)
+### 8.9 - Catalog UI\*\* `/products` (sidebar entry)
 
 Debounced registry search vs. "my products" grid (lazy images, purchase stats,
 skeletons with the
@@ -7787,7 +7794,7 @@ receipts.
 
 ### 8.10 - Tests + polish
 
-Shared 151 (GTIN/normalize/validator), api **1057** unit green 
+Shared 151 (GTIN/normalize/validator), api **1057** unit green
 (matcher stages, trigram, OFF breaker, service rules,
 worker auto-link) + new `products.integration.spec.ts` (6 green:
 registry CRUD/search/cross-language alias/barcode, walkthrough
