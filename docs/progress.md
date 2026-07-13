@@ -7364,10 +7364,6 @@ CI-green with staging deploys.
 **Next** — 7.5 (extraction provider layer: mock + Anthropic + OpenAI
 implementations behind `RECEIPT_EXTRACTION_PROVIDER`), 7.6 (worker).
 
----
-
-## Phase 7 · Iterations 7.5–7.6 — Extraction providers + worker (2026-07-04)
-
 ### 7.5 — pluggable provider layer
 
 `ReceiptExtractionProvider` contract (image / pdf / html inputs; category
@@ -7458,9 +7454,7 @@ typecheck unaffected.**
 
 **Next** — 10.2 (`BudgetModule` CRUD + guards + `budget.updated` SSE).
 
----
-
-## Phase 7 · Iteration 7.7 — Receipts upload UI (2026-07-04)
+### 7.7 — Receipts upload UI (2026-07-04)
 
 **`/receipts`** (new sidebar entry): intake via drag-and-drop, file browse,
 mobile camera capture (`capture="environment"`), and a URL form; the
@@ -7487,9 +7481,7 @@ tree in parallel — receipt commits stage files explicitly and leave
 **Next** — 7.8 (review page: header + items editing, merchant
 autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
 
----
-
-## Phase 7 · Iteration 7.8 — Receipt review & edit (2026-07-05)
+### 7.8 — Receipt review & edit
 
 **API.** Three REVIEW-only editing endpoints on the receipt resource:
 
@@ -7537,7 +7529,7 @@ autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
   `MerchantSuggestion`; list rows now link to the review page.
   `receipts.review` i18n namespace added (EN/HE parity verified).
 
-### Tests
+#### Tests
 
 API: 65 receipt-suite tests green (adds `update` / `replaceItems` /
 `searchMerchants` / normalization coverage). Web: review-client spec (17)
@@ -7553,9 +7545,7 @@ the list-row Link. **Web receipt specs 31 green; typecheck + lint clean.**
 **Next** — 7.9 (confirm → Payment OUT + PaymentDocument), 7.10 (closing
 pass: integration + E2E, i18n sweep).
 
----
-
-## Phase 7 · Iteration 7.9 — Confirm receipt → payment (2026-07-09)
+### 7.9 — Confirm receipt → payment
 
 **API.** `POST /receipts/:id/confirm` turns a reviewed receipt into money.
 REVIEW-only; the receipt must already carry a total + currency (the review
@@ -7592,7 +7582,7 @@ server's stored values), with the primary category pre-selected from the most
 common line-item category. `confirmReceipt` context method + `ConfirmReceiptInput`
 wire type; `receipts.confirm` i18n namespace (EN/HE parity verified).
 
-### Tests
+#### Tests
 
 API: +5 `PaymentService` (validate / create-within-tx / publishCreated), +5
 receipt-service confirm (payment+document+merchant+link+audits, merchant
@@ -7613,9 +7603,7 @@ stayed untouched.
 **Next** — 7.10 (URL ingestion polish, audit-log matrix, Playwright E2E for
 upload → extract → review → confirm, i18n sweep).
 
----
-
-## Phase 7 · Iteration 7.10 — Closing pass: SSRF guard, E2E, audit matrix (2026-07-09)
+### 7.10 — Closing pass: SSRF guard, E2E, audit matrix (2026-07-09)
 
 **URL-ingestion SSRF guard.** A receipt URL is user-supplied and fetched
 server-side, so `assertPublicReceiptUrl` now gates it: reject non-http(s)
@@ -7649,7 +7637,7 @@ review page (asserts the mock "Mock Grocery" / $16.60) → Confirm with a
 primary category → lands on `/payments/:id` showing $16.60. Runs against
 staging like the Phase 6 payments E2E.
 
-### Tests
+#### Tests
 
 +19 URL-guard unit cases (accepts public v4/v6; rejects every private /
 loopback / metadata / scheme / credential vector) + 1 `createFromUrl` SSRF
@@ -7662,10 +7650,7 @@ merchant registry, per-item categories, realtime lifecycle, and an
 SSRF-guarded URL path. **Next: Phase 8** (product catalog & staged matching
 over the `receipt_items` this phase persists).
 
----
-
-## Phase 7 · Iterations 7.11–7.13 — recognition fixes + payment-first intake (2026-07-11)
-
+### 7.11–7.13 — recognition fixes + payment-first intake
 Follow-ups from staging verification (documented as a re-plan block in
 IMPLEMENTATION-PLAN.md before implementation):
 
@@ -7709,7 +7694,9 @@ a global registry (barcode-keyed `products` + multi-language
 from each user's confirmed `receipt_items` — the registry never records who
 bought what.
 
-**8.1 Schema** (`20260711100000_phase8_81_products`, expand-only):
+### 8.1 - Schema
+
+**(`20260711100000_phase8_81_products`, expand-only)**:
 `products` (unique nullable GTIN barcode, canonical + normalized name,
 brand, image ref, system-only default category), `product_aliases`
 (normalized spelling unique per product, locale, source, confirmation
@@ -7723,7 +7710,7 @@ receipts. Shared package: `product.types.ts` (match enums/candidate shape,
 `normalizeLookupName` — the one normalization rule for both registries;
 `merchant-name.util` deleted, receipt service now uses the shared fn.
 
-**8.2 Product API.** `ProductModule` (imported by `ReceiptModule` — the
+### 8.2 - Product API `ProductModule` (imported by `ReceiptModule` — the
 worker and walkthrough are its consumers): list = ranked global search
 (`?search`, any recorded language or barcode) / caller's purchased products
 (groupBy on the new index, keyset-paginated, per-product stats via two
@@ -7735,7 +7722,8 @@ per-merchant price aggregates, always scoped `uploadedById` + CONFIRMED.
 Registry writes audited (`PRODUCT_CREATED/UPDATED`,
 `PRODUCT_ALIAS_RECORDED`, `RECEIPT_ITEM_MATCHED`).
 
-**8.3 Staged matcher.** `ProductMatchingService`: barcode(1.0) →
+### 8.3 - Staged matcher 
+`ProductMatchingService`: barcode(1.0) →
 confirmed-alias (0.95 + per-confirmation bonus) → normalized-exact (0.9) →
 trigram fuzzy (dependency-free Dice over token-prefiltered pools,
 0.35–0.85). Batch-first: one alias + one product + one capped LIKE pool
@@ -7747,51 +7735,60 @@ into per-item candidates; deterministic top ≥ 0.9 **auto-links**
 (`AUTO`) and backfills the product's default category when the item came
 back uncategorized.
 
-**8.4 Walkthrough UI.** `ItemWalkthroughDialog` on the review page (REVIEW
+### 8.4 - Walkthrough UI
 
-- CONFIRMED): steps through items with ranked candidates + confidence
-  meters, registry search, scan-to-find, create-new, skip. Keyboard-first
-  (↑↓/1-9 choose, Enter confirm, S skip, N new, ←→ navigate, Esc close);
-  every action is one per-item POST so progress is server-persisted and
-  SKIPPED stays resumable. Focus-trapped dialog, `aria-live` progress,
-  reduced-motion-safe. Item rows show match-state dots; PUT /items carries
-  match state over for unchanged names (an edited name invalidates its
-  match).
+`ItemWalkthroughDialog` on the review page (REVIEW CONFIRMED): 
+steps through items with ranked candidates + confidence
+meters, registry search, scan-to-find, create-new, skip. Keyboard-first
+(↑↓/1-9 choose, Enter confirm, S skip, N new, ←→ navigate, Esc close);
+every action is one per-item POST so progress is server-persisted and
+SKIPPED stays resumable. Focus-trapped dialog, `aria-live` progress,
+reduced-motion-safe. Item rows show match-state dots; PUT /items carries
+match state over for unchanged names (an edited name invalidates its
+match).
 
-**8.5 Registry auto-update.** Confirm records the raw spelling as an alias
+### 8.5 - Registry auto-update
+Confirm records the raw spelling as an alias
 (uploader's locale, `confirmation` source) via upsert-increment inside the
 link transaction; creating publishes globally + seeds the canonical alias.
 Verified live: second upload of the same receipt **auto-matched** the item
 confirmed the first time (alias stage, 0.955).
 
-**8.6 Barcode scanning.** `BarcodeScannerDialog`: `getUserMedia` +
+### 8.6 - Barcode scanning
+`BarcodeScannerDialog`: `getUserMedia` +
 native `BarcodeDetector` where present, `@zxing/browser` dynamic-imported
 fallback (never in the main bundle), GTIN-validated accepts only. Camera
 denial degrades to an always-present manual-entry input (also the AT/
 keyboard path). Scan-to-find in walkthrough + catalog; scan-to-attach in
 the product form.
 
-**8.7 Open Food Facts.** `OpenFoodFactsService` behind a circuit breaker
+### 8.7 - Open Food Facts
+`OpenFoodFactsService` behind a circuit breaker
 (3 failures → 60s open) + min-interval rate limit; unknown barcodes
 prefill name/brand/image in the create form; outage/disabled degrade to
 `unavailable`/`disabled` — manual entry, never an error. Live-verified
 (Nutella barcode → prefill).
 
-**8.8 Product images.** One image per product. Uploads magic-byte-checked
+### 8.8 - Product images
+One image per product. Uploads magic-byte-checked
 and staged, then a `product-images` BullMQ worker re-encodes via sharp
 (auto-rotate, ≤512px, WebP — EXIF/GPS stripped by construction); OFF
 prefill images ride the same queue as https fetch jobs. Served with strong
 ETag → verified 304 revalidation; `?v=` cache-busting on re-upload.
 
-**8.9 Catalog UI.** `/products` (sidebar entry): debounced registry search
-vs. "my products" grid (lazy images, purchase stats, skeletons with the
+### 8.9 - Catalog UI** `/products` (sidebar entry)
+
+Debounced registry search vs. "my products" grid (lazy images, purchase stats,
+skeletons with the
 same cell geometry — no CLS), barcode scan-to-find, create dialog.
 `/products/:id`: image upload, aliases with locale tags, barcode, default
 category, per-merchant price table + purchase history linking back to
 receipts.
 
-**8.10 Tests + polish.** Shared 151 (GTIN/normalize/validator), api
-**1057** unit green (matcher stages, trigram, OFF breaker, service rules,
+### 8.10 - Tests + polish
+
+Shared 151 (GTIN/normalize/validator), api **1057** unit green 
+(matcher stages, trigram, OFF breaker, service rules,
 worker auto-link) + new `products.integration.spec.ts` (6 green:
 registry CRUD/search/cross-language alias/barcode, walkthrough
 confirm/skip/guards, privacy boundary) + receipts-confirm integration
@@ -7818,9 +7815,7 @@ registry with staged + LLM matching, barcode/OFF enrichment, images, and a
 private purchase catalog. **Next: Phase 9** (purchase analytics over
 `(product_id, purchased_at)`).
 
----
-
-## 2026-07-12 — Phase 8.11: Per-user LLM selection + BYOK (runbook §9 implemented)
+### 8.11 - Follow-up: LLM selection + BYOK (runbook §9 implemented)
 
 **Shipped the §9 design end-to-end.** Every LLM call now resolves the
 model per uploader at call time: `user selection (own key → shared env
@@ -7881,9 +7876,7 @@ gating, isolation, clear/delete); web **1150** green incl.
 OAuth connectors remain the next LLM-track step. Ops: set
 `LLM_SECRETS_ENCRYPTION_KEY` on staging/production **before** deploying.
 
----
-
-## 2026-07-13 — Phase 8.12: URL receipts routed by actual content
+## 8.12 - URL receipts routed by actual content
 
 URL intake (Phase 7: paste an e-receipt link on the Receipts page →
 `POST /receipts/url` → SSRF-guarded server fetch → LLM) previously treated
