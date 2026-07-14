@@ -26,6 +26,7 @@ const mockResumeSchedule = vi.fn();
 const mockCancelSchedule = vi.fn();
 const mockGetPlan = vi.fn();
 const mockCancelPlan = vi.fn();
+const mockGetReceipt = vi.fn();
 
 const mockRouterReplace = vi.fn();
 const mockRouterPush = vi.fn();
@@ -89,9 +90,10 @@ vi.mock('@/lib/payment/payment-context', () => ({
 }));
 
 // The edit dialog offers receipt intake in create mode (7.13); the detail
-// page renders the real dialog, so the hook needs a provider stand-in.
+// page renders the real dialog, so the hook needs a provider stand-in. The
+// purchase-details fold (8.18) reads getReceipt from the same hook.
 vi.mock('@/lib/receipt/receipt-context', () => ({
-  useReceipts: () => ({ uploadReceipt: vi.fn() }),
+  useReceipts: () => ({ uploadReceipt: vi.fn(), getReceipt: mockGetReceipt }),
 }));
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -187,16 +189,41 @@ describe('PaymentDetailClient', () => {
     expect(screen.getByTestId('payment-comment-list')).toBeInTheDocument();
     expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
     // Manual payments carry no source receipt (7.13).
-    expect(screen.queryByTestId('payment-detail-receipt')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payment-purchase-details')).not.toBeInTheDocument();
   });
 
-  it('links to the source receipt when the payment came from a confirm (7.13)', async () => {
+  it('folds open the linked receipt purchase details (7.13 / 8.18)', async () => {
     mockGetPayment.mockResolvedValueOnce(makePayment({ receiptId: 'r-42' }));
+    mockGetReceipt.mockResolvedValueOnce({
+      id: 'r-42',
+      items: [
+        {
+          id: 'i1',
+          position: 1,
+          rawName: 'Milk',
+          quantity: 1,
+          unitPriceCents: null,
+          discountCents: 0,
+          totalCents: 500,
+          categoryId: null,
+          productId: null,
+          productName: null,
+          productBrand: null,
+          matchStatus: 'PENDING',
+          matchCandidates: [],
+        },
+      ],
+    });
     render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-receipt')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-detail-receipt-link')).toHaveAttribute(
-      'href',
-      '/receipts/r-42',
+    await waitFor(() => expect(screen.getByTestId('payment-purchase-details')).toBeInTheDocument());
+    // Collapsed by default → no fetch until the user expands.
+    expect(mockGetReceipt).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('purchase-details-toggle'));
+    await waitFor(() =>
+      expect(screen.getByTestId('purchase-details-receipt-link')).toHaveAttribute(
+        'href',
+        '/receipts/r-42',
+      ),
     );
   });
 

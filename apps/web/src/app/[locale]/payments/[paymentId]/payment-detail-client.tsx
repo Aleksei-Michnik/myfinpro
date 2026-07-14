@@ -21,6 +21,7 @@ import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
 import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
 import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
 import { PaymentPlanSection } from '@/components/payment/PaymentPlanSection';
+import { PaymentPurchaseDetails } from '@/components/payment/PaymentPurchaseDetails';
 import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
 import { RecurringOccurrencesSection } from '@/components/payment/RecurringOccurrencesSection';
 import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
@@ -365,23 +366,10 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         />
       )}
 
-      {/* 7.13 — a confirmed receipt is this payment's proving document. */}
+      {/* 7.13 / 8.18 — a confirmed receipt is this payment's proving document;
+          its products/services fold open here (lazy-loaded on expand). */}
       {payment.receiptId && (
-        <section
-          className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="payment-detail-receipt"
-        >
-          <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {tDetail('receiptTitle')}
-          </h2>
-          <Link
-            href={`/receipts/${payment.receiptId}`}
-            className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-            data-testid="payment-detail-receipt-link"
-          >
-            {tDetail('receiptLink')}
-          </Link>
-        </section>
+        <PaymentPurchaseDetails receiptId={payment.receiptId} currency={payment.currency} />
       )}
 
       <PaymentDocumentsPlaceholder />

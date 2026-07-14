@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
+import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
 import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
@@ -89,6 +90,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   // Attached receipts (Phase 8.15) finish via reconcile, not confirm. Auto-open
   // the reconcile dialog the first time such a receipt reaches REVIEW.
   const autoReconciledRef = useRef(false);
@@ -418,21 +420,41 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
             </a>
           ) : previewUrl ? (
             receipt.mimeType === 'application/pdf' ? (
-              <object
-                data={previewUrl}
-                type="application/pdf"
-                className="h-[70vh] w-full rounded"
-                aria-label={t('previewTitle')}
-                data-testid="receipt-preview-pdf"
-              />
+              <div className="space-y-2">
+                <object
+                  data={previewUrl}
+                  type="application/pdf"
+                  className="h-[60vh] w-full rounded"
+                  aria-label={t('previewTitle')}
+                  data-testid="receipt-preview-pdf"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewerOpen(true)}
+                  data-testid="receipt-view-document"
+                >
+                  {t('viewDocument')}
+                </Button>
+              </div>
             ) : (
-              // Blob object-URL — next/image can't consume it.
-              <img
-                src={previewUrl}
-                alt={receipt.originalName ?? t('previewTitle')}
-                className="max-h-[70vh] w-full rounded object-contain"
-                data-testid="receipt-preview-image"
-              />
+              // Blob object-URL — next/image can't consume it. The image is a
+              // button: activating it opens the accessible zoom/pan viewer.
+              <button
+                type="button"
+                onClick={() => setViewerOpen(true)}
+                aria-label={t('viewDocument')}
+                data-testid="receipt-view-document"
+                className="block w-full cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <img
+                  src={previewUrl}
+                  alt={receipt.originalName ?? t('previewTitle')}
+                  className="max-h-[70vh] w-full rounded object-contain"
+                  data-testid="receipt-preview-image"
+                />
+              </button>
             )
           ) : (
             <div className="flex h-40 items-center justify-center text-sm text-gray-400 dark:text-gray-500">
@@ -798,6 +820,23 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           categories={categories}
           onClose={() => setWalkthroughOpen(false)}
           onReceiptUpdated={hydrate}
+        />
+      )}
+
+      {/* Popup document viewer (uploaded image/PDF) — zoom/pan for pictures,
+          native PDF viewer for slips. URL receipts open externally instead. */}
+      {receipt.source !== 'url' && (
+        <ReceiptDocumentViewer
+          open={viewerOpen}
+          url={previewUrl}
+          mimeType={receipt.mimeType}
+          title={
+            receipt.merchantName ??
+            receipt.extractedMerchantName ??
+            receipt.originalName ??
+            t('previewTitle')
+          }
+          onClose={() => setViewerOpen(false)}
         />
       )}
     </main>

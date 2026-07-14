@@ -772,7 +772,10 @@
         "countPlural": "{n} מופעים",
         "empty": "עדיין אין מופעים — הם יופיעו כאן ככל שלוח הזמנים יפעל."
       },
-      "receiptTitle": "קבלה",
+      "purchaseTitle": "פרטי הרכישה",
+      "purchaseLoading": "טוען את פרטי הרכישה…",
+      "purchaseEmpty": "לקבלה זו אין פירוט מוצרים.",
+      "purchaseUnavailable": "פרטי הרכישה אינם זמינים עבור קבלה זו.",
       "receiptLink": "צפייה בקבלת המקור"
     },
     "comments": {
@@ -1111,12 +1114,22 @@
       "loadMore": "טעינת עוד",
       "actionFailed": "הפעולה נכשלה"
     },
+    "viewer": {
+      "zoomControls": "בקרות זום",
+      "zoomIn": "הגדלה",
+      "zoomOut": "הקטנה",
+      "reset": "איפוס",
+      "openInNewTab": "פתיחה בלשונית חדשה",
+      "close": "סגירה",
+      "downloadPdf": "הורדת PDF"
+    },
     "review": {
       "back": "חזרה לקבלות",
       "notFound": "הקבלה לא נמצאה",
       "loadFailed": "לא ניתן לטעון את הקבלה",
       "previewTitle": "תצוגה מקדימה של הקבלה",
       "previewLoading": "טוען תצוגה מקדימה…",
+      "viewDocument": "צפייה במסמך",
       "headerTitle": "פרטים שחולצו",
       "merchantLabel": "בית עסק",
       "merchantLinked": "מקושר לבית עסק מוכר",

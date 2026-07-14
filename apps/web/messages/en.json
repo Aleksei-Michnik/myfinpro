@@ -772,7 +772,10 @@
         "countPlural": "{n} occurrences",
         "empty": "No occurrences yet — they will appear here as the schedule runs."
       },
-      "receiptTitle": "Receipt",
+      "purchaseTitle": "Purchase details",
+      "purchaseLoading": "Loading purchase details…",
+      "purchaseEmpty": "This receipt has no itemised products.",
+      "purchaseUnavailable": "Purchase details aren't available for this receipt.",
       "receiptLink": "View the source receipt"
     },
     "comments": {
@@ -1111,12 +1114,22 @@
       "loadMore": "Load more",
       "actionFailed": "Action failed"
     },
+    "viewer": {
+      "zoomControls": "Zoom controls",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset",
+      "openInNewTab": "Open in a new tab",
+      "close": "Close",
+      "downloadPdf": "Download PDF"
+    },
     "review": {
       "back": "Back to receipts",
       "notFound": "Receipt not found",
       "loadFailed": "Could not load the receipt",
       "previewTitle": "Receipt preview",
       "previewLoading": "Loading preview…",
+      "viewDocument": "View document",
       "headerTitle": "Extracted details",
       "merchantLabel": "Merchant",
       "merchantLinked": "Linked to a known merchant",
