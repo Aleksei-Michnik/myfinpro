@@ -27,6 +27,9 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       API_INTERNAL_URL: ${API_INTERNAL_URL}
+      # Receipt file storage — MUST point at the mounted volume below; a
+      # container-local path loses every uploaded file on each blue/green swap.
+      RECEIPT_STORAGE_DIR: /data/receipts
       # Receipt extraction (LLM) — defaults to the deterministic mock provider;
       # set RECEIPT_EXTRACTION_PROVIDER=anthropic + ANTHROPIC_API_KEY to use Claude.
       RECEIPT_EXTRACTION_PROVIDER: ${RECEIPT_EXTRACTION_PROVIDER:-mock}
@@ -47,6 +50,10 @@ services:
       SMTP_FROM: 'MyFinPro <noreply@${MAIL_DOMAIN}>'
       # DKIM — signed at Nodemailer layer (Haraka dkim_sign plugin has stream crash)
       DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
+    volumes:
+      # Fixed-name volume shared by both blue/green slots (each runs under its
+      # own compose project, so the name must not be project-prefixed).
+      - myfinpro-staging-receipts:/data/receipts
     networks:
       myfinpro-staging-net:
         aliases:
@@ -89,3 +96,8 @@ services:
 networks:
   myfinpro-staging-net:
     external: true
+
+volumes:
+  myfinpro-staging-receipts:
+    name: myfinpro-staging-receipts
+    driver: local
