@@ -469,7 +469,9 @@ describe('ReceiptReviewClient', () => {
 
   it('completing reconciliation routes to the linked payment', async () => {
     await renderLoaded(makeReceipt({ paymentId: 'pay-1' }));
-    fireEvent.click(screen.getByTestId('reconcile-dialog-done'));
+    // The reconcile dialog auto-opens via an effect — wait for it rather than
+    // racing the click against the flush.
+    fireEvent.click(await screen.findByTestId('reconcile-dialog-done'));
     expect(pushMock).toHaveBeenCalledWith('/payments/pay-1');
     await waitFor(() => expect(screen.queryByTestId('reconcile-dialog')).toBeNull());
   });
