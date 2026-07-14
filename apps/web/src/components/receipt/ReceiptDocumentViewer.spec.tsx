@@ -29,6 +29,21 @@ describe('ReceiptDocumentViewer (8.18)', () => {
     expect(screen.getByTestId('viewer-loading')).toBeInTheDocument();
   });
 
+  it('shows a load-failure message (not the endless spinner) on loadError', () => {
+    render(
+      <ReceiptDocumentViewer
+        open
+        url={null}
+        loadError
+        mimeType="image/png"
+        title="R"
+        onClose={noop}
+      />,
+    );
+    expect(screen.getByTestId('viewer-load-error')).toHaveTextContent('loadFailed');
+    expect(screen.queryByTestId('viewer-loading')).not.toBeInTheDocument();
+  });
+
   it('renders an image with zoom controls and zooms in', () => {
     render(
       <ReceiptDocumentViewer

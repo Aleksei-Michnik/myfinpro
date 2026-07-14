@@ -24,6 +24,7 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const [viewerOpen, setViewerOpen] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobError, setBlobError] = useState(false);
 
   const load = useCallback(() => {
     void loadOp
@@ -37,8 +38,11 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
   useEffect(() => load(), [load]);
 
   // Fetch the file blob only once the viewer is opened (uploaded receipts).
+  // Failure surfaces IN the viewer — a silent catch here left it spinning
+  // forever. Close + reopen retries.
   useEffect(() => {
     if (!viewerOpen || !receipt || receipt.source === 'url') return;
+    setBlobError(false);
     let objectUrl: string | null = null;
     let cancelled = false;
     void fetchFileBlob(receipt.id)
@@ -48,18 +52,22 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
         setBlobUrl(objectUrl);
       })
       .catch(() => {
-        /* the viewer shows its own loading state; failure is best-effort */
+        if (!cancelled) setBlobError(true);
       });
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setBlobUrl(null);
     };
   }, [viewerOpen, receipt, fetchFileBlob]);
 
   const notAccessible =
     !!loadOp.error && (loadOp.error.httpStatus === 404 || loadOp.error.httpStatus === 403);
+  // Title the viewer with the FILE NAME (language-neutral, matches the row
+  // the user clicked) — merchant names are receipt data in the receipt's own
+  // language and read as a localisation bug when they lead.
   const title = receipt
-    ? (receipt.merchantName ?? receipt.extractedMerchantName ?? receipt.originalName ?? t('title'))
+    ? (receipt.originalName ?? receipt.merchantName ?? receipt.extractedMerchantName ?? t('title'))
     : t('title');
 
   return (
@@ -140,6 +148,7 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
         <ReceiptDocumentViewer
           open={viewerOpen}
           url={blobUrl}
+          loadError={blobError}
           mimeType={receipt.mimeType}
           title={title}
           onClose={() => setViewerOpen(false)}

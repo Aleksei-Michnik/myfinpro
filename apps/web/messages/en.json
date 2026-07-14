@@ -1124,7 +1124,8 @@
       "reset": "Reset",
       "openInNewTab": "Open in a new tab",
       "close": "Close",
-      "downloadPdf": "Download PDF"
+      "downloadPdf": "Download PDF",
+      "loadFailed": "Could not load the document file."
     },
     "review": {
       "back": "Back to receipts",

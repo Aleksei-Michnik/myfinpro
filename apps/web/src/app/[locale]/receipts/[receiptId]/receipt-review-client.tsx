@@ -67,6 +67,7 @@ const inputClass =
 export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const t = useTranslations('receipts.review');
   const tStatus = useTranslations('receipts.status');
+  const tViewer = useTranslations('receipts.viewer');
   const { getReceipt, updateReceipt, replaceItems, searchMerchants, fetchFileBlob, retryReceipt } =
     useReceipts();
   const { listCategories } = usePayments();
@@ -76,6 +77,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState(false);
 
   // Header form state.
   const [merchantText, setMerchantText] = useState('');
@@ -148,9 +150,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     });
   });
 
-  // Authenticated file preview via a blob object-URL.
+  // Authenticated file preview via a blob object-URL. A failure surfaces as
+  // an inline error — a silent catch left the "loading" placeholder forever.
   useEffect(() => {
     if (!receipt || receipt.source !== 'upload') return;
+    setPreviewError(false);
     let revoked: string | null = null;
     let cancelled = false;
     void fetchFileBlob(receiptId)
@@ -160,7 +164,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         setPreviewUrl(revoked);
       })
       .catch(() => {
-        /* preview is best-effort */
+        if (!cancelled) setPreviewError(true);
       });
     return () => {
       cancelled = true;
@@ -468,6 +472,14 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                 />
               </button>
             )
+          ) : previewError ? (
+            <div
+              className="flex h-40 items-center justify-center text-sm text-red-600 dark:text-red-400"
+              role="alert"
+              data-testid="receipt-preview-error"
+            >
+              {tViewer('loadFailed')}
+            </div>
           ) : (
             <div className="flex h-40 items-center justify-center text-sm text-gray-400 dark:text-gray-500">
               {t('previewLoading')}
@@ -841,11 +853,14 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         <ReceiptDocumentViewer
           open={viewerOpen}
           url={previewUrl}
+          loadError={previewError}
           mimeType={receipt.mimeType}
           title={
+            // File name first — merchant names are receipt data in the
+            // receipt's own language and read as a localisation bug.
+            receipt.originalName ??
             receipt.merchantName ??
             receipt.extractedMerchantName ??
-            receipt.originalName ??
             t('previewTitle')
           }
           onClose={() => setViewerOpen(false)}

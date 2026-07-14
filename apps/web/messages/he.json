@@ -1124,7 +1124,8 @@
       "reset": "איפוס",
       "openInNewTab": "פתיחה בלשונית חדשה",
       "close": "סגירה",
-      "downloadPdf": "הורדת PDF"
+      "downloadPdf": "הורדת PDF",
+      "loadFailed": "טעינת קובץ המסמך נכשלה."
     },
     "review": {
       "back": "חזרה לקבלות",

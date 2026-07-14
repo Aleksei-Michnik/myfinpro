@@ -14,8 +14,10 @@ interface ReceiptDocumentViewerProps {
   open: boolean;
   /** Object URL for the file blob, or null while it's still loading. */
   url: string | null;
+  /** True when the file failed to load — renders an error instead of the spinner. */
+  loadError?: boolean;
   mimeType: string | null;
-  /** Accessible title (e.g. the receipt's merchant or file name). */
+  /** Accessible title (e.g. the file name). */
   title: string;
   onClose(): void;
 }
@@ -27,6 +29,7 @@ const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 export function ReceiptDocumentViewer({
   open,
   url,
+  loadError = false,
   mimeType,
   title,
   onClose,
@@ -236,13 +239,23 @@ export function ReceiptDocumentViewer({
 
         <div className="relative flex-1 overflow-hidden">
           {!url ? (
-            <div
-              className="flex h-full items-center justify-center text-sm text-white/70"
-              role="status"
-              data-testid="viewer-loading"
-            >
-              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-white/80" />
-            </div>
+            loadError ? (
+              <div
+                className="flex h-full items-center justify-center p-4 text-center text-sm text-red-300"
+                role="alert"
+                data-testid="viewer-load-error"
+              >
+                {t('loadFailed')}
+              </div>
+            ) : (
+              <div
+                className="flex h-full items-center justify-center text-sm text-white/70"
+                role="status"
+                data-testid="viewer-loading"
+              >
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-white/80" />
+              </div>
+            )
           ) : isPdf ? (
             <object
               data={url}

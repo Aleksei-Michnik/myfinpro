@@ -14,10 +14,27 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 }));
 
 // Stub the shared viewer — its own behaviour is covered by its spec; here we
-// only assert PaymentDocuments opens it with the fetched blob URL.
+// only assert PaymentDocuments opens it with the fetched blob URL / error.
 vi.mock('@/components/receipt/ReceiptDocumentViewer', () => ({
-  ReceiptDocumentViewer: ({ open, url }: { open: boolean; url: string | null }) =>
-    open ? <div data-testid="mock-viewer" data-url={url ?? ''} /> : null,
+  ReceiptDocumentViewer: ({
+    open,
+    url,
+    loadError,
+    title,
+  }: {
+    open: boolean;
+    url: string | null;
+    loadError?: boolean;
+    title: string;
+  }) =>
+    open ? (
+      <div
+        data-testid="mock-viewer"
+        data-url={url ?? ''}
+        data-load-error={loadError ? 'true' : 'false'}
+        data-title={title}
+      />
+    ) : null,
 }));
 
 describe('PaymentDocuments (8.19)', () => {
@@ -44,6 +61,25 @@ describe('PaymentDocuments (8.19)', () => {
     await waitFor(() => expect(screen.getByTestId('mock-viewer')).toBeInTheDocument());
     expect(mockFetchFileBlob).toHaveBeenCalledWith('r-1');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-url', 'blob:mock');
+    // Viewer titled by the FILE NAME (language-neutral), not the merchant.
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-title', 'receipt.jpg');
+  });
+
+  it('surfaces a file-load failure in the viewer instead of spinning forever', async () => {
+    mockGetReceipt.mockResolvedValue({
+      id: 'r-1',
+      source: 'upload',
+      mimeType: 'image/jpeg',
+      originalName: 'receipt.jpg',
+    });
+    mockFetchFileBlob.mockRejectedValue(Object.assign(new Error('gone'), { status: 404 }));
+    render(<PaymentDocuments receiptId="r-1" />);
+
+    await waitFor(() => expect(screen.getByTestId('payment-document-file')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('payment-document-view'));
+    await waitFor(() =>
+      expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-load-error', 'true'),
+    );
   });
 
   it('links out for a URL-sourced receipt (no in-app viewer)', async () => {
