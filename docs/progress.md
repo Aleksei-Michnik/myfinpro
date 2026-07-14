@@ -8103,7 +8103,7 @@ updated `payment-detail` spec for the fold. EN+HE strings; orphaned
 
 ### 8.19 - Payment Documents panel, cross-member receipt access, navigation
 
-_Status: in progress._ Receipt↔payment cohesion fixes raised on staging
+_Status: shipped._ Receipt↔payment cohesion fixes raised on staging
 (design §7):
 
 - **Cross-member receipt access** (API): a receipt linked to a payment should
@@ -8118,3 +8118,13 @@ _Status: in progress._ Receipt↔payment cohesion fixes raised on staging
   sidebar.
 - **Receipt → payment backlink** (web): link the receipt review page to its
   attributed payment when `paymentId` is set.
+
+API: `loadViewableOrThrow` (owner OR `assertVisible` on the linked payment)
+for `getOne`/`openFile`; mutations unchanged. Web: `PaymentDocuments` (file
+row + shared viewer, URL link-out, unavailable/none states) replacing the
+deleted placeholder; sidebar **Transactions** item (the stale unused
+`nav.transactions` key repurposed — the label is "Transactions", the umbrella
+term for income/expense/transfers, not "Payments"); receipt→transaction
+backlink. api unit **1141** / web **1188** green; both typechecks clean.
+Follow-up: a full **Payment → Transaction** rename (API routes + entity + DB
+table, per user decision) lands next as its own change.
