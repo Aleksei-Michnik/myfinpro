@@ -8128,3 +8128,18 @@ term for income/expense/transfers, not "Payments"); receipt→transaction
 backlink. api unit **1141** / web **1188** green; both typechecks clean.
 Follow-up: a full **Payment → Transaction** rename (API routes + entity + DB
 table, per user decision) lands next as its own change.
+
+**Hotfix (staging verification):** the Documents viewer spun forever. Staging
+logs showed `GET /receipts/:id/file` → 404 "Receipt file not found" — the DB
+row exists but the FILE is gone. Root cause: the api service had **no volume**
+for `RECEIPT_STORAGE_DIR`, so uploaded receipt files lived in the container's
+writable layer and were destroyed on every blue/green swap (files uploaded
+before the last deploy are unrecoverable; DB rows remain). Fix: fixed-name
+`…-receipts` volume mounted at `/data/receipts` + `RECEIPT_STORAGE_DIR` env in
+BOTH staging and production compose (fixed `name:` because each slot runs
+under its own compose project). Web: the silent `catch` that turned that 404
+into an endless spinner now surfaces a `loadFailed` error in the viewer
+(`loadError` prop) and an inline error on the review-page preview; close +
+reopen retries. Also: the viewer is now titled by the **file name** — leading
+with the merchant name (receipt data in the receipt's own language, e.g.
+"קסטרו") read as a localisation bug for an EN user.
