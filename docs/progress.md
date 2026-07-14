@@ -8100,3 +8100,21 @@ ESC/backdrop/close) + `PaymentPurchaseDetails` (collapsed-by-default, lazy
 load + list + currency, fetch-once across toggles, empty, 404-unavailable) +
 updated `payment-detail` spec for the fold. EN+HE strings; orphaned
 `receiptTitle` removed. web **1184** green; typecheck clean.
+
+### 8.19 - Payment Documents panel, cross-member receipt access, navigation
+
+_Status: in progress._ Receipt↔payment cohesion fixes raised on staging
+(design §7):
+
+- **Cross-member receipt access** (API): a receipt linked to a payment should
+  be viewable by anyone who can see the payment (e.g. group members), not just
+  the uploader. Receipt reads (`GET /receipts/:id`, `/file`) move to a
+  `loadViewableOrThrow` guard (uploader OR `PaymentService.assertVisible` on
+  the linked payment); mutations stay uploader-only.
+- **Documents panel** (web): replace the stale "coming in Phase 9"
+  placeholder with a real `PaymentDocuments` list of the payment's receipt
+  file(s), opened in the 8.18 viewer.
+- **Payments nav** (web): surface the existing `/payments` list (6.16) in the
+  sidebar.
+- **Receipt → payment backlink** (web): link the receipt review page to its
+  attributed payment when `paymentId` is set.

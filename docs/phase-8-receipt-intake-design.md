@@ -1,4 +1,4 @@
-# Phase 8.13–8.17 — Receipt Intake & Payment Integration
+# Phase 8.13–8.19 — Receipt Intake & Payment Integration
 
 > **Principle**: a receipt is a payment's proving document. The target model
 > is **every receipt belongs to a payment** — a receipt without a payment has
@@ -8,17 +8,20 @@
 
 Increments ship in this order (8.14 immediately after 8.13 by request):
 
-| Iter | Scope                                                               | Status  |
-| ---- | ------------------------------------------------------------------- | ------- |
-| 8.13 | Intake chooser in Add Payment: device upload + **Add from URL**     | shipped |
-| 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)  | shipped |
-| 8.15 | Attach receipts to **existing payments** + LLM reconciliation       | shipped |
-| 8.16 | Invariant: no receipt without a payment; directory mirrors payments | planned |
-| 8.17 | Online-receipt URL intake: provider adapters (SPA → JSON) + guards  | shipped |
+| Iter | Scope                                                                  | Status      |
+| ---- | ---------------------------------------------------------------------- | ----------- |
+| 8.13 | Intake chooser in Add Payment: device upload + **Add from URL**        | shipped     |
+| 8.14 | Manual receipt via **barcode scanning** (camera, qty+price memory)     | shipped     |
+| 8.15 | Attach receipts to **existing payments** + LLM reconciliation          | shipped     |
+| 8.16 | Invariant: no receipt without a payment; directory mirrors payments    | planned     |
+| 8.17 | Online-receipt URL intake: provider adapters (SPA → JSON) + guards     | shipped     |
+| 8.18 | Receipt document viewer (image zoom/pan + PDF) + purchase-details fold | shipped     |
+| 8.19 | Payment Documents panel + cross-member receipt access + Payments nav   | in progress |
 
 8.17 jumped ahead of the still-planned 8.16: a user-reported bug (a real
 online receipt imported blank) made the URL path a correctness fix, not a
-nice-to-have.
+nice-to-have. 8.18–8.19 likewise land ahead of 8.16 — UX follow-ups raised
+while reviewing receipts on staging.
 
 ## 1. 8.13 — Intake chooser in Add Payment
 
@@ -196,3 +199,47 @@ currently hit the empty-result guard (fail-fast with guidance). The
 provider interface is the seam to later add a real renderer (headless
 Chromium) for hosts we see often but can't reach via a data endpoint; the
 anonymized log is what will tell us which hosts justify it.
+
+## 6. 8.18 — Receipt document viewer + payment purchase-details fold
+
+Two UX follow-ups from reviewing receipts on staging.
+
+**Document viewer (receipt review page).** `ReceiptDocumentViewer` — a
+portal-mounted, focus-trapped dialog (the app's standard modal pattern:
+ESC/backdrop close, focus snapshot+restore, Tab trap). Images support zoom
+(buttons, wheel, `+`/`-`/`0`) and drag-to-pan; PDFs render in the browser's
+native viewer with a download fallback. The review page's inline image opens
+it on click; PDFs get a "view document" button. URL receipts keep their
+external link (nothing to embed).
+
+**Purchase-details fold (payment view).** `PaymentPurchaseDetails` turns the
+payment's bare receipt link into an accessible disclosure
+(`aria-expanded`/`aria-controls`) listing the receipt's products/services
+(name + brand, qty × unit, line total in the payment currency).
+
+## 7. 8.19 — Payment Documents panel, cross-member receipt access, navigation
+
+A cluster of receipt↔payment cohesion fixes raised on staging.
+
+**Cross-member receipt access.** A receipt is a payment's proving document,
+so anyone who can see the payment should be able to see (and open) that
+document — not just the uploader. Receipt **reads** (`GET /receipts/:id`,
+`GET /receipts/:id/file`) now resolve via a `loadViewableOrThrow` guard:
+the uploader, OR any user the linked payment is visible to (reusing
+`PaymentService.assertVisible`, which already covers personal + group-member
+attributions). **Mutations stay uploader-only** (`loadOwnedOrThrow`
+unchanged) — a group member can view a shared payment's receipt but not
+edit/reconcile/delete it.
+
+**Documents panel (payment view).** The Phase-6.14 "coming in Phase 9"
+placeholder is replaced by a real `PaymentDocuments` panel: it lists the
+payment's receipt as a document (file name + type, or the source URL) and
+opens it in the 8.18 `ReceiptDocumentViewer` (reused verbatim). Phase 9 is
+Purchase Analytics, not documents — the placeholder's promise was stale, and
+the document already exists as the linked receipt.
+
+**Navigation + backlink.** The full-featured `/payments` list (built in 6.16)
+was never linked from the sidebar — payments were only reachable via the
+dashboard. Add a **Payments** nav item. And close the loop the other way: the
+receipt review page gets a link to its **attributed payment** when the
+receipt carries a `paymentId`.
