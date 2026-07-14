@@ -808,7 +808,10 @@
     },
     "documents": {
       "title": "מסמכים",
-      "comingSoon": "קבלות, תמונות ו-PDFs בדרך בשלב 9."
+      "loading": "טוען מסמכים…",
+      "view": "צפייה",
+      "none": "אין קובץ מסמך לקבלה זו.",
+      "unavailable": "המסמכים אינם זמינים עבור קבלה זו."
     },
     "schedulePlan": {
       "occurrenceTitle": "לוח זמנים / תכנית",
@@ -1125,6 +1128,7 @@
     },
     "review": {
       "back": "חזרה לקבלות",
+      "viewTransaction": "צפייה בתנועה",
       "notFound": "הקבלה לא נמצאה",
       "loadFailed": "לא ניתן לטעון את הקבלה",
       "previewTitle": "תצוגה מקדימה של הקבלה",

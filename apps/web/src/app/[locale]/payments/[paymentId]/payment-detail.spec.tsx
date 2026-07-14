@@ -147,6 +147,7 @@ describe('PaymentDetailClient', () => {
     mockGetPlan.mockReset();
     mockGetPlan.mockResolvedValue(null);
     mockCancelPlan.mockReset();
+    mockGetReceipt.mockReset();
     mockRouterReplace.mockReset();
     mockRouterPush.mockReset();
     mockAddToast.mockReset();
@@ -181,21 +182,24 @@ describe('PaymentDetailClient', () => {
     await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
   });
 
-  it('successful render shows header + documents placeholder + comments; no schedule for ONE_TIME', async () => {
+  it('successful render shows header + comments; no receipt sections without a linked receipt', async () => {
     mockGetPayment.mockResolvedValueOnce(makePayment());
     render(<PaymentDetailClient paymentId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-documents-placeholder')).toBeInTheDocument();
     expect(screen.getByTestId('payment-comment-list')).toBeInTheDocument();
     expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
-    // Manual payments carry no source receipt (7.13).
+    // No linked receipt → neither the purchase-details fold nor the documents panel.
     expect(screen.queryByTestId('payment-purchase-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payment-documents')).not.toBeInTheDocument();
   });
 
-  it('folds open the linked receipt purchase details (7.13 / 8.18)', async () => {
+  it('shows the purchase-details fold + documents panel for a linked receipt (7.13 / 8.18 / 8.19)', async () => {
     mockGetPayment.mockResolvedValueOnce(makePayment({ receiptId: 'r-42' }));
-    mockGetReceipt.mockResolvedValueOnce({
+    // Resolved (not Once) — the documents panel fetches eagerly and the fold
+    // fetches on expand; both read the same receipt.
+    mockGetReceipt.mockResolvedValue({
       id: 'r-42',
+      source: 'upload',
       items: [
         {
           id: 'i1',
@@ -216,8 +220,7 @@ describe('PaymentDetailClient', () => {
     });
     render(<PaymentDetailClient paymentId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('payment-purchase-details')).toBeInTheDocument());
-    // Collapsed by default → no fetch until the user expands.
-    expect(mockGetReceipt).not.toHaveBeenCalled();
+    expect(screen.getByTestId('payment-documents')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('purchase-details-toggle'));
     await waitFor(() =>
       expect(screen.getByTestId('purchase-details-receipt-link')).toHaveAttribute(

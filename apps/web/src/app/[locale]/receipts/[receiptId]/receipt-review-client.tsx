@@ -371,13 +371,25 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   return (
     <main className="container mx-auto max-w-5xl space-y-4 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link
-          href="/receipts"
-          className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-          data-testid="receipt-review-back"
-        >
-          ← {t('back')}
-        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link
+            href="/receipts"
+            className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+            data-testid="receipt-review-back"
+          >
+            ← {t('back')}
+          </Link>
+          {/* 8.19 — this receipt proves a payment; link back to it. */}
+          {receipt.paymentId && (
+            <Link
+              href={`/payments/${receipt.paymentId}`}
+              className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+              data-testid="receipt-review-transaction-link"
+            >
+              {t('viewTransaction')} →
+            </Link>
+          )}
+        </div>
         <ReceiptStatusPill status={receipt.status} />
       </div>
 

@@ -18,7 +18,7 @@ import {
   type PaymentCommentListHandle,
 } from '@/components/payment/PaymentCommentList';
 import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
-import { PaymentDocumentsPlaceholder } from '@/components/payment/PaymentDocumentsPlaceholder';
+import { PaymentDocuments } from '@/components/payment/PaymentDocuments';
 import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
 import { PaymentPlanSection } from '@/components/payment/PaymentPlanSection';
 import { PaymentPurchaseDetails } from '@/components/payment/PaymentPurchaseDetails';
@@ -366,13 +366,15 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         />
       )}
 
-      {/* 7.13 / 8.18 — a confirmed receipt is this payment's proving document;
-          its products/services fold open here (lazy-loaded on expand). */}
+      {/* 7.13 / 8.18 / 8.19 — the linked receipt is this payment's proving
+          document: its items fold open (purchase details) and its file(s) are
+          viewable (documents). Both are visible to any payment co-viewer. */}
       {payment.receiptId && (
-        <PaymentPurchaseDetails receiptId={payment.receiptId} currency={payment.currency} />
+        <>
+          <PaymentPurchaseDetails receiptId={payment.receiptId} currency={payment.currency} />
+          <PaymentDocuments receiptId={payment.receiptId} />
+        </>
       )}
-
-      <PaymentDocumentsPlaceholder />
 
       <section
         className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"

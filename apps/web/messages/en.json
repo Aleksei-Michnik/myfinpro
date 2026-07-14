@@ -808,7 +808,10 @@
     },
     "documents": {
       "title": "Documents",
-      "comingSoon": "Receipts, photos, and PDFs are coming in Phase 9."
+      "loading": "Loading documents…",
+      "view": "View",
+      "none": "No document file for this receipt.",
+      "unavailable": "Documents aren't available for this receipt."
     },
     "schedulePlan": {
       "occurrenceTitle": "Schedule / Plan",
@@ -1125,6 +1128,7 @@
     },
     "review": {
       "back": "Back to receipts",
+      "viewTransaction": "View transaction",
       "notFound": "Receipt not found",
       "loadFailed": "Could not load the receipt",
       "previewTitle": "Receipt preview",
