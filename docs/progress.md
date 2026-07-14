@@ -8068,5 +8068,35 @@ reaches the model; and the shared extraction output cap was raised
 (8192 → 16384, `EXTRACTION_MAX_OUTPUT_TOKENS`, DRY across both providers) for
 large grocery receipts. The provider interface became `resolveContent` (the
 adapter owns both the endpoint and the reduction). Verified the reducer
-against the real captured document (30495 → 4101 chars, no PII leak). **Live
-staging re-verification is the remaining step.**
+against the real captured document (30495 → 4101 chars, no PII leak).
+Staging verification **passed** — the reported receipt now extracts merchant,
+total and all 39 line items into REVIEW.
+
+### 8.18 - Accessible receipt document viewer + payment-view purchase details
+
+Follow-up UX from the same review (the receipt page's inline preview was hard
+to read, and a payment gave no at-a-glance list of what was bought).
+
+**Receipt page — popup document viewer.** New `ReceiptDocumentViewer`: a
+portal-mounted, focus-trapped dialog (the app's standard modal pattern —
+ESC/backdrop close, focus snapshot+restore, Tab trap). Images support zoom
+(buttons, wheel, `+`/`-`/`0` keys) and drag-to-pan; PDFs render in the
+browser's native viewer with a download fallback. The review page's inline
+image is now a button that opens it; PDFs get a "view document" button. URL
+receipts keep their external link (nothing to embed). Uploaded blob is reused
+from the existing preview fetch.
+
+**Payment view — foldable purchase details.** New `PaymentPurchaseDetails`
+replaces the bare "view receipt" link with an accessible disclosure
+(`aria-expanded`/`aria-controls`) that **lazy-loads** the linked receipt on
+first expand and lists its products/services (name + brand, quantity × unit,
+line total in the payment currency), plus the full-receipt link. A receipt is
+private to its uploader, so a co-viewer of a shared payment who can't read it
+gets a soft "unavailable" note (404/403) rather than an error; other failures
+show the retry banner.
+
+**Tests.** `ReceiptDocumentViewer` (image zoom controls, PDF branch, loading,
+ESC/backdrop/close) + `PaymentPurchaseDetails` (collapsed-by-default, lazy
+load + list + currency, fetch-once across toggles, empty, 404-unavailable) +
+updated `payment-detail` spec for the fold. EN+HE strings; orphaned
+`receiptTitle` removed. web **1184** green; typecheck clean.
