@@ -298,7 +298,7 @@ export class ReceiptService {
 
   /** GET /receipts/:id */
   async getOne(userId: string, id: string): Promise<ReceiptResponseDto> {
-    const row = await this.loadOwnedOrThrow(userId, id);
+    const row = await this.loadViewableOrThrow(userId, id);
     return mapReceiptToDto(row);
   }
 
@@ -307,7 +307,7 @@ export class ReceiptService {
     userId: string,
     id: string,
   ): Promise<{ stream: NodeJS.ReadableStream; mimeType: string; sizeBytes: number }> {
-    const row = await this.loadOwnedOrThrow(userId, id);
+    const row = await this.loadViewableOrThrow(userId, id);
     if (!row.fileRef) {
       throw new NotFoundException({
         message: 'Receipt has no stored file',
@@ -936,6 +936,35 @@ export class ReceiptService {
       });
     }
     return row as ReceiptWithRelations;
+  }
+
+  /**
+   * Phase 8.19 — read access for VIEW paths (getOne, openFile). A receipt is
+   * a payment's proving document, so anyone who can see the linked payment may
+   * view it and download its file — the uploader, or a member of the group the
+   * payment is attributed to (delegated to `PaymentService.assertVisible`).
+   * Mutations keep `loadOwnedOrThrow` (uploader-only). A receipt the caller
+   * can neither own nor reach via its payment 404s, same as the owned lookup.
+   */
+  private async loadViewableOrThrow(userId: string, id: string): Promise<ReceiptWithRelations> {
+    const row = await this.prisma.receipt.findFirst({ where: { id }, include: RECEIPT_INCLUDE });
+    if (row) {
+      if (row.uploadedById === userId) return row as ReceiptWithRelations;
+      if (row.paymentId) {
+        const visible = await this.paymentService
+          .assertVisible(userId, row.paymentId)
+          .then(() => true)
+          .catch((err) => {
+            if (err instanceof NotFoundException) return false;
+            throw err;
+          });
+        if (visible) return row as ReceiptWithRelations;
+      }
+    }
+    throw new NotFoundException({
+      message: 'Receipt not found',
+      errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
+    });
   }
 
   /**

@@ -37,6 +37,7 @@ describe('ReceiptService', () => {
     createExpenseWithinTx: jest.fn(),
     publishCreated: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
+    assertVisible: jest.fn().mockResolvedValue(undefined),
   };
   const storageMock = {
     save: jest.fn(),
@@ -306,18 +307,54 @@ describe('ReceiptService', () => {
   });
 
   describe('getOne / openFile', () => {
-    it("404s for another user's receipt without existence leak", async () => {
-      prismaMock.receipt.findFirst.mockResolvedValue(null);
+    it('the uploader views their own receipt without a payment check', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow());
+      const dto = await service.getOne('u-1', 'r-1');
+      expect(dto.id).toBe('r-1');
+      expect(paymentServiceMock.assertVisible).not.toHaveBeenCalled();
+      expect(prismaMock.receipt.findFirst.mock.calls[0][0].where).toEqual({ id: 'r-1' });
+    });
+
+    it('404s for a foreign receipt with no linked payment (no existence leak)', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ uploadedById: 'owner', paymentId: null }),
+      );
       try {
         await service.getOne('intruder', 'r-1');
         throw new Error('should have thrown');
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_NOT_FOUND');
       }
-      expect(prismaMock.receipt.findFirst.mock.calls[0][0].where).toEqual({
-        id: 'r-1',
-        uploadedById: 'intruder',
-      });
+      expect(paymentServiceMock.assertVisible).not.toHaveBeenCalled();
+    });
+
+    it('a co-viewer of the linked payment may view and download the receipt (8.19)', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ uploadedById: 'owner', paymentId: 'pay-1' }),
+      );
+      storageMock.openStream.mockResolvedValue({ stream: 'STREAM', sizeBytes: 1234 });
+
+      const dto = await service.getOne('group-member', 'r-1');
+      expect(dto.id).toBe('r-1');
+      expect(paymentServiceMock.assertVisible).toHaveBeenCalledWith('group-member', 'pay-1');
+
+      const file = await service.openFile('group-member', 'r-1');
+      expect(file.mimeType).toBe('image/jpeg');
+    });
+
+    it("404s when the caller cannot see the receipt's linked payment (8.19)", async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ uploadedById: 'owner', paymentId: 'pay-1' }),
+      );
+      paymentServiceMock.assertVisible.mockRejectedValueOnce(
+        new NotFoundException({ message: 'no', errorCode: 'PAYMENT_NOT_FOUND' }),
+      );
+      try {
+        await service.getOne('outsider', 'r-1');
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_NOT_FOUND');
+      }
     });
 
     it('streams the stored file with its mime type', async () => {
