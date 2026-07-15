@@ -112,7 +112,7 @@ export class CategoryController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Delete a category, optionally reassigning its payments to a replacement',
+    summary: 'Delete a category, optionally reassigning its transactions to a replacement',
   })
   @ApiParam({ name: 'id', description: 'Category ID (UUID)' })
   @ApiOkResponse({ description: 'Category deleted' })

@@ -2,10 +2,10 @@ import { firstValueFrom, take, toArray } from 'rxjs';
 import { EventBus } from './event-bus.service';
 import type { RealtimeEvent } from './events.types';
 
-const ev = (userIds: string[], paymentId = 'p1'): RealtimeEvent => ({
-  type: 'payment.deleted',
+const ev = (userIds: string[], transactionId = 'p1'): RealtimeEvent => ({
+  type: 'transaction.deleted',
   userIds,
-  paymentId,
+  transactionId,
 });
 
 describe('EventBus', () => {
@@ -21,7 +21,7 @@ describe('EventBus', () => {
     const collected = firstValueFrom(bus.subscribeForUser('u1').pipe(take(1)));
     bus.publish(ev(['u1']));
     const received = await collected;
-    expect(received).toMatchObject({ type: 'payment.deleted', paymentId: 'p1' });
+    expect(received).toMatchObject({ type: 'transaction.deleted', transactionId: 'p1' });
   });
 
   it('filters out events not addressed to the user (multicast)', async () => {
@@ -34,9 +34,9 @@ describe('EventBus', () => {
 
     const u1 = await u1Events;
     const u2 = await u2Events;
-    expect(u1.map((e) => (e as { paymentId: string }).paymentId)).toEqual(['p1', 'p3']);
+    expect(u1.map((e) => (e as { transactionId: string }).transactionId)).toEqual(['p1', 'p3']);
     expect(u2).toHaveLength(1);
-    expect((u2[0] as { paymentId: string }).paymentId).toBe('p2');
+    expect((u2[0] as { transactionId: string }).transactionId).toBe('p2');
   });
 
   it('drops events with empty userIds', async () => {

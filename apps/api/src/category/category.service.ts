@@ -171,7 +171,7 @@ export class CategoryService {
     if (dto.color !== undefined) data.color = dto.color;
 
     if (dto.direction !== undefined && dto.direction !== existing.direction) {
-      const usage = await this.prisma.payment.count({ where: { categoryId: id } });
+      const usage = await this.prisma.transaction.count({ where: { categoryId: id } });
       if (usage > 0) {
         throw new ConflictException({
           message: 'Cannot change direction of a category that is in use',
@@ -218,7 +218,7 @@ export class CategoryService {
     }
     await this.requireOwner(existing, userId);
 
-    const usage = await this.prisma.payment.count({ where: { categoryId: id } });
+    const usage = await this.prisma.transaction.count({ where: { categoryId: id } });
 
     if (usage === 0) {
       await this.prisma.category.delete({ where: { id } });
@@ -226,13 +226,13 @@ export class CategoryService {
         slug: existing.slug,
         usage: 0,
       });
-      this.logger.log(`Category ${id} deleted by user ${userId} (no payments)`);
+      this.logger.log(`Category ${id} deleted by user ${userId} (no transactions)`);
       return { deleted: true, reassigned: 0 };
     }
 
     if (!q.replaceWithCategoryId) {
       throw new ConflictException({
-        message: 'Category is in use; provide replaceWithCategoryId to reassign payments',
+        message: 'Category is in use; provide replaceWithCategoryId to reassign transactions',
         errorCode: CATEGORY_ERRORS.CATEGORY_IN_USE,
         details: { usage },
       });
@@ -266,7 +266,7 @@ export class CategoryService {
     }
 
     const reassigned = await this.prisma.$transaction(async (tx) => {
-      const upd = await tx.payment.updateMany({
+      const upd = await tx.transaction.updateMany({
         where: { categoryId: id },
         data: { categoryId: q.replaceWithCategoryId! },
       });
@@ -286,7 +286,7 @@ export class CategoryService {
     });
 
     this.logger.log(
-      `Category ${id} deleted by user ${userId} after reassigning ${reassigned} payments`,
+      `Category ${id} deleted by user ${userId} after reassigning ${reassigned} transactions`,
     );
     return { deleted: true, reassigned };
   }

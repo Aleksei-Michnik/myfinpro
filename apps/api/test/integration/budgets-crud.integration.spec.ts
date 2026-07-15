@@ -1,8 +1,8 @@
 import * as crypto from 'crypto';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**
@@ -658,7 +658,7 @@ describe('Budgets API (integration)', () => {
     expect(groupIds).toContain(groupBudget.id);
     expect(groupIds).not.toContain(personal.id);
 
-    // Outsider on the group scope → 403 (mirrors GET /payments).
+    // Outsider on the group scope → 403 (mirrors GET /transactions).
     const forbidden = await request(app.getHttpServer())
       .get(`/api/v1/budgets?scope=group:${groupId}`)
       .set(auth(outsider.accessToken))

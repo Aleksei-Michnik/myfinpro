@@ -3,11 +3,11 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryService } from '../category/category.service';
-import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductService } from '../product/product.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
+import { TransactionService } from '../transaction/transaction.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptService } from './receipt.service';
 
@@ -27,12 +27,12 @@ describe('ReceiptService', () => {
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn(), updateMany: jest.fn() },
     merchant: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     product: { findMany: jest.fn() },
-    payment: { findFirst: jest.fn(), findUnique: jest.fn() },
+    transaction: { findFirst: jest.fn(), findUnique: jest.fn() },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(),
   };
   const categoryMock = { list: jest.fn() };
-  const paymentServiceMock = {
+  const transactionServiceMock = {
     validateExpenseInputs: jest.fn(),
     createExpenseWithinTx: jest.fn(),
     publishCreated: jest.fn().mockResolvedValue({}),
@@ -72,7 +72,7 @@ describe('ReceiptService', () => {
     rawExtraction: null,
     failureReason: null,
     uploadedById: 'u-1',
-    paymentId: null,
+    transactionId: null,
     createdAt: new Date('2026-07-04T10:00:00.000Z'),
     updatedAt: new Date('2026-07-04T10:00:00.000Z'),
     items: [],
@@ -88,7 +88,7 @@ describe('ReceiptService', () => {
         { provide: ReceiptStorageService, useValue: storageMock },
         { provide: EventBus, useValue: eventBusMock },
         { provide: CategoryService, useValue: categoryMock },
-        { provide: PaymentService, useValue: paymentServiceMock },
+        { provide: TransactionService, useValue: transactionServiceMock },
         { provide: ProductService, useValue: productServiceMock },
         { provide: getQueueToken(RECEIPT_EXTRACTIONS_QUEUE), useValue: queueMock },
       ],
@@ -307,17 +307,17 @@ describe('ReceiptService', () => {
   });
 
   describe('getOne / openFile', () => {
-    it('the uploader views their own receipt without a payment check', async () => {
+    it('the uploader views their own receipt without a transaction check', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(makeRow());
       const dto = await service.getOne('u-1', 'r-1');
       expect(dto.id).toBe('r-1');
-      expect(paymentServiceMock.assertVisible).not.toHaveBeenCalled();
+      expect(transactionServiceMock.assertVisible).not.toHaveBeenCalled();
       expect(prismaMock.receipt.findFirst.mock.calls[0][0].where).toEqual({ id: 'r-1' });
     });
 
-    it('404s for a foreign receipt with no linked payment (no existence leak)', async () => {
+    it('404s for a foreign receipt with no linked transaction (no existence leak)', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(
-        makeRow({ uploadedById: 'owner', paymentId: null }),
+        makeRow({ uploadedById: 'owner', transactionId: null }),
       );
       try {
         await service.getOne('intruder', 'r-1');
@@ -325,29 +325,29 @@ describe('ReceiptService', () => {
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_NOT_FOUND');
       }
-      expect(paymentServiceMock.assertVisible).not.toHaveBeenCalled();
+      expect(transactionServiceMock.assertVisible).not.toHaveBeenCalled();
     });
 
-    it('a co-viewer of the linked payment may view and download the receipt (8.19)', async () => {
+    it('a co-viewer of the linked transaction may view and download the receipt (8.19)', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(
-        makeRow({ uploadedById: 'owner', paymentId: 'pay-1' }),
+        makeRow({ uploadedById: 'owner', transactionId: 'pay-1' }),
       );
       storageMock.openStream.mockResolvedValue({ stream: 'STREAM', sizeBytes: 1234 });
 
       const dto = await service.getOne('group-member', 'r-1');
       expect(dto.id).toBe('r-1');
-      expect(paymentServiceMock.assertVisible).toHaveBeenCalledWith('group-member', 'pay-1');
+      expect(transactionServiceMock.assertVisible).toHaveBeenCalledWith('group-member', 'pay-1');
 
       const file = await service.openFile('group-member', 'r-1');
       expect(file.mimeType).toBe('image/jpeg');
     });
 
-    it("404s when the caller cannot see the receipt's linked payment (8.19)", async () => {
+    it("404s when the caller cannot see the receipt's linked transaction (8.19)", async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(
-        makeRow({ uploadedById: 'owner', paymentId: 'pay-1' }),
+        makeRow({ uploadedById: 'owner', transactionId: 'pay-1' }),
       );
-      paymentServiceMock.assertVisible.mockRejectedValueOnce(
-        new NotFoundException({ message: 'no', errorCode: 'PAYMENT_NOT_FOUND' }),
+      transactionServiceMock.assertVisible.mockRejectedValueOnce(
+        new NotFoundException({ message: 'no', errorCode: 'TRANSACTION_NOT_FOUND' }),
       );
       try {
         await service.getOne('outsider', 'r-1');
@@ -557,21 +557,21 @@ describe('ReceiptService', () => {
           receiptItem: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
         }),
       );
-      paymentServiceMock.validateExpenseInputs.mockResolvedValue(
+      transactionServiceMock.validateExpenseInputs.mockResolvedValue(
         new Date('2026-07-01T12:00:00.000Z'),
       );
-      paymentServiceMock.createExpenseWithinTx.mockResolvedValue({
+      transactionServiceMock.createExpenseWithinTx.mockResolvedValue({
         id: 'p-1',
         createdById: 'u-1',
         attributions: [{ scopeType: 'personal', userId: 'u-1', groupId: null, group: null }],
       });
     });
 
-    it('creates the payment + document, links the receipt, and creates a new merchant', async () => {
+    it('creates the transaction + document, links the receipt, and creates a new merchant', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
       txMerchant.create.mockResolvedValue({ id: 'm-new', name: 'Shufersal' });
       prismaMock.receipt.findUnique.mockResolvedValue(
-        reviewRow({ status: 'CONFIRMED', paymentId: 'p-1', merchantId: 'm-new' }),
+        reviewRow({ status: 'CONFIRMED', transactionId: 'p-1', merchantId: 'm-new' }),
       );
 
       const out = await service.confirm('u-1', 'r-1', {
@@ -579,7 +579,7 @@ describe('ReceiptService', () => {
         attributions: [{ scope: 'personal' }],
       });
 
-      expect(paymentServiceMock.validateExpenseInputs).toHaveBeenCalledWith(
+      expect(transactionServiceMock.validateExpenseInputs).toHaveBeenCalledWith(
         'u-1',
         expect.objectContaining({ amountCents: 4590, currency: 'ILS', categoryId: 'cat-1' }),
       );
@@ -587,8 +587,8 @@ describe('ReceiptService', () => {
       expect(txMerchant.create).toHaveBeenCalledWith({
         data: { name: 'Shufersal', normalizedName: 'shufersal' },
       });
-      // Payment carries the money fields, merchant-name note, and the file document.
-      expect(paymentServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
+      // Transaction carries the money fields, merchant-name note, and the file document.
+      expect(transactionServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
         expect.anything(),
         'u-1',
         expect.objectContaining({
@@ -599,28 +599,28 @@ describe('ReceiptService', () => {
           document: expect.objectContaining({ kind: 'receipt', fileRef: '2026/07/abc.jpg' }),
         }),
       );
-      // Receipt linked to the payment + merchant, marked CONFIRMED.
+      // Receipt linked to the transaction + merchant, marked CONFIRMED.
       expect(txReceipt.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             status: 'CONFIRMED',
-            paymentId: 'p-1',
+            transactionId: 'p-1',
             merchantId: 'm-new',
           }),
         }),
       );
-      expect(paymentServiceMock.publishCreated).toHaveBeenCalled();
+      expect(transactionServiceMock.publishCreated).toHaveBeenCalled();
       const actions = prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action);
       expect(actions).toEqual(expect.arrayContaining(['RECEIPT_CONFIRMED', 'MERCHANT_CREATED']));
       expect(out.status).toBe('CONFIRMED');
-      expect(out.paymentId).toBe('p-1');
+      expect(out.transactionId).toBe('p-1');
     });
 
     it('reuses an existing registry merchant without creating one', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
       txMerchant.findUnique.mockResolvedValue({ id: 'm-existing', name: 'Shufersal' });
       prismaMock.receipt.findUnique.mockResolvedValue(
-        reviewRow({ status: 'CONFIRMED', paymentId: 'p-1', merchantId: 'm-existing' }),
+        reviewRow({ status: 'CONFIRMED', transactionId: 'p-1', merchantId: 'm-existing' }),
       );
 
       await service.confirm('u-1', 'r-1', {
@@ -639,7 +639,7 @@ describe('ReceiptService', () => {
         reviewRow({ source: 'url', fileRef: null, extractedMerchantName: null }),
       );
       prismaMock.receipt.findUnique.mockResolvedValue(
-        reviewRow({ source: 'url', fileRef: null, status: 'CONFIRMED', paymentId: 'p-1' }),
+        reviewRow({ source: 'url', fileRef: null, status: 'CONFIRMED', transactionId: 'p-1' }),
       );
 
       await service.confirm('u-1', 'r-1', {
@@ -647,7 +647,7 @@ describe('ReceiptService', () => {
         attributions: [{ scope: 'personal' }],
       });
 
-      expect(paymentServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
+      expect(transactionServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
         expect.anything(),
         'u-1',
         expect.objectContaining({ document: null }),
@@ -683,20 +683,20 @@ describe('ReceiptService', () => {
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
       }
-      expect(paymentServiceMock.createExpenseWithinTx).not.toHaveBeenCalled();
+      expect(transactionServiceMock.createExpenseWithinTx).not.toHaveBeenCalled();
     });
 
-    it('propagates payment-input validation failures before writing', async () => {
+    it('propagates transaction-input validation failures before writing', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
-      paymentServiceMock.validateExpenseInputs.mockRejectedValue(new Error('bad category'));
+      transactionServiceMock.validateExpenseInputs.mockRejectedValue(new Error('bad category'));
       await expect(
         service.confirm('u-1', 'r-1', { categoryId: 'c', attributions: [{ scope: 'personal' }] }),
       ).rejects.toThrow('bad category');
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
     });
 
-    it('rejects confirming a receipt already attached to a payment', async () => {
-      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow({ paymentId: 'pay-1' }));
+    it('rejects confirming a receipt already attached to a transaction', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow({ transactionId: 'pay-1' }));
       try {
         await service.confirm('u-1', 'r-1', {
           categoryId: 'c',
@@ -706,13 +706,13 @@ describe('ReceiptService', () => {
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
       }
-      expect(paymentServiceMock.validateExpenseInputs).not.toHaveBeenCalled();
+      expect(transactionServiceMock.validateExpenseInputs).not.toHaveBeenCalled();
     });
   });
 
-  describe('attach to payment (8.15)', () => {
-    it('createFromUpload with a paymentId links the receipt after guarding the payment', async () => {
-      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
+  describe('attach to transaction (8.15)', () => {
+    it('createFromUpload with a transactionId links the receipt after guarding the transaction', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
       prismaMock.receipt.findUnique.mockResolvedValue(null); // no receipt yet
       storageMock.save.mockResolvedValue({
         fileRef: '2026/07/x.jpg',
@@ -725,38 +725,38 @@ describe('ReceiptService', () => {
 
       const dto = await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
 
-      expect(prismaMock.payment.findFirst).toHaveBeenCalledWith(
+      expect(prismaMock.transaction.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'pay-1', createdById: 'u-1' } }),
       );
       expect(prismaMock.receipt.create.mock.calls[0][0].data).toEqual(
-        expect.objectContaining({ paymentId: 'pay-1', source: 'upload' }),
+        expect.objectContaining({ transactionId: 'pay-1', source: 'upload' }),
       );
       expect(queueMock.add).toHaveBeenCalled();
-      expect(dto.paymentId).toBe('pay-1');
+      expect(dto.transactionId).toBe('pay-1');
     });
 
-    it('404s attaching to a payment the caller did not create', async () => {
-      prismaMock.payment.findFirst.mockResolvedValue(null);
+    it('404s attaching to a transaction the caller did not create', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(null);
       await expect(
         service.createFromUrl('u-1', { url: 'https://r.example/x' }, 'pay-x'),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prismaMock.receipt.create).not.toHaveBeenCalled();
     });
 
-    it('rejects attaching a second receipt to the same payment', async () => {
-      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
+    it('rejects attaching a second receipt to the same transaction', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
       prismaMock.receipt.findUnique.mockResolvedValue({ id: 'r-existing' });
       try {
         await service.createFromUrl('u-1', { url: 'https://r.example/x' }, 'pay-1');
         throw new Error('should have thrown');
       } catch (err) {
-        expect(codeOf(err)).toBe('PAYMENT_ALREADY_HAS_RECEIPT');
+        expect(codeOf(err)).toBe('TRANSACTION_ALREADY_HAS_RECEIPT');
       }
       expect(prismaMock.receipt.create).not.toHaveBeenCalled();
     });
 
-    it('rejects attaching to a non-expense (IN) payment', async () => {
-      prismaMock.payment.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'IN' });
+    it('rejects attaching to a non-expense (IN) transaction', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'IN' });
       try {
         await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
         throw new Error('should have thrown');
@@ -771,7 +771,7 @@ describe('ReceiptService', () => {
     const attachedReview = (over: Record<string, unknown> = {}) =>
       makeRow({
         status: 'REVIEW',
-        paymentId: 'pay-1',
+        transactionId: 'pay-1',
         currency: 'EUR',
         totalCents: 3400,
         items: [
@@ -785,18 +785,18 @@ describe('ReceiptService', () => {
       prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
         cb({ receipt: prismaMock.receipt, receiptItem: prismaMock.receiptItem }),
       );
-      prismaMock.payment.findUnique.mockResolvedValue({
+      prismaMock.transaction.findUnique.mockResolvedValue({
         occurredAt: new Date('2026-07-02T00:00:00.000Z'),
       });
       prismaMock.receipt.findUnique.mockResolvedValue(attachedReview());
     });
 
-    it('applies total (+currency) and dominant category to the payment, then CONFIRMS', async () => {
+    it('applies total (+currency) and dominant category to the transaction, then CONFIRMS', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(attachedReview());
 
       await service.reconcile('u-1', 'r-1', { applyTotal: true, applyCategory: true });
 
-      expect(paymentServiceMock.update).toHaveBeenCalledWith('u-1', 'pay-1', {
+      expect(transactionServiceMock.update).toHaveBeenCalledWith('u-1', 'pay-1', {
         amountCents: 3400,
         currency: 'EUR',
         categoryId: 'cat-food', // 3000 > 400
@@ -809,26 +809,26 @@ describe('ReceiptService', () => {
       );
     });
 
-    it('keeps the payment untouched when both flags are false', async () => {
+    it('keeps the transaction untouched when both flags are false', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(attachedReview());
 
       await service.reconcile('u-1', 'r-1', { applyTotal: false, applyCategory: false });
 
-      expect(paymentServiceMock.update).not.toHaveBeenCalled();
+      expect(transactionServiceMock.update).not.toHaveBeenCalled();
       expect(prismaMock.receipt.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { status: 'CONFIRMED' } }),
       );
     });
 
-    it('rejects reconciling a receipt with no linked payment', async () => {
-      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview({ paymentId: null }));
+    it('rejects reconciling a receipt with no linked transaction', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview({ transactionId: null }));
       try {
         await service.reconcile('u-1', 'r-1', { applyTotal: true, applyCategory: false });
         throw new Error('should have thrown');
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_NOT_ATTACHED');
       }
-      expect(paymentServiceMock.update).not.toHaveBeenCalled();
+      expect(transactionServiceMock.update).not.toHaveBeenCalled();
     });
   });
 

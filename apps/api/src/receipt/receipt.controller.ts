@@ -142,7 +142,7 @@ export class ReceiptController {
     summary: 'Compose a receipt manually from scanned products',
     description:
       'No extraction runs — the receipt is created in REVIEW with every line pre-linked to ' +
-      'its registry product and the total summed server-side. Confirm creates the payment ' +
+      'its registry product and the total summed server-side. Confirm creates the transaction ' +
       'like any other receipt.',
   })
   @ApiOkResponse({ description: 'Receipt created in REVIEW', type: ReceiptResponseDto })
@@ -258,15 +258,15 @@ export class ReceiptController {
   @Post(':id/confirm')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Confirm a reviewed receipt → create its payment',
+    summary: 'Confirm a reviewed receipt → create its transaction',
     description:
-      'Creates one OUT / ONE_TIME payment from the reviewed receipt (total, currency, date, ' +
+      'Creates one OUT / ONE_TIME transaction from the reviewed receipt (total, currency, date, ' +
       'items) with the given primary category and attribution scopes, attaches the file as a ' +
       'receipt document, and creates the merchant in the global registry when needed. REVIEW ' +
       'only; total + currency must be set.',
   })
   @ApiOkResponse({
-    description: 'Confirmed receipt (now linked to its payment)',
+    description: 'Confirmed receipt (now linked to its transaction)',
     type: ReceiptResponseDto,
   })
   @ApiNotFoundResponse({ description: 'Not found / not the uploader / unknown category' })
@@ -285,12 +285,12 @@ export class ReceiptController {
   @Post(':id/reconcile')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Reconcile an attached receipt with its payment',
+    summary: 'Reconcile an attached receipt with its transaction',
     description:
-      'Confirm step for a receipt attached to an existing payment: flips REVIEW → CONFIRMED ' +
-      'without creating a payment, and per the flags overwrites the payment total (and ' +
+      'Confirm step for a receipt attached to an existing transaction: flips REVIEW → CONFIRMED ' +
+      'without creating a transaction, and per the flags overwrites the transaction total (and ' +
       'currency) and/or category from the reviewed receipt. Item/product links are saved ' +
-      'regardless. REVIEW only; the receipt must be attached to a payment.',
+      'regardless. REVIEW only; the receipt must be attached to a transaction.',
   })
   @ApiOkResponse({ description: 'Reconciled receipt (now CONFIRMED)', type: ReceiptResponseDto })
   @ApiNotFoundResponse({ description: 'Not found / not the uploader' })
@@ -371,7 +371,7 @@ export class ReceiptController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete a non-confirmed receipt (file + rows)',
-    description: 'Confirmed receipts are managed through their payment (design §2.1).',
+    description: 'Confirmed receipts are managed through their transaction (design §2.1).',
   })
   @ApiNoContentResponse({ description: 'Deleted' })
   @ApiNotFoundResponse({ description: 'Not found / not the uploader' })

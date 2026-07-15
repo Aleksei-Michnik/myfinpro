@@ -1,30 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import {
-  PAYMENT_DIRECTIONS,
-  PAYMENT_TYPES,
-  PAYMENT_STATUSES,
-  PAYMENT_FREQUENCIES,
+  TRANSACTION_DIRECTIONS,
+  TRANSACTION_TYPES,
+  TRANSACTION_STATUSES,
+  TRANSACTION_FREQUENCIES,
   CATEGORY_OWNER_TYPES,
   CATEGORY_DIRECTIONS,
   ATTRIBUTION_SCOPE_TYPES,
-  PAYMENT_SORTS,
+  TRANSACTION_SORTS,
   AMORTIZATION_METHODS,
-  PAYMENT_PLAN_KINDS,
+  TRANSACTION_PLAN_KINDS,
   type AttributionScope,
-} from '../types/payment.types';
+} from '../types/transaction.types';
 
-describe('payment.types string-literal arrays', () => {
+describe('transaction.types string-literal arrays', () => {
   const arrays = {
-    PAYMENT_DIRECTIONS,
-    PAYMENT_TYPES,
-    PAYMENT_STATUSES,
-    PAYMENT_FREQUENCIES,
+    TRANSACTION_DIRECTIONS,
+    TRANSACTION_TYPES,
+    TRANSACTION_STATUSES,
+    TRANSACTION_FREQUENCIES,
     CATEGORY_OWNER_TYPES,
     CATEGORY_DIRECTIONS,
     ATTRIBUTION_SCOPE_TYPES,
-    PAYMENT_SORTS,
+    TRANSACTION_SORTS,
     AMORTIZATION_METHODS,
-    PAYMENT_PLAN_KINDS,
+    TRANSACTION_PLAN_KINDS,
   };
 
   it.each(Object.entries(arrays))('%s is a non-empty readonly tuple of strings', (_name, arr) => {
@@ -35,13 +35,13 @@ describe('payment.types string-literal arrays', () => {
     expect(JSON.parse(JSON.stringify(arr))).toEqual([...arr]);
   });
 
-  it('PAYMENT_DIRECTIONS contains exactly IN and OUT', () => {
-    expect([...PAYMENT_DIRECTIONS].sort()).toEqual(['IN', 'OUT']);
+  it('TRANSACTION_DIRECTIONS contains exactly IN and OUT', () => {
+    expect([...TRANSACTION_DIRECTIONS].sort()).toEqual(['IN', 'OUT']);
   });
 
-  it('PAYMENT_PLAN_KINDS is a subset of PAYMENT_TYPES', () => {
-    for (const k of PAYMENT_PLAN_KINDS) {
-      expect(PAYMENT_TYPES).toContain(k);
+  it('TRANSACTION_PLAN_KINDS is a subset of TRANSACTION_TYPES', () => {
+    for (const k of TRANSACTION_PLAN_KINDS) {
+      expect(TRANSACTION_TYPES).toContain(k);
     }
   });
 

@@ -21,7 +21,7 @@ export class UpdateCategoryDto {
   color?: string;
 
   /**
-   * Direction change is allowed only if the category has no Payment rows;
+   * Direction change is allowed only if the category has no Transaction rows;
    * otherwise the service rejects with CATEGORY_IN_USE.
    */
   @ApiPropertyOptional({ enum: [...CATEGORY_DIRECTIONS] })

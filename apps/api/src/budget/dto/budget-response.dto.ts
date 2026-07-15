@@ -1,11 +1,11 @@
 import { BUDGET_PERIODS, type BudgetPeriod } from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentCategorySummary } from '../../payment/dto/payment-summary.dto';
+import { TransactionCategorySummary } from '../../transaction/dto/transaction-summary.dto';
 
 /**
  * Budget representation returned by every /budgets endpoint (Phase 10.2).
  *
- * The optional `category` embed reuses the compact category shape payments
+ * The optional `category` embed reuses the compact category shape transactions
  * already expose so clients render both with one component. Progress is NOT
  * included here — it ships inline in iteration 10.5.
  */
@@ -20,8 +20,8 @@ export class BudgetResponseDto {
   @ApiPropertyOptional({ nullable: true }) groupId?: string | null;
 
   @ApiPropertyOptional({ nullable: true }) categoryId?: string | null;
-  @ApiPropertyOptional({ type: () => PaymentCategorySummary, nullable: true })
-  category?: PaymentCategorySummary | null;
+  @ApiPropertyOptional({ type: () => TransactionCategorySummary, nullable: true })
+  category?: TransactionCategorySummary | null;
 
   @ApiProperty({ enum: [...BUDGET_PERIODS] }) period!: BudgetPeriod;
   @ApiPropertyOptional({ nullable: true, description: 'CUSTOM only (ISO 8601).' })

@@ -8,9 +8,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { computePaymentRecipients } from '../payment/utils/payment-event-recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventBus } from '../realtime/event-bus.service';
+import { computeTransactionRecipients } from '../transaction/utils/transaction-event-recipients';
 import { BUDGET_ERRORS } from './constants/budget-errors';
 import { BudgetListResponseDto } from './dto/budget-list-response.dto';
 import { BudgetResponseDto } from './dto/budget-response.dto';
@@ -18,7 +18,7 @@ import { CreateBudgetDto } from './dto/create-budget.dto';
 import { ListBudgetsQueryDto } from './dto/list-budgets-query.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 
-/** Compact category embed — same select payments use in their summaries. */
+/** Compact category embed — same select transactions use in their summaries. */
 const CATEGORY_SELECT = {
   select: { id: true, slug: true, name: true, icon: true, color: true },
 } as const;
@@ -80,7 +80,7 @@ export class BudgetService {
   ) {}
 
   async create(userId: string, dto: CreateBudgetDto): Promise<BudgetResponseDto> {
-    // 1. Scope — exactly one of ownerId/groupId, mirroring payment_attributions.
+    // 1. Scope — exactly one of ownerId/groupId, mirroring transaction_attributions.
     let ownerId: string | null = null;
     let groupId: string | null = null;
     let groupCurrency: string | null = null;
@@ -183,7 +183,7 @@ export class BudgetService {
         select: { id: true },
       });
       if (!membership) {
-        // Same contract as GET /payments?scope=group:<id> for a non-member.
+        // Same contract as GET /transactions?scope=group:<id> for a non-member.
         throw new ForbiddenException({
           message: 'Requested group scope is not accessible',
           errorCode: BUDGET_ERRORS.BUDGET_FORBIDDEN,
@@ -488,7 +488,7 @@ export class BudgetService {
    * Category guard (design §5): the category must exist, be visible in the
    * budget's scope — system categories, the owner's personal categories
    * (personal scope) or that group's categories (group scope) — and accept
-   * OUT payments (direction OUT or BOTH). Everything else is a uniform 400
+   * OUT transactions (direction OUT or BOTH). Everything else is a uniform 400
    * `BUDGET_INVALID_CATEGORY` (no existence leak on foreign categories).
    */
   private async validateCategoryForScope(
@@ -536,13 +536,13 @@ export class BudgetService {
 
   /**
    * Advisory `budget.updated` SSE on every mutation (design §2.6). The
-   * budget's scope maps 1:1 onto the attribution shape the payment
+   * budget's scope maps 1:1 onto the attribution shape the transaction
    * recipient util already understands, so recipients — owner (personal)
    * or all group members (group), plus the acting user — are computed by
-   * the same code path payment events use.
+   * the same code path transaction events use.
    */
   private async publishBudgetUpdated(budget: BudgetWithCategory, actorId: string): Promise<void> {
-    const recipients = await computePaymentRecipients(
+    const recipients = await computeTransactionRecipients(
       this.prisma,
       [{ scopeType: budget.scopeType, userId: budget.ownerId, groupId: budget.groupId }],
       actorId,

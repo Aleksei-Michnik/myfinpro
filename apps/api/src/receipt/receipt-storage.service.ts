@@ -113,7 +113,7 @@ export class ReceiptStorageService {
     // HEIC (the iPhone camera default) is accepted at the door but stored as
     // JPEG: vision LLM APIs reject `image/heic` and browsers can't render it
     // in previews (Phase 7.11). Converting once here fixes extraction, the
-    // review preview, and the PaymentDocument in one place.
+    // review preview, and the TransactionDocument in one place.
     if (mimeType === 'image/heic') {
       try {
         const converted = await heicConvert({

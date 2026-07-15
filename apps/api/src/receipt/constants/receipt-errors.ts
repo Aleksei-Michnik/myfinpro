@@ -1,6 +1,6 @@
 /**
  * Phase 7 — structured error codes for the receipt pipeline (design §4).
- * Mirrors the PAYMENT_ERRORS convention: the same const object also names
+ * Mirrors the TRANSACTION_ERRORS convention: the same const object also names
  * audit-log actions where they overlap.
  */
 export const RECEIPT_ERRORS = {
@@ -13,7 +13,7 @@ export const RECEIPT_ERRORS = {
   RECEIPT_ALREADY_CONFIRMED: 'RECEIPT_ALREADY_CONFIRMED',
   RECEIPT_ITEMS_INVALID: 'RECEIPT_ITEMS_INVALID',
   RECEIPT_NOT_ATTACHED: 'RECEIPT_NOT_ATTACHED',
-  PAYMENT_ALREADY_HAS_RECEIPT: 'PAYMENT_ALREADY_HAS_RECEIPT',
+  TRANSACTION_ALREADY_HAS_RECEIPT: 'TRANSACTION_ALREADY_HAS_RECEIPT',
   MERCHANT_NOT_FOUND: 'MERCHANT_NOT_FOUND',
 } as const;
 

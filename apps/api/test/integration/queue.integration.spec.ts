@@ -4,7 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import type { Queue } from 'bullmq';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { buildRedisConnection } from '../../src/config/redis.config';
-import { PAYMENT_OCCURRENCES_QUEUE } from '../../src/queue/queue.constants';
+import { TRANSACTION_OCCURRENCES_QUEUE } from '../../src/queue/queue.constants';
 
 /**
  * Integration test for the BullMQ queue infrastructure.
@@ -46,11 +46,11 @@ describe('Queue infrastructure (integration)', () => {
           }),
           inject: [ConfigService],
         }),
-        BullModule.registerQueue({ name: PAYMENT_OCCURRENCES_QUEUE }),
+        BullModule.registerQueue({ name: TRANSACTION_OCCURRENCES_QUEUE }),
       ],
     }).compile();
 
-    queue = module.get<Queue>(getQueueToken(PAYMENT_OCCURRENCES_QUEUE));
+    queue = module.get<Queue>(getQueueToken(TRANSACTION_OCCURRENCES_QUEUE));
   }, 60_000);
 
   afterAll(async () => {

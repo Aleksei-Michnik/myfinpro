@@ -3,27 +3,27 @@ import { INestApplication } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import {
-  PAYMENT_OCCURRENCES_QUEUE,
+  TRANSACTION_OCCURRENCES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
 } from '../../src/queue/queue.constants';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**
- * Phase 8.15 — attach a receipt to an existing payment + reconcile.
+ * Phase 8.15 — attach a receipt to an existing transaction + reconcile.
  *
- * Exercises `POST /payments/:id/receipt(-url)` (receipt born linked to the
- * payment) and `POST /receipts/:id/reconcile` (REVIEW → CONFIRMED without a
- * new payment, applying the receipt's total/category to the payment per the
+ * Exercises `POST /transactions/:id/receipt(-url)` (receipt born linked to the
+ * transaction) and `POST /receipts/:id/reconcile` (REVIEW → CONFIRMED without a
+ * new transaction, applying the receipt's total/category to the transaction per the
  * flags). Receipts are pushed to REVIEW via Prisma — the async worker is out
  * of scope here.
  */
-describe('attach receipt to payment + reconcile (integration)', () => {
+describe('attach receipt to transaction + reconcile (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let paymentQueue: Queue;
+  let transactionQueue: Queue;
   let receiptQueue: Queue;
   let redis: StartedTestContainer;
 
@@ -56,7 +56,7 @@ describe('attach receipt to payment + reconcile (integration)', () => {
     const ctx = await bootstrapTestApp();
     app = ctx.app;
     prisma = ctx.prisma;
-    paymentQueue = app.get(getQueueToken(PAYMENT_OCCURRENCES_QUEUE));
+    transactionQueue = app.get(getQueueToken(TRANSACTION_OCCURRENCES_QUEUE));
     receiptQueue = app.get(getQueueToken(RECEIPT_EXTRACTIONS_QUEUE));
 
     await seedSystemCategories(prisma);
@@ -74,7 +74,7 @@ describe('attach receipt to payment + reconcile (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (paymentQueue) await paymentQueue.close().catch(() => undefined);
+    if (transactionQueue) await transactionQueue.close().catch(() => undefined);
     if (receiptQueue) await receiptQueue.close().catch(() => undefined);
     if (app) await app.close();
     if (redis) await redis.stop();
@@ -88,17 +88,20 @@ describe('attach receipt to payment + reconcile (integration)', () => {
     await prisma.receipt.deleteMany({
       where: { uploadedById: { in: [alice.user.id, bob.user.id] } },
     });
-    await prisma.paymentAttribution.deleteMany({});
-    await prisma.payment.deleteMany({
+    await prisma.transactionAttribution.deleteMany({});
+    await prisma.transaction.deleteMany({
       where: { createdById: { in: [alice.user.id, bob.user.id] } },
     });
     await prisma.auditLog.deleteMany({ where: { userId: { in: [alice.user.id, bob.user.id] } } });
   });
 
-  /** Create an OUT ONE_TIME payment via the API and return its id. */
-  async function createPayment(token: string, over: Record<string, unknown> = {}): Promise<string> {
+  /** Create an OUT ONE_TIME transaction via the API and return its id. */
+  async function createTransaction(
+    token: string,
+    over: Record<string, unknown> = {},
+  ): Promise<string> {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/payments')
+      .post('/api/v1/transactions')
       .set(auth(token))
       .send({
         direction: 'OUT',
@@ -114,44 +117,44 @@ describe('attach receipt to payment + reconcile (integration)', () => {
     return res.body.id as string;
   }
 
-  it('1. attaches a URL receipt to a payment (born linked)', async () => {
-    const paymentId = await createPayment(alice.accessToken);
+  it('1. attaches a URL receipt to a transaction (born linked)', async () => {
+    const transactionId = await createTransaction(alice.accessToken);
     const res = await request(app.getHttpServer())
-      .post(`/api/v1/payments/${paymentId}/receipt-url`)
+      .post(`/api/v1/transactions/${transactionId}/receipt-url`)
       .set(auth(alice.accessToken))
       .send({ url: 'https://receipts.example.com/r/1' })
       .expect(201);
 
-    expect(res.body.paymentId).toBe(paymentId);
+    expect(res.body.transactionId).toBe(transactionId);
     expect(res.body.source).toBe('url');
     expect(res.body.status).toBe('UPLOADED');
   });
 
-  it("2. 404s attaching to another user's payment (no existence leak)", async () => {
-    const paymentId = await createPayment(bob.accessToken);
+  it("2. 404s attaching to another user's transaction (no existence leak)", async () => {
+    const transactionId = await createTransaction(bob.accessToken);
     await request(app.getHttpServer())
-      .post(`/api/v1/payments/${paymentId}/receipt-url`)
+      .post(`/api/v1/transactions/${transactionId}/receipt-url`)
       .set(auth(alice.accessToken))
       .send({ url: 'https://receipts.example.com/r/1' })
       .expect(404);
   });
 
-  it('3. rejects a second receipt on the same payment', async () => {
-    const paymentId = await createPayment(alice.accessToken);
+  it('3. rejects a second receipt on the same transaction', async () => {
+    const transactionId = await createTransaction(alice.accessToken);
     await request(app.getHttpServer())
-      .post(`/api/v1/payments/${paymentId}/receipt-url`)
+      .post(`/api/v1/transactions/${transactionId}/receipt-url`)
       .set(auth(alice.accessToken))
       .send({ url: 'https://receipts.example.com/r/1' })
       .expect(201);
     await request(app.getHttpServer())
-      .post(`/api/v1/payments/${paymentId}/receipt-url`)
+      .post(`/api/v1/transactions/${transactionId}/receipt-url`)
       .set(auth(alice.accessToken))
       .send({ url: 'https://receipts.example.com/r/2' })
       .expect(400);
   });
 
-  it('4. reconcile applies the total and dominant category to the payment', async () => {
-    const paymentId = await createPayment(alice.accessToken, {
+  it('4. reconcile applies the total and dominant category to the transaction', async () => {
+    const transactionId = await createTransaction(alice.accessToken, {
       amountCents: 1000,
       categoryId: groceriesId,
     });
@@ -165,7 +168,7 @@ describe('attach receipt to payment + reconcile (integration)', () => {
         currency: 'USD',
         totalCents: 4200,
         uploadedById: alice.user.id,
-        paymentId,
+        transactionId,
         items: {
           create: [
             { position: 1, rawName: 'Dinner', quantity: 1, totalCents: 3000, categoryId: diningId },
@@ -188,12 +191,12 @@ describe('attach receipt to payment + reconcile (integration)', () => {
       .expect(201);
 
     expect(res.body.status).toBe('CONFIRMED');
-    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
-    expect(payment).toMatchObject({ amountCents: 4200, currency: 'USD', categoryId: diningId });
+    const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+    expect(transaction).toMatchObject({ amountCents: 4200, currency: 'USD', categoryId: diningId });
   });
 
-  it('5. reconcile with both flags false confirms without touching the payment', async () => {
-    const paymentId = await createPayment(alice.accessToken, {
+  it('5. reconcile with both flags false confirms without touching the transaction', async () => {
+    const transactionId = await createTransaction(alice.accessToken, {
       amountCents: 1000,
       categoryId: groceriesId,
     });
@@ -205,7 +208,7 @@ describe('attach receipt to payment + reconcile (integration)', () => {
         currency: 'EUR',
         totalCents: 9999,
         uploadedById: alice.user.id,
-        paymentId,
+        transactionId,
         items: {
           create: [
             { position: 1, rawName: 'X', quantity: 1, totalCents: 9999, categoryId: diningId },
@@ -220,12 +223,16 @@ describe('attach receipt to payment + reconcile (integration)', () => {
       .send({ applyTotal: false, applyCategory: false })
       .expect(201);
 
-    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
-    expect(payment).toMatchObject({ amountCents: 1000, currency: 'USD', categoryId: groceriesId });
+    const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+    expect(transaction).toMatchObject({
+      amountCents: 1000,
+      currency: 'USD',
+      categoryId: groceriesId,
+    });
   });
 
   it('6. an attached receipt cannot be confirmed (must reconcile)', async () => {
-    const paymentId = await createPayment(alice.accessToken);
+    const transactionId = await createTransaction(alice.accessToken);
     const receipt = await prisma.receipt.create({
       data: {
         status: 'REVIEW',
@@ -234,7 +241,7 @@ describe('attach receipt to payment + reconcile (integration)', () => {
         currency: 'USD',
         totalCents: 2000,
         uploadedById: alice.user.id,
-        paymentId,
+        transactionId,
         items: { create: [] },
       },
     });

@@ -5,7 +5,7 @@ import { IsBooleanString, IsInt, IsOptional, IsString, Matches, Max, Min } from 
 /**
  * Query params for GET /budgets — Phase 10, iteration 10.2 (design §5).
  *
- * Mirrors the GET /payments scope grammar (`all | personal | group:<id>`)
+ * Mirrors the GET /transactions scope grammar (`all | personal | group:<id>`)
  * and cursor-pagination knobs so clients reuse the same query-building code.
  */
 export class ListBudgetsQueryDto {

@@ -338,7 +338,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
 /**
  * True when extraction yielded nothing usable — no merchant, no positive
  * total, and no line items. Such a result is worthless as a review (it can't
- * become a payment) and usually means the content was never actually read
+ * become a transaction) and usually means the content was never actually read
  * (a JS-rendered page, an unrelated link). Phase 8.17.
  */
 export function isEmptyExtraction(result: ExtractionResult): boolean {

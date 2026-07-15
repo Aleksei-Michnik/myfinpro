@@ -3,9 +3,9 @@ import { INestApplication } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PRODUCT_IMAGES_QUEUE, RECEIPT_EXTRACTIONS_QUEUE } from '../../src/queue/queue.constants';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**

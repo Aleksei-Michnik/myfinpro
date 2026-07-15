@@ -14,7 +14,7 @@ import {
   Min,
 } from 'class-validator';
 
-/** Same sanity cap payments apply to amountCents (design §5 "Validation rules"). */
+/** Same sanity cap transactions apply to amountCents (design §5 "Validation rules"). */
 export const MAX_BUDGET_AMOUNT_CENTS = 1e11;
 
 /**

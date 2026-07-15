@@ -4,12 +4,12 @@ import { INestApplication } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import {
-  PAYMENT_OCCURRENCES_QUEUE,
+  TRANSACTION_OCCURRENCES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
 } from '../../src/queue/queue.constants';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**
@@ -17,12 +17,12 @@ import { bootstrapTestApp, registerUser } from './helpers';
  *
  * A receipt composed by scanning products: no extraction job runs, the
  * receipt is born in REVIEW with items pre-linked to their registry
- * products, and confirm turns it into a payment like any other receipt.
+ * products, and confirm turns it into a transaction like any other receipt.
  */
 describe('POST /receipts/manual (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let paymentQueue: Queue;
+  let transactionQueue: Queue;
   let receiptQueue: Queue;
   let redis: StartedTestContainer;
 
@@ -55,7 +55,7 @@ describe('POST /receipts/manual (integration)', () => {
     const ctx = await bootstrapTestApp();
     app = ctx.app;
     prisma = ctx.prisma;
-    paymentQueue = app.get(getQueueToken(PAYMENT_OCCURRENCES_QUEUE));
+    transactionQueue = app.get(getQueueToken(TRANSACTION_OCCURRENCES_QUEUE));
     receiptQueue = app.get(getQueueToken(RECEIPT_EXTRACTIONS_QUEUE));
 
     await seedSystemCategories(prisma);
@@ -82,7 +82,7 @@ describe('POST /receipts/manual (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (paymentQueue) await paymentQueue.close().catch(() => undefined);
+    if (transactionQueue) await transactionQueue.close().catch(() => undefined);
     if (receiptQueue) await receiptQueue.close().catch(() => undefined);
     await prisma.product.deleteMany({ where: { id: { in: [milkId, breadId] } } });
     if (app) await app.close();
@@ -95,8 +95,8 @@ describe('POST /receipts/manual (integration)', () => {
 
   afterEach(async () => {
     await prisma.receipt.deleteMany({ where: { uploadedById: alice.user.id } });
-    await prisma.paymentAttribution.deleteMany({});
-    await prisma.payment.deleteMany({ where: { createdById: alice.user.id } });
+    await prisma.transactionAttribution.deleteMany({});
+    await prisma.transaction.deleteMany({ where: { createdById: alice.user.id } });
     await prisma.auditLog.deleteMany({ where: { userId: alice.user.id } });
   });
 
@@ -169,7 +169,7 @@ describe('POST /receipts/manual (integration)', () => {
       .expect(400);
   });
 
-  it('5. confirm turns the manual receipt into a payment', async () => {
+  it('5. confirm turns the manual receipt into a transaction', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/v1/receipts/manual')
       .set(auth(alice.accessToken))
@@ -186,9 +186,11 @@ describe('POST /receipts/manual (integration)', () => {
       .expect(201);
 
     expect(confirmed.body.status).toBe('CONFIRMED');
-    expect(confirmed.body.paymentId).toBeTruthy();
+    expect(confirmed.body.transactionId).toBeTruthy();
 
-    const payment = await prisma.payment.findUnique({ where: { id: confirmed.body.paymentId } });
-    expect(payment).toMatchObject({ amountCents: 1500, currency: 'USD', direction: 'OUT' });
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: confirmed.body.transactionId },
+    });
+    expect(transaction).toMatchObject({ amountCents: 1500, currency: 'USD', direction: 'OUT' });
   });
 });

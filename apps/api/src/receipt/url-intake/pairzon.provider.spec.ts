@@ -165,7 +165,7 @@ describe('pairzonJsonToReceiptText', () => {
     );
   });
 
-  it('drops customer, payment and hash noise', () => {
+  it('drops customer, transaction and hash noise', () => {
     const text = pairzonJsonToReceiptText(DOC_JSON)!;
     expect(text).not.toContain('Some Customer'); // loyaltyName (the shopper)
     expect(text).not.toContain('2887'); // masked card from notes

@@ -1,14 +1,14 @@
-import { PAYMENT_DIRECTIONS } from '@myfinpro/shared';
+import { TRANSACTION_DIRECTIONS } from '@myfinpro/shared';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
 
 export class ListCategoriesQueryDto {
   @ApiPropertyOptional({
-    enum: [...PAYMENT_DIRECTIONS],
+    enum: [...TRANSACTION_DIRECTIONS],
     description: 'Filter by direction (IN / OUT). BOTH categories match either.',
   })
   @IsOptional()
-  @IsIn([...PAYMENT_DIRECTIONS])
+  @IsIn([...TRANSACTION_DIRECTIONS])
   direction?: 'IN' | 'OUT';
 
   /**

@@ -1,7 +1,7 @@
 /**
  * Budget-domain error codes — Phase 10 design §5 "Error codes".
  *
- * Mirrors the payment/auth error-constant structure: a frozen map whose
+ * Mirrors the transaction/auth error-constant structure: a frozen map whose
  * values ride in the `errorCode` field of HTTP error payloads.
  *
  * - BUDGET_NOT_FOUND      — missing id OR caller has no read access (404,

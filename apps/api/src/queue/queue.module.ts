@@ -3,7 +3,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { buildRedisConnection } from '../config/redis.config';
 import {
-  PAYMENT_OCCURRENCES_QUEUE,
+  TRANSACTION_OCCURRENCES_QUEUE,
   PRODUCT_IMAGES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
 } from './queue.constants';
@@ -35,7 +35,7 @@ import {
       }),
       inject: [ConfigService],
     }),
-    BullModule.registerQueue({ name: PAYMENT_OCCURRENCES_QUEUE }),
+    BullModule.registerQueue({ name: TRANSACTION_OCCURRENCES_QUEUE }),
     BullModule.registerQueue({ name: RECEIPT_EXTRACTIONS_QUEUE }),
     BullModule.registerQueue({ name: PRODUCT_IMAGES_QUEUE }),
   ],

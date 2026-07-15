@@ -201,7 +201,7 @@ export function validateExtractionResult(value: unknown): {
 }
 
 /**
- * The single category that best represents a receipt for payment
+ * The single category that best represents a receipt for transaction
  * reconciliation (Phase 8.15) — the categorised line items' category with
  * the largest summed spend. Ties break by first appearance. Returns null
  * when no line carries a category. Used by both the reconcile endpoint

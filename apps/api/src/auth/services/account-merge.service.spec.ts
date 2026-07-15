@@ -41,19 +41,19 @@ describe('AccountMergeService', () => {
         update: jest.fn().mockResolvedValue({}),
         delete: jest.fn().mockResolvedValue({}),
       },
-      payment: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      paymentAttribution: {
+      transaction: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      transactionAttribution: {
         findMany: jest.fn().mockResolvedValue([]),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
-      paymentStar: {
+      transactionStar: {
         findMany: jest.fn().mockResolvedValue([]),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
-      paymentComment: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      paymentDocument: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      transactionComment: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      transactionDocument: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       receipt: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       receiptItem: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -103,7 +103,7 @@ describe('AccountMergeService', () => {
       );
     });
 
-    it('moves OAuth providers, payments, and satellites to the target user', async () => {
+    it('moves OAuth providers, transactions, and satellites to the target user', async () => {
       await service.mergeUsers('target-uuid', 'source-uuid');
 
       const reassignment = {
@@ -112,14 +112,14 @@ describe('AccountMergeService', () => {
       };
       expect(tx.oAuthProvider.updateMany).toHaveBeenCalledWith(reassignment);
       expect(tx.groupMembership.updateMany).toHaveBeenCalledWith(reassignment);
-      expect(tx.paymentAttribution.updateMany).toHaveBeenCalledWith(reassignment);
-      expect(tx.paymentStar.updateMany).toHaveBeenCalledWith(reassignment);
-      expect(tx.paymentComment.updateMany).toHaveBeenCalledWith(reassignment);
-      expect(tx.payment.updateMany).toHaveBeenCalledWith({
+      expect(tx.transactionAttribution.updateMany).toHaveBeenCalledWith(reassignment);
+      expect(tx.transactionStar.updateMany).toHaveBeenCalledWith(reassignment);
+      expect(tx.transactionComment.updateMany).toHaveBeenCalledWith(reassignment);
+      expect(tx.transaction.updateMany).toHaveBeenCalledWith({
         where: { createdById: 'source-uuid' },
         data: { createdById: 'target-uuid' },
       });
-      expect(tx.paymentDocument.updateMany).toHaveBeenCalledWith({
+      expect(tx.transactionDocument.updateMany).toHaveBeenCalledWith({
         where: { uploadedById: 'source-uuid' },
         data: { uploadedById: 'target-uuid' },
       });
@@ -143,7 +143,7 @@ describe('AccountMergeService', () => {
       });
     });
 
-    it('merges duplicate categories by repointing payments and receipt items', async () => {
+    it('merges duplicate categories by repointing transactions and receipt items', async () => {
       tx.category.findMany
         .mockResolvedValueOnce([
           { id: 'src-cat', slug: 'groceries', direction: 'OUT' },
@@ -154,7 +154,7 @@ describe('AccountMergeService', () => {
       await service.mergeUsers('target-uuid', 'source-uuid');
 
       // Duplicate slug+direction → repoint and delete
-      expect(tx.payment.updateMany).toHaveBeenCalledWith({
+      expect(tx.transaction.updateMany).toHaveBeenCalledWith({
         where: { categoryId: 'src-cat' },
         data: { categoryId: 'tgt-cat' },
       });
@@ -171,22 +171,22 @@ describe('AccountMergeService', () => {
     });
 
     it('drops duplicate stars and attributions before reassigning', async () => {
-      tx.paymentStar.findMany
+      tx.transactionStar.findMany
         .mockResolvedValueOnce([
-          { id: 'src-star-dup', paymentId: 'pay-1' },
-          { id: 'src-star-new', paymentId: 'pay-2' },
+          { id: 'src-star-dup', transactionId: 'pay-1' },
+          { id: 'src-star-new', transactionId: 'pay-2' },
         ])
-        .mockResolvedValueOnce([{ paymentId: 'pay-1' }]);
-      tx.paymentAttribution.findMany
-        .mockResolvedValueOnce([{ id: 'src-attr-dup', paymentId: 'pay-1', scopeType: 'user' }])
-        .mockResolvedValueOnce([{ paymentId: 'pay-1', scopeType: 'user' }]);
+        .mockResolvedValueOnce([{ transactionId: 'pay-1' }]);
+      tx.transactionAttribution.findMany
+        .mockResolvedValueOnce([{ id: 'src-attr-dup', transactionId: 'pay-1', scopeType: 'user' }])
+        .mockResolvedValueOnce([{ transactionId: 'pay-1', scopeType: 'user' }]);
 
       await service.mergeUsers('target-uuid', 'source-uuid');
 
-      expect(tx.paymentStar.deleteMany).toHaveBeenCalledWith({
+      expect(tx.transactionStar.deleteMany).toHaveBeenCalledWith({
         where: { id: { in: ['src-star-dup'] } },
       });
-      expect(tx.paymentAttribution.deleteMany).toHaveBeenCalledWith({
+      expect(tx.transactionAttribution.deleteMany).toHaveBeenCalledWith({
         where: { id: { in: ['src-attr-dup'] } },
       });
     });

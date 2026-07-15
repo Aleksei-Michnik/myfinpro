@@ -3,12 +3,12 @@ import { INestApplication } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import {
-  PAYMENT_OCCURRENCES_QUEUE,
+  TRANSACTION_OCCURRENCES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
 } from '../../src/queue/queue.constants';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**
@@ -16,15 +16,15 @@ import { bootstrapTestApp, registerUser } from './helpers';
  *
  * Bootstraps the real AppModule against the test DB/Redis and exercises
  * confirmation end-to-end: a reviewed receipt becomes one OUT / ONE_TIME
- * payment with a receipt document, the merchant lands in the global
- * registry, the receipt is linked + marked CONFIRMED, and the payment shows
+ * transaction with a receipt document, the merchant lands in the global
+ * registry, the receipt is linked + marked CONFIRMED, and the transaction shows
  * up in the owner's list. Receipts are seeded straight to REVIEW via Prisma
  * (the async extraction worker is out of scope here).
  */
 describe('POST /receipts/:id/confirm (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let paymentQueue: Queue;
+  let transactionQueue: Queue;
   let receiptQueue: Queue;
   let redis: StartedTestContainer;
 
@@ -55,7 +55,7 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     const ctx = await bootstrapTestApp();
     app = ctx.app;
     prisma = ctx.prisma;
-    paymentQueue = app.get(getQueueToken(PAYMENT_OCCURRENCES_QUEUE));
+    transactionQueue = app.get(getQueueToken(TRANSACTION_OCCURRENCES_QUEUE));
     receiptQueue = app.get(getQueueToken(RECEIPT_EXTRACTIONS_QUEUE));
 
     await seedSystemCategories(prisma);
@@ -74,7 +74,7 @@ describe('POST /receipts/:id/confirm (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (paymentQueue) await paymentQueue.close().catch(() => undefined);
+    if (transactionQueue) await transactionQueue.close().catch(() => undefined);
     if (receiptQueue) await receiptQueue.close().catch(() => undefined);
     if (app) await app.close();
     if (redis) await redis.stop();
@@ -88,8 +88,8 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     await prisma.receipt.deleteMany({
       where: { uploadedById: { in: [alice.user.id, bob.user.id] } },
     });
-    await prisma.paymentAttribution.deleteMany({});
-    await prisma.payment.deleteMany({
+    await prisma.transactionAttribution.deleteMany({});
+    await prisma.transaction.deleteMany({
       where: { createdById: { in: [alice.user.id, bob.user.id] } },
     });
     await prisma.merchant.deleteMany({ where: { normalizedName: { contains: 'confirmco' } } });
@@ -132,7 +132,7 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     return row.id;
   }
 
-  it('1. confirms a reviewed receipt → payment + document + merchant + link', async () => {
+  it('1. confirms a reviewed receipt → transaction + document + merchant + link', async () => {
     const receiptId = await seedReviewReceipt(alice.user.id);
 
     const res = await request(app.getHttpServer())
@@ -142,15 +142,15 @@ describe('POST /receipts/:id/confirm (integration)', () => {
       .expect(201);
 
     expect(res.body.status).toBe('CONFIRMED');
-    expect(res.body.paymentId).toBeTruthy();
-    const paymentId = res.body.paymentId as string;
+    expect(res.body.transactionId).toBeTruthy();
+    const transactionId = res.body.transactionId as string;
 
-    // Payment: OUT / ONE_TIME with the receipt's money fields + document.
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
+    // Transaction: OUT / ONE_TIME with the receipt's money fields + document.
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
       include: { attributions: true, documents: true },
     });
-    expect(payment).toMatchObject({
+    expect(transaction).toMatchObject({
       direction: 'OUT',
       type: 'ONE_TIME',
       amountCents: 2599,
@@ -158,15 +158,18 @@ describe('POST /receipts/:id/confirm (integration)', () => {
       categoryId: outCategoryId,
       createdById: alice.user.id,
     });
-    expect(payment!.attributions).toHaveLength(1);
-    expect(payment!.attributions[0]).toMatchObject({
+    expect(transaction!.attributions).toHaveLength(1);
+    expect(transaction!.attributions[0]).toMatchObject({
       scopeType: 'personal',
       userId: alice.user.id,
     });
-    expect(payment!.documents).toHaveLength(1);
-    expect(payment!.documents[0]).toMatchObject({ kind: 'receipt', uploadedById: alice.user.id });
+    expect(transaction!.documents).toHaveLength(1);
+    expect(transaction!.documents[0]).toMatchObject({
+      kind: 'receipt',
+      uploadedById: alice.user.id,
+    });
 
-    // Merchant registered + linked; receipt links back to the payment.
+    // Merchant registered + linked; receipt links back to the transaction.
     const merchant = await prisma.merchant.findUnique({
       where: { normalizedName: 'confirmco market' },
     });
@@ -174,7 +177,7 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
     expect(receipt).toMatchObject({
       status: 'CONFIRMED',
-      paymentId,
+      transactionId,
       merchantId: merchant!.id,
     });
 
@@ -184,12 +187,12 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     });
     expect(audits.map((a) => a.action).sort()).toEqual(['MERCHANT_CREATED', 'RECEIPT_CONFIRMED']);
 
-    // The payment shows up in the owner's list.
+    // The transaction shows up in the owner's list.
     const list = await request(app.getHttpServer())
-      .get('/api/v1/payments')
+      .get('/api/v1/transactions')
       .set('Authorization', `Bearer ${alice.accessToken}`)
       .expect(200);
-    expect(list.body.data.some((p: { id: string }) => p.id === paymentId)).toBe(true);
+    expect(list.body.data.some((p: { id: string }) => p.id === transactionId)).toBe(true);
   });
 
   it('2. reuses an existing registry merchant instead of creating a duplicate', async () => {
@@ -250,7 +253,7 @@ describe('POST /receipts/:id/confirm (integration)', () => {
     // Receipt stays REVIEW — nothing was written.
     const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
     expect(receipt!.status).toBe('REVIEW');
-    expect(receipt!.paymentId).toBeNull();
+    expect(receipt!.transactionId).toBeNull();
   });
 
   it("6. a non-uploader cannot confirm someone else's receipt (404)", async () => {

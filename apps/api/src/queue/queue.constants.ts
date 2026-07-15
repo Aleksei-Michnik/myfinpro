@@ -8,12 +8,12 @@
  */
 
 /**
- * Recurring-payment occurrence queue (Phase 6.17).
+ * Recurring-transaction occurrence queue (Phase 6.17).
  *
- * Producer: payment-schedule service (lands in 6.17.2).
- * Consumer: payment-occurrence processor (lands in 6.17.3).
+ * Producer: transaction-schedule service (lands in 6.17.2).
+ * Consumer: transaction-occurrence processor (lands in 6.17.3).
  */
-export const PAYMENT_OCCURRENCES_QUEUE = 'payment-occurrences';
+export const TRANSACTION_OCCURRENCES_QUEUE = 'transaction-occurrences';
 
 /**
  * Receipt extraction queue (Phase 7.4).

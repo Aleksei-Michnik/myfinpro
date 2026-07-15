@@ -109,7 +109,7 @@ export class ReceiptResponseDto {
   failureReason!: string | null;
 
   @ApiPropertyOptional({ nullable: true, type: String, description: 'Set on confirm.' })
-  paymentId!: string | null;
+  transactionId!: string | null;
 
   @ApiProperty({ description: 'Σ item totals (advisory).' })
   itemsSumCents!: number;
@@ -184,7 +184,7 @@ export function mapReceiptToDto(row: ReceiptWithRelations): ReceiptResponseDto {
     totalCents: row.totalCents,
     discountCents: row.discountCents,
     failureReason: row.failureReason,
-    paymentId: row.paymentId,
+    transactionId: row.transactionId,
     itemsSumCents,
     totalsMismatchCents: mismatchCents,
     createdAt: row.createdAt.toISOString(),

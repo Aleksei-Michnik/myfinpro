@@ -3,7 +3,7 @@ import { BudgetResponseDto } from './budget-response.dto';
 
 /**
  * Paginated envelope for GET /budgets — same cursor contract as
- * GET /payments (`nextCursor` is an opaque base64url payload the client
+ * GET /transactions (`nextCursor` is an opaque base64url payload the client
  * echoes back verbatim).
  */
 export class BudgetListResponseDto {

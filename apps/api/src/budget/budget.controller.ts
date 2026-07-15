@@ -40,7 +40,7 @@ import { UpdateBudgetDto } from './dto/update-budget.dto';
 
 /**
  * Phase 10 · Iteration 10.2 — Budget CRUD/archive endpoints (design §5).
- * Same throttle tiers as payments: 30/min mutations, 120/min reads.
+ * Same throttle tiers as transactions: 30/min mutations, 120/min reads.
  */
 @ApiTags('Budgets')
 @Controller('budgets')
