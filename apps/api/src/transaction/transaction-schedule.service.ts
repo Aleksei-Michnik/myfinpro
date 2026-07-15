@@ -102,6 +102,18 @@ export class TransactionScheduleService implements OnApplicationBootstrap {
    * block the app from starting.
    */
   async onApplicationBootstrap(): Promise<void> {
+    await this.reconcileSchedulers();
+  }
+
+  /**
+   * The deploy pipeline boots the new container BEFORE running migrations,
+   * so the first attempt can race a schema change (as the 8.20 rename did).
+   * On a query-level failure, retry a few times in the background — the
+   * timer is unref'd so it never holds the process open.
+   */
+  private async reconcileSchedulers(attempt = 1): Promise<void> {
+    const MAX_ATTEMPTS = 5;
+    const RETRY_DELAY_MS = 30_000;
     try {
       const rows = await this.prisma.transactionSchedule.findMany({
         where: {
@@ -137,7 +149,15 @@ export class TransactionScheduleService implements OnApplicationBootstrap {
         this.logger.log(`Scheduler reconciliation: ${ok}/${rows.length} live schedules upserted`);
       }
     } catch (err) {
-      this.logger.error(`Scheduler reconciliation skipped: ${(err as Error).message}`);
+      if (attempt < MAX_ATTEMPTS) {
+        this.logger.warn(
+          `Scheduler reconciliation attempt ${attempt}/${MAX_ATTEMPTS} failed — retrying in ${RETRY_DELAY_MS / 1000}s: ${(err as Error).message}`,
+        );
+        const timer = setTimeout(() => void this.reconcileSchedulers(attempt + 1), RETRY_DELAY_MS);
+        timer.unref?.();
+      } else {
+        this.logger.error(`Scheduler reconciliation gave up: ${(err as Error).message}`);
+      }
     }
   }
 
