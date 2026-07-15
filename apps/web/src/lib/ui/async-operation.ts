@@ -86,7 +86,7 @@ export function classifyError(err: unknown): AsyncErrorInfo {
     return { reason: 'network', message: err.message };
   }
   if (err instanceof Error) {
-    // Heuristic: payment-context throws Error with a `status` property on HTTP failures.
+    // Heuristic: transaction-context throws Error with a `status` property on HTTP failures.
     const status = (err as Error & { status?: number }).status;
     if (typeof status === 'number') {
       return { reason: 'http', httpStatus: status, message: err.message };

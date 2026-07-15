@@ -2,7 +2,7 @@
 
 // Phase 6 · Iteration 6.15 — "This month" totals card on the aggregated
 // dashboard. Aggregation is performed client-side over a single fetched page
-// of payments (cap 100). When the API reports `hasMore=true` we surface a
+// of transactions (cap 100). When the API reports `hasMore=true` we surface a
 // "partial totals" badge — server-side rollups land in Phase 10.
 
 import { useLocale, useTranslations } from 'next-intl';
@@ -10,9 +10,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { computeMonthRange } from './date-range';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/auth/auth-context';
-import { formatAmount } from '@/lib/payment/formatters';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { PaymentSummary } from '@/lib/payment/types';
+import { formatAmount } from '@/lib/transaction/formatters';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 export interface TotalsCardProps {
   /** ISO timestamp; defaults to first-of-this-month UTC midnight. */
@@ -24,7 +24,7 @@ export interface TotalsCardProps {
    * fetch. Used by `<DashboardClient>` once it has cached the recent page,
    * so we don't issue a duplicate request.
    */
-  payments?: PaymentSummary[];
+  transactions?: TransactionSummary[];
 }
 
 interface CurrencyTotals {
@@ -35,7 +35,7 @@ interface CurrencyTotals {
 
 const FETCH_LIMIT = 100;
 
-function aggregate(rows: PaymentSummary[]): CurrencyTotals[] {
+function aggregate(rows: TransactionSummary[]): CurrencyTotals[] {
   const map = new Map<string, CurrencyTotals>();
   for (const r of rows) {
     const cur = r.currency;
@@ -55,11 +55,11 @@ function sortCurrencies(rows: CurrencyTotals[], primary: string | undefined): Cu
   });
 }
 
-export function TotalsCard({ fromIso, toIso, payments }: TotalsCardProps) {
+export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
   const t = useTranslations('dashboard.totals');
   const locale = useLocale();
   const { user } = useAuth();
-  const { fetchList } = usePayments();
+  const { fetchList } = useTransactions();
 
   const range = useMemo(() => {
     if (fromIso && toIso) return { fromIso, toIso };
@@ -67,9 +67,11 @@ export function TotalsCard({ fromIso, toIso, payments }: TotalsCardProps) {
     return { fromIso: fromIso ?? r.fromIso, toIso: toIso ?? r.toIso };
   }, [fromIso, toIso]);
 
-  const externallyProvided = payments !== undefined;
+  const externallyProvided = transactions !== undefined;
 
-  const [rows, setRows] = useState<PaymentSummary[] | null>(externallyProvided ? payments! : null);
+  const [rows, setRows] = useState<TransactionSummary[] | null>(
+    externallyProvided ? transactions! : null,
+  );
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(!externallyProvided);
   const [error, setError] = useState<string | null>(null);
@@ -95,12 +97,12 @@ export function TotalsCard({ fromIso, toIso, payments }: TotalsCardProps) {
 
   useEffect(() => {
     if (externallyProvided) {
-      setRows(payments!);
+      setRows(transactions!);
       setHasMore(false);
       return;
     }
     void load();
-  }, [externallyProvided, payments, load]);
+  }, [externallyProvided, transactions, load]);
 
   const totals = useMemo(() => {
     const list = rows ?? [];

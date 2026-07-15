@@ -113,12 +113,12 @@ describe('RealtimeProvider', () => {
     act(() => {
       MockEventSource.instances[0]!.emitOpen();
       MockEventSource.instances[0]!.emitMessage({
-        type: 'payment.deleted',
-        paymentId: 'p1',
+        type: 'transaction.deleted',
+        transactionId: 'p1',
       });
     });
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ type: 'payment.deleted', paymentId: 'p1' });
+    expect(seen[0]).toMatchObject({ type: 'transaction.deleted', transactionId: 'p1' });
   });
 
   it('reconnects with exponential backoff on error', () => {

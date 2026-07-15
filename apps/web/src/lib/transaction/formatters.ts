@@ -3,7 +3,7 @@
 // label) and return a formatted string. Built on `Intl.NumberFormat` /
 // `Intl.DateTimeFormat` — no extra dependencies (dinero.js / date-fns).
 
-import type { PaymentSummary } from './types';
+import type { TransactionSummary } from './types';
 
 /**
  * Format an integer minor-unit amount as a localised currency string.
@@ -24,27 +24,27 @@ export function formatAmount(amountCents: number, currency: string, locale: stri
 }
 
 /**
- * Format a payment amount with an explicit `+` / `-` sign derived from the
- * payment's direction (not from the numeric sign). The underlying
+ * Format a transaction amount with an explicit `+` / `-` sign derived from the
+ * transaction's direction (not from the numeric sign). The underlying
  * `Intl.NumberFormat` output is stripped of any leading +/- and re-prefixed
  * so the rendered glyph is always consistent.
  */
 export function formatSignedAmount(
-  payment: Pick<PaymentSummary, 'amountCents' | 'currency' | 'direction'>,
+  transaction: Pick<TransactionSummary, 'amountCents' | 'currency' | 'direction'>,
   locale: string,
 ): string {
-  const sign = payment.direction === 'OUT' ? '-' : '+';
-  const formatted = formatAmount(Math.abs(payment.amountCents), payment.currency, locale);
+  const sign = transaction.direction === 'OUT' ? '-' : '+';
+  const formatted = formatAmount(Math.abs(transaction.amountCents), transaction.currency, locale);
   return sign + formatted.replace(/^[-+]/, '');
 }
 
 /**
- * Format a payment's `occurredAt` ISO string as a localised date+time.
+ * Format a transaction's `occurredAt` ISO string as a localised date+time.
  * Returns an empty string on an unparseable input so callers never crash.
  *
  * Phase 6 · Iteration 6.18.1.2 — the helper now defaults to including the
  * time of day (`dateStyle: 'medium', timeStyle: 'short'`) since the
- * payment form (6.18.1) accepts a full ISO timestamp:
+ * transaction form (6.18.1) accepts a full ISO timestamp:
  *
  *   formatOccurredAt('2026-05-19T14:30:00Z', 'en-US') → 'May 19, 2026, 2:30 PM'
  *   formatOccurredAt('2026-05-19T14:30:00Z', 'he-IL') → '19 במאי 2026, 14:30'
@@ -95,17 +95,17 @@ export function formatOccurredAtAbsolute(iso: string, locale: string): string {
 
 /**
  * Resolve a human-readable scope label for a single attribution row.
- * `t` is the next-intl `useTranslations('payments')` function (passed in so
+ * `t` is the next-intl `useTranslations('transactions')` function (passed in so
  * this helper stays pure and testable). Keys are *relative* to the
- * `payments` namespace — matching the project convention for any helper
- * receiving a `t` function from a `payments.*` component.
+ * `transactions` namespace — matching the project convention for any helper
+ * receiving a `t` function from a `transactions.*` component.
  *
  *   personal                                    → t('scope.personal')
  *   group with name                             → the group name verbatim
  *   group with null name (defensive fallback)   → t('scope.group')
  */
 export function formatScopeLabel(
-  attribution: Pick<PaymentSummary['attributions'][number], 'scope' | 'groupName'>,
+  attribution: Pick<TransactionSummary['attributions'][number], 'scope' | 'groupName'>,
   t: (key: string) => string,
 ): string {
   if (attribution.scope === 'personal') return t('scope.personal');

@@ -1,7 +1,7 @@
 'use client';
 
-// Phase 7 · Iteration 7.7 — ReceiptProvider (the payment-context conventions:
-// every method takes an optional AbortSignal, errors are rich PaymentApiError-
+// Phase 7 · Iteration 7.7 — ReceiptProvider (the transaction-context conventions:
+// every method takes an optional AbortSignal, errors are rich TransactionApiError-
 // shaped objects, run() maintains the transient loading/error state).
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
@@ -30,10 +30,18 @@ interface ReceiptContextValue {
   createFromUrl(url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Compose a receipt from scanned products — born in REVIEW (8.14). */
   createManual(input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary>;
-  /** Attach a receipt file to an existing payment — born linked (8.15). */
-  attachFileToPayment(paymentId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary>;
-  /** Attach an online receipt by URL to an existing payment (8.15). */
-  attachUrlToPayment(paymentId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Attach a receipt file to an existing transaction — born linked (8.15). */
+  attachFileToTransaction(
+    transactionId: string,
+    file: File,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Attach an online receipt by URL to an existing transaction (8.15). */
+  attachUrlToTransaction(
+    transactionId: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
   /** Finish an attached receipt: REVIEW → CONFIRMED, apply chosen fields (8.15). */
   reconcileReceipt(
     id: string,
@@ -69,7 +77,7 @@ interface ReceiptContextValue {
   ): Promise<ReceiptSummary>;
   /** Walkthrough skip/unlink — always resumable (8.4). */
   skipItemMatch(receiptId: string, itemId: string, signal?: AbortSignal): Promise<ReceiptSummary>;
-  /** REVIEW → CONFIRMED: create the payment from the reviewed receipt (7.9). */
+  /** REVIEW → CONFIRMED: create the transaction from the reviewed receipt (7.9). */
   confirmReceipt(
     id: string,
     input: ConfirmReceiptInput,
@@ -198,28 +206,31 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
-  const attachFileToPayment = useCallback(
-    (paymentId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
+  const attachFileToTransaction = useCallback(
+    (transactionId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
       run(async () => {
         const form = new FormData();
         form.append('file', file);
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/receipt`, {
-          method: 'POST',
-          headers: authHeaders(false),
-          body: form,
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/receipt`,
+          {
+            method: 'POST',
+            headers: authHeaders(false),
+            body: form,
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
         return (await res.json()) as ReceiptSummary;
       }),
     [authHeaders, run],
   );
 
-  const attachUrlToPayment = useCallback(
-    (paymentId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+  const attachUrlToTransaction = useCallback(
+    (transactionId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
       run(async () => {
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/receipt-url`,
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/receipt-url`,
           { method: 'POST', headers: authHeaders(), body: JSON.stringify({ url }), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
@@ -414,8 +425,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       uploadReceipt,
       createFromUrl,
       createManual,
-      attachFileToPayment,
-      attachUrlToPayment,
+      attachFileToTransaction,
+      attachUrlToTransaction,
       reconcileReceipt,
       fetchList,
       getReceipt,
@@ -437,8 +448,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       uploadReceipt,
       createFromUrl,
       createManual,
-      attachFileToPayment,
-      attachUrlToPayment,
+      attachFileToTransaction,
+      attachUrlToTransaction,
       reconcileReceipt,
       fetchList,
       getReceipt,

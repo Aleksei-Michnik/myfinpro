@@ -16,10 +16,10 @@ import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -29,7 +29,7 @@ export function ProductsClient() {
   const locale = useLocale();
   const router = useRouter();
   const { fetchProducts, lookupBarcode } = useProducts();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
   const { addToast } = useToast();
 
   const [products, setProducts] = useState<ProductSummary[]>([]);

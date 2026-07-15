@@ -1,11 +1,11 @@
 // Phase 6 · Iteration 6.15.2 — defensive checks against i18n-key shape bugs.
 //
 // Background: a user-reported staging bug rendered the literal string
-// `payments.payments.scope.personal` in the Recent Activity scope cell.
-// Root cause: `formatScopeLabel` called `t('payments.scope.personal')` from
+// `transactions.transactions.scope.personal` in the Recent Activity scope cell.
+// Root cause: `formatScopeLabel` called `t('transactions.scope.personal')` from
 // a translation function that was already namespaced via
-// `useTranslations('payments')` — producing a non-existent resolved path
-// `payments.payments.scope.personal` and falling back to the literal key.
+// `useTranslations('transactions')` — producing a non-existent resolved path
+// `transactions.transactions.scope.personal` and falling back to the literal key.
 //
 // These tests are cheap, deterministic guards against the same class of
 // mistake elsewhere in the codebase.
@@ -48,7 +48,7 @@ describe('i18n key shape (regression for 6.15.2)', () => {
   const heKeys = flatten(heMessages as Messages);
 
   // The bug pattern is specifically a top-level namespace appearing as both
-  // the first AND second segment of a key (e.g. `payments.payments.scope.personal`).
+  // the first AND second segment of a key (e.g. `transactions.transactions.scope.personal`).
   // Legit nested labels like `groups.create.create` (button under a section
   // of the same name) are not flagged.
   const topLevels = Object.keys(enMessages as Messages);
@@ -62,18 +62,22 @@ describe('i18n key shape (regression for 6.15.2)', () => {
     expect(heKeys.filter(doubledTopLevel)).toEqual([]);
   });
 
-  it('formatScopeLabel keys exist in en + he under the payments namespace', () => {
-    // The formatter is invoked with a `t` from `useTranslations('payments')`,
-    // so the keys it passes must exist as `payments.<key>` in the bundle.
-    const required = ['payments.scope.personal', 'payments.scope.group'];
+  it('formatScopeLabel keys exist in en + he under the transactions namespace', () => {
+    // The formatter is invoked with a `t` from `useTranslations('transactions')`,
+    // so the keys it passes must exist as `transactions.<key>` in the bundle.
+    const required = ['transactions.scope.personal', 'transactions.scope.group'];
     for (const k of required) {
       expect(lookup(enMessages as Messages, k), `missing en: ${k}`).toBeTypeOf('string');
       expect(lookup(heMessages as Messages, k), `missing he: ${k}`).toBeTypeOf('string');
     }
   });
 
-  it('the bug-trigger path payments.payments.scope.personal is absent in en + he', () => {
-    expect(lookup(enMessages as Messages, 'payments.payments.scope.personal')).toBeUndefined();
-    expect(lookup(heMessages as Messages, 'payments.payments.scope.personal')).toBeUndefined();
+  it('the bug-trigger path transactions.transactions.scope.personal is absent in en + he', () => {
+    expect(
+      lookup(enMessages as Messages, 'transactions.transactions.scope.personal'),
+    ).toBeUndefined();
+    expect(
+      lookup(heMessages as Messages, 'transactions.transactions.scope.personal'),
+    ).toBeUndefined();
   });
 });

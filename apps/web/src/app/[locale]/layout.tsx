@@ -14,10 +14,10 @@ import { routing } from '@/i18n/routing';
 import { AuthProvider } from '@/lib/auth/auth-context';
 import { CategoryProvider } from '@/lib/category/category-context';
 import { GroupProvider } from '@/lib/group/group-context';
-import { PaymentProvider } from '@/lib/payment/payment-context';
 import { ProductProvider } from '@/lib/product/product-context';
 import { AuthenticatedRealtimeProvider } from '@/lib/realtime/AuthenticatedRealtimeProvider';
 import { ReceiptProvider } from '@/lib/receipt/receipt-context';
+import { TransactionProvider } from '@/lib/transaction/transaction-context';
 import { UIStatusProvider } from '@/lib/ui';
 
 import '../globals.css';
@@ -57,7 +57,7 @@ export default async function LocaleLayout({ children, params }: Props) {
             <AuthProvider>
               <AuthenticatedRealtimeProvider>
                 <GroupProvider>
-                  <PaymentProvider>
+                  <TransactionProvider>
                     <ReceiptProvider>
                       <ProductProvider>
                         <CategoryProvider>
@@ -73,7 +73,7 @@ export default async function LocaleLayout({ children, params }: Props) {
                         </CategoryProvider>
                       </ProductProvider>
                     </ReceiptProvider>
-                  </PaymentProvider>
+                  </TransactionProvider>
                 </GroupProvider>
               </AuthenticatedRealtimeProvider>
             </AuthProvider>

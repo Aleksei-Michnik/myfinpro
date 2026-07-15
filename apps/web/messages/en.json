@@ -143,7 +143,7 @@
     "subtitle": "Your finances at a glance.",
     "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here.",
     "actions": {
-      "add": "+ Add payment"
+      "add": "+ Add transaction"
     },
     "totals": {
       "title": "This month",
@@ -154,27 +154,27 @@
       "loading": "Loading totals…",
       "error": "Couldn't load totals. {message}",
       "retry": "Retry",
-      "partial": "Showing first {count} payments — totals are partial."
+      "partial": "Showing first {count} transactions — totals are partial."
     },
     "scopes": {
       "title": "Your scopes",
       "personal": "Personal",
-      "personalSubtitle": "Your individual payments",
+      "personalSubtitle": "Your individual transactions",
       "groupSubtitle": "{role}",
       "view": "View",
       "noActivity": "No activity yet",
-      "empty": "Join or create a group to share payments.",
+      "empty": "Join or create a group to share transactions.",
       "createGroup": "Create a group"
     },
     "recent": {
       "title": "Recent activity",
       "viewAll": "View all",
-      "empty": "No payments yet. Add one to get started."
+      "empty": "No transactions yet. Add one to get started."
     },
     "starred": {
       "title": "Starred",
       "viewAll": "All starred",
-      "empty": "Star a payment to find it here."
+      "empty": "Star a transaction to find it here."
     }
   },
   "groups": {
@@ -565,17 +565,17 @@
     "help": "Help",
     "copyright": "© {year} MyFinPro. All rights reserved."
   },
-  "payments": {
+  "transactions": {
     "scope": {
       "personal": "Personal",
       "group": "Group"
     },
     "list": {
-      "empty": "No payments yet.",
+      "empty": "No transactions yet.",
       "loadMore": "Load more",
       "loadingMore": "Loading…",
       "retry": "Retry",
-      "errorLoading": "Could not load payments. {message}"
+      "errorLoading": "Could not load transactions. {message}"
     },
     "table": {
       "date": "Date",
@@ -624,43 +624,43 @@
       "moreScopes": "+{count} more"
     },
     "delete": {
-      "title": "Delete payment",
-      "description": "This payment is shared across multiple scopes. Choose what to remove.",
+      "title": "Delete transaction",
+      "description": "This transaction is shared across multiple scopes. Choose what to remove.",
       "scopeOnly": "Delete from this scope",
       "scopeAll": "Delete from all my accessible scopes ({count})",
       "pickScope": "Which scope?",
       "confirm": "Delete",
       "cancel": "Cancel",
-      "errorNoAccess": "You no longer have access to delete this payment.",
-      "deleted": "Payment removed.",
+      "errorNoAccess": "You no longer have access to delete this transaction.",
+      "deleted": "Transaction removed.",
       "deletedFromScope": "Removed from {scope}."
     },
     "propagate": {
       "title": "Apply changes to occurrences?",
-      "description": "This recurring payment has generated occurrences. Choose how far this change should reach.",
+      "description": "This recurring transaction has generated occurrences. Choose how far this change should reach.",
       "destructiveWarning": "This change rebuilds future occurrences and may discard their comments and attachments.",
       "mode": {
         "self": {
-          "label": "This payment only",
-          "description": "Update just this recurring payment. Occurrences stay as they are."
+          "label": "This transaction only",
+          "description": "Update just this recurring transaction. Occurrences stay as they are."
         },
         "future": {
           "label": "This and future occurrences",
-          "description": "Update this payment and every occurrence dated from now onward."
+          "description": "Update this transaction and every occurrence dated from now onward."
         },
         "all": {
           "label": "All occurrences",
-          "description": "Update this payment and every occurrence, past and future."
+          "description": "Update this transaction and every occurrence, past and future."
         }
       },
       "confirm": "Apply",
       "cancel": "Cancel",
-      "resultUpdated": "Updated payment and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
+      "resultUpdated": "Updated transaction and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
       "resultSkipped": "{count, plural, =1 {# occurrence in a group you don't manage was} other {# occurrences in groups you don't manage were}} left unchanged."
     },
     "form": {
-      "createTitle": "Add payment",
-      "editTitle": "Edit payment",
+      "createTitle": "Add transaction",
+      "editTitle": "Edit transaction",
       "direction": "Direction",
       "directionIn": "Income",
       "directionOut": "Expense",
@@ -676,12 +676,12 @@
       "cancel": "Cancel",
       "close": "Close",
       "saving": "Saving…",
-      "loading": "Loading payment…",
-      "loadError": "Could not refresh payment data. Showing the last known values.",
+      "loading": "Loading transaction…",
+      "loadError": "Could not refresh transaction data. Showing the last known values.",
       "discardChanges": "Discard changes?",
       "discard": "Discard",
       "keepEditing": "Keep editing",
-      "errorGeneric": "Could not save the payment. {message}",
+      "errorGeneric": "Could not save the transaction. {message}",
       "validation": {
         "amountRequired": "Amount must be greater than zero.",
         "currencyInvalid": "Pick a currency.",
@@ -692,11 +692,11 @@
         "scopesRequired": "Pick at least one scope.",
         "noteTooLong": "Note must be 2000 characters or fewer."
       },
-      "addAction": "+ Add payment",
+      "addAction": "+ Add transaction",
       "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
-      "othersPreserved": "Other users' attributions on this payment will not be touched.",
+      "othersPreserved": "Other users' attributions on this transaction will not be touched.",
       "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved.",
-      "fromReceiptHint": "Have a receipt? Add it and we will fill the payment in for you.",
+      "fromReceiptHint": "Have a receipt? Add it and we will fill the transaction in for you.",
       "fromReceiptDevice": "Upload from this device",
       "fromReceiptUrl": "Add from URL",
       "fromReceiptBarcodes": "Scan product barcodes",
@@ -745,9 +745,9 @@
     },
     "detail": {
       "back": "Back",
-      "loading": "Loading payment…",
-      "notFound": "Payment not found or no longer accessible.",
-      "errorGeneric": "Could not load payment. {message}",
+      "loading": "Loading transaction…",
+      "notFound": "Transaction not found or no longer accessible.",
+      "errorGeneric": "Could not load transaction. {message}",
       "tryAgain": "Try again",
       "amountLabel": "Amount",
       "dateLabel": "Date",
@@ -759,13 +759,13 @@
       "starRemove": "Unstar",
       "edit": "Edit",
       "delete": "Delete",
-      "editDisabledNotCreator": "Only the creator can edit this payment.",
+      "editDisabledNotCreator": "Only the creator can edit this transaction.",
       "editDisabled": {
-        "generatedOccurrence": "This payment was generated by a recurring schedule. Edit the parent to change all occurrences.",
-        "unsupportedType": "Editing this payment type isn't supported yet."
+        "generatedOccurrence": "This transaction was generated by a recurring schedule. Edit the parent to change all occurrences.",
+        "unsupportedType": "Editing this transaction type isn't supported yet."
       },
       "edited": "edited",
-      "deletedToast": "Payment removed.",
+      "deletedToast": "Transaction removed.",
       "occurrences": {
         "title": "Occurrences",
         "countSingular": "1 occurrence",
@@ -818,8 +818,8 @@
       "comingSoon": "Recurring and plan management ship in iterations 6.18 and 6.20."
     },
     "page": {
-      "title": "Payments",
-      "subtitle": "Manage all payments you can see.",
+      "title": "Transactions",
+      "subtitle": "Manage all transactions you can see.",
       "scopeTabs": {
         "all": "All",
         "personal": "Personal",
@@ -831,7 +831,7 @@
         "ariaPressed": "Show starred only"
       },
       "clearFilters": "Clear filters",
-      "groupTabTitle": "Payments"
+      "groupTabTitle": "Transactions"
     },
     "schedule": {
       "form": {
@@ -864,7 +864,7 @@
         "limit": {
           "label": "Run at most N times (optional)"
         },
-        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated payments stay.",
+        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated transactions stay.",
         "validation": {
           "everyCountInvalid": "Enter a positive whole number.",
           "everyMsTooSmall": "Interval must be at least 1 minute.",
@@ -890,7 +890,7 @@
         "lastRun": "Last run: {when}",
         "cancelledAt": "Cancelled {when}",
         "runsLimit": "Limit: {n} run(s)",
-        "fromRecurring": "← from recurring payment",
+        "fromRecurring": "← from recurring transaction",
         "pause": "Pause",
         "resume": "Resume",
         "cancelAction": "Cancel schedule",
@@ -911,12 +911,12 @@
       },
       "statusActive": "Active",
       "statusCancelled": "Cancelled",
-      "summary": "{principal} over {count} payments · {rate}% p.a. · {frequency} · {method}",
+      "summary": "{principal} over {count} transactions · {rate}% p.a. · {frequency} · {method}",
       "table": {
         "dueAt": "Due",
         "principal": "Principal",
         "interest": "Interest",
-        "total": "Payment",
+        "total": "Transaction",
         "remaining": "Remaining",
         "status": "Status"
       },
@@ -927,7 +927,7 @@
         "CANCELLED": "Cancelled"
       },
       "cancelAction": "Cancel plan",
-      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending payments will be marked cancelled; nothing is deleted.",
+      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending transactions will be marked cancelled; nothing is deleted.",
       "cancelConfirmYes": "Yes, cancel",
       "cancelConfirmKeep": "Keep plan",
       "cancelledToast": "Plan cancelled",
@@ -935,11 +935,11 @@
       "form": {
         "legend": "Plan details",
         "rateLabel": "Annual interest rate (%)",
-        "countLabel": "Number of payments",
+        "countLabel": "Number of transactions",
         "frequencyLabel": "Frequency",
-        "firstDueLabel": "First payment due",
+        "firstDueLabel": "First transaction due",
         "methodLabel": "Amortisation method",
-        "principalHint": "The amount above is the plan's principal; each payment is derived from it.",
+        "principalHint": "The amount above is the plan's principal; each transaction is derived from it.",
         "frequency": {
           "DAILY": "Daily",
           "WEEKLY": "Weekly",
@@ -951,13 +951,13 @@
         "method": {
           "auto": "Automatic (by type)",
           "equal": "Equal (no interest)",
-          "french": "Annuity (fixed payment)"
+          "french": "Annuity (fixed transaction)"
         },
         "validation": {
           "rateInvalid": "Enter a rate of 0 or more",
           "rateTooHigh": "Rate cannot exceed 100%",
-          "countInvalid": "Enter a whole number of payments (at least 1)",
-          "countTooHigh": "At most 600 payments",
+          "countInvalid": "Enter a whole number of transactions (at least 1)",
+          "countTooHigh": "At most 600 transactions",
           "firstDueRequired": "Pick the first due date",
           "firstDueInvalid": "Invalid date",
           "equalRequiresZeroRate": "The equal method is interest-free — set the rate to 0 or pick the annuity method"
@@ -968,7 +968,7 @@
   "categories": {
     "page": {
       "title": "Categories",
-      "subtitle": "Manage your payment categories."
+      "subtitle": "Manage your transaction categories."
     },
     "scope": {
       "personal": "Personal",
@@ -1021,7 +1021,7 @@
     "delete": {
       "title": "Delete category",
       "warning": "Are you sure you want to delete \"{name}\"? This can't be undone.",
-      "inUse": "{count} payment(s) still use this category. Choose a replacement category before deleting.",
+      "inUse": "{count} transaction(s) still use this category. Choose a replacement category before deleting.",
       "replaceLabel": "Replacement category",
       "cancel": "Cancel",
       "confirm": "Delete",
@@ -1078,7 +1078,7 @@
     },
     "attach": {
       "title": "Attach a receipt",
-      "hint": "Add the receipt for this payment. We'll read it and check it against what you entered.",
+      "hint": "Add the receipt for this transaction. We'll read it and check it against what you entered.",
       "device": "Upload from this device",
       "urlLabel": "Or add from a URL",
       "urlPlaceholder": "https://…",
@@ -1087,17 +1087,17 @@
       "failed": "Failed to attach the receipt"
     },
     "reconcile": {
-      "title": "Update the payment?",
-      "hint": "The receipt differs from the payment. Choose what to keep for each field.",
+      "title": "Update the transaction?",
+      "hint": "The receipt differs from the transaction. Choose what to keep for each field.",
       "totalLabel": "Total",
       "categoryLabel": "Category",
       "keep": "Keep",
       "update": "Use receipt:",
       "none": "None",
-      "noDifferences": "The receipt matches the payment. Confirm to finish.",
+      "noDifferences": "The receipt matches the transaction. Confirm to finish.",
       "itemsNote": "Products and item details are saved either way.",
-      "loading": "Loading the payment…",
-      "loadFailed": "Could not load the payment.",
+      "loading": "Loading the transaction…",
+      "loadFailed": "Could not load the transaction.",
       "cancel": "Cancel",
       "confirm": "Confirm",
       "close": "Close",
@@ -1157,7 +1157,7 @@
       "retry": "Retry extraction",
       "retriedToast": "Extraction restarted",
       "confirm": "Confirm",
-      "reconcile": "Reconcile with payment",
+      "reconcile": "Reconcile with transaction",
       "confirmSaveFirst": "Save your changes before confirming",
       "matchProducts": "Match products ({count})",
       "matchProductsDone": "Products matched",
@@ -1170,12 +1170,12 @@
     },
     "confirm": {
       "title": "Confirm receipt",
-      "description": "This creates a payment from the reviewed receipt.",
+      "description": "This creates a transaction from the reviewed receipt.",
       "categoryLabel": "Primary category",
       "scopeLabel": "Attribute to",
       "noteLabel": "Note (optional)",
       "notePlaceholder": "Defaults to the merchant name",
-      "submit": "Confirm & create payment",
+      "submit": "Confirm & create transaction",
       "cancel": "Cancel",
       "missingCategory": "Choose a primary category",
       "missingScope": "Choose at least one scope",

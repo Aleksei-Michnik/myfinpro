@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TotalsCard } from './TotalsCard';
-import type { PaymentSummary } from '@/lib/payment/types';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 const mockFetchList = vi.fn();
 
@@ -18,11 +18,11 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me', defaultCurrency: 'USD' } }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ fetchList: mockFetchList }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ fetchList: mockFetchList }),
 }));
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: p.id ?? 'p',
     direction: p.direction ?? 'OUT',
@@ -37,14 +37,14 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
   };
 }
 
-function listResp(rows: PaymentSummary[], hasMore = false) {
+function listResp(rows: TransactionSummary[], hasMore = false) {
   return { data: rows, nextCursor: null, hasMore };
 }
 
@@ -72,7 +72,7 @@ describe('TotalsCard', () => {
     });
   });
 
-  it('shows the empty state when zero payments', async () => {
+  it('shows the empty state when zero transactions', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
     await waitFor(() => expect(screen.getByTestId('totals-card-empty')).toBeInTheDocument());
@@ -81,9 +81,9 @@ describe('TotalsCard', () => {
   it('aggregates IN, OUT and Net for a single currency', async () => {
     mockFetchList.mockResolvedValueOnce(
       listResp([
-        makePayment({ id: 'a', direction: 'IN', amountCents: 5000, currency: 'USD' }),
-        makePayment({ id: 'b', direction: 'OUT', amountCents: 1500, currency: 'USD' }),
-        makePayment({ id: 'c', direction: 'OUT', amountCents: 500, currency: 'USD' }),
+        makeTransaction({ id: 'a', direction: 'IN', amountCents: 5000, currency: 'USD' }),
+        makeTransaction({ id: 'b', direction: 'OUT', amountCents: 1500, currency: 'USD' }),
+        makeTransaction({ id: 'c', direction: 'OUT', amountCents: 500, currency: 'USD' }),
       ]),
     );
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
@@ -96,8 +96,8 @@ describe('TotalsCard', () => {
   it('renders one row per currency for multi-currency totals', async () => {
     mockFetchList.mockResolvedValueOnce(
       listResp([
-        makePayment({ id: 'a', direction: 'IN', amountCents: 1000, currency: 'USD' }),
-        makePayment({ id: 'b', direction: 'OUT', amountCents: 2000, currency: 'EUR' }),
+        makeTransaction({ id: 'a', direction: 'IN', amountCents: 1000, currency: 'USD' }),
+        makeTransaction({ id: 'b', direction: 'OUT', amountCents: 2000, currency: 'EUR' }),
       ]),
     );
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
@@ -108,10 +108,10 @@ describe('TotalsCard', () => {
   it('places the user default currency first; rest alphabetical', async () => {
     mockFetchList.mockResolvedValueOnce(
       listResp([
-        makePayment({ id: 'a', currency: 'EUR', amountCents: 100 }),
-        makePayment({ id: 'b', currency: 'GBP', amountCents: 100 }),
-        makePayment({ id: 'c', currency: 'USD', amountCents: 100 }),
-        makePayment({ id: 'd', currency: 'AED', amountCents: 100 }),
+        makeTransaction({ id: 'a', currency: 'EUR', amountCents: 100 }),
+        makeTransaction({ id: 'b', currency: 'GBP', amountCents: 100 }),
+        makeTransaction({ id: 'c', currency: 'USD', amountCents: 100 }),
+        makeTransaction({ id: 'd', currency: 'AED', amountCents: 100 }),
       ]),
     );
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
@@ -128,7 +128,7 @@ describe('TotalsCard', () => {
 
   it('shows the "partial totals" badge when API hasMore=true', async () => {
     mockFetchList.mockResolvedValueOnce(
-      listResp([makePayment({ amountCents: 100, currency: 'USD' })], true),
+      listResp([makeTransaction({ amountCents: 100, currency: 'USD' })], true),
     );
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
     await waitFor(() => expect(screen.getByTestId('totals-card-partial')).toBeInTheDocument());
@@ -145,18 +145,18 @@ describe('TotalsCard', () => {
     mockFetchList.mockRejectedValueOnce(new Error('Boom'));
     render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
     await waitFor(() => expect(screen.getByTestId('totals-card-retry')).toBeInTheDocument());
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment({ amountCents: 100 })]));
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction({ amountCents: 100 })]));
     screen.getByTestId('totals-card-retry').click();
     await waitFor(() => expect(screen.getByTestId('totals-card-row-USD')).toBeInTheDocument());
     expect(mockFetchList).toHaveBeenCalledTimes(2);
   });
 
-  it('payments prop bypasses the fetch entirely', async () => {
+  it('transactions prop bypasses the fetch entirely', async () => {
     render(
       <TotalsCard
         fromIso="2026-05-01T00:00:00Z"
         toIso="2026-06-01T00:00:00Z"
-        payments={[makePayment({ direction: 'IN', amountCents: 4200, currency: 'USD' })]}
+        transactions={[makeTransaction({ direction: 'IN', amountCents: 4200, currency: 'USD' })]}
       />,
     );
     await waitFor(() => expect(screen.getByTestId('totals-card-row-USD')).toBeInTheDocument());
@@ -180,9 +180,9 @@ describe('TotalsCard', () => {
       <TotalsCard
         fromIso="2026-05-01T00:00:00Z"
         toIso="2026-06-01T00:00:00Z"
-        payments={[
-          makePayment({ direction: 'OUT', amountCents: 1234, currency: 'USD' }),
-          makePayment({ direction: 'OUT', amountCents: 999, currency: 'ILS' }),
+        transactions={[
+          makeTransaction({ direction: 'OUT', amountCents: 1234, currency: 'USD' }),
+          makeTransaction({ direction: 'OUT', amountCents: 999, currency: 'ILS' }),
         ]}
       />,
     );

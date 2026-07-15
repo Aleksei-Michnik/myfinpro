@@ -92,10 +92,10 @@ vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }));
 
-vi.mock('@/components/group/GroupPaymentsTab', () => ({
-  GroupPaymentsTab: ({ groupId }: { groupId: string }) => (
-    <div data-testid="group-payments-tab" data-group-id={groupId}>
-      payments
+vi.mock('@/components/group/GroupTransactionsTab', () => ({
+  GroupTransactionsTab: ({ groupId }: { groupId: string }) => (
+    <div data-testid="group-transactions-tab" data-group-id={groupId}>
+      transactions
     </div>
   ),
 }));
@@ -362,15 +362,18 @@ describe('GroupDashboardPage', () => {
     expect(screen.getByTestId('group-member-joined-user-1').textContent).toMatch(/^Joined /);
   });
 
-  it('renders the GroupPaymentsTab section', async () => {
+  it('renders the GroupTransactionsTab section', async () => {
     mockGroupState.getGroup = vi.fn().mockResolvedValue(sampleGroup);
 
     render(<GroupDashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('group-payments-tab')).toBeInTheDocument();
+      expect(screen.getByTestId('group-transactions-tab')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('group-payments-tab')).toHaveAttribute('data-group-id', 'group-1');
+    expect(screen.getByTestId('group-transactions-tab')).toHaveAttribute(
+      'data-group-id',
+      'group-1',
+    );
   });
 
   describe('Leave Group flow', () => {

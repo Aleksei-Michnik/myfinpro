@@ -1,19 +1,19 @@
 'use client';
 
 // Phase 6 · Iteration 6.20 — plan sub-form rendered inside
-// `<PaymentFormDialog>` when the selected type is a plan kind (INSTALLMENT /
+// `<TransactionFormDialog>` when the selected type is a plan kind (INSTALLMENT /
 // LOAN / MORTGAGE). Mirrors the 6.18.1 schedule sub-form conventions: state
 // is owned + persisted by the parent dialog so type toggles preserve the
 // in-progress draft (sticky form).
 //
-// The plan's principal is the payment's own amount and its kind is the
+// The plan's principal is the transaction's own amount and its kind is the
 // selected type — neither is repeated here (single source of truth).
 
 import { isPlanKind } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
-import type { PaymentType, PlanSpec } from '@/lib/payment/types';
+import type { TransactionType, PlanSpec } from '@/lib/transaction/types';
 
-export const PLAN_PAYMENTS_COUNT_MAX = 600;
+export const PLAN_TRANSACTIONS_COUNT_MAX = 600;
 
 const FREQUENCIES: PlanSpec['frequency'][] = [
   'DAILY',
@@ -28,7 +28,7 @@ const FREQUENCIES: PlanSpec['frequency'][] = [
 export interface PlanSubFormState {
   /** Annual interest rate in PERCENT as typed ("5" = 5% = 0.05). */
   interestRatePctStr: string;
-  paymentsCountStr: string;
+  transactionsCountStr: string;
   frequency: PlanSpec['frequency'];
   /** yyyy-mm-dd. */
   firstDueAt: string;
@@ -38,7 +38,7 @@ export interface PlanSubFormState {
 
 export interface PlanSubFormErrors {
   interestRate?: string;
-  paymentsCount?: string;
+  transactionsCount?: string;
   firstDueAt?: string;
   method?: string;
 }
@@ -46,7 +46,7 @@ export interface PlanSubFormErrors {
 export function defaultPlanSubFormState(): PlanSubFormState {
   return {
     interestRatePctStr: '0',
-    paymentsCountStr: '12',
+    transactionsCountStr: '12',
     frequency: 'MONTHLY',
     firstDueAt: new Date().toISOString().slice(0, 10),
     method: 'auto',
@@ -64,12 +64,12 @@ interface BuildResult {
  * `type` must be a plan kind — used for the equal-method + rate cross-check
  * (INSTALLMENT defaults to 'equal', which requires a 0% rate).
  *
- * `tValidation` is the `payments.plan.form.validation` translation function;
+ * `tValidation` is the `transactions.plan.form.validation` translation function;
  * tests stub it with the identity-key formatter.
  */
 export function buildPlanSpec(
   state: PlanSubFormState,
-  type: PaymentType,
+  type: TransactionType,
   tValidation: (key: string) => string,
 ): BuildResult {
   const errors: PlanSubFormErrors = {};
@@ -81,11 +81,11 @@ export function buildPlanSpec(
     errors.interestRate = tValidation('rateTooHigh');
   }
 
-  const count = Number(state.paymentsCountStr);
+  const count = Number(state.transactionsCountStr);
   if (!Number.isInteger(count) || count < 1) {
-    errors.paymentsCount = tValidation('countInvalid');
-  } else if (count > PLAN_PAYMENTS_COUNT_MAX) {
-    errors.paymentsCount = tValidation('countTooHigh');
+    errors.transactionsCount = tValidation('countInvalid');
+  } else if (count > PLAN_TRANSACTIONS_COUNT_MAX) {
+    errors.transactionsCount = tValidation('countTooHigh');
   }
 
   let firstDueAtIso = '';
@@ -112,7 +112,7 @@ export function buildPlanSpec(
   const ok = Object.keys(errors).length === 0 && isPlanKind(type);
   const spec: PlanSpec = {
     interestRate: Number.isNaN(ratePct) ? 0 : ratePct / 100,
-    paymentsCount: Number.isInteger(count) ? count : 0,
+    transactionsCount: Number.isInteger(count) ? count : 0,
     frequency: state.frequency,
     firstDueAt: firstDueAtIso,
     ...(state.method !== 'auto' ? { amortizationMethod: state.method } : {}),
@@ -120,7 +120,7 @@ export function buildPlanSpec(
   return { ok, spec, errors };
 }
 
-export interface PaymentPlanSubFormProps {
+export interface TransactionPlanSubFormProps {
   state: PlanSubFormState;
   errors: PlanSubFormErrors;
   onChange(next: PlanSubFormState): void;
@@ -132,15 +132,20 @@ const inputClass =
   'focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 ' +
   'dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
 
-export function PaymentPlanSubForm({ state, errors, onChange, disabled }: PaymentPlanSubFormProps) {
-  const t = useTranslations('payments.plan.form');
+export function TransactionPlanSubForm({
+  state,
+  errors,
+  onChange,
+  disabled,
+}: TransactionPlanSubFormProps) {
+  const t = useTranslations('transactions.plan.form');
 
   const set = (patch: Partial<PlanSubFormState>) => onChange({ ...state, ...patch });
 
   return (
     <fieldset
       className="rounded-md border border-gray-200 p-3 dark:border-gray-700"
-      data-testid="payment-plan-subform"
+      data-testid="transaction-plan-subform"
     >
       <legend className="px-1 text-xs font-medium text-gray-500 dark:text-gray-400">
         {t('legend')}
@@ -172,27 +177,27 @@ export function PaymentPlanSubForm({ state, errors, onChange, disabled }: Paymen
           )}
         </label>
 
-        {/* Payments count */}
+        {/* Transactions count */}
         <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
           <span>{t('countLabel')}</span>
           <input
             type="number"
             inputMode="numeric"
             min={1}
-            max={PLAN_PAYMENTS_COUNT_MAX}
+            max={PLAN_TRANSACTIONS_COUNT_MAX}
             step={1}
-            value={state.paymentsCountStr}
-            onChange={(e) => set({ paymentsCountStr: e.target.value })}
+            value={state.transactionsCountStr}
+            onChange={(e) => set({ transactionsCountStr: e.target.value })}
             disabled={disabled}
             data-testid="plan-count"
             className={inputClass}
           />
-          {errors.paymentsCount && (
+          {errors.transactionsCount && (
             <span
               className="mt-1 text-xs text-red-600 dark:text-red-400"
               data-testid="plan-error-count"
             >
-              {errors.paymentsCount}
+              {errors.transactionsCount}
             </span>
           )}
         </label>

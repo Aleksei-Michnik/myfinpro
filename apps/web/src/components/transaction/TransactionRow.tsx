@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.12 — single payment row.
+// Phase 6 · Iteration 6.12 — single transaction row.
 // Two render variants:
 //   - "desktop": a `<tr>` with 8 cells. Used inside a `<table>` body.
 //   - "card":    a stacked `<li>` block, mobile-friendly.
@@ -14,16 +14,20 @@ import { useLocale, useTranslations } from 'next-intl';
 import { type KeyboardEvent } from 'react';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
-import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
-import { canEditPayment } from '@/lib/payment/types';
-import type { PaymentSummary } from '@/lib/payment/types';
-import { useStarToggle } from '@/lib/payment/use-star-toggle';
+import {
+  formatOccurredAt,
+  formatScopeLabel,
+  formatSignedAmount,
+} from '@/lib/transaction/formatters';
+import { canEditTransaction } from '@/lib/transaction/types';
+import type { TransactionSummary } from '@/lib/transaction/types';
+import { useStarToggle } from '@/lib/transaction/use-star-toggle';
 
-export type PaymentRowVariant = 'desktop' | 'card';
+export type TransactionRowVariant = 'desktop' | 'card';
 
-export interface PaymentRowProps {
-  payment: PaymentSummary;
-  variant: PaymentRowVariant;
+export interface TransactionRowProps {
+  transaction: TransactionSummary;
+  variant: TransactionRowVariant;
   /** Hide the star icon (e.g. on the starred-only page). Default true. */
   showStar?: boolean;
   /** Hide the edit/delete controls (e.g. read-only view). Default true. */
@@ -32,9 +36,9 @@ export interface PaymentRowProps {
   onClick?(id: string): void;
   /** Open the edit dialog (6.13). In 6.12 we wire to a no-op pass-through. */
   onEditClick?(id: string): void;
-  onDeleteClick?(payment: PaymentSummary): void;
-  /** Attach a receipt to this (expense) payment (8.15). Absent → no menu item. */
-  onAttachClick?(payment: PaymentSummary): void;
+  onDeleteClick?(transaction: TransactionSummary): void;
+  /** Attach a receipt to this (expense) transaction (8.15). Absent → no menu item. */
+  onAttachClick?(transaction: TransactionSummary): void;
   /** Reports the new starred state so the parent list can update / remove. */
   onStarToggled?(id: string, starred: boolean): void;
 }
@@ -47,8 +51,8 @@ function truncateScopeList(labels: string[]): { display: string; full: string } 
   return { display, full };
 }
 
-export function PaymentRow({
-  payment,
+export function TransactionRow({
+  transaction,
   variant,
   showStar = true,
   showControls = true,
@@ -57,8 +61,8 @@ export function PaymentRow({
   onDeleteClick,
   onAttachClick,
   onStarToggled,
-}: PaymentRowProps) {
-  const t = useTranslations('payments');
+}: TransactionRowProps) {
+  const t = useTranslations('transactions');
   const locale = useLocale();
 
   // Optimistic star state — shared hook provides flip + revert-on-error.
@@ -67,7 +71,7 @@ export function PaymentRow({
     error: starError,
     pending: starPending,
     toggle: runToggleStar,
-  } = useStarToggle(payment.id, payment.starredByMe, { onToggled: onStarToggled });
+  } = useStarToggle(transaction.id, transaction.starredByMe, { onToggled: onStarToggled });
 
   const handleStar = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -76,41 +80,41 @@ export function PaymentRow({
 
   const handleRowClick = () => {
     if (!onClick) return;
-    onClick(payment.id);
+    onClick(transaction.id);
   };
 
   const handleRowKeyDown = (e: KeyboardEvent) => {
     if (!onClick) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onClick(payment.id);
+      onClick(transaction.id);
     }
   };
 
   const handleEdit = () => {
-    onEditClick?.(payment.id);
+    onEditClick?.(transaction.id);
   };
 
   const handleDelete = () => {
-    onDeleteClick?.(payment);
+    onDeleteClick?.(transaction);
   };
 
   const handleAttach = () => {
-    onAttachClick?.(payment);
+    onAttachClick?.(transaction);
   };
 
   // Prepare derived values shared between variants.
-  const dateText = formatOccurredAt(payment.occurredAt, locale);
-  const amountText = formatSignedAmount(payment, locale);
+  const dateText = formatOccurredAt(transaction.occurredAt, locale);
+  const amountText = formatSignedAmount(transaction, locale);
   const directionClass =
-    payment.direction === 'IN'
+    transaction.direction === 'IN'
       ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
       : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
-  const directionLabel = payment.direction === 'IN' ? t('directions.in') : t('directions.out');
+  const directionLabel = transaction.direction === 'IN' ? t('directions.in') : t('directions.out');
   const tFn = (key: string) => t(key);
-  const scopeLabels = payment.attributions.map((a) => formatScopeLabel(a, tFn));
+  const scopeLabels = transaction.attributions.map((a) => formatScopeLabel(a, tFn));
   const scopes = truncateScopeList(scopeLabels);
-  const note = payment.note ?? '';
+  const note = transaction.note ?? '';
   const starGlyph = starred ? '★' : '☆';
   const starAria = starred ? t('row.starRemove') : t('row.starAdd');
   const starColor = starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500';
@@ -121,7 +125,7 @@ export function PaymentRow({
     <button
       type="button"
       onClick={handleStar}
-      data-testid={`row-star-${payment.id}`}
+      data-testid={`row-star-${transaction.id}`}
       aria-label={starAria}
       aria-pressed={starred}
       aria-busy={starPending}
@@ -130,7 +134,7 @@ export function PaymentRow({
       className={`text-lg leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 ${starColor}`}
     >
       {starPending ? (
-        <ButtonSpinner size="sm" data-testid={`row-star-spinner-${payment.id}`} />
+        <ButtonSpinner size="sm" data-testid={`row-star-spinner-${transaction.id}`} />
       ) : (
         starGlyph
       )}
@@ -138,30 +142,30 @@ export function PaymentRow({
   ) : null;
 
   // Phase 6 · Iteration 6.18.1.2 — disable the Edit/Delete menu entries
-  // when the form can't handle this payment (child occurrences + future
+  // when the form can't handle this transaction (child occurrences + future
   // types) so the row-level affordance matches the detail page's rule.
-  const formCanEdit = canEditPayment(payment);
+  const formCanEdit = canEditTransaction(transaction);
   const controlsMenu = showControls ? (
     <RowActionsMenu
       triggerLabel={t('table.controls')}
-      testId={`row-controls-${payment.id}`}
+      testId={`row-controls-${transaction.id}`}
       items={[
         {
           key: 'edit',
           label: t('controls.edit'),
           onClick: handleEdit,
           disabled: !formCanEdit,
-          testId: `row-edit-${payment.id}`,
+          testId: `row-edit-${transaction.id}`,
         },
-        // Attach a receipt — expense payments only (receipts are OUT proving
+        // Attach a receipt — expense transactions only (receipts are OUT proving
         // documents) and only when the parent wires the handler.
-        ...(onAttachClick && payment.direction === 'OUT'
+        ...(onAttachClick && transaction.direction === 'OUT'
           ? [
               {
                 key: 'attach',
                 label: t('controls.attachReceipt'),
                 onClick: handleAttach,
-                testId: `row-attach-${payment.id}`,
+                testId: `row-attach-${transaction.id}`,
               },
             ]
           : []),
@@ -171,7 +175,7 @@ export function PaymentRow({
           destructive: true,
           onClick: handleDelete,
           disabled: !formCanEdit,
-          testId: `row-delete-${payment.id}`,
+          testId: `row-delete-${transaction.id}`,
         },
       ]}
     />
@@ -180,8 +184,8 @@ export function PaymentRow({
   const directionPill = (
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${directionClass}`}
-      data-testid={`row-direction-${payment.id}`}
-      data-direction={payment.direction}
+      data-testid={`row-direction-${transaction.id}`}
+      data-direction={transaction.direction}
     >
       {directionLabel}
     </span>
@@ -191,7 +195,7 @@ export function PaymentRow({
   if (variant === 'desktop') {
     return (
       <tr
-        data-testid={`payment-row-${payment.id}`}
+        data-testid={`transaction-row-${transaction.id}`}
         onClick={onClick ? handleRowClick : undefined}
         onKeyDown={onClick ? handleRowKeyDown : undefined}
         tabIndex={onClick ? 0 : undefined}
@@ -206,16 +210,16 @@ export function PaymentRow({
         <td className="px-2 py-2 align-middle">{directionPill}</td>
         <td
           className="px-2 py-2 text-end align-middle font-mono text-sm text-gray-900 dark:text-gray-100"
-          data-testid={`row-amount-${payment.id}`}
+          data-testid={`row-amount-${transaction.id}`}
         >
           {amountText}
         </td>
         <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
-          {payment.category.name}
+          {transaction.category.name}
         </td>
         <td
           className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300"
-          data-testid={`row-scopes-${payment.id}`}
+          data-testid={`row-scopes-${transaction.id}`}
           title={scopes.full}
         >
           {scopes.display}
@@ -223,7 +227,7 @@ export function PaymentRow({
         <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
           <span
             className="block max-w-[24ch] truncate"
-            data-testid={`row-note-${payment.id}`}
+            data-testid={`row-note-${transaction.id}`}
             title={note}
           >
             {note}
@@ -237,7 +241,7 @@ export function PaymentRow({
   // ── Card variant (mobile list item) ───────────────────────────────────────
   return (
     <li
-      data-testid={`payment-row-${payment.id}`}
+      data-testid={`transaction-row-${transaction.id}`}
       onClick={onClick ? handleRowClick : undefined}
       onKeyDown={onClick ? handleRowKeyDown : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -249,7 +253,7 @@ export function PaymentRow({
         {directionPill}
         <span
           className="ms-auto font-mono text-sm text-gray-900 dark:text-gray-100"
-          data-testid={`row-amount-${payment.id}`}
+          data-testid={`row-amount-${transaction.id}`}
         >
           {amountText}
         </span>
@@ -257,11 +261,11 @@ export function PaymentRow({
         {controlsMenu}
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400">
-        {dateText} · {payment.category.name}
+        {dateText} · {transaction.category.name}
       </div>
       <div
         className="text-xs text-gray-700 dark:text-gray-300"
-        data-testid={`row-scopes-${payment.id}`}
+        data-testid={`row-scopes-${transaction.id}`}
         title={scopes.full}
       >
         {scopes.display}

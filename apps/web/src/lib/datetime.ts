@@ -1,6 +1,6 @@
 // Helpers for `<input type="datetime-local">`, whose only accepted value
 // shape is `YYYY-MM-DDTHH:mm` (local zone, no seconds, no timezone).
-// Shared by every dialog that edits a timestamp (payments, manual receipts).
+// Shared by every dialog that edits a timestamp (transactions, manual receipts).
 
 /** Current local date+time as a `YYYY-MM-DDTHH:mm` datetime-local value. */
 export function nowLocalIso(): string {

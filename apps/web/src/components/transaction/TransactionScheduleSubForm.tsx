@@ -1,13 +1,13 @@
 'use client';
 
 // Phase 6 · Iteration 6.18.1 — schedule sub-form rendered inside
-// `<PaymentFormDialog>` when `type === 'RECURRING'`.
+// `<TransactionFormDialog>` when `type === 'RECURRING'`.
 //
 // State shape is owned + persisted by the parent dialog so toggling between
 // ONE_TIME and RECURRING preserves the in-progress draft (sticky form).
 
 import { useTranslations } from 'next-intl';
-import type { ScheduleSpec } from '@/lib/payment/types';
+import type { ScheduleSpec } from '@/lib/transaction/types';
 
 export type ScheduleRepeatMode = 'every' | 'cron';
 export type ScheduleEveryUnit = 'minute' | 'hour' | 'day' | 'week' | 'month';
@@ -115,7 +115,7 @@ interface BuildResult {
  * Returns inline errors on failure; the parent dialog uses these to short-
  * circuit the save flow before any network call.
  *
- * `tValidation` is the `payments.schedule.form.validation` translation
+ * `tValidation` is the `transactions.schedule.form.validation` translation
  * function; tests stub it with the identity-key formatter.
  */
 export function buildScheduleSpec(
@@ -186,28 +186,28 @@ export function buildScheduleSpec(
   return { ok, spec, errors };
 }
 
-export interface PaymentScheduleSubFormProps {
+export interface TransactionScheduleSubFormProps {
   state: ScheduleSubFormState;
   errors: ScheduleSubFormErrors;
   onChange(next: ScheduleSubFormState): void;
   disabled?: boolean;
 }
 
-export function PaymentScheduleSubForm({
+export function TransactionScheduleSubForm({
   state,
   errors,
   onChange,
   disabled,
-}: PaymentScheduleSubFormProps) {
-  const t = useTranslations('payments.schedule.form');
+}: TransactionScheduleSubFormProps) {
+  const t = useTranslations('transactions.schedule.form');
 
   const set = (patch: Partial<ScheduleSubFormState>) => onChange({ ...state, ...patch });
 
   return (
     <fieldset
       className="rounded-md border border-gray-200 p-3 dark:border-gray-700"
-      data-testid="payment-schedule-subform"
-      aria-describedby="payment-schedule-subform-help"
+      data-testid="transaction-schedule-subform"
+      aria-describedby="transaction-schedule-subform-help"
     >
       <legend className="px-1 text-xs font-medium text-gray-500 dark:text-gray-400">
         {t('legend')}
@@ -279,7 +279,7 @@ export function PaymentScheduleSubForm({
           </div>
           <p
             className="mt-1 text-xs text-gray-500 dark:text-gray-400"
-            id="payment-schedule-subform-help"
+            id="transaction-schedule-subform-help"
           >
             {t('every.minHelp')}
           </p>

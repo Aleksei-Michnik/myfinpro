@@ -10,7 +10,7 @@ export interface MonthRange {
 /**
  * Compute the [first-of-this-month, first-of-next-month) UTC range covering
  * the given `now` (defaults to the current wall clock). Returns ISO strings
- * suitable for `from`/`to` query params on the payments list endpoint.
+ * suitable for `from`/`to` query params on the transactions list endpoint.
  */
 export function computeMonthRange(now: Date = new Date()): MonthRange {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

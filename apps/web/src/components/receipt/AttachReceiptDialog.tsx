@@ -1,11 +1,11 @@
 'use client';
 
-// Phase 8 · Iteration 8.15 — attach a receipt to an existing payment
+// Phase 8 · Iteration 8.15 — attach a receipt to an existing transaction
 // (design §3). Offers the two LLM-analysed intake paths — upload from this
 // device and add from URL — since the whole point is to extract the receipt
-// and reconcile it against the payment (a manually-composed barcode receipt
+// and reconcile it against the transaction (a manually-composed barcode receipt
 // has nothing to analyse). The receipt is created already linked to the
-// payment; the review page then runs reconciliation.
+// transaction; the review page then runs reconciliation.
 //
 // Accessibility: dialog semantics, focus moved in on open, Esc/backdrop
 // close, labelled URL field with Enter-to-submit, errors via toast; every
@@ -28,7 +28,7 @@ const inputClass =
 
 export interface AttachReceiptDialogProps {
   open: boolean;
-  paymentId: string;
+  transactionId: string;
   onClose(): void;
   /** The created (linked) receipt — the parent routes to its review. */
   onAttached(receipt: ReceiptSummary): void;
@@ -36,12 +36,12 @@ export interface AttachReceiptDialogProps {
 
 export function AttachReceiptDialog({
   open,
-  paymentId,
+  transactionId,
   onClose,
   onAttached,
 }: AttachReceiptDialogProps) {
   const t = useTranslations('receipts.attach');
-  const { attachFileToPayment, attachUrlToPayment } = useReceipts();
+  const { attachFileToTransaction, attachUrlToTransaction } = useReceipts();
   const { addToast } = useToast();
 
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -82,12 +82,12 @@ export function AttachReceiptDialog({
 
   const onFile = (file: File | undefined) => {
     if (!file) return;
-    attach((signal) => attachFileToPayment(paymentId, file, signal));
+    attach((signal) => attachFileToTransaction(transactionId, file, signal));
   };
   const onUrl = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
-    attach((signal) => attachUrlToPayment(paymentId, trimmed, signal));
+    attach((signal) => attachUrlToTransaction(transactionId, trimmed, signal));
   };
 
   if (!open || typeof document === 'undefined') return null;

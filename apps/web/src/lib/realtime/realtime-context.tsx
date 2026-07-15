@@ -42,12 +42,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { ConnectionStatus, RealtimeEvent } from './realtime-types';
 import {
   AUTH_BROADCAST_CHANNEL,
   TOKEN_REFRESHED_MESSAGE,
   type AuthBroadcastMessage,
 } from '@/lib/api-client';
-import type { ConnectionStatus, RealtimeEvent } from './realtime-types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 const STREAM_URL = `${API_BASE}/events/stream`;

@@ -1,46 +1,46 @@
 'use client';
 
-// Phase 6 · Iteration 6.14 — client orchestrator for the payment detail page.
+// Phase 6 · Iteration 6.14 — client orchestrator for the transaction detail page.
 //
 // Handles:
-//   - initial fetch via usePayments().getPayment
+//   - initial fetch via useTransactions().getTransaction
 //   - loading / 404 / network-error / success states
-//   - edit (PaymentFormDialog) + delete (DeletePaymentDialog) mounts
+//   - edit (TransactionFormDialog) + delete (DeleteTransactionDialog) mounts
 //   - star-toggle bubble-up + comment-append bridging
 
 import { isPlanKind } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DeletePaymentDialog } from '@/components/payment/DeletePaymentDialog';
-import { PaymentCommentInput } from '@/components/payment/PaymentCommentInput';
+import { DeleteTransactionDialog } from '@/components/transaction/DeleteTransactionDialog';
+import { RecurringOccurrencesSection } from '@/components/transaction/RecurringOccurrencesSection';
+import { ScheduleBadge } from '@/components/transaction/ScheduleBadge';
+import { TransactionCommentInput } from '@/components/transaction/TransactionCommentInput';
 import {
-  PaymentCommentList,
-  type PaymentCommentListHandle,
-} from '@/components/payment/PaymentCommentList';
-import { PaymentDetailHeader } from '@/components/payment/PaymentDetailHeader';
-import { PaymentDocuments } from '@/components/payment/PaymentDocuments';
-import { PaymentFormDialog } from '@/components/payment/PaymentFormDialog';
-import { PaymentPlanSection } from '@/components/payment/PaymentPlanSection';
-import { PaymentPurchaseDetails } from '@/components/payment/PaymentPurchaseDetails';
-import { PaymentSchedulePlanPlaceholder } from '@/components/payment/PaymentSchedulePlanPlaceholder';
-import { RecurringOccurrencesSection } from '@/components/payment/RecurringOccurrencesSection';
-import { ScheduleBadge } from '@/components/payment/ScheduleBadge';
+  TransactionCommentList,
+  type TransactionCommentListHandle,
+} from '@/components/transaction/TransactionCommentList';
+import { TransactionDetailHeader } from '@/components/transaction/TransactionDetailHeader';
+import { TransactionDocuments } from '@/components/transaction/TransactionDocuments';
+import { TransactionFormDialog } from '@/components/transaction/TransactionFormDialog';
+import { TransactionPlanSection } from '@/components/transaction/TransactionPlanSection';
+import { TransactionPurchaseDetails } from '@/components/transaction/TransactionPurchaseDetails';
+import { TransactionSchedulePlanPlaceholder } from '@/components/transaction/TransactionSchedulePlanPlaceholder';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { usePayments } from '@/lib/payment/payment-context';
-import type {
-  AttributionChangeResult,
-  PaymentSummary,
-  ScheduleResponse,
-} from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type {
+  AttributionChangeResult,
+  TransactionSummary,
+  ScheduleResponse,
+} from '@/lib/transaction/types';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
-interface PaymentDetailClientProps {
-  paymentId: string;
+interface TransactionDetailClientProps {
+  transactionId: string;
 }
 
 interface LoadError {
@@ -48,63 +48,68 @@ interface LoadError {
   message: string;
 }
 
-export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
-  const t = useTranslations('payments');
-  const tDetail = useTranslations('payments.detail');
-  const tComments = useTranslations('payments.comments');
-  const tBadge = useTranslations('payments.schedule.badge');
+export function TransactionDetailClient({ transactionId }: TransactionDetailClientProps) {
+  const t = useTranslations('transactions');
+  const tDetail = useTranslations('transactions.detail');
+  const tComments = useTranslations('transactions.comments');
+  const tBadge = useTranslations('transactions.schedule.badge');
   const locale = useLocale();
-  const { getPayment, getSchedule, pauseSchedule, resumeSchedule, cancelSchedule } = usePayments();
+  const { getTransaction, getSchedule, pauseSchedule, resumeSchedule, cancelSchedule } =
+    useTransactions();
   const { addToast } = useToast();
   const { user } = useAuth();
   const router = useRouter();
 
-  const [payment, setPayment] = useState<PaymentSummary | null>(null);
+  const [transaction, setTransaction] = useState<TransactionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<TransactionSummary | null>(null);
 
   // Container-scope async op for the schedule fetch — separate from the
-  // payment fetch so loading/error states stay independent.
+  // transaction fetch so loading/error states stay independent.
   const scheduleOp = useAsyncOperation<ScheduleResponse | null>({ scope: 'container' });
 
-  const commentListRef = useRef<PaymentCommentListHandle | null>(null);
+  const commentListRef = useRef<TransactionCommentListHandle | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const p = await getPayment(paymentId);
-      setPayment(p);
+      const p = await getTransaction(transactionId);
+      setTransaction(p);
     } catch (e) {
       const err = e as { status?: number; message?: string };
-      setError({ status: err.status, message: err.message || 'Failed to load payment' });
-      setPayment(null);
+      setError({ status: err.status, message: err.message || 'Failed to load transaction' });
+      setTransaction(null);
     } finally {
       setLoading(false);
     }
-  }, [getPayment, paymentId]);
+  }, [getTransaction, transactionId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Fetch the schedule whenever the payment is RECURRING. 404 → null.
+  // Fetch the schedule whenever the transaction is RECURRING. 404 → null.
   useEffect(() => {
-    if (!payment || payment.type !== 'RECURRING' || payment.parentPaymentId !== null) {
+    if (
+      !transaction ||
+      transaction.type !== 'RECURRING' ||
+      transaction.parentTransactionId !== null
+    ) {
       setSchedule(null);
       return;
     }
     void scheduleOp
-      .run(async (signal) => getSchedule(payment.id, signal))
+      .run(async (signal) => getSchedule(transaction.id, signal))
       .then((s) => {
         if (s !== undefined) setSchedule(s);
       });
     // scheduleOp identity is stable; including it would re-fire continuously.
-  }, [payment?.id, payment?.type, payment?.parentPaymentId]);
+  }, [transaction?.id, transaction?.type, transaction?.parentTransactionId]);
 
   // Phase 6 · Iteration 6.16.5 — clear stale errors when the locale flips
   // (en ↔ he) and re-fetch quietly so we don't briefly flash a "no access"
@@ -113,7 +118,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
     void load();
   });
 
-  // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. Refetch the payment
+  // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. Refetch the transaction
   // (and, transitively via the schedule effect, its schedule) on every
   // realtime reconnect-after-gap. A 404 inside `load()` already becomes
   // an error state with a friendly "not found" branch — no extra wiring
@@ -122,22 +127,22 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
     void load();
   });
 
-  // Realtime: keep the displayed payment in sync with server-side edits and
+  // Realtime: keep the displayed transaction in sync with server-side edits and
   // react to deletions by sending the user back to the dashboard.
-  useRealtimeEvents({ type: 'payment.updated' }, (event) => {
-    if (event.payment.id !== paymentId) return;
-    setPayment(event.payment);
+  useRealtimeEvents({ type: 'transaction.updated' }, (event) => {
+    if (event.transaction.id !== transactionId) return;
+    setTransaction(event.transaction);
   });
 
-  useRealtimeEvents({ type: 'payment.deleted', paymentId }, () => {
+  useRealtimeEvents({ type: 'transaction.deleted', transactionId }, () => {
     addToast('success', tDetail('deletedToast'));
     router.replace('/dashboard');
   });
 
-  useRealtimeEvents({ type: 'payment_attribution.removed', paymentId }, () => {
+  useRealtimeEvents({ type: 'transaction_attribution.removed', transactionId }, () => {
     // We may have lost visibility — refetch to confirm; if 404, redirect.
-    void getPayment(paymentId)
-      .then((fresh) => setPayment(fresh))
+    void getTransaction(transactionId)
+      .then((fresh) => setTransaction(fresh))
       .catch(() => {
         addToast('success', tDetail('deletedToast'));
         router.replace('/dashboard');
@@ -148,22 +153,22 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   // purely presentational, so subscriptions live here and update the
   // `schedule` state that flows down as a prop. All five non-delete events
   // carry the latest `ScheduleResponseDto`, so we just replace the state.
-  useRealtimeEvents({ type: 'schedule.created', paymentId }, (event) => {
+  useRealtimeEvents({ type: 'schedule.created', transactionId }, (event) => {
     setSchedule(event.schedule);
   });
-  useRealtimeEvents({ type: 'schedule.updated', paymentId }, (event) => {
+  useRealtimeEvents({ type: 'schedule.updated', transactionId }, (event) => {
     setSchedule(event.schedule);
   });
-  useRealtimeEvents({ type: 'schedule.paused', paymentId }, (event) => {
+  useRealtimeEvents({ type: 'schedule.paused', transactionId }, (event) => {
     setSchedule(event.schedule);
   });
-  useRealtimeEvents({ type: 'schedule.resumed', paymentId }, (event) => {
+  useRealtimeEvents({ type: 'schedule.resumed', transactionId }, (event) => {
     setSchedule(event.schedule);
   });
-  useRealtimeEvents({ type: 'schedule.cancelled', paymentId }, (event) => {
+  useRealtimeEvents({ type: 'schedule.cancelled', transactionId }, (event) => {
     setSchedule(event.schedule);
   });
-  useRealtimeEvents({ type: 'schedule.deleted', paymentId }, () => {
+  useRealtimeEvents({ type: 'schedule.deleted', transactionId }, () => {
     setSchedule(null);
   });
 
@@ -174,11 +179,11 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   const lifecycleOp = useAsyncOperation<ScheduleResponse>({ scope: 'control' });
   const runLifecycle = useCallback(
     (action: 'pause' | 'resume' | 'cancel') => {
-      if (!payment) return;
+      if (!transaction) return;
       const call =
         action === 'pause' ? pauseSchedule : action === 'resume' ? resumeSchedule : cancelSchedule;
       void lifecycleOp
-        .run((signal) => call(payment.id, signal))
+        .run((signal) => call(transaction.id, signal))
         .then((s) => {
           if (s === undefined) return; // error or abort — surfaced below
           setSchedule(s);
@@ -193,7 +198,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         });
     },
     // lifecycleOp identity is stable (useAsyncOperation contract).
-    [payment?.id, pauseSchedule, resumeSchedule, cancelSchedule, addToast, tBadge],
+    [transaction?.id, pauseSchedule, resumeSchedule, cancelSchedule, addToast, tBadge],
   );
 
   // Lifecycle failures (e.g. 409 when another tab already paused/cancelled)
@@ -206,15 +211,15 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   }, [lifecycleOp.error, addToast, tBadge]);
 
   const handleStarToggled = useCallback((starred: boolean) => {
-    setPayment((prev) => (prev ? { ...prev, starredByMe: starred } : prev));
+    setTransaction((prev) => (prev ? { ...prev, starredByMe: starred } : prev));
   }, []);
 
   const handleEditSaved = useCallback(
-    async (saved: PaymentSummary | null) => {
+    async (saved: TransactionSummary | null) => {
       if (saved) {
-        setPayment(saved);
+        setTransaction(saved);
       } else {
-        // Edit dropped all accessible attributions → payment gone for us.
+        // Edit dropped all accessible attributions → transaction gone for us.
         addToast('success', tDetail('deletedToast'));
         router.replace('/dashboard');
       }
@@ -224,7 +229,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
 
   const handleDeleted = useCallback(
     async (result: AttributionChangeResult) => {
-      if (result.paymentDeleted) {
+      if (result.transactionDeleted) {
         addToast('success', tDetail('deletedToast'));
         router.replace('/dashboard');
         return;
@@ -232,14 +237,14 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
       // Still visible for someone (we may still have access to another scope) —
       // re-fetch to refresh attributions. If we lost access, treat as gone.
       try {
-        const fresh = await getPayment(paymentId);
-        setPayment(fresh);
+        const fresh = await getTransaction(transactionId);
+        setTransaction(fresh);
       } catch {
         addToast('success', tDetail('deletedToast'));
         router.replace('/dashboard');
       }
     },
-    [addToast, getPayment, paymentId, router, tDetail],
+    [addToast, getTransaction, transactionId, router, tDetail],
   );
 
   // ── Render branches ──────────────────────────────────────────────────────
@@ -249,7 +254,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
       <main className="container mx-auto max-w-3xl px-4 py-8">
         <div
           className="flex items-center justify-center py-16"
-          data-testid="payment-detail-loading"
+          data-testid="transaction-detail-loading"
           role="status"
           aria-label={tDetail('loading')}
         >
@@ -260,18 +265,18 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
     );
   }
 
-  if (error || !payment) {
+  if (error || !transaction) {
     const notFound = !!error && (error.status === 404 || error.status === 403);
     return (
       <main className="container mx-auto max-w-lg px-4 py-8">
         <div
           className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="payment-detail-error"
+          data-testid="transaction-detail-error"
           role="alert"
         >
           <h1
             className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100"
-            data-testid="payment-detail-error-title"
+            data-testid="transaction-detail-error-title"
           >
             {notFound
               ? tDetail('notFound')
@@ -281,7 +286,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
             <Link
               href="/dashboard"
               className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
-              data-testid="payment-detail-back-dashboard"
+              data-testid="transaction-detail-back-dashboard"
             >
               {tDetail('back')}
             </Link>
@@ -291,7 +296,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
                 variant="secondary"
                 size="md"
                 onClick={() => void load()}
-                data-testid="payment-detail-retry"
+                data-testid="transaction-detail-retry"
               >
                 {tDetail('tryAgain')}
               </Button>
@@ -303,16 +308,17 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
   }
 
   // 6.18.1: RECURRING parents render the live `<ScheduleBadge>`; 6.20: plan
-  // parents (INSTALLMENT / LOAN / MORTGAGE) render `<PaymentPlanSection>`.
+  // parents (INSTALLMENT / LOAN / MORTGAGE) render `<TransactionPlanSection>`.
   // The legacy "schedule/plan placeholder" stays only for LIMITED_PERIOD
   // and for child occurrences.
-  const isRecurringParent = payment.type === 'RECURRING' && payment.parentPaymentId === null;
-  const isPlanParent = isPlanKind(payment.type) && payment.parentPaymentId === null;
-  const isChildOccurrence = payment.parentPaymentId !== null;
+  const isRecurringParent =
+    transaction.type === 'RECURRING' && transaction.parentTransactionId === null;
+  const isPlanParent = isPlanKind(transaction.type) && transaction.parentTransactionId === null;
+  const isChildOccurrence = transaction.parentTransactionId !== null;
   const showLegacyPlaceholder =
     !isRecurringParent &&
     !isPlanParent &&
-    (isChildOccurrence || (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING'));
+    (isChildOccurrence || (transaction.type !== 'ONE_TIME' && transaction.type !== 'RECURRING'));
 
   return (
     <main className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -320,15 +326,15 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         <Link
           href="/dashboard"
           className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-          data-testid="payment-detail-back"
+          data-testid="transaction-detail-back"
         >
           ← {tDetail('back')}
         </Link>
-        {isChildOccurrence && payment.parentPaymentId && (
+        {isChildOccurrence && transaction.parentTransactionId && (
           <Link
-            href={`/payments/${payment.parentPaymentId}`}
+            href={`/transactions/${transaction.parentTransactionId}`}
             className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-            data-testid="payment-detail-from-recurring"
+            data-testid="transaction-detail-from-recurring"
           >
             {tBadge('fromRecurring')}
           </Link>
@@ -337,10 +343,10 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
 
       <h1 className="sr-only">{t('detail.amountLabel')}</h1>
 
-      <PaymentDetailHeader
-        payment={payment}
+      <TransactionDetailHeader
+        transaction={transaction}
         onEditClick={() => setEditOpen(true)}
-        onDeleteClick={() => setPaymentToDelete(payment)}
+        onDeleteClick={() => setTransactionToDelete(transaction)}
         onStarToggled={handleStarToggled}
       />
 
@@ -348,7 +354,7 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         <ScheduleBadge
           schedule={schedule}
           locale={locale}
-          canManage={!!user && user.id === payment.createdById}
+          canManage={!!user && user.id === transaction.createdById}
           pending={lifecycleOp.isLoading}
           onPause={() => runLifecycle('pause')}
           onResume={() => runLifecycle('resume')}
@@ -356,23 +362,26 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         />
       )}
 
-      {isRecurringParent && <RecurringOccurrencesSection paymentId={payment.id} />}
+      {isRecurringParent && <RecurringOccurrencesSection transactionId={transaction.id} />}
 
       {isPlanParent && (
-        <PaymentPlanSection
-          paymentId={payment.id}
-          createdById={payment.createdById}
-          currency={payment.currency}
+        <TransactionPlanSection
+          transactionId={transaction.id}
+          createdById={transaction.createdById}
+          currency={transaction.currency}
         />
       )}
 
-      {/* 7.13 / 8.18 / 8.19 — the linked receipt is this payment's proving
+      {/* 7.13 / 8.18 / 8.19 — the linked receipt is this transaction's proving
           document: its items fold open (purchase details) and its file(s) are
-          viewable (documents). Both are visible to any payment co-viewer. */}
-      {payment.receiptId && (
+          viewable (documents). Both are visible to any transaction co-viewer. */}
+      {transaction.receiptId && (
         <>
-          <PaymentPurchaseDetails receiptId={payment.receiptId} currency={payment.currency} />
-          <PaymentDocuments receiptId={payment.receiptId} />
+          <TransactionPurchaseDetails
+            receiptId={transaction.receiptId}
+            currency={transaction.currency}
+          />
+          <TransactionDocuments receiptId={transaction.receiptId} />
         </>
       )}
 
@@ -386,32 +395,32 @@ export function PaymentDetailClient({ paymentId }: PaymentDetailClientProps) {
         >
           {tComments('title')}
         </h2>
-        <PaymentCommentList paymentId={payment.id} ref={commentListRef} />
+        <TransactionCommentList transactionId={transaction.id} ref={commentListRef} />
         <div className="mt-4">
-          <PaymentCommentInput
-            paymentId={payment.id}
+          <TransactionCommentInput
+            transactionId={transaction.id}
             onPosted={(c) => commentListRef.current?.appendComment(c)}
           />
         </div>
       </section>
 
-      {showLegacyPlaceholder && <PaymentSchedulePlanPlaceholder />}
+      {showLegacyPlaceholder && <TransactionSchedulePlanPlaceholder />}
 
       {editOpen && (
-        <PaymentFormDialog
+        <TransactionFormDialog
           open
           mode="edit"
-          payment={payment}
+          transaction={transaction}
           existingSchedule={schedule}
           onClose={() => setEditOpen(false)}
           onSaved={handleEditSaved}
         />
       )}
 
-      {paymentToDelete && (
-        <DeletePaymentDialog
-          payment={paymentToDelete}
-          onClose={() => setPaymentToDelete(null)}
+      {transactionToDelete && (
+        <DeleteTransactionDialog
+          transaction={transactionToDelete}
+          onClose={() => setTransactionToDelete(null)}
           onDeleted={handleDeleted}
         />
       )}

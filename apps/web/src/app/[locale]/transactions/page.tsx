@@ -1,12 +1,12 @@
-// Phase 6 · Iteration 6.16 — `/payments` server shell.
+// Phase 6 · Iteration 6.16 — `/transactions` server shell.
 
-import { PaymentsListClient } from './payments-list-client';
+import { TransactionsListClient } from './transactions-list-client';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
-export default function PaymentsPage() {
+export default function TransactionsPage() {
   return (
     <ProtectedRoute>
-      <PaymentsListClient />
+      <TransactionsListClient />
     </ProtectedRoute>
   );
 }

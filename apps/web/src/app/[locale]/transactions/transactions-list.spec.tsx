@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentsListClient } from './payments-list-client';
+import { TransactionsListClient } from './transactions-list-client';
 
 // Tests for the iteration 6.16.2 orchestrator: filters live in URL, but the
 // orchestrator owns the fetch via useAsyncOperation. URL is rewritten ONLY
@@ -29,7 +29,7 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
   useRouter: () => ({ push: vi.fn(), replace: mockReplace }),
-  usePathname: () => '/payments',
+  usePathname: () => '/transactions',
 }));
 
 vi.mock('@/lib/group/group-context', () => ({
@@ -49,14 +49,14 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ fetchList: mockFetchList }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ fetchList: mockFetchList }),
 }));
 
-vi.mock('@/components/payment/PaymentsList', () => ({
-  PaymentsList: (props: Record<string, unknown>) => {
+vi.mock('@/components/transaction/TransactionsList', () => ({
+  TransactionsList: (props: Record<string, unknown>) => {
     mockListProps(props);
-    return <div data-testid="payments-list-mock" />;
+    return <div data-testid="transactions-list-mock" />;
   },
 }));
 
@@ -92,7 +92,7 @@ async function flushFetch() {
   });
 }
 
-describe('PaymentsListClient (orchestrator)', () => {
+describe('TransactionsListClient (orchestrator)', () => {
   beforeEach(() => {
     mockReplace.mockReset();
     mockListProps.mockReset();
@@ -107,15 +107,15 @@ describe('PaymentsListClient (orchestrator)', () => {
   });
 
   it('renders heading + tabs + list', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    expect(screen.getByTestId('payments-page')).toBeInTheDocument();
-    expect(screen.getByTestId('payments-scope-tabs')).toBeInTheDocument();
-    expect(screen.getByTestId('payments-list-mock')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-page')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-scope-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-list-mock')).toBeInTheDocument();
   });
 
-  it('default scope is "all"; filters.scope=all forwarded to <PaymentsList>', async () => {
-    render(<PaymentsListClient />);
+  it('default scope is "all"; filters.scope=all forwarded to <TransactionsList>', async () => {
+    render(<TransactionsListClient />);
     await flushFetch();
     const props = lastListProps();
     expect(props.filters).toMatchObject({ scope: 'all' });
@@ -124,60 +124,60 @@ describe('PaymentsListClient (orchestrator)', () => {
 
   it('?scope=personal pre-populates committedFilters.scope', async () => {
     searchString = 'scope=personal';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(lastListProps().filters.scope).toBe('personal');
   });
 
   it('?scope=group:g-1 forwards "group:g-1" when user is a member', async () => {
     searchString = 'scope=group:g-1';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(lastListProps().filters.scope).toBe('group:g-1');
   });
 
   it('?scope=group:unknown shows the no-access message', async () => {
     searchString = 'scope=group:unknown';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    expect(screen.getByTestId('payments-page-no-access')).toBeInTheDocument();
-    expect(screen.queryByTestId('payments-list-mock')).not.toBeInTheDocument();
+    expect(screen.getByTestId('transactions-page-no-access')).toBeInTheDocument();
+    expect(screen.queryByTestId('transactions-list-mock')).not.toBeInTheDocument();
   });
 
   it('renders exactly one starred control on the page', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(screen.getAllByTestId('starred-filter-toggle')).toHaveLength(1);
   });
 
   it('?starred=1 reflects in the toggle button AND on filters.starred', async () => {
     searchString = 'starred=1';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(screen.getByTestId('starred-filter-toggle')).toHaveAttribute('aria-pressed', 'true');
     expect(lastListProps().filters.starred).toBe(true);
   });
 
   it('clicking starred toggle commits and writes ?starred=1 to the URL', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     fireEvent.click(screen.getByTestId('starred-filter-toggle'));
     await flushFetch();
-    expect(mockReplace).toHaveBeenLastCalledWith('/payments?starred=1');
+    expect(mockReplace).toHaveBeenLastCalledWith('/transactions?starred=1');
   });
 
   it('clicking starred toggle when already starred commits and clears it', async () => {
     searchString = 'starred=1';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     fireEvent.click(screen.getByTestId('starred-filter-toggle'));
     await flushFetch();
-    expect(mockReplace).toHaveBeenLastCalledWith('/payments');
+    expect(mockReplace).toHaveBeenLastCalledWith('/transactions');
   });
 
   it('?direction=OUT&q=coffee&from=2026-01-01 pre-populates the filters', async () => {
     searchString = 'direction=OUT&q=coffee&from=2026-01-01';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(lastListProps().filters).toMatchObject({
       direction: 'OUT',
@@ -186,45 +186,45 @@ describe('PaymentsListClient (orchestrator)', () => {
     });
   });
 
-  it('PaymentsList.onFiltersChange writes back to the URL only on commit', async () => {
-    render(<PaymentsListClient />);
+  it('TransactionsList.onFiltersChange writes back to the URL only on commit', async () => {
+    render(<TransactionsListClient />);
     await flushFetch();
     mockReplace.mockReset();
     const onChange = lastListProps().onFiltersChange as (next: Record<string, unknown>) => void;
     onChange({ scope: 'all', sort: 'date_desc', direction: 'IN' });
     await flushFetch();
-    expect(mockReplace).toHaveBeenLastCalledWith('/payments?direction=IN');
+    expect(mockReplace).toHaveBeenLastCalledWith('/transactions?direction=IN');
   });
 
   it('Clear filters button is hidden when no non-default filter is set', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    expect(screen.queryByTestId('payments-clear-filters')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transactions-clear-filters')).not.toBeInTheDocument();
   });
 
   it('Clear filters button is visible when any non-default filter is set', async () => {
     searchString = 'starred=1';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    expect(screen.getByTestId('payments-clear-filters')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-clear-filters')).toBeInTheDocument();
   });
 
   it('Clear filters button preserves scope and strips other params', async () => {
     searchString = 'scope=personal&starred=1&direction=OUT&q=test';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    fireEvent.click(screen.getByTestId('payments-clear-filters'));
+    fireEvent.click(screen.getByTestId('transactions-clear-filters'));
     await flushFetch();
-    expect(mockReplace).toHaveBeenLastCalledWith('/payments?scope=personal');
+    expect(mockReplace).toHaveBeenLastCalledWith('/transactions?scope=personal');
   });
 
-  it('Clear filters on the all-scope tab strips down to /payments', async () => {
+  it('Clear filters on the all-scope tab strips down to /transactions', async () => {
     searchString = 'starred=1&direction=OUT&q=test&sort=amount_desc';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
-    fireEvent.click(screen.getByTestId('payments-clear-filters'));
+    fireEvent.click(screen.getByTestId('transactions-clear-filters'));
     await flushFetch();
-    expect(mockReplace).toHaveBeenLastCalledWith('/payments');
+    expect(mockReplace).toHaveBeenLastCalledWith('/transactions');
   });
 
   // ── Iteration 6.16.2 — state machine ─────────────────────────────────
@@ -238,7 +238,7 @@ describe('PaymentsListClient (orchestrator)', () => {
       }),
     );
     searchString = 'direction=IN';
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     // While in-flight: filters prop reflects deep-link (committed initially), but
     // the orchestrator hasn't yet acknowledged the commit. Simulating the bug
     // fix: the URL is the source of truth ONLY on initial mount, the controls
@@ -253,14 +253,14 @@ describe('PaymentsListClient (orchestrator)', () => {
     expect(lastListProps().loading).toBe(false);
   });
 
-  it('PaymentsList receives loading=true while the initial fetch is in flight', async () => {
+  it('TransactionsList receives loading=true while the initial fetch is in flight', async () => {
     let resolveFn: (v: unknown) => void = () => {};
     mockFetchList.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFn = resolve;
       }),
     );
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     expect(lastListProps().loading).toBe(true);
     await act(async () => {
@@ -271,7 +271,7 @@ describe('PaymentsListClient (orchestrator)', () => {
   });
 
   it('on subsequent-change failure: dialog opens; URL stays unchanged', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch(); // initial fetch resolves with default mock (success).
     mockReplace.mockReset();
     mockFetchList.mockRejectedValueOnce(new TypeError('Failed to fetch'));
@@ -282,7 +282,7 @@ describe('PaymentsListClient (orchestrator)', () => {
   });
 
   it('clicking Return on subsequent-change failure leaves URL/committedFilters untouched', async () => {
-    render(<PaymentsListClient />);
+    render(<TransactionsListClient />);
     await flushFetch();
     mockReplace.mockReset();
     mockFetchList.mockRejectedValueOnce(new TypeError('net'));
@@ -302,7 +302,7 @@ describe('PaymentsListClient (orchestrator)', () => {
     // First mount: a deferred fetch that we leave unresolved long enough to
     // simulate the in-flight cancellation that produces the AbortError flash.
     mockFetchList.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const { rerender } = render(<PaymentsListClient />);
+    const { rerender } = render(<TransactionsListClient />);
     await flushFetch();
     // Subsequent-change failure → dialog opens.
     await waitFor(() => expect(screen.getByTestId('retry-return-dialog')).toBeInTheDocument());
@@ -313,7 +313,7 @@ describe('PaymentsListClient (orchestrator)', () => {
     // Locale flips → useResetOnLocaleChange fires → dialog closes, fresh
     // fetch resolves with empty list, no error banner re-renders.
     currentLocale = 'he';
-    rerender(<PaymentsListClient />);
+    rerender(<TransactionsListClient />);
     await flushFetch();
 
     expect(screen.queryByTestId('retry-return-dialog')).not.toBeInTheDocument();

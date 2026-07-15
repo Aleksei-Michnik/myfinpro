@@ -1,15 +1,15 @@
-// Phase 6 · Iteration 6.11 — frontend wire types for the Payment + Category API.
+// Phase 6 · Iteration 6.11 — frontend wire types for the Transaction + Category API.
 // Re-exports shared enums so the web app consumes a single source of truth
 // (packages/shared), and declares the DTO-shaped interfaces returned by the
 // NestJS controllers implemented in iterations 6.5–6.10.
 
 export {
-  PAYMENT_DIRECTIONS,
-  PAYMENT_TYPES,
-  PAYMENT_STATUSES,
-  PAYMENT_FREQUENCIES,
-  PAYMENT_SORTS,
-  PAYMENT_PLAN_KINDS,
+  TRANSACTION_DIRECTIONS,
+  TRANSACTION_TYPES,
+  TRANSACTION_STATUSES,
+  TRANSACTION_FREQUENCIES,
+  TRANSACTION_SORTS,
+  TRANSACTION_PLAN_KINDS,
   AMORTIZATION_METHODS,
   CATEGORY_DIRECTIONS,
   CATEGORY_OWNER_TYPES,
@@ -17,12 +17,12 @@ export {
 } from '@myfinpro/shared';
 
 export type {
-  PaymentDirection,
-  PaymentType,
-  PaymentStatus,
-  PaymentFrequency,
-  PaymentSort,
-  PaymentPlanKind,
+  TransactionDirection,
+  TransactionType,
+  TransactionStatus,
+  TransactionFrequency,
+  TransactionSort,
+  TransactionPlanKind,
   AmortizationMethod,
   CategoryDirection,
   CategoryOwnerType,
@@ -32,8 +32,8 @@ export type {
 
 import type { AttributionScope } from '@myfinpro/shared';
 
-/** Inline category metadata returned on payment responses. */
-export interface PaymentCategorySummary {
+/** Inline category metadata returned on transaction responses. */
+export interface TransactionCategorySummary {
   id: string;
   slug: string;
   name: string;
@@ -42,7 +42,7 @@ export interface PaymentCategorySummary {
 }
 
 /** One attribution row as returned by the API (already resolved per-row). */
-export interface PaymentAttribution {
+export interface TransactionAttribution {
   scope: 'personal' | 'group';
   userId: string | null;
   groupId: string | null;
@@ -50,32 +50,32 @@ export interface PaymentAttribution {
 }
 
 /** Summary shape returned from list + single-item + mutation endpoints. */
-export interface PaymentSummary {
+export interface TransactionSummary {
   id: string;
   direction: 'IN' | 'OUT';
-  /** Kept as plain string for forward compat with future payment types. */
+  /** Kept as plain string for forward compat with future transaction types. */
   type: string;
   amountCents: number;
   currency: string;
   /** ISO-8601 UTC timestamp. */
   occurredAt: string;
   status: string;
-  category: PaymentCategorySummary;
-  attributions: PaymentAttribution[];
+  category: TransactionCategorySummary;
+  attributions: TransactionAttribution[];
   note: string | null;
   commentCount: number;
   starredByMe: boolean;
   hasDocuments: boolean;
-  /** Source receipt when the payment came from confirming one (7.13); loaded on the detail endpoint. */
+  /** Source receipt when the transaction came from confirming one (7.13); loaded on the detail endpoint. */
   receiptId?: string | null;
-  parentPaymentId: string | null;
+  parentTransactionId: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface PaymentListResponse {
-  data: PaymentSummary[];
+export interface TransactionListResponse {
+  data: TransactionSummary[];
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -87,7 +87,7 @@ export interface CommentAuthor {
 
 export interface Comment {
   id: string;
-  paymentId: string;
+  transactionId: string;
   author: CommentAuthor;
   content: string;
   createdAt: string;
@@ -123,12 +123,12 @@ export interface CategoryDto {
  * foundation UI will create. Later iterations (recurring / installment / plan)
  * will widen this union.
  */
-export interface CreatePaymentInput {
+export interface CreateTransactionInput {
   direction: 'IN' | 'OUT';
   /**
    * Iteration 6.18.1 widens the union to include `'RECURRING'`. The schedule
-   * itself is created by a separate POST /payments/:id/schedule call (see
-   * the two-step create flow in `<PaymentFormDialog>`); the request body
+   * itself is created by a separate POST /transactions/:id/schedule call (see
+   * the two-step create flow in `<TransactionFormDialog>`); the request body
    * therefore still carries no `schedule` payload.
    *
    * Iteration 6.20 adds the plan kinds — these DO carry an inline `plan`
@@ -149,15 +149,15 @@ export interface CreatePaymentInput {
 // ── Plan wire types (Phase 6 · Iteration 6.20) ──────────────────────────────
 
 /**
- * Inline plan body on POST /payments when type ∈ {INSTALLMENT, LOAN,
- * MORTGAGE}. The plan's principal is the payment's own `amountCents` and its
- * kind is the payment `type` — deliberately no separate fields.
+ * Inline plan body on POST /transactions when type ∈ {INSTALLMENT, LOAN,
+ * MORTGAGE}. The plan's principal is the transaction's own `amountCents` and its
+ * kind is the transaction `type` — deliberately no separate fields.
  */
 export interface PlanSpec {
   /** Annual rate as a decimal fraction (0.05 = 5%). Must be 0 for `equal`. */
   interestRate: number;
   /** 1..600. */
-  paymentsCount: number;
+  transactionsCount: number;
   frequency: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
   /** ISO 8601 datetime. */
   firstDueAt: string;
@@ -165,7 +165,7 @@ export interface PlanSpec {
   amortizationMethod?: 'equal' | 'french';
 }
 
-/** One amortisation-table row served by GET /payments/:id/plan. */
+/** One amortisation-table row served by GET /transactions/:id/plan. */
 export interface PlanRow {
   index: number;
   dueAt: string;
@@ -177,14 +177,14 @@ export interface PlanRow {
   status: string | null;
 }
 
-/** Wire shape returned by GET / DELETE /payments/:id/plan. */
+/** Wire shape returned by GET / DELETE /transactions/:id/plan. */
 export interface PlanResponse {
   id: string;
-  paymentId: string;
+  transactionId: string;
   kind: 'INSTALLMENT' | 'LOAN' | 'MORTGAGE';
   principalCents: number;
   interestRate: number;
-  paymentsCount: number;
+  transactionsCount: number;
   frequency: PlanSpec['frequency'];
   firstDueAt: string;
   amortizationMethod: 'equal' | 'french';
@@ -196,14 +196,14 @@ export interface PlanResponse {
 // ── Schedule wire types (Phase 6 · Iteration 6.18.1) ────────────────────────
 
 /**
- * Body shape for POST / PUT /payments/:paymentId/schedule.
+ * Body shape for POST / PUT /transactions/:transactionId/schedule.
  *
  * Exactly one of `cron` / `everyMs` must be set — the API does the
  * authoritative cross-field check; client-side validation rejects the
  * obvious "both" / "neither" cases before the round trip.
  *
  * `everyMs` minimum is 60_000 (1 minute) in production. Tests / staging
- * may relax it via the `PAYMENT_SCHEDULE_MIN_INTERVAL_MS` env knob.
+ * may relax it via the `TRANSACTION_SCHEDULE_MIN_INTERVAL_MS` env knob.
  */
 export interface ScheduleSpec {
   cron?: string;
@@ -219,7 +219,7 @@ export interface ScheduleSpec {
 /** Wire shape returned by all schedule endpoints. */
 export interface ScheduleResponse {
   id: string;
-  paymentId: string;
+  transactionId: string;
   cron: string | null;
   everyMs: number | null;
   startsAt: string;
@@ -253,36 +253,38 @@ export function deriveScheduleStatus(schedule: ScheduleResponse | null): Schedul
 }
 
 /**
- * Edit-eligibility predicate consumed by `<PaymentDetailHeader>` and
- * `<PaymentRow>` (Phase 6 · Iteration 6.18.1.2).
+ * Edit-eligibility predicate consumed by `<TransactionDetailHeader>` and
+ * `<TransactionRow>` (Phase 6 · Iteration 6.18.1.2).
  *
  * The form supports `ONE_TIME` and `RECURRING` (parent) types; everything
  * else (`INSTALLMENT` / `LOAN` / `MORTGAGE` / `LIMITED_PERIOD`) is still
  * read-only until the dedicated forms ship. Server-generated occurrences
- * (`parentPaymentId !== null`) stay non-editable per the
- * `PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE` rule; per-child overrides
+ * (`parentTransactionId !== null`) stay non-editable per the
+ * `TRANSACTION_CANNOT_EDIT_GENERATED_OCCURRENCE` rule; per-child overrides
  * land in 6.18.1.6.
  *
  * Authorisation (creator / co-owner) is layered separately by the caller —
  * this helper only reports whether the form *can technically* edit the
- * payment.
+ * transaction.
  */
 export type CannotEditReason = 'generatedOccurrence' | 'unsupportedType';
 
-export function canEditPayment(payment: Pick<PaymentSummary, 'parentPaymentId' | 'type'>): boolean {
-  if (payment.parentPaymentId !== null) return false;
-  return payment.type === 'ONE_TIME' || payment.type === 'RECURRING';
+export function canEditTransaction(
+  transaction: Pick<TransactionSummary, 'parentTransactionId' | 'type'>,
+): boolean {
+  if (transaction.parentTransactionId !== null) return false;
+  return transaction.type === 'ONE_TIME' || transaction.type === 'RECURRING';
 }
 
 export function cannotEditReason(
-  payment: Pick<PaymentSummary, 'parentPaymentId' | 'type'>,
+  transaction: Pick<TransactionSummary, 'parentTransactionId' | 'type'>,
 ): CannotEditReason | null {
-  if (payment.parentPaymentId !== null) return 'generatedOccurrence';
-  if (payment.type !== 'ONE_TIME' && payment.type !== 'RECURRING') return 'unsupportedType';
+  if (transaction.parentTransactionId !== null) return 'generatedOccurrence';
+  if (transaction.type !== 'ONE_TIME' && transaction.type !== 'RECURRING') return 'unsupportedType';
   return null;
 }
 
-export interface UpdatePaymentInput {
+export interface UpdateTransactionInput {
   direction?: 'IN' | 'OUT';
   type?: 'ONE_TIME' | 'RECURRING';
   amountCents?: number;
@@ -302,23 +304,27 @@ export interface UpdatePaymentInput {
  *              `occurredAt >= now` (server-evaluated).
  * - `all`    — update the parent + every child occurrence (past + future).
  */
-export type PaymentPropagateMode = 'self' | 'future' | 'all';
+export type TransactionPropagateMode = 'self' | 'future' | 'all';
 
-export const PAYMENT_PROPAGATE_MODES: readonly PaymentPropagateMode[] = ['self', 'future', 'all'];
+export const TRANSACTION_PROPAGATE_MODES: readonly TransactionPropagateMode[] = [
+  'self',
+  'future',
+  'all',
+];
 
 /**
- * Envelope returned by `PATCH /payments/:id?propagate=...` (the cascade-edit
+ * Envelope returned by `PATCH /transactions/:id?propagate=...` (the cascade-edit
  * path). `affectedChildrenCount` is the number of child occurrences updated
  * in place; `skippedChildrenCount` is the number left untouched because they
  * carry an attribution to a group the editor does not control.
  */
 export interface CascadeEditResult {
-  payment: PaymentSummary;
+  transaction: TransactionSummary;
   affectedChildrenCount: number;
   skippedChildrenCount: number;
 }
 
-export interface ListPaymentsParams {
+export interface ListTransactionsParams {
   /** `'all'`, `'personal'`, or `'group:<groupId>'`. */
   scope?: string;
   direction?: 'IN' | 'OUT';
@@ -333,12 +339,12 @@ export interface ListPaymentsParams {
   limit?: number;
   cursor?: string;
   /** Iteration 6.18.1.3 — narrow to a single parent's occurrences. */
-  parentPaymentId?: string;
+  parentTransactionId?: string;
   /** Iteration 6.18.1.3 — `true` parents only, `false` occurrences only. */
   withParent?: boolean;
 }
 
-/** Query knobs accepted by `usePayments().listOccurrences()`. */
+/** Query knobs accepted by `useTransactions().listOccurrences()`. */
 export interface ListOccurrencesParams {
   cursor?: string;
   limit?: number;
@@ -348,8 +354,8 @@ export interface ListOccurrencesParams {
 export interface AttributionChangeResult {
   deletedAttributions: number;
   addedAttributions: number;
-  paymentDeleted: boolean;
-  payment: PaymentSummary | null;
+  transactionDeleted: boolean;
+  transaction: TransactionSummary | null;
 }
 
 export interface ToggleStarResult {

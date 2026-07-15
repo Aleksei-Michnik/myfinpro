@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentFormDialog } from './PaymentFormDialog';
-import type { CategoryDto, PaymentSummary } from '@/lib/payment/types';
+import { TransactionFormDialog } from './TransactionFormDialog';
+import type { CategoryDto, TransactionSummary } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -14,14 +14,14 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-const createPaymentMock = vi.fn();
-const updatePaymentMock = vi.fn();
-const removePaymentMock = vi.fn();
+const createTransactionMock = vi.fn();
+const updateTransactionMock = vi.fn();
+const removeTransactionMock = vi.fn();
 const listCategoriesMock = vi.fn();
 const createScheduleMock = vi.fn();
 const replaceScheduleMock = vi.fn();
-const getPaymentMock = vi.fn();
-const editPaymentWithPropagationMock = vi.fn();
+const getTransactionMock = vi.fn();
+const editTransactionWithPropagationMock = vi.fn();
 const listOccurrencesMock = vi.fn();
 const addToastMock = vi.fn();
 
@@ -39,16 +39,16 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
-    createPayment: createPaymentMock,
-    updatePayment: updatePaymentMock,
-    removePayment: removePaymentMock,
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
+    createTransaction: createTransactionMock,
+    updateTransaction: updateTransactionMock,
+    removeTransaction: removeTransactionMock,
     listCategories: listCategoriesMock,
     createSchedule: createScheduleMock,
     replaceSchedule: replaceScheduleMock,
-    getPayment: getPaymentMock,
-    editPaymentWithPropagation: editPaymentWithPropagationMock,
+    getTransaction: getTransactionMock,
+    editTransactionWithPropagation: editTransactionWithPropagationMock,
     listOccurrences: listOccurrencesMock,
   }),
 }));
@@ -102,7 +102,7 @@ const DEFAULT_CATS: CategoryDto[] = [
   cat({ id: 'c-both', name: 'Misc', ownerType: 'system', direction: 'BOTH' }),
 ];
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: p.id ?? 'p-1',
     direction: p.direction ?? 'OUT',
@@ -125,18 +125,18 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: p.parentPaymentId ?? null,
+    parentTransactionId: p.parentTransactionId ?? null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
   };
 }
 
-function renderCreate(defaults?: React.ComponentProps<typeof PaymentFormDialog>['defaults']) {
+function renderCreate(defaults?: React.ComponentProps<typeof TransactionFormDialog>['defaults']) {
   const onClose = vi.fn();
   const onSaved = vi.fn();
   render(
-    <PaymentFormDialog
+    <TransactionFormDialog
       open
       mode="create"
       onClose={onClose}
@@ -148,14 +148,14 @@ function renderCreate(defaults?: React.ComponentProps<typeof PaymentFormDialog>[
   return { onClose, onSaved };
 }
 
-function renderEdit(payment: PaymentSummary) {
+function renderEdit(transaction: TransactionSummary) {
   const onClose = vi.fn();
   const onSaved = vi.fn();
   render(
-    <PaymentFormDialog
+    <TransactionFormDialog
       open
       mode="edit"
-      payment={payment}
+      transaction={transaction}
       onClose={onClose}
       onSaved={onSaved}
       categories={DEFAULT_CATS}
@@ -164,24 +164,24 @@ function renderEdit(payment: PaymentSummary) {
   return { onClose, onSaved };
 }
 
-describe('PaymentFormDialog', () => {
+describe('TransactionFormDialog', () => {
   beforeEach(() => {
-    createPaymentMock.mockReset();
-    updatePaymentMock.mockReset();
-    removePaymentMock.mockReset();
+    createTransactionMock.mockReset();
+    updateTransactionMock.mockReset();
+    removeTransactionMock.mockReset();
     listCategoriesMock.mockReset();
     listCategoriesMock.mockResolvedValue(DEFAULT_CATS);
     createScheduleMock.mockReset();
     replaceScheduleMock.mockReset();
-    getPaymentMock.mockReset();
+    getTransactionMock.mockReset();
     // Default: synchronous throw mirrors the previous "not implemented"
     // behaviour and keeps tests that don't care about the refetch
     // straightforward — the dialog falls back to the prop instantly.
     // Tests that exercise the refetch path override this.
-    getPaymentMock.mockImplementation(() => {
+    getTransactionMock.mockImplementation(() => {
       throw new Error('not configured');
     });
-    editPaymentWithPropagationMock.mockReset();
+    editTransactionWithPropagationMock.mockReset();
     listOccurrencesMock.mockReset();
     addToastMock.mockReset();
     uploadReceiptMock.mockReset();
@@ -201,7 +201,7 @@ describe('PaymentFormDialog', () => {
   // ── Create mode ────────────────────────────────────────────────────────────
 
   it('create: defaults from remember.ts pre-fill last-used direction', () => {
-    localStorage.setItem('myfin.payment.lastDirection', 'IN');
+    localStorage.setItem('myfin.transaction.lastDirection', 'IN');
     renderCreate();
     expect(screen.getByTestId('form-direction-in').getAttribute('aria-pressed')).toBe('true');
   });
@@ -213,7 +213,7 @@ describe('PaymentFormDialog', () => {
     const { onClose } = renderCreate();
 
     const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
-    fireEvent.change(screen.getByTestId('payment-form-receipt-input'), {
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-input'), {
       target: { files: [file] },
     });
 
@@ -226,7 +226,7 @@ describe('PaymentFormDialog', () => {
     uploadReceiptMock.mockRejectedValue(new Error('Unsupported file type'));
     const { onClose } = renderCreate();
 
-    fireEvent.change(screen.getByTestId('payment-form-receipt-input'), {
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-input'), {
       target: { files: [new File(['x'], 'x.gif', { type: 'image/gif' })] },
     });
 
@@ -242,25 +242,25 @@ describe('PaymentFormDialog', () => {
   it('create: the URL row is hidden until the toggle opens it', () => {
     renderCreate();
 
-    expect(screen.queryByTestId('payment-form-receipt-url-input')).toBeNull();
-    const toggle = screen.getByTestId('payment-form-receipt-url-toggle');
+    expect(screen.queryByTestId('transaction-form-receipt-url-input')).toBeNull();
+    const toggle = screen.getByTestId('transaction-form-receipt-url-toggle');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
 
     fireEvent.click(toggle);
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByTestId('payment-form-receipt-url-input')).toBeTruthy();
+    expect(screen.getByTestId('transaction-form-receipt-url-input')).toBeTruthy();
   });
 
   it('create: submitting a receipt URL creates it, routes to review, and closes', async () => {
     createFromUrlMock.mockResolvedValue({ id: 'r-88' });
     const { onClose } = renderCreate();
 
-    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
-    fireEvent.change(screen.getByTestId('payment-form-receipt-url-input'), {
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-url-toggle'));
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-url-input'), {
       target: { value: '  https://shop.example/e-receipt/42  ' },
     });
-    fireEvent.click(screen.getByTestId('payment-form-receipt-url-submit'));
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-url-submit'));
 
     await waitFor(() =>
       expect(createFromUrlMock).toHaveBeenCalledWith(
@@ -272,28 +272,28 @@ describe('PaymentFormDialog', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it('create: Enter in the URL field adds the receipt without submitting the payment form', async () => {
+  it('create: Enter in the URL field adds the receipt without submitting the transaction form', async () => {
     createFromUrlMock.mockResolvedValue({ id: 'r-88' });
     renderCreate();
 
-    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
-    const input = screen.getByTestId('payment-form-receipt-url-input');
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-url-toggle'));
+    const input = screen.getByTestId('transaction-form-receipt-url-input');
     fireEvent.change(input, { target: { value: 'https://shop.example/e-receipt/42' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => expect(createFromUrlMock).toHaveBeenCalled());
-    expect(createPaymentMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
   it('create: a failed URL receipt toasts and keeps the dialog open', async () => {
     createFromUrlMock.mockRejectedValue(new Error('Only http(s) URLs are supported'));
     const { onClose } = renderCreate();
 
-    fireEvent.click(screen.getByTestId('payment-form-receipt-url-toggle'));
-    fireEvent.change(screen.getByTestId('payment-form-receipt-url-input'), {
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-url-toggle'));
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-url-input'), {
       target: { value: 'ftp://nope' },
     });
-    fireEvent.click(screen.getByTestId('payment-form-receipt-url-submit'));
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-url-submit'));
 
     await waitFor(() =>
       expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('http(s)')),
@@ -308,24 +308,24 @@ describe('PaymentFormDialog', () => {
     renderCreate();
 
     expect(screen.queryByTestId('manual-receipt-stub')).toBeNull();
-    fireEvent.click(screen.getByTestId('payment-form-receipt-barcodes'));
+    fireEvent.click(screen.getByTestId('transaction-form-receipt-barcodes'));
     expect(screen.getByTestId('manual-receipt-stub')).toBeTruthy();
   });
 
   it('edit: the from-receipt intake is not offered', () => {
-    renderEdit(makePayment());
-    expect(screen.queryByTestId('payment-form-from-receipt')).toBeNull();
+    renderEdit(makeTransaction());
+    expect(screen.queryByTestId('transaction-form-from-receipt')).toBeNull();
   });
 
   it('create: defaults.direction overrides remember', () => {
-    localStorage.setItem('myfin.payment.lastDirection', 'IN');
+    localStorage.setItem('myfin.transaction.lastDirection', 'IN');
     renderCreate({ direction: 'OUT' });
     expect(screen.getByTestId('form-direction-out').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('create: defaults.scope overrides remember', () => {
     localStorage.setItem(
-      'myfin.payment.lastScopes',
+      'myfin.transaction.lastScopes',
       JSON.stringify([{ scope: 'group', groupId: 'g1' }]),
     );
     renderCreate({ scope: [{ scope: 'personal' }] });
@@ -339,7 +339,7 @@ describe('PaymentFormDialog', () => {
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-amount')).toBeInTheDocument();
-    expect(createPaymentMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
   it('create: validation — category required', async () => {
@@ -380,16 +380,16 @@ describe('PaymentFormDialog', () => {
     expect(await screen.findByTestId('form-error-date')).toBeInTheDocument();
   });
 
-  it('create: save calls createPayment with correct payload', async () => {
-    createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-1' }));
+  it('create: save calls createTransaction with correct payload', async () => {
+    createTransactionMock.mockResolvedValueOnce(makeTransaction({ id: 'new-1' }));
     const { onSaved, onClose } = renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '12.50' } });
     fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
-    await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-    const payload = createPaymentMock.mock.calls[0][0];
-    const signal = createPaymentMock.mock.calls[0][1];
+    await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+    const payload = createTransactionMock.mock.calls[0][0];
+    const signal = createTransactionMock.mock.calls[0][1];
     expect(payload.amountCents).toBe(1250);
     expect(payload.currency).toBe('USD');
     expect(payload.type).toBe('ONE_TIME');
@@ -405,20 +405,22 @@ describe('PaymentFormDialog', () => {
   });
 
   it('create: save persists last-used values to localStorage', async () => {
-    createPaymentMock.mockResolvedValueOnce(makePayment());
+    createTransactionMock.mockResolvedValueOnce(makeTransaction());
     renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '12.50' } });
     fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-out' } });
     fireEvent.click(screen.getByTestId('form-save'));
-    await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-    await waitFor(() => expect(localStorage.getItem('myfin.payment.lastDirection')).toBe('OUT'));
-    expect(localStorage.getItem('myfin.payment.lastType')).toBe('ONE_TIME');
-    expect(localStorage.getItem('myfin.payment.lastScopes')).toContain('personal');
+    await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(localStorage.getItem('myfin.transaction.lastDirection')).toBe('OUT'),
+    );
+    expect(localStorage.getItem('myfin.transaction.lastType')).toBe('ONE_TIME');
+    expect(localStorage.getItem('myfin.transaction.lastScopes')).toContain('personal');
   });
 
   it('create: API error is shown inline; dialog stays open', async () => {
-    createPaymentMock.mockRejectedValueOnce(new Error('Boom'));
+    createTransactionMock.mockRejectedValueOnce(new Error('Boom'));
     const { onClose } = renderCreate();
     fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '1.00' } });
     fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
@@ -446,8 +448,8 @@ describe('PaymentFormDialog', () => {
 
   // ── Edit mode ─────────────────────────────────────────────────────────────
 
-  it('edit: prefills fields from payment', () => {
-    renderEdit(makePayment({ note: 'hello', amountCents: 3400 }));
+  it('edit: prefills fields from transaction', () => {
+    renderEdit(makeTransaction({ note: 'hello', amountCents: 3400 }));
     expect((screen.getByTestId('form-amount') as HTMLInputElement).value).toBe('34.00');
     // datetime-local input — `YYYY-MM-DDTHH:mm`. Phase 6 · Iteration 6.18.1.2.
     expect((screen.getByTestId('form-date') as HTMLInputElement).value).toBe('2026-04-25T00:00');
@@ -455,46 +457,46 @@ describe('PaymentFormDialog', () => {
   });
 
   it('edit: computeDiff only sends changed fields', async () => {
-    updatePaymentMock.mockResolvedValueOnce(makePayment({ note: 'changed' }));
-    renderEdit(makePayment({ note: 'orig' }));
+    updateTransactionMock.mockResolvedValueOnce(makeTransaction({ note: 'changed' }));
+    renderEdit(makeTransaction({ note: 'orig' }));
     fireEvent.change(screen.getByTestId('form-note'), { target: { value: 'changed' } });
     fireEvent.click(screen.getByTestId('form-save'));
-    await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
-    const [id, diff] = updatePaymentMock.mock.calls[0];
+    await waitFor(() => expect(updateTransactionMock).toHaveBeenCalled());
+    const [id, diff] = updateTransactionMock.mock.calls[0];
     expect(id).toBe('p-1');
     expect(diff).toEqual({ note: 'changed' });
   });
 
   it('edit: changing scope emits attributions in diff', async () => {
-    updatePaymentMock.mockResolvedValueOnce(makePayment());
-    renderEdit(makePayment());
+    updateTransactionMock.mockResolvedValueOnce(makeTransaction());
+    renderEdit(makeTransaction());
     fireEvent.click(screen.getByTestId('scope-toggle-group-g1')); // add group
     fireEvent.click(screen.getByTestId('form-save'));
-    await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
-    const diff = updatePaymentMock.mock.calls[0][1];
+    await waitFor(() => expect(updateTransactionMock).toHaveBeenCalled());
+    const diff = updateTransactionMock.mock.calls[0][1];
     expect(diff.attributions).toEqual([{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }]);
   });
 
-  it('edit: generated occurrence (parentPaymentId) shows banner, Save disabled', () => {
-    renderEdit(makePayment({ parentPaymentId: 'parent-1' }));
-    expect(screen.getByTestId('payment-form-occurrence-banner')).toBeInTheDocument();
+  it('edit: generated occurrence (parentTransactionId) shows banner, Save disabled', () => {
+    renderEdit(makeTransaction({ parentTransactionId: 'parent-1' }));
+    expect(screen.getByTestId('transaction-form-occurrence-banner')).toBeInTheDocument();
     expect((screen.getByTestId('form-save') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('edit: still-unsupported type (INSTALLMENT) shows banner', () => {
-    renderEdit(makePayment({ type: 'INSTALLMENT' }));
-    expect(screen.getByTestId('payment-form-occurrence-banner')).toBeInTheDocument();
+    renderEdit(makeTransaction({ type: 'INSTALLMENT' }));
+    expect(screen.getByTestId('transaction-form-occurrence-banner')).toBeInTheDocument();
   });
 
   it('edit: RECURRING parent is editable in 6.18.1 (no occurrence banner)', () => {
-    renderEdit(makePayment({ type: 'RECURRING' }));
-    expect(screen.queryByTestId('payment-form-occurrence-banner')).not.toBeInTheDocument();
+    renderEdit(makeTransaction({ type: 'RECURRING' }));
+    expect(screen.queryByTestId('transaction-form-occurrence-banner')).not.toBeInTheDocument();
     expect((screen.getByTestId('form-save') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('edit: non-accessible attributions show read-only footnote', () => {
     renderEdit(
-      makePayment({
+      makeTransaction({
         attributions: [
           { scope: 'personal', userId: 'me', groupId: null, groupName: null },
           { scope: 'personal', userId: 'other', groupId: null, groupName: null },
@@ -505,8 +507,8 @@ describe('PaymentFormDialog', () => {
   });
 
   it('edit: API error path shows error', async () => {
-    updatePaymentMock.mockRejectedValueOnce(new Error('BadRequest'));
-    const { onClose } = renderEdit(makePayment({ note: 'orig' }));
+    updateTransactionMock.mockRejectedValueOnce(new Error('BadRequest'));
+    const { onClose } = renderEdit(makeTransaction({ note: 'orig' }));
     fireEvent.change(screen.getByTestId('form-note'), { target: { value: 'new' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-api-error')).toHaveTextContent('BadRequest');
@@ -557,38 +559,42 @@ describe('PaymentFormDialog', () => {
 
   it('recurring: picking RECURRING reveals the schedule sub-form', () => {
     renderCreate();
-    expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-schedule-subform')).not.toBeInTheDocument();
     pickRecurring();
-    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-schedule-subform')).toBeInTheDocument();
   });
 
-  it('recurring create: posts payment then schedule in sequence', async () => {
-    createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-1', type: 'RECURRING' }));
+  it('recurring create: posts transaction then schedule in sequence', async () => {
+    createTransactionMock.mockResolvedValueOnce(
+      makeTransaction({ id: 'new-1', type: 'RECURRING' }),
+    );
     createScheduleMock.mockResolvedValueOnce({ id: 's-1' });
     const { onSaved, onClose } = renderCreate();
     fillBaseFields();
     pickRecurring();
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createScheduleMock).toHaveBeenCalled());
-    const [paymentId, spec] = createScheduleMock.mock.calls[0];
-    expect(paymentId).toBe('new-1');
+    const [transactionId, spec] = createScheduleMock.mock.calls[0];
+    expect(transactionId).toBe('new-1');
     expect(spec.everyMs).toBe(86_400_000); // default = every 1 day
-    expect(createPaymentMock.mock.calls[0][0].type).toBe('RECURRING');
+    expect(createTransactionMock.mock.calls[0][0].type).toBe('RECURRING');
     expect(onSaved).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('recurring create: schedule failure rolls back the payment via DELETE', async () => {
-    createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'new-2', type: 'RECURRING' }));
+  it('recurring create: schedule failure rolls back the transaction via DELETE', async () => {
+    createTransactionMock.mockResolvedValueOnce(
+      makeTransaction({ id: 'new-2', type: 'RECURRING' }),
+    );
     const scheduleErr = Object.assign(new Error('Invalid cron expression.'), {
-      errorCode: 'PAYMENT_SCHEDULE_INVALID_CRON',
+      errorCode: 'TRANSACTION_SCHEDULE_INVALID_CRON',
     });
     createScheduleMock.mockRejectedValueOnce(scheduleErr);
-    removePaymentMock.mockResolvedValueOnce({
+    removeTransactionMock.mockResolvedValueOnce({
       deletedAttributions: 1,
       addedAttributions: 0,
-      paymentDeleted: true,
-      payment: null,
+      transactionDeleted: true,
+      transaction: null,
     });
     const { onSaved, onClose } = renderCreate();
     fillBaseFields();
@@ -600,7 +606,7 @@ describe('PaymentFormDialog', () => {
     });
     fireEvent.click(screen.getByTestId('form-save'));
     await waitFor(() => expect(createScheduleMock).toHaveBeenCalled());
-    await waitFor(() => expect(removePaymentMock).toHaveBeenCalledWith('new-2', 'all'));
+    await waitFor(() => expect(removeTransactionMock).toHaveBeenCalledWith('new-2', 'all'));
     // Inline cron error surfaced; dialog stays open.
     await waitFor(() => expect(screen.getByTestId('schedule-error-cron')).toBeInTheDocument());
     expect(onSaved).not.toHaveBeenCalled();
@@ -608,19 +614,19 @@ describe('PaymentFormDialog', () => {
   });
 
   it('recurring edit: PUT /schedule when spec changes', async () => {
-    const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
-    updatePaymentMock.mockResolvedValueOnce(payment);
+    const transaction = makeTransaction({ id: 'p-rec', type: 'RECURRING' });
+    updateTransactionMock.mockResolvedValueOnce(transaction);
     replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
     const onClose = vi.fn();
     const onSaved = vi.fn();
     render(
-      <PaymentFormDialog
+      <TransactionFormDialog
         open
         mode="edit"
-        payment={payment}
+        transaction={transaction}
         existingSchedule={{
           id: 's-1',
-          paymentId: payment.id,
+          transactionId: transaction.id,
           cron: null,
           everyMs: 86_400_000,
           startsAt: '2026-04-25T00:00:00Z',
@@ -639,7 +645,7 @@ describe('PaymentFormDialog', () => {
       />,
     );
     // Sub-form is auto-shown for RECURRING parent.
-    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-schedule-subform')).toBeInTheDocument();
     // Change the count from 1 → 5.
     fireEvent.change(screen.getByTestId('schedule-every-count'), { target: { value: '5' } });
     fireEvent.click(screen.getByTestId('form-save'));
@@ -649,23 +655,23 @@ describe('PaymentFormDialog', () => {
   });
 
   it('recurring edit: changing type RECURRING → ONE_TIME shows the type-change warning', () => {
-    const payment = makePayment({ type: 'RECURRING' });
-    renderEdit(payment);
+    const transaction = makeTransaction({ type: 'RECURRING' });
+    renderEdit(transaction);
     // ONE_TIME radio is always visible up top — flip back to ONE_TIME.
     fireEvent.click(screen.getByTestId('type-radio-ONE_TIME'));
     expect(screen.getByTestId('schedule-type-change-warning')).toBeInTheDocument();
   });
 
-  it('recurring create: validation aggregates payment + schedule errors', async () => {
+  it('recurring create: validation aggregates transaction + schedule errors', async () => {
     renderCreate();
     pickRecurring();
-    // Skip filling amount → payment validation fails; clear startsAt to also
+    // Skip filling amount → transaction validation fails; clear startsAt to also
     // fail the schedule validation.
     fireEvent.change(screen.getByTestId('schedule-starts-at'), { target: { value: '' } });
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-amount')).toBeInTheDocument();
     expect(await screen.findByTestId('schedule-error-starts-at')).toBeInTheDocument();
-    expect(createPaymentMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
   it('recurring create: client-side everyMs<60_000 short-circuits the create', async () => {
@@ -678,16 +684,16 @@ describe('PaymentFormDialog', () => {
       fireEvent.click(screen.getByTestId('form-save'));
     });
     expect(await screen.findByTestId('schedule-error-every')).toBeInTheDocument();
-    expect(createPaymentMock).not.toHaveBeenCalled();
+    expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
   it('recurring create: type=ONE_TIME path stays unchanged (no schedule call)', async () => {
-    createPaymentMock.mockResolvedValueOnce(makePayment());
+    createTransactionMock.mockResolvedValueOnce(makeTransaction());
     renderCreate();
     fillBaseFields();
     fireEvent.click(screen.getByTestId('form-save'));
-    await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-    expect(createPaymentMock.mock.calls[0][0].type).toBe('ONE_TIME');
+    await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+    expect(createTransactionMock.mock.calls[0][0].type).toBe('ONE_TIME');
     expect(createScheduleMock).not.toHaveBeenCalled();
   });
 
@@ -699,10 +705,10 @@ describe('PaymentFormDialog', () => {
     expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
     // Toggle off → sub-form hidden.
     fireEvent.click(screen.getByTestId('type-radio-ONE_TIME'));
-    expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-schedule-subform')).not.toBeInTheDocument();
     // Re-toggle on → sub-form re-shown with sticky 7.
     fireEvent.click(screen.getByTestId('type-radio-RECURRING'));
-    expect(screen.getByTestId('payment-schedule-subform')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-schedule-subform')).toBeInTheDocument();
     expect((screen.getByTestId('schedule-every-count') as HTMLInputElement).value).toBe('7');
   });
 
@@ -717,13 +723,13 @@ describe('PaymentFormDialog', () => {
     it('create: picking a plan kind reveals the plan sub-form', () => {
       renderCreate();
       pickPlanKind('INSTALLMENT');
-      expect(screen.getByTestId('payment-plan-subform')).toBeInTheDocument();
+      expect(screen.getByTestId('transaction-plan-subform')).toBeInTheDocument();
       // Mutually exclusive with the schedule sub-form.
-      expect(screen.queryByTestId('payment-schedule-subform')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('transaction-schedule-subform')).not.toBeInTheDocument();
     });
 
     it('create: LOAN posts type + plan body with percent converted to a fraction', async () => {
-      createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'loan-1', type: 'LOAN' }));
+      createTransactionMock.mockResolvedValueOnce(makeTransaction({ id: 'loan-1', type: 'LOAN' }));
       const { onSaved } = renderCreate();
       fillBaseFields();
       pickPlanKind('LOAN');
@@ -731,12 +737,12 @@ describe('PaymentFormDialog', () => {
       fireEvent.change(screen.getByTestId('plan-count'), { target: { value: '60' } });
       fireEvent.change(screen.getByTestId('plan-first-due'), { target: { value: '2026-08-01' } });
       fireEvent.click(screen.getByTestId('form-save'));
-      await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-      const payload = createPaymentMock.mock.calls[0][0];
+      await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+      const payload = createTransactionMock.mock.calls[0][0];
       expect(payload.type).toBe('LOAN');
       expect(payload.plan).toEqual({
         interestRate: 0.05,
-        paymentsCount: 60,
+        transactionsCount: 60,
         frequency: 'MONTHLY',
         firstDueAt: '2026-08-01T00:00:00.000Z',
       });
@@ -754,11 +760,13 @@ describe('PaymentFormDialog', () => {
         fireEvent.click(screen.getByTestId('form-save'));
       });
       expect(await screen.findByTestId('plan-error-rate')).toBeInTheDocument();
-      expect(createPaymentMock).not.toHaveBeenCalled();
+      expect(createTransactionMock).not.toHaveBeenCalled();
     });
 
     it('create: explicit method override is included in the payload', async () => {
-      createPaymentMock.mockResolvedValueOnce(makePayment({ id: 'inst-1', type: 'INSTALLMENT' }));
+      createTransactionMock.mockResolvedValueOnce(
+        makeTransaction({ id: 'inst-1', type: 'INSTALLMENT' }),
+      );
       renderCreate();
       fillBaseFields();
       pickPlanKind('INSTALLMENT');
@@ -766,12 +774,12 @@ describe('PaymentFormDialog', () => {
       fireEvent.change(screen.getByTestId('plan-rate'), { target: { value: '3' } });
       fireEvent.change(screen.getByTestId('plan-first-due'), { target: { value: '2026-08-01' } });
       fireEvent.click(screen.getByTestId('form-save'));
-      await waitFor(() => expect(createPaymentMock).toHaveBeenCalled());
-      expect(createPaymentMock.mock.calls[0][0].plan.amortizationMethod).toBe('french');
+      await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+      expect(createTransactionMock.mock.calls[0][0].plan.amortizationMethod).toBe('french');
     });
 
     it('edit: plan kinds stay disabled (create-only)', () => {
-      renderEdit(makePayment({ type: 'ONE_TIME' }));
+      renderEdit(makeTransaction({ type: 'ONE_TIME' }));
       fireEvent.click(screen.getByTestId('type-disclosure-toggle'));
       const radio = screen.getByTestId('type-radio-INSTALLMENT') as HTMLInputElement;
       expect(radio.disabled).toBe(true);
@@ -784,7 +792,7 @@ describe('PaymentFormDialog', () => {
   describe('propagation (6.18.1.5)', () => {
     const SCHEDULE_FIXTURE = {
       id: 's-1',
-      paymentId: 'p-rec',
+      transactionId: 'p-rec',
       cron: null,
       everyMs: 86_400_000,
       startsAt: '2026-04-25T00:00:00Z',
@@ -798,15 +806,15 @@ describe('PaymentFormDialog', () => {
       updatedAt: '2026-04-25T00:00:00Z',
     };
 
-    function renderRecurringEdit(payment: PaymentSummary) {
+    function renderRecurringEdit(transaction: TransactionSummary) {
       const onClose = vi.fn();
       const onSaved = vi.fn();
       render(
-        <PaymentFormDialog
+        <TransactionFormDialog
           open
           mode="edit"
-          payment={payment}
-          existingSchedule={{ ...SCHEDULE_FIXTURE, paymentId: payment.id }}
+          transaction={transaction}
+          existingSchedule={{ ...SCHEDULE_FIXTURE, transactionId: transaction.id }}
           onClose={onClose}
           onSaved={onSaved}
           categories={DEFAULT_CATS}
@@ -822,12 +830,12 @@ describe('PaymentFormDialog', () => {
         cursor: null,
         hasMore: false,
       });
-      const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
-      const handlers = renderRecurringEdit(payment);
+      const transaction = makeTransaction({ id: 'p-rec', type: 'RECURRING' });
+      const handlers = renderRecurringEdit(transaction);
       await waitFor(() => expect(listOccurrencesMock).toHaveBeenCalledWith('p-rec', { limit: 1 }));
       // Flush the probe's .then() so hasChildren lands before we save.
       await act(async () => {});
-      return { payment, ...handlers };
+      return { transaction, ...handlers };
     }
 
     it('editing a cascadeable field on a parent with children opens the choice dialog', async () => {
@@ -836,14 +844,14 @@ describe('PaymentFormDialog', () => {
       fireEvent.click(screen.getByTestId('form-save'));
       expect(await screen.findByTestId('propagation-choice-dialog')).toBeInTheDocument();
       // Deferred submit: nothing hits the API until a mode is confirmed.
-      expect(updatePaymentMock).not.toHaveBeenCalled();
-      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
+      expect(updateTransactionMock).not.toHaveBeenCalled();
+      expect(editTransactionWithPropagationMock).not.toHaveBeenCalled();
     });
 
     it('confirming a mode submits the stashed diff with that propagate value', async () => {
-      const { payment, onSaved, onClose } = await renderParentWithChildren();
-      editPaymentWithPropagationMock.mockResolvedValueOnce({
-        payment,
+      const { transaction, onSaved, onClose } = await renderParentWithChildren();
+      editTransactionWithPropagationMock.mockResolvedValueOnce({
+        transaction,
         affectedChildrenCount: 3,
         skippedChildrenCount: 0,
       });
@@ -853,23 +861,23 @@ describe('PaymentFormDialog', () => {
       await screen.findByTestId('propagation-choice-dialog');
       fireEvent.click(screen.getByTestId('propagation-mode-future'));
       fireEvent.click(screen.getByTestId('propagation-confirm'));
-      await waitFor(() => expect(editPaymentWithPropagationMock).toHaveBeenCalled());
-      const [id, diff, propagate, signal] = editPaymentWithPropagationMock.mock.calls[0];
+      await waitFor(() => expect(editTransactionWithPropagationMock).toHaveBeenCalled());
+      const [id, diff, propagate, signal] = editTransactionWithPropagationMock.mock.calls[0];
       expect(id).toBe('p-rec');
       expect(diff.amountCents).toBe(9900);
       expect(propagate).toBe('future');
       expect(signal).toBeInstanceOf(AbortSignal);
       // Plain PATCH path must not fire — the cascade endpoint owns the edit.
-      expect(updatePaymentMock).not.toHaveBeenCalled();
-      await waitFor(() => expect(onSaved).toHaveBeenCalledWith(payment));
+      expect(updateTransactionMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(onSaved).toHaveBeenCalledWith(transaction));
       expect(onClose).toHaveBeenCalled();
       expect(addToastMock).toHaveBeenCalledWith('success', 'resultUpdated:3');
     });
 
     it('skipped children surface a second info toast', async () => {
-      const { payment } = await renderParentWithChildren();
-      editPaymentWithPropagationMock.mockResolvedValueOnce({
-        payment,
+      const { transaction } = await renderParentWithChildren();
+      editTransactionWithPropagationMock.mockResolvedValueOnce({
+        transaction,
         affectedChildrenCount: 2,
         skippedChildrenCount: 1,
       });
@@ -891,78 +899,80 @@ describe('PaymentFormDialog', () => {
       await waitFor(() =>
         expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument(),
       );
-      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
-      expect(updatePaymentMock).not.toHaveBeenCalled();
+      expect(editTransactionWithPropagationMock).not.toHaveBeenCalled();
+      expect(updateTransactionMock).not.toHaveBeenCalled();
       // Form stays open with the user's edits intact.
       expect(onClose).not.toHaveBeenCalled();
       expect((screen.getByTestId('form-amount') as HTMLInputElement).value).toBe('99.00');
     });
 
     it('occurredAt-only change is not cascadeable → direct PATCH, no dialog', async () => {
-      const { payment } = await renderParentWithChildren();
-      updatePaymentMock.mockResolvedValueOnce(payment);
+      const { transaction } = await renderParentWithChildren();
+      updateTransactionMock.mockResolvedValueOnce(transaction);
       replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
       fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-26T00:00' } });
       fireEvent.click(screen.getByTestId('form-save'));
-      await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
+      await waitFor(() => expect(updateTransactionMock).toHaveBeenCalled());
       expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument();
-      expect(editPaymentWithPropagationMock).not.toHaveBeenCalled();
+      expect(editTransactionWithPropagationMock).not.toHaveBeenCalled();
     });
 
     it('parent without children saves directly (no dialog)', async () => {
       // beforeEach default: listOccurrences resolves an empty page.
-      const payment = makePayment({ id: 'p-rec', type: 'RECURRING' });
-      updatePaymentMock.mockResolvedValueOnce(payment);
+      const transaction = makeTransaction({ id: 'p-rec', type: 'RECURRING' });
+      updateTransactionMock.mockResolvedValueOnce(transaction);
       replaceScheduleMock.mockResolvedValueOnce({ id: 's-1' });
-      renderRecurringEdit(payment);
+      renderRecurringEdit(transaction);
       await waitFor(() => expect(listOccurrencesMock).toHaveBeenCalled());
       await act(async () => {});
       fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '99.00' } });
       fireEvent.click(screen.getByTestId('form-save'));
-      await waitFor(() => expect(updatePaymentMock).toHaveBeenCalled());
+      await waitFor(() => expect(updateTransactionMock).toHaveBeenCalled());
       expect(screen.queryByTestId('propagation-choice-dialog')).not.toBeInTheDocument();
     });
 
-    it('ONE_TIME payments never probe for children', async () => {
-      renderEdit(makePayment({ id: 'p-1', type: 'ONE_TIME' }));
+    it('ONE_TIME transactions never probe for children', async () => {
+      renderEdit(makeTransaction({ id: 'p-1', type: 'ONE_TIME' }));
       await act(async () => {});
       expect(listOccurrencesMock).not.toHaveBeenCalled();
     });
   });
 
   // ── Phase 6 · 6.18.1.4-hotfix — edit-mode refetch ─────────────────────────
-  // The dialog must request a fresh copy of the payment when it opens
+  // The dialog must request a fresh copy of the transaction when it opens
   // in edit mode so users don't see (and submit) values that have gone
   // stale in another tab/device.
 
   describe('edit refetch', () => {
-    it('calls getPayment with the prop id when opening in edit mode', () => {
-      getPaymentMock.mockResolvedValueOnce(makePayment({ id: 'p-1', note: 'fresh' }));
-      renderEdit(makePayment({ id: 'p-1', note: 'stale' }));
-      expect(getPaymentMock).toHaveBeenCalledTimes(1);
-      expect(getPaymentMock.mock.calls[0][0]).toBe('p-1');
+    it('calls getTransaction with the prop id when opening in edit mode', () => {
+      getTransactionMock.mockResolvedValueOnce(makeTransaction({ id: 'p-1', note: 'fresh' }));
+      renderEdit(makeTransaction({ id: 'p-1', note: 'stale' }));
+      expect(getTransactionMock).toHaveBeenCalledTimes(1);
+      expect(getTransactionMock.mock.calls[0][0]).toBe('p-1');
       // Second arg is an AbortSignal so the dialog can cancel mid-flight.
-      const signal = getPaymentMock.mock.calls[0][1];
+      const signal = getTransactionMock.mock.calls[0][1];
       expect(signal).toBeInstanceOf(AbortSignal);
     });
 
-    it('does NOT call getPayment in create mode', () => {
+    it('does NOT call getTransaction in create mode', () => {
       renderCreate();
-      expect(getPaymentMock).not.toHaveBeenCalled();
+      expect(getTransactionMock).not.toHaveBeenCalled();
     });
 
     it('shows a loading state while the refetch is in flight', () => {
       // Resolve never — the loading banner stays visible.
-      getPaymentMock.mockReturnValueOnce(new Promise(() => {}));
-      renderEdit(makePayment({ id: 'p-1' }));
-      expect(screen.getByTestId('payment-form-loading')).toBeInTheDocument();
+      getTransactionMock.mockReturnValueOnce(new Promise(() => {}));
+      renderEdit(makeTransaction({ id: 'p-1' }));
+      expect(screen.getByTestId('transaction-form-loading')).toBeInTheDocument();
     });
 
-    it('repopulates the form with the freshly fetched payment data', async () => {
+    it('repopulates the form with the freshly fetched transaction data', async () => {
       // Server has a different note than the prop → form should show the
       // server value, not the stale prop.
-      getPaymentMock.mockResolvedValueOnce(makePayment({ id: 'p-1', note: 'fresh-from-server' }));
-      renderEdit(makePayment({ id: 'p-1', note: 'stale-prop' }));
+      getTransactionMock.mockResolvedValueOnce(
+        makeTransaction({ id: 'p-1', note: 'fresh-from-server' }),
+      );
+      renderEdit(makeTransaction({ id: 'p-1', note: 'stale-prop' }));
       await waitFor(() => {
         expect((screen.getByTestId('form-note') as HTMLTextAreaElement).value).toBe(
           'fresh-from-server',
@@ -971,10 +981,10 @@ describe('PaymentFormDialog', () => {
     });
 
     it('falls back to the prop and surfaces a soft warning when the refetch fails', async () => {
-      getPaymentMock.mockRejectedValueOnce(new Error('boom'));
-      renderEdit(makePayment({ id: 'p-1', note: 'prop-note' }));
+      getTransactionMock.mockRejectedValueOnce(new Error('boom'));
+      renderEdit(makeTransaction({ id: 'p-1', note: 'prop-note' }));
       await waitFor(() => {
-        expect(screen.getByTestId('payment-form-load-error')).toBeInTheDocument();
+        expect(screen.getByTestId('transaction-form-load-error')).toBeInTheDocument();
       });
       // Prop value still drives the form so the user can keep editing.
       expect((screen.getByTestId('form-note') as HTMLTextAreaElement).value).toBe('prop-note');
@@ -982,15 +992,15 @@ describe('PaymentFormDialog', () => {
 
     it('aborts the in-flight fetch when the dialog is closed', () => {
       let capturedSignal: AbortSignal | undefined;
-      getPaymentMock.mockImplementationOnce((_id: string, signal?: AbortSignal) => {
+      getTransactionMock.mockImplementationOnce((_id: string, signal?: AbortSignal) => {
         capturedSignal = signal;
         return new Promise(() => {});
       });
       const { rerender } = render(
-        <PaymentFormDialog
+        <TransactionFormDialog
           open
           mode="edit"
-          payment={makePayment({ id: 'p-1' })}
+          transaction={makeTransaction({ id: 'p-1' })}
           categories={DEFAULT_CATS}
           onClose={() => {}}
           onSaved={() => {}}
@@ -999,10 +1009,10 @@ describe('PaymentFormDialog', () => {
       expect(capturedSignal).toBeDefined();
       expect(capturedSignal!.aborted).toBe(false);
       rerender(
-        <PaymentFormDialog
+        <TransactionFormDialog
           open={false}
           mode="edit"
-          payment={makePayment({ id: 'p-1' })}
+          transaction={makeTransaction({ id: 'p-1' })}
           categories={DEFAULT_CATS}
           onClose={() => {}}
           onSaved={() => {}}

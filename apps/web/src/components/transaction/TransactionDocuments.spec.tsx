@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentDocuments } from './PaymentDocuments';
+import { TransactionDocuments } from './TransactionDocuments';
 
 const mockGetReceipt = vi.fn();
 const mockFetchFileBlob = vi.fn();
@@ -14,7 +14,7 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 }));
 
 // Stub the shared viewer — its own behaviour is covered by its spec; here we
-// only assert PaymentDocuments opens it with the fetched blob URL / error.
+// only assert TransactionDocuments opens it with the fetched blob URL / error.
 vi.mock('@/components/receipt/ReceiptDocumentViewer', () => ({
   ReceiptDocumentViewer: ({
     open,
@@ -37,7 +37,7 @@ vi.mock('@/components/receipt/ReceiptDocumentViewer', () => ({
     ) : null,
 }));
 
-describe('PaymentDocuments (8.19)', () => {
+describe('TransactionDocuments (8.19)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.URL.createObjectURL = vi.fn(() => 'blob:mock');
@@ -52,12 +52,14 @@ describe('PaymentDocuments (8.19)', () => {
       originalName: 'receipt.jpg',
     });
     mockFetchFileBlob.mockResolvedValue(new Blob(['x']));
-    render(<PaymentDocuments receiptId="r-1" />);
+    render(<TransactionDocuments receiptId="r-1" />);
 
-    await waitFor(() => expect(screen.getByTestId('payment-document-file')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-document-file')).toBeInTheDocument(),
+    );
     expect(screen.getByText('receipt.jpg')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('payment-document-view'));
+    fireEvent.click(screen.getByTestId('transaction-document-view'));
     await waitFor(() => expect(screen.getByTestId('mock-viewer')).toBeInTheDocument());
     expect(mockFetchFileBlob).toHaveBeenCalledWith('r-1');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-url', 'blob:mock');
@@ -73,10 +75,12 @@ describe('PaymentDocuments (8.19)', () => {
       originalName: 'receipt.jpg',
     });
     mockFetchFileBlob.mockRejectedValue(Object.assign(new Error('gone'), { status: 404 }));
-    render(<PaymentDocuments receiptId="r-1" />);
+    render(<TransactionDocuments receiptId="r-1" />);
 
-    await waitFor(() => expect(screen.getByTestId('payment-document-file')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('payment-document-view'));
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-document-file')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('transaction-document-view'));
     await waitFor(() =>
       expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-load-error', 'true'),
     );
@@ -89,28 +93,30 @@ describe('PaymentDocuments (8.19)', () => {
       sourceUrl: 'https://r.example/x',
       mimeType: null,
     });
-    render(<PaymentDocuments receiptId="r-2" />);
+    render(<TransactionDocuments receiptId="r-2" />);
 
     await waitFor(() =>
-      expect(screen.getByTestId('payment-document-external')).toHaveAttribute(
+      expect(screen.getByTestId('transaction-document-external')).toHaveAttribute(
         'href',
         'https://r.example/x',
       ),
     );
-    expect(screen.queryByTestId('payment-document-view')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-document-view')).not.toBeInTheDocument();
   });
 
   it('shows a "no document" note for a receipt with no file (e.g. manual)', async () => {
     mockGetReceipt.mockResolvedValue({ id: 'r-3', source: 'manual', mimeType: null });
-    render(<PaymentDocuments receiptId="r-3" />);
-    await waitFor(() => expect(screen.getByTestId('payment-documents-none')).toBeInTheDocument());
+    render(<TransactionDocuments receiptId="r-3" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-documents-none')).toBeInTheDocument(),
+    );
   });
 
   it('shows a soft "unavailable" note when the receipt is not readable (404)', async () => {
     mockGetReceipt.mockRejectedValue(Object.assign(new Error('nf'), { status: 404 }));
-    render(<PaymentDocuments receiptId="r-4" />);
+    render(<TransactionDocuments receiptId="r-4" />);
     await waitFor(() =>
-      expect(screen.getByTestId('payment-documents-unavailable')).toBeInTheDocument(),
+      expect(screen.getByTestId('transaction-documents-unavailable')).toBeInTheDocument(),
     );
   });
 });

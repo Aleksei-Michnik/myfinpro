@@ -1,11 +1,11 @@
 'use client';
 
-// Phase 6 · Iteration 6.12 — scope-aware payment delete dialog (design §2.4).
+// Phase 6 · Iteration 6.12 — scope-aware transaction delete dialog (design §2.4).
 // Phase 6 · Iteration 6.16.4 — delete flow uses
 // useAsyncOperation({ scope: 'control' }). Confirm button shows
 // <ButtonSpinner>, scope inputs disabled while in flight, Cancel triggers
 // cancel(). Network/timeout/HTTP failures surface via inline banner with
-// Retry. Domain errors keep the existing `<div data-testid="delete-payment-error">`
+// Retry. Domain errors keep the existing `<div data-testid="delete-transaction-error">`
 // inline message contract (no banner double-render).
 
 import { useTranslations } from 'next-intl';
@@ -15,16 +15,16 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
-import { usePayments } from '@/lib/payment/payment-context';
+import { useTransactions } from '@/lib/transaction/transaction-context';
 import type {
   AttributionChangeResult,
-  PaymentAttribution,
-  PaymentSummary,
-} from '@/lib/payment/types';
+  TransactionAttribution,
+  TransactionSummary,
+} from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface DeletePaymentDialogProps {
-  payment: PaymentSummary;
+export interface DeleteTransactionDialogProps {
+  transaction: TransactionSummary;
   onClose(): void;
   onDeleted(result: AttributionChangeResult): void;
   /**
@@ -36,26 +36,26 @@ export interface DeletePaymentDialogProps {
 interface AccessibleScope {
   key: string;
   label: string;
-  attribution: PaymentAttribution;
+  attribution: TransactionAttribution;
 }
 
-export function DeletePaymentDialog({
-  payment,
+export function DeleteTransactionDialog({
+  transaction,
   onClose,
   onDeleted,
   singleScope,
-}: DeletePaymentDialogProps) {
-  const t = useTranslations('payments');
-  const tDelete = useTranslations('payments.delete');
+}: DeleteTransactionDialogProps) {
+  const t = useTranslations('transactions');
+  const tDelete = useTranslations('transactions.delete');
   const { user } = useAuth();
   const { groups } = useGroups();
-  const { removePayment } = usePayments();
+  const { removeTransaction } = useTransactions();
 
   const accessible: AccessibleScope[] = useMemo(() => {
     if (!user) return [];
     const groupIds = new Set(groups.map((g) => g.id));
     const list: AccessibleScope[] = [];
-    for (const a of payment.attributions) {
+    for (const a of transaction.attributions) {
       if (a.scope === 'personal' && a.userId === user.id) {
         list.push({
           key: 'personal',
@@ -71,7 +71,7 @@ export function DeletePaymentDialog({
       }
     }
     return list;
-  }, [payment.attributions, groups, user, t]);
+  }, [transaction.attributions, groups, user, t]);
 
   const noAccess = accessible.length === 0;
   const forcedSingle = !!singleScope;
@@ -116,7 +116,7 @@ export function DeletePaymentDialog({
     if (effectiveNoAccess || isLoading) return;
     const scopeArg = buildScope();
     void deleteOp
-      .run((signal) => removePayment(payment.id, scopeArg, signal))
+      .run((signal) => removeTransaction(transaction.id, scopeArg, signal))
       .then((result) => {
         if (!result) return;
         onDeleted(result);
@@ -148,14 +148,14 @@ export function DeletePaymentDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="delete-payment-title"
-      data-testid="delete-payment-dialog"
+      aria-labelledby="delete-transaction-title"
+      data-testid="delete-transaction-dialog"
       onMouseDown={handleBackdrop}
       aria-busy={isLoading || undefined}
     >
       <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
         <h3
-          id="delete-payment-title"
+          id="delete-transaction-title"
           className="mb-4 text-lg font-semibold text-red-600 dark:text-red-400"
         >
           {tDelete('title')}
@@ -165,7 +165,7 @@ export function DeletePaymentDialog({
           <div
             className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
             role="alert"
-            data-testid="delete-payment-no-access"
+            data-testid="delete-transaction-no-access"
           >
             {tDelete('errorNoAccess')}
           </div>
@@ -177,10 +177,10 @@ export function DeletePaymentDialog({
 
             <ul
               className="mb-4 space-y-1 rounded-md border border-gray-200 p-2 text-sm text-gray-700 dark:border-gray-700 dark:text-gray-300"
-              data-testid="delete-payment-accessible-list"
+              data-testid="delete-transaction-accessible-list"
             >
               {accessible.map((s) => (
-                <li key={s.key} data-testid={`delete-payment-accessible-${s.key}`}>
+                <li key={s.key} data-testid={`delete-transaction-accessible-${s.key}`}>
                   • {s.label}
                 </li>
               ))}
@@ -257,7 +257,7 @@ export function DeletePaymentDialog({
             <p
               className="mb-2 text-sm text-red-700 dark:text-red-300"
               role="alert"
-              data-testid="delete-payment-error"
+              data-testid="delete-transaction-error"
             >
               {deleteOp.error.message ?? deleteOp.error.reason}
             </p>
@@ -267,7 +267,7 @@ export function DeletePaymentDialog({
               message={deleteOp.error.message ?? undefined}
               onRetry={() => void deleteOp.retry()}
               retrying={isLoading}
-              data-testid="delete-payment-error-banner"
+              data-testid="delete-transaction-error-banner"
             />
           </div>
         )}
@@ -279,7 +279,7 @@ export function DeletePaymentDialog({
             size="md"
             className="flex-1"
             onClick={handleCancel}
-            data-testid="delete-payment-cancel"
+            data-testid="delete-transaction-cancel"
           >
             {tDelete('cancel')}
           </Button>
@@ -291,7 +291,7 @@ export function DeletePaymentDialog({
             onClick={runDelete}
             disabled={isLoading || effectiveNoAccess}
             aria-busy={isLoading}
-            data-testid="delete-payment-confirm"
+            data-testid="delete-transaction-confirm"
           >
             {isLoading ? (
               <span className="inline-flex items-center justify-center gap-2">

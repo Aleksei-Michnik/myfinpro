@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentProvider, usePayments } from '../payment-context';
+import { TransactionProvider, useTransactions } from '../transaction-context';
 
 // ── Mock the auth context to inject a fixed bearer token ──────────────────
 vi.mock('@/lib/auth/auth-context', () => ({
@@ -25,12 +25,12 @@ function fetchSpy() {
   return vi.fn() as unknown as ReturnType<typeof vi.fn> & typeof fetch;
 }
 
-// Wrapper that provides <PaymentProvider>.
+// Wrapper that provides <TransactionProvider>.
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <PaymentProvider>{children}</PaymentProvider>
+  <TransactionProvider>{children}</TransactionProvider>
 );
 
-describe('usePayments', () => {
+describe('useTransactions', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchSpy());
   });
@@ -43,18 +43,18 @@ describe('usePayments', () => {
   it('throws when used outside the provider', () => {
     // Suppress the expected error log that React emits when a hook throws.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => renderHook(() => usePayments())).toThrow(/PaymentProvider/);
+    expect(() => renderHook(() => useTransactions())).toThrow(/TransactionProvider/);
     spy.mockRestore();
   });
 
-  it('fetchList() with no params hits GET /payments with no query string', async () => {
+  it('fetchList() with no params hits GET /transactions with no query string', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { data: [], nextCursor: null, hasMore: false }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     const out = await result.current.fetchList();
     expect(fetch).toHaveBeenCalledWith(
-      `${API}/payments`,
+      `${API}/transactions`,
       expect.objectContaining({ method: 'GET' }),
     );
     expect(out.data).toEqual([]);
@@ -64,7 +64,7 @@ describe('usePayments', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { data: [], nextCursor: null, hasMore: false }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     await result.current.fetchList({ scope: 'personal', direction: 'OUT', starred: true });
     const call = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
     expect(call).toContain('scope=personal');
@@ -72,24 +72,24 @@ describe('usePayments', () => {
     expect(call).toContain('starred=true');
   });
 
-  it('getPayment(id) fetches GET /payments/:id', async () => {
+  it('getTransaction(id) fetches GET /transactions/:id', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { id: 'p-1' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    await result.current.getPayment('p-1');
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    await result.current.getTransaction('p-1');
     expect(fetch).toHaveBeenCalledWith(
-      `${API}/payments/p-1`,
+      `${API}/transactions/p-1`,
       expect.objectContaining({ method: 'GET' }),
     );
   });
 
-  it('createPayment posts the body as JSON', async () => {
+  it('createTransaction posts the body as JSON', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(201, { id: 'p-new' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    await result.current.createPayment({
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    await result.current.createTransaction({
       direction: 'OUT',
       type: 'ONE_TIME',
       amountCents: 1000,
@@ -106,80 +106,80 @@ describe('usePayments', () => {
     });
   });
 
-  it('updatePayment returns the body on 200', async () => {
+  it('updateTransaction returns the body on 200', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { id: 'p-1', note: 'updated' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    const out = await result.current.updatePayment('p-1', { note: 'updated' });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    const out = await result.current.updateTransaction('p-1', { note: 'updated' });
     expect(out).toMatchObject({ id: 'p-1', note: 'updated' });
   });
 
-  it('updatePayment returns null on 204 (payment hard-deleted)', async () => {
+  it('updateTransaction returns null on 204 (transaction hard-deleted)', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse(204, null));
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    const out = await result.current.updatePayment('p-1', { attributions: [] });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    const out = await result.current.updateTransaction('p-1', { attributions: [] });
     expect(out).toBeNull();
   });
 
-  it('removePayment(id, scope) appends ?scope=', async () => {
+  it('removeTransaction(id, scope) appends ?scope=', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, {
         deletedAttributions: 1,
         addedAttributions: 0,
-        paymentDeleted: true,
-        payment: null,
+        transactionDeleted: true,
+        transaction: null,
       }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    await result.current.removePayment('p-1', 'group:g-1');
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    await result.current.removeTransaction('p-1', 'group:g-1');
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
     expect(url).toContain('?scope=group%3Ag-1');
   });
 
-  it('removePayment(id) without scope has no query', async () => {
+  it('removeTransaction(id) without scope has no query', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, {
         deletedAttributions: 0,
         addedAttributions: 0,
-        paymentDeleted: true,
-        payment: null,
+        transactionDeleted: true,
+        transaction: null,
       }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    await result.current.removePayment('p-1');
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    await result.current.removeTransaction('p-1');
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-    expect(url).toBe(`${API}/payments/p-1`);
+    expect(url).toBe(`${API}/transactions/p-1`);
   });
 
-  it('toggleStar posts to /payments/:id/star', async () => {
+  it('toggleStar posts to /transactions/:id/star', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { starred: true, starCount: 1 }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     const out = await result.current.toggleStar('p-1');
     expect(fetch).toHaveBeenCalledWith(
-      `${API}/payments/p-1/star`,
+      `${API}/transactions/p-1/star`,
       expect.objectContaining({ method: 'POST' }),
     );
     expect(out).toEqual({ starred: true, starCount: 1 });
   });
 
-  it('listComments(paymentId) with no opts has no query', async () => {
+  it('listComments(transactionId) with no opts has no query', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { data: [], nextCursor: null, hasMore: false }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     await result.current.listComments('p-1');
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-    expect(url).toBe(`${API}/payments/p-1/comments`);
+    expect(url).toBe(`${API}/transactions/p-1/comments`);
   });
 
   it('listComments with cursor appends ?cursor=', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { data: [], nextCursor: null, hasMore: false }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     await result.current.listComments('p-1', { cursor: 'abc', limit: 10 });
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
     expect(url).toContain('cursor=abc');
@@ -190,7 +190,7 @@ describe('usePayments', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(201, { id: 'c-1', content: 'hi' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     const out = await result.current.postComment('p-1', 'hi');
     expect(out).toMatchObject({ id: 'c-1', content: 'hi' });
   });
@@ -199,7 +199,7 @@ describe('usePayments', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(200, { id: 'c-1', content: 'edited' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     const out = await result.current.editComment('p-1', 'c-1', 'edited');
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('PATCH');
@@ -208,13 +208,13 @@ describe('usePayments', () => {
 
   it('deleteComment resolves without throwing on 204', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse(204, null));
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     await expect(result.current.deleteComment('p-1', 'c-1')).resolves.toBeUndefined();
   });
 
   it('listCategories passes direction + scope as query string', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(jsonResponse(200, []));
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     await result.current.listCategories({ direction: 'OUT', scope: 'group:g-1' });
     const url = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
     expect(url).toContain('direction=OUT');
@@ -227,7 +227,7 @@ describe('usePayments', () => {
       resolveFn = r;
     });
     (fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(pending);
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     expect(result.current.isLoading).toBe(false);
     act(() => {
       void result.current.fetchList();
@@ -244,8 +244,8 @@ describe('usePayments', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       jsonResponse(500, { message: 'Boom' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
-    await expect(result.current.getPayment('p-1')).rejects.toThrow(/Boom/);
+    const { result } = renderHook(() => useTransactions(), { wrapper });
+    await expect(result.current.getTransaction('p-1')).rejects.toThrow(/Boom/);
     await waitFor(() => expect(result.current.error).toBe('Boom'));
     act(() => result.current.clearError());
     expect(result.current.error).toBeNull();
@@ -253,14 +253,14 @@ describe('usePayments', () => {
 
   it('propagates errorCode from API error payloads', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      jsonResponse(404, { message: 'Not found', errorCode: 'PAYMENT_NOT_FOUND' }),
+      jsonResponse(404, { message: 'Not found', errorCode: 'TRANSACTION_NOT_FOUND' }),
     );
-    const { result } = renderHook(() => usePayments(), { wrapper });
+    const { result } = renderHook(() => useTransactions(), { wrapper });
     try {
-      await result.current.getPayment('missing');
+      await result.current.getTransaction('missing');
       expect.fail('Expected throw');
     } catch (err) {
-      expect((err as { errorCode?: string }).errorCode).toBe('PAYMENT_NOT_FOUND');
+      expect((err as { errorCode?: string }).errorCode).toBe('TRANSACTION_NOT_FOUND');
       expect((err as { status?: number }).status).toBe(404);
     }
   });

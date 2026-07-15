@@ -7,7 +7,7 @@ import {
   formatScopeLabel,
   formatSignedAmount,
 } from '../formatters';
-import type { PaymentSummary } from '../types';
+import type { TransactionSummary } from '../types';
 
 describe('formatAmount', () => {
   it('formats USD in en-US with narrow symbol', () => {
@@ -43,25 +43,25 @@ describe('formatAmount', () => {
 });
 
 describe('formatSignedAmount', () => {
-  const basePayment: Pick<PaymentSummary, 'amountCents' | 'currency' | 'direction'> = {
+  const baseTransaction: Pick<TransactionSummary, 'amountCents' | 'currency' | 'direction'> = {
     amountCents: 1250,
     currency: 'USD',
     direction: 'OUT',
   };
 
   it('prefixes "-" for OUT direction', () => {
-    expect(formatSignedAmount(basePayment, 'en-US').startsWith('-')).toBe(true);
+    expect(formatSignedAmount(baseTransaction, 'en-US').startsWith('-')).toBe(true);
   });
 
   it('prefixes "+" for IN direction', () => {
-    expect(formatSignedAmount({ ...basePayment, direction: 'IN' }, 'en-US').startsWith('+')).toBe(
-      true,
-    );
+    expect(
+      formatSignedAmount({ ...baseTransaction, direction: 'IN' }, 'en-US').startsWith('+'),
+    ).toBe(true);
   });
 
   it('strips existing "-" emitted by Intl before re-prefixing', () => {
     // Math.abs is applied internally, so the sign is always ours.
-    const out = formatSignedAmount({ ...basePayment, amountCents: -1250 }, 'en-US');
+    const out = formatSignedAmount({ ...baseTransaction, amountCents: -1250 }, 'en-US');
     expect(out.startsWith('-')).toBe(true);
     expect(out.slice(1).startsWith('-')).toBe(false);
     expect(out.slice(1).startsWith('+')).toBe(false);
@@ -140,12 +140,12 @@ describe('formatScopeLabel', () => {
     expect(formatScopeLabel({ scope: 'group', groupName: null }, t)).toBe('t:scope.group');
   });
 
-  it('never invokes `t` with a doubled `payments.` prefix (regression for 6.15.2)', () => {
+  it('never invokes `t` with a doubled `transactions.` prefix (regression for 6.15.2)', () => {
     const spy = vi.fn((key: string) => key);
     formatScopeLabel({ scope: 'personal', groupName: null }, spy);
     formatScopeLabel({ scope: 'group', groupName: null }, spy);
     for (const call of spy.mock.calls) {
-      expect(call[0]).not.toMatch(/^payments\./);
+      expect(call[0]).not.toMatch(/^transactions\./);
     }
   });
 });

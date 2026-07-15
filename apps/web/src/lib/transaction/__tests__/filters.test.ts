@@ -7,10 +7,10 @@ import {
   filtersFromQuery,
   filtersToQuery,
   isFiltersDirty,
-  type PaymentFilters,
+  type TransactionFilters,
 } from '../filters';
 
-describe('lib/payment/filters', () => {
+describe('lib/transaction/filters', () => {
   // ── defaultFilters ───────────────────────────────────────────────────────
 
   it('defaultFilters() returns scope=all + sort=date_desc', () => {
@@ -32,7 +32,7 @@ describe('lib/payment/filters', () => {
   });
 
   it('filtersToQuery serialises every supported field', () => {
-    const f: PaymentFilters = {
+    const f: TransactionFilters = {
       scope: 'group:g-1',
       starred: true,
       direction: 'OUT',
@@ -122,7 +122,7 @@ describe('lib/payment/filters', () => {
   // ── round-trip ───────────────────────────────────────────────────────────
 
   it('filtersFromQuery(filtersToQuery(x)) ≈ x for a representative input', () => {
-    const x: PaymentFilters = {
+    const x: TransactionFilters = {
       scope: 'group:g-1',
       starred: true,
       direction: 'OUT',
@@ -197,12 +197,12 @@ describe('lib/payment/filters', () => {
 
   describe('childScope round-trip', () => {
     it('serialises childScope=parents through the URL', () => {
-      const f: PaymentFilters = { ...defaultFilters(), childScope: 'parents' };
+      const f: TransactionFilters = { ...defaultFilters(), childScope: 'parents' };
       expect(filtersToQuery(f).toString()).toBe('childScope=parents');
     });
 
     it('serialises childScope=occurrences through the URL', () => {
-      const f: PaymentFilters = { ...defaultFilters(), childScope: 'occurrences' };
+      const f: TransactionFilters = { ...defaultFilters(), childScope: 'occurrences' };
       expect(filtersToQuery(f).toString()).toBe('childScope=occurrences');
     });
 
@@ -226,7 +226,7 @@ describe('lib/payment/filters', () => {
     });
 
     it('round-trips a representative filter object that includes childScope', () => {
-      const f: PaymentFilters = { ...defaultFilters(), childScope: 'occurrences' };
+      const f: TransactionFilters = { ...defaultFilters(), childScope: 'occurrences' };
       const round = filtersFromQuery(filtersToQuery(f));
       expect(round.childScope).toBe('occurrences');
     });

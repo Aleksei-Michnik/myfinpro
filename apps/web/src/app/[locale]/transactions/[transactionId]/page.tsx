@@ -1,15 +1,15 @@
-import { PaymentDetailClient } from './payment-detail-client';
+import { TransactionDetailClient } from './transaction-detail-client';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 interface PageProps {
-  params: Promise<{ locale: string; paymentId: string }>;
+  params: Promise<{ locale: string; transactionId: string }>;
 }
 
-export default async function PaymentDetailPage({ params }: PageProps) {
-  const { paymentId } = await params;
+export default async function TransactionDetailPage({ params }: PageProps) {
+  const { transactionId } = await params;
   return (
     <ProtectedRoute>
-      <PaymentDetailClient paymentId={paymentId} />
+      <TransactionDetailClient transactionId={transactionId} />
     </ProtectedRoute>
   );
 }

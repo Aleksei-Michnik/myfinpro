@@ -35,8 +35,8 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ listCategories: listCategoriesMock }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ listCategories: listCategoriesMock }),
 }));
 
 vi.mock('@/components/ui/Toast', () => ({
@@ -55,7 +55,7 @@ vi.mock('@/components/receipt/ReceiptConfirmDialog', () => ({
     open: boolean;
     receiptId: string;
     defaultCategoryId?: string | null;
-    onConfirmed: (paymentId: string) => void;
+    onConfirmed: (transactionId: string) => void;
   }) =>
     open ? (
       <div
@@ -78,7 +78,7 @@ vi.mock('@/components/receipt/ReconcileReceiptDialog', () => ({
     onReconciled,
   }: {
     open: boolean;
-    onReconciled: (paymentId: string) => void;
+    onReconciled: (transactionId: string) => void;
   }) =>
     open ? (
       <div data-testid="reconcile-dialog">
@@ -140,7 +140,7 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     totalCents: 4590,
     discountCents: null,
     failureReason: null,
-    paymentId: null,
+    transactionId: null,
     itemsSumCents: 4590,
     totalsMismatchCents: null,
     createdAt: '2026-07-04T10:00:00.000Z',
@@ -442,12 +442,12 @@ describe('ReceiptReviewClient', () => {
     expect(screen.getByTestId('review-confirm-hint')).toBeInTheDocument();
   });
 
-  it('navigates to the new payment once confirmation completes', async () => {
+  it('navigates to the new transaction once confirmation completes', async () => {
     await renderLoaded(makeReceipt());
     fireEvent.click(screen.getByTestId('review-confirm'));
     fireEvent.click(screen.getByTestId('confirm-dialog-done'));
 
-    expect(pushMock).toHaveBeenCalledWith('/payments/p-9');
+    expect(pushMock).toHaveBeenCalledWith('/transactions/p-9');
     await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
   });
 
@@ -459,7 +459,7 @@ describe('ReceiptReviewClient', () => {
   // ── Attached receipts reconcile instead of confirm (8.15) ──────────────────
 
   it('an attached receipt offers Reconcile (not Confirm) and auto-opens the dialog', async () => {
-    await renderLoaded(makeReceipt({ paymentId: 'pay-1' }));
+    await renderLoaded(makeReceipt({ transactionId: 'pay-1' }));
     // Confirm is replaced by Reconcile.
     expect(screen.queryByTestId('review-confirm')).toBeNull();
     expect(screen.getByTestId('review-reconcile')).toBeInTheDocument();
@@ -467,12 +467,12 @@ describe('ReceiptReviewClient', () => {
     await waitFor(() => expect(screen.getByTestId('reconcile-dialog')).toBeInTheDocument());
   });
 
-  it('completing reconciliation routes to the linked payment', async () => {
-    await renderLoaded(makeReceipt({ paymentId: 'pay-1' }));
+  it('completing reconciliation routes to the linked transaction', async () => {
+    await renderLoaded(makeReceipt({ transactionId: 'pay-1' }));
     // The reconcile dialog auto-opens via an effect — wait for it rather than
     // racing the click against the flush.
     fireEvent.click(await screen.findByTestId('reconcile-dialog-done'));
-    expect(pushMock).toHaveBeenCalledWith('/payments/pay-1');
+    expect(pushMock).toHaveBeenCalledWith('/transactions/pay-1');
     await waitFor(() => expect(screen.queryByTestId('reconcile-dialog')).toBeNull());
   });
 });

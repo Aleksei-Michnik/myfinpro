@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildPlanSpec,
   defaultPlanSubFormState,
-  PaymentPlanSubForm,
+  TransactionPlanSubForm,
   type PlanSubFormState,
-} from './PaymentPlanSubForm';
+} from './TransactionPlanSubForm';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -20,21 +20,25 @@ function s(over: Partial<PlanSubFormState> = {}): PlanSubFormState {
 describe('buildPlanSpec', () => {
   it('builds a valid INSTALLMENT spec (auto method omitted from the wire shape)', () => {
     const r = buildPlanSpec(
-      s({ interestRatePctStr: '0', paymentsCountStr: '12' }),
+      s({ interestRatePctStr: '0', transactionsCountStr: '12' }),
       'INSTALLMENT',
       tId,
     );
     expect(r.ok).toBe(true);
     expect(r.spec).toEqual({
       interestRate: 0,
-      paymentsCount: 12,
+      transactionsCount: 12,
       frequency: 'MONTHLY',
       firstDueAt: '2026-08-01T00:00:00.000Z',
     });
   });
 
   it('converts percent input to a decimal fraction', () => {
-    const r = buildPlanSpec(s({ interestRatePctStr: '5', paymentsCountStr: '60' }), 'LOAN', tId);
+    const r = buildPlanSpec(
+      s({ interestRatePctStr: '5', transactionsCountStr: '60' }),
+      'LOAN',
+      tId,
+    );
     expect(r.ok).toBe(true);
     expect(r.spec.interestRate).toBeCloseTo(0.05);
   });
@@ -63,9 +67,9 @@ describe('buildPlanSpec', () => {
     ['empty rate', { interestRatePctStr: '' }, 'interestRate', 'rateInvalid'],
     ['negative rate', { interestRatePctStr: '-1' }, 'interestRate', 'rateInvalid'],
     ['rate above 100%', { interestRatePctStr: '150' }, 'interestRate', 'rateTooHigh'],
-    ['zero count', { paymentsCountStr: '0' }, 'paymentsCount', 'countInvalid'],
-    ['fractional count', { paymentsCountStr: '2.5' }, 'paymentsCount', 'countInvalid'],
-    ['count above 600', { paymentsCountStr: '601' }, 'paymentsCount', 'countTooHigh'],
+    ['zero count', { transactionsCountStr: '0' }, 'transactionsCount', 'countInvalid'],
+    ['fractional count', { transactionsCountStr: '2.5' }, 'transactionsCount', 'countInvalid'],
+    ['count above 600', { transactionsCountStr: '601' }, 'transactionsCount', 'countTooHigh'],
     ['missing first due', { firstDueAt: '' }, 'firstDueAt', 'firstDueRequired'],
   ] as const)('rejects %s', (_label, patch, field, code) => {
     const r = buildPlanSpec(s(patch), 'INSTALLMENT', tId);
@@ -74,22 +78,22 @@ describe('buildPlanSpec', () => {
   });
 });
 
-describe('PaymentPlanSubForm', () => {
+describe('TransactionPlanSubForm', () => {
   it('renders all fields and propagates changes', () => {
     const onChange = vi.fn();
-    render(<PaymentPlanSubForm state={s()} errors={{}} onChange={onChange} />);
-    expect(screen.getByTestId('payment-plan-subform')).toBeInTheDocument();
+    render(<TransactionPlanSubForm state={s()} errors={{}} onChange={onChange} />);
+    expect(screen.getByTestId('transaction-plan-subform')).toBeInTheDocument();
     fireEvent.change(screen.getByTestId('plan-count'), { target: { value: '24' } });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ paymentsCountStr: '24' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ transactionsCountStr: '24' }));
     fireEvent.change(screen.getByTestId('plan-frequency'), { target: { value: 'WEEKLY' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ frequency: 'WEEKLY' }));
   });
 
   it('renders inline errors', () => {
     render(
-      <PaymentPlanSubForm
+      <TransactionPlanSubForm
         state={s()}
-        errors={{ interestRate: 'rateInvalid', paymentsCount: 'countInvalid' }}
+        errors={{ interestRate: 'rateInvalid', transactionsCount: 'countInvalid' }}
         onChange={vi.fn()}
       />,
     );
@@ -98,7 +102,7 @@ describe('PaymentPlanSubForm', () => {
   });
 
   it('disables every input when disabled', () => {
-    render(<PaymentPlanSubForm state={s()} errors={{}} onChange={vi.fn()} disabled />);
+    render(<TransactionPlanSubForm state={s()} errors={{}} onChange={vi.fn()} disabled />);
     for (const id of [
       'plan-rate',
       'plan-count',

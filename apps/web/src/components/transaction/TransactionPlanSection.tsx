@@ -1,12 +1,12 @@
 'use client';
 
-// Phase 6 · Iteration 6.20 — plan section for the payment detail page.
+// Phase 6 · Iteration 6.20 — plan section for the transaction detail page.
 //
 // Renders for plan-kind parents (INSTALLMENT / LOAN / MORTGAGE): a summary
 // strip (kind, principal, rate, count, method, status) + the amortisation
 // table with per-row occurrence status, and a creator-only terminal Cancel
 // action behind an inline two-step confirm (mirrors the 6.18.2 schedule
-// badge pattern). Owns its own fetch via usePayments().getPlan — the parent
+// badge pattern). Owns its own fetch via useTransactions().getPlan — the parent
 // page only passes ids.
 
 import { useLocale, useTranslations } from 'next-intl';
@@ -15,15 +15,15 @@ import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { PlanResponse } from '@/lib/payment/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { PlanResponse } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface PaymentPlanSectionProps {
-  paymentId: string;
+export interface TransactionPlanSectionProps {
+  transactionId: string;
   /** Creator gating for the cancel action (API is creator-only anyway). */
   createdById: string;
-  /** The parent payment's currency — plan rows are amounts in it. */
+  /** The parent transaction's currency — plan rows are amounts in it. */
   currency: string;
 }
 
@@ -51,11 +51,15 @@ const ROW_STATUS_CLASSES: Record<string, string> = {
     'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600',
 };
 
-export function PaymentPlanSection({ paymentId, createdById, currency }: PaymentPlanSectionProps) {
-  const t = useTranslations('payments.plan');
+export function TransactionPlanSection({
+  transactionId,
+  createdById,
+  currency,
+}: TransactionPlanSectionProps) {
+  const t = useTranslations('transactions.plan');
   const locale = useLocale();
   const { user } = useAuth();
-  const { getPlan, cancelPlan } = usePayments();
+  const { getPlan, cancelPlan } = useTransactions();
   const { addToast } = useToast();
 
   const [plan, setPlan] = useState<PlanResponse | null>(null);
@@ -66,12 +70,12 @@ export function PaymentPlanSection({ paymentId, createdById, currency }: Payment
 
   const load = useCallback(() => {
     void loadOp
-      .run((signal) => getPlan(paymentId, signal))
+      .run((signal) => getPlan(transactionId, signal))
       .then((p) => {
         if (p !== undefined) setPlan(p);
       });
     // loadOp identity is stable (useAsyncOperation contract).
-  }, [paymentId, getPlan]);
+  }, [transactionId, getPlan]);
 
   useEffect(() => {
     load();
@@ -83,7 +87,7 @@ export function PaymentPlanSection({ paymentId, createdById, currency }: Payment
   function runCancel() {
     setConfirmingCancel(false);
     void cancelOp
-      .run((signal) => cancelPlan(paymentId, signal))
+      .run((signal) => cancelPlan(transactionId, signal))
       .then((updated) => {
         if (updated === undefined) return;
         setPlan(updated);
@@ -156,7 +160,7 @@ export function PaymentPlanSection({ paymentId, createdById, currency }: Payment
       <p className="text-sm text-gray-700 dark:text-gray-200" data-testid="plan-summary">
         {t('summary', {
           principal: formatMoney(plan.principalCents, currency, locale),
-          count: plan.paymentsCount,
+          count: plan.transactionsCount,
           rate: (plan.interestRate * 100).toLocaleString(locale, { maximumFractionDigits: 2 }),
           frequency: t(`form.frequency.${plan.frequency}`),
           method: t(`form.method.${plan.amortizationMethod}`),

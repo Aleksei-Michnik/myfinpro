@@ -1,13 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentDetailClient } from './payment-detail-client';
-import type { PaymentSummary, ScheduleResponse } from '@/lib/payment/types';
+import { TransactionDetailClient } from './transaction-detail-client';
 import { RealtimeContext } from '@/lib/realtime/realtime-context';
 import type { RealtimeEvent } from '@/lib/realtime/realtime-types';
+import type { TransactionSummary, ScheduleResponse } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-const mockGetPayment = vi.fn();
+const mockGetTransaction = vi.fn();
 const mockGetSchedule = vi.fn();
 const mockListOccurrences = vi.fn();
 const mockListComments = vi.fn();
@@ -15,9 +15,9 @@ const mockPostComment = vi.fn();
 const mockEditComment = vi.fn();
 const mockDeleteComment = vi.fn();
 const mockToggleStar = vi.fn();
-const mockRemovePayment = vi.fn();
-const mockUpdatePayment = vi.fn();
-const mockCreatePayment = vi.fn();
+const mockRemoveTransaction = vi.fn();
+const mockUpdateTransaction = vi.fn();
+const mockCreateTransaction = vi.fn();
 const mockCreateSchedule = vi.fn();
 const mockReplaceSchedule = vi.fn();
 const mockListCategories = vi.fn();
@@ -65,9 +65,9 @@ vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => ({ groups: [] }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
-    getPayment: mockGetPayment,
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
+    getTransaction: mockGetTransaction,
     getSchedule: mockGetSchedule,
     listOccurrences: mockListOccurrences,
     listComments: mockListComments,
@@ -75,9 +75,9 @@ vi.mock('@/lib/payment/payment-context', () => ({
     editComment: mockEditComment,
     deleteComment: mockDeleteComment,
     toggleStar: mockToggleStar,
-    removePayment: mockRemovePayment,
-    updatePayment: mockUpdatePayment,
-    createPayment: mockCreatePayment,
+    removeTransaction: mockRemoveTransaction,
+    updateTransaction: mockUpdateTransaction,
+    createTransaction: mockCreateTransaction,
     createSchedule: mockCreateSchedule,
     replaceSchedule: mockReplaceSchedule,
     listCategories: mockListCategories,
@@ -98,7 +98,7 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: 'p-1',
     direction: 'OUT',
@@ -113,7 +113,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -121,9 +121,9 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
   };
 }
 
-describe('PaymentDetailClient', () => {
+describe('TransactionDetailClient', () => {
   beforeEach(() => {
-    mockGetPayment.mockReset();
+    mockGetTransaction.mockReset();
     mockGetSchedule.mockReset();
     mockGetSchedule.mockResolvedValue(null);
     mockListOccurrences.mockReset();
@@ -134,9 +134,9 @@ describe('PaymentDetailClient', () => {
     mockEditComment.mockReset();
     mockDeleteComment.mockReset();
     mockToggleStar.mockReset();
-    mockRemovePayment.mockReset();
-    mockUpdatePayment.mockReset();
-    mockCreatePayment.mockReset();
+    mockRemoveTransaction.mockReset();
+    mockUpdateTransaction.mockReset();
+    mockCreateTransaction.mockReset();
     mockCreateSchedule.mockReset();
     mockReplaceSchedule.mockReset();
     mockListCategories.mockReset();
@@ -158,43 +158,47 @@ describe('PaymentDetailClient', () => {
   });
 
   it('shows the loading spinner while fetching', () => {
-    mockGetPayment.mockReturnValueOnce(new Promise(() => {}));
-    render(<PaymentDetailClient paymentId="p-1" />);
-    expect(screen.getByTestId('payment-detail-loading')).toBeInTheDocument();
+    mockGetTransaction.mockReturnValueOnce(new Promise(() => {}));
+    render(<TransactionDetailClient transactionId="p-1" />);
+    expect(screen.getByTestId('transaction-detail-loading')).toBeInTheDocument();
   });
 
   it('renders the 404 error card when the API returns 404', async () => {
     const err = Object.assign(new Error('not found'), { status: 404 });
-    mockGetPayment.mockRejectedValueOnce(err);
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-error')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-detail-error-title').textContent).toMatch(/notFound/);
-    expect(screen.queryByTestId('payment-detail-retry')).not.toBeInTheDocument();
+    mockGetTransaction.mockRejectedValueOnce(err);
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('transaction-detail-error')).toBeInTheDocument());
+    expect(screen.getByTestId('transaction-detail-error-title').textContent).toMatch(/notFound/);
+    expect(screen.queryByTestId('transaction-detail-retry')).not.toBeInTheDocument();
   });
 
   it('generic error card offers Try again', async () => {
     const err = Object.assign(new Error('network'), { status: 500 });
-    mockGetPayment.mockRejectedValueOnce(err);
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-error')).toBeInTheDocument());
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    fireEvent.click(screen.getByTestId('payment-detail-retry'));
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+    mockGetTransaction.mockRejectedValueOnce(err);
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('transaction-detail-error')).toBeInTheDocument());
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    fireEvent.click(screen.getByTestId('transaction-detail-retry'));
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
   });
 
   it('successful render shows header + comments; no receipt sections without a linked receipt', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-comment-list')).toBeInTheDocument();
-    expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('transaction-comment-list')).toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-schedule-plan-placeholder')).not.toBeInTheDocument();
     // No linked receipt → neither the purchase-details fold nor the documents panel.
-    expect(screen.queryByTestId('payment-purchase-details')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('payment-documents')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-purchase-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-documents')).not.toBeInTheDocument();
   });
 
   it('shows the purchase-details fold + documents panel for a linked receipt (7.13 / 8.18 / 8.19)', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ receiptId: 'r-42' }));
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ receiptId: 'r-42' }));
     // Resolved (not Once) — the documents panel fetches eagerly and the fold
     // fetches on expand; both read the same receipt.
     mockGetReceipt.mockResolvedValue({
@@ -218,9 +222,11 @@ describe('PaymentDetailClient', () => {
         },
       ],
     });
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-purchase-details')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-documents')).toBeInTheDocument();
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-purchase-details')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('transaction-documents')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('purchase-details-toggle'));
     await waitFor(() =>
       expect(screen.getByTestId('purchase-details-receipt-link')).toHaveAttribute(
@@ -230,61 +236,67 @@ describe('PaymentDetailClient', () => {
     );
   });
 
-  it('edit button opens the <PaymentFormDialog>', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+  it('edit button opens the <TransactionFormDialog>', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByTestId('detail-edit'));
-    expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-form-dialog')).toBeInTheDocument();
   });
 
-  it('delete button opens the <DeletePaymentDialog>', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+  it('delete button opens the <DeleteTransactionDialog>', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByTestId('detail-delete'));
-    expect(screen.getByTestId('delete-payment-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('delete-transaction-dialog')).toBeInTheDocument();
   });
 
-  it('delete with paymentDeleted=true redirects to /dashboard with toast', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+  it('delete with transactionDeleted=true redirects to /dashboard with toast', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByTestId('detail-delete'));
-    mockRemovePayment.mockResolvedValueOnce({
+    mockRemoveTransaction.mockResolvedValueOnce({
       deletedAttributions: 1,
       addedAttributions: 0,
-      paymentDeleted: true,
-      payment: null,
+      transactionDeleted: true,
+      transaction: null,
     });
-    fireEvent.click(screen.getByTestId('delete-payment-confirm'));
+    fireEvent.click(screen.getByTestId('delete-transaction-confirm'));
     await waitFor(() => expect(mockRouterReplace).toHaveBeenCalledWith('/dashboard'));
     expect(mockAddToast).toHaveBeenCalledWith('success', expect.any(String));
   });
 
-  it('delete with paymentDeleted=false re-fetches and keeps the page visible', async () => {
-    const first = makePayment({ note: 'one' });
-    const second = makePayment({ note: 'two' });
-    mockGetPayment.mockResolvedValueOnce(first);
-    render(<PaymentDetailClient paymentId="p-1" />);
+  it('delete with transactionDeleted=false re-fetches and keeps the page visible', async () => {
+    const first = makeTransaction({ note: 'one' });
+    const second = makeTransaction({ note: 'two' });
+    mockGetTransaction.mockResolvedValueOnce(first);
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-note')).toHaveTextContent('one'));
     fireEvent.click(screen.getByTestId('detail-delete'));
-    mockRemovePayment.mockResolvedValueOnce({
+    mockRemoveTransaction.mockResolvedValueOnce({
       deletedAttributions: 1,
       addedAttributions: 0,
-      paymentDeleted: false,
-      payment: null,
+      transactionDeleted: false,
+      transaction: null,
     });
-    mockGetPayment.mockResolvedValueOnce(second);
-    fireEvent.click(screen.getByTestId('delete-payment-confirm'));
+    mockGetTransaction.mockResolvedValueOnce(second);
+    fireEvent.click(screen.getByTestId('delete-transaction-confirm'));
     await waitFor(() => expect(screen.getByTestId('detail-note')).toHaveTextContent('two'));
     expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
   it('star toggle in header updates state', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
     mockToggleStar.mockResolvedValueOnce({ starred: true, starCount: 1 });
-    render(<PaymentDetailClient paymentId="p-1" />);
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-star')).toBeInTheDocument());
     const btn = screen.getByTestId('detail-star');
     fireEvent.click(btn);
@@ -294,12 +306,12 @@ describe('PaymentDetailClient', () => {
   });
 
   it('new comment posted via input appears at the bottom of the list', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-comment-list')).toBeInTheDocument());
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('transaction-comment-list')).toBeInTheDocument());
     mockPostComment.mockResolvedValueOnce({
       id: 'c-new',
-      paymentId: 'p-1',
+      transactionId: 'p-1',
       author: { id: 'me', name: 'Me' },
       content: 'hi',
       createdAt: '2026-04-25T00:00:00Z',
@@ -314,29 +326,29 @@ describe('PaymentDetailClient', () => {
     await waitFor(() => expect(screen.getByTestId('comment-row-c-new')).toBeInTheDocument());
   });
 
-  it('schedule/plan placeholder is shown when payment has a parentPaymentId', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ parentPaymentId: 'parent-1' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+  it('schedule/plan placeholder is shown when transaction has a parentTransactionId', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ parentTransactionId: 'parent-1' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() =>
-      expect(screen.getByTestId('payment-schedule-plan-placeholder')).toBeInTheDocument(),
+      expect(screen.getByTestId('transaction-schedule-plan-placeholder')).toBeInTheDocument(),
     );
   });
 
   it('schedule/plan placeholder is shown for still-unsupported types (LIMITED_PERIOD)', async () => {
     // 6.20 made the plan kinds first-class — LIMITED_PERIOD is the only
     // remaining type that falls back to the placeholder.
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'LIMITED_PERIOD' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'LIMITED_PERIOD' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() =>
-      expect(screen.getByTestId('payment-schedule-plan-placeholder')).toBeInTheDocument(),
+      expect(screen.getByTestId('transaction-schedule-plan-placeholder')).toBeInTheDocument(),
     );
   });
 
   it('RECURRING parent renders <ScheduleBadge> with the fetched schedule', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
     mockGetSchedule.mockResolvedValueOnce({
       id: 's-1',
-      paymentId: 'p-1',
+      transactionId: 'p-1',
       cron: null,
       everyMs: 86_400_000,
       startsAt: '2026-04-25T00:00:00Z',
@@ -349,44 +361,44 @@ describe('PaymentDetailClient', () => {
       createdAt: '2026-04-25T00:00:00Z',
       updatedAt: '2026-04-25T00:00:00Z',
     });
-    render(<PaymentDetailClient paymentId="p-1" />);
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
-    expect(screen.queryByTestId('payment-schedule-plan-placeholder')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-schedule-plan-placeholder')).not.toBeInTheDocument();
     expect(mockGetSchedule).toHaveBeenCalledWith('p-1', expect.any(AbortSignal));
   });
 
-  it('child occurrence renders the "from recurring payment" back-link', async () => {
-    mockGetPayment.mockResolvedValueOnce(
-      makePayment({ id: 'child-1', parentPaymentId: 'parent-1' }),
+  it('child occurrence renders the "from recurring transaction" back-link', async () => {
+    mockGetTransaction.mockResolvedValueOnce(
+      makeTransaction({ id: 'child-1', parentTransactionId: 'parent-1' }),
     );
-    render(<PaymentDetailClient paymentId="child-1" />);
+    render(<TransactionDetailClient transactionId="child-1" />);
     await waitFor(() =>
-      expect(screen.getByTestId('payment-detail-from-recurring')).toBeInTheDocument(),
+      expect(screen.getByTestId('transaction-detail-from-recurring')).toBeInTheDocument(),
     );
-    expect(screen.getByTestId('payment-detail-from-recurring').getAttribute('href')).toBe(
-      '/payments/parent-1',
+    expect(screen.getByTestId('transaction-detail-from-recurring').getAttribute('href')).toBe(
+      '/transactions/parent-1',
     );
   });
 
   it('back link points to /dashboard', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-back')).toBeInTheDocument());
-    expect(screen.getByTestId('payment-detail-back').getAttribute('href')).toBe('/dashboard');
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() => expect(screen.getByTestId('transaction-detail-back')).toBeInTheDocument());
+    expect(screen.getByTestId('transaction-detail-back').getAttribute('href')).toBe('/dashboard');
   });
 
   // ── Phase 6 · Iteration 6.18.1.2 — Edit/Delete eligibility regressions ──
 
-  it('Edit button is enabled for RECURRING parent payments', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+  it('Edit button is enabled for RECURRING parent transactions', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
     expect(screen.getByTestId('detail-edit')).not.toBeDisabled();
   });
 
   it('Edit button is disabled for child occurrences with the right tooltip', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ parentPaymentId: 'parent-1' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ parentTransactionId: 'parent-1' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
     const btn = screen.getByTestId('detail-edit');
     expect(btn).toBeDisabled();
@@ -394,8 +406,8 @@ describe('PaymentDetailClient', () => {
   });
 
   it('Edit button is disabled for unsupported types (INSTALLMENT) with the right tooltip', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'INSTALLMENT' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-edit')).toBeInTheDocument());
     const btn = screen.getByTestId('detail-edit');
     expect(btn).toBeDisabled();
@@ -403,15 +415,15 @@ describe('PaymentDetailClient', () => {
   });
 
   it('Delete button follows the same eligibility rules', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ parentPaymentId: 'parent-1' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ parentTransactionId: 'parent-1' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-delete')).toBeInTheDocument());
     expect(screen.getByTestId('detail-delete')).toBeDisabled();
   });
 
   it('Date row displays the time-of-day component', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment());
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() => expect(screen.getByTestId('detail-date')).toBeInTheDocument());
     expect(screen.getByTestId('detail-date').textContent).toMatch(/\d{1,2}:\d{2}/);
   });
@@ -419,8 +431,8 @@ describe('PaymentDetailClient', () => {
   // ── Phase 6 · Iteration 6.18.1.3 — <RecurringOccurrencesSection> mount rules ──
 
   it('RECURRING parent renders the <RecurringOccurrencesSection>', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-section')).toBeInTheDocument(),
     );
@@ -432,18 +444,22 @@ describe('PaymentDetailClient', () => {
   });
 
   it('RECURRING child occurrence does NOT render the section', async () => {
-    mockGetPayment.mockResolvedValueOnce(
-      makePayment({ type: 'RECURRING', parentPaymentId: 'parent-1' }),
+    mockGetTransaction.mockResolvedValueOnce(
+      makeTransaction({ type: 'RECURRING', parentTransactionId: 'parent-1' }),
     );
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
     expect(screen.queryByTestId('recurring-occurrences-section')).not.toBeInTheDocument();
   });
 
-  it('ONE_TIME payment does NOT render the section', async () => {
-    mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'ONE_TIME' }));
-    render(<PaymentDetailClient paymentId="p-1" />);
-    await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+  it('ONE_TIME transaction does NOT render the section', async () => {
+    mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'ONE_TIME' }));
+    render(<TransactionDetailClient transactionId="p-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+    );
     expect(screen.queryByTestId('recurring-occurrences-section')).not.toBeInTheDocument();
     expect(mockListOccurrences).not.toHaveBeenCalled();
   });
@@ -454,7 +470,7 @@ describe('PaymentDetailClient', () => {
     function makeSchedule(over: Partial<ScheduleResponse> = {}): ScheduleResponse {
       return {
         id: 's-1',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         cron: null,
         everyMs: 86_400_000,
         startsAt: '2026-04-25T00:00:00Z',
@@ -471,8 +487,8 @@ describe('PaymentDetailClient', () => {
     }
 
     function renderWithRealtime() {
-      // PaymentDetailClient registers many `useRealtimeEvents` listeners
-      // (payment.*, attribution, schedule.*) — collect them all so emit()
+      // TransactionDetailClient registers many `useRealtimeEvents` listeners
+      // (transaction.*, attribution, schedule.*) — collect them all so emit()
       // fans out, matching the production EventBus semantics.
       const listeners = new Set<(e: RealtimeEvent) => void>();
       const subscribe = (l: (e: RealtimeEvent) => void) => {
@@ -485,7 +501,7 @@ describe('PaymentDetailClient', () => {
         <RealtimeContext.Provider
           value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
         >
-          <PaymentDetailClient paymentId="p-1" />
+          <TransactionDetailClient transactionId="p-1" />
         </RealtimeContext.Provider>,
       );
       return {
@@ -498,7 +514,7 @@ describe('PaymentDetailClient', () => {
     }
 
     it('schedule.paused → badge re-renders with paused state', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule());
 
@@ -509,7 +525,7 @@ describe('PaymentDetailClient', () => {
 
       emit({
         type: 'schedule.paused',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         schedule: makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }),
       });
 
@@ -519,7 +535,7 @@ describe('PaymentDetailClient', () => {
     });
 
     it('schedule.resumed → badge re-renders with active state', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule({ pausedAt: '2026-05-01T00:00:00Z' }));
 
@@ -530,7 +546,7 @@ describe('PaymentDetailClient', () => {
 
       emit({
         type: 'schedule.resumed',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         schedule: makeSchedule({ pausedAt: null, nextRunAt: '2026-05-02T00:00:00Z' }),
       });
 
@@ -540,7 +556,7 @@ describe('PaymentDetailClient', () => {
     });
 
     it('schedule.cancelled → badge shows cancelled pill', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule());
 
@@ -549,7 +565,7 @@ describe('PaymentDetailClient', () => {
 
       emit({
         type: 'schedule.cancelled',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         schedule: makeSchedule({ cancelledAt: '2026-05-01T00:00:00Z' }),
       });
 
@@ -559,20 +575,20 @@ describe('PaymentDetailClient', () => {
     });
 
     it('schedule.deleted → badge is removed from the page', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule());
 
       const { emit } = renderWithRealtime();
       await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
 
-      emit({ type: 'schedule.deleted', paymentId: 'p-1' });
+      emit({ type: 'schedule.deleted', transactionId: 'p-1' });
 
       await waitFor(() => expect(screen.queryByTestId('schedule-badge')).not.toBeInTheDocument());
     });
 
-    it('schedule.* events for a different payment are ignored', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+    it('schedule.* events for a different transaction are ignored', async () => {
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule());
 
@@ -581,18 +597,18 @@ describe('PaymentDetailClient', () => {
         expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active'),
       );
 
-      emit({ type: 'schedule.deleted', paymentId: 'p-OTHER' });
+      emit({ type: 'schedule.deleted', transactionId: 'p-OTHER' });
 
       // Badge still present + still active.
       expect(screen.getByTestId('schedule-badge').getAttribute('data-status')).toBe('active');
     });
 
     it('badge carries aria-live="polite" for screen-reader announcements', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING' }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(makeSchedule());
 
-      render(<PaymentDetailClient paymentId="p-1" />);
+      render(<TransactionDetailClient transactionId="p-1" />);
       const badge = await screen.findByTestId('schedule-badge');
       expect(badge.getAttribute('aria-live')).toBe('polite');
     });
@@ -604,7 +620,7 @@ describe('PaymentDetailClient', () => {
     function makeSchedule(over: Partial<ScheduleResponse> = {}): ScheduleResponse {
       return {
         id: 's-1',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         cron: null,
         everyMs: 86_400_000,
         startsAt: '2026-04-25T00:00:00Z',
@@ -620,11 +636,14 @@ describe('PaymentDetailClient', () => {
       };
     }
 
-    async function renderRecurring(over: Partial<PaymentSummary> = {}, schedule = makeSchedule()) {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'RECURRING', ...over }));
+    async function renderRecurring(
+      over: Partial<TransactionSummary> = {},
+      schedule = makeSchedule(),
+    ) {
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'RECURRING', ...over }));
       mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
       mockGetSchedule.mockResolvedValueOnce(schedule);
-      render(<PaymentDetailClient paymentId="p-1" />);
+      render(<TransactionDetailClient transactionId="p-1" />);
       await waitFor(() => expect(screen.getByTestId('schedule-badge')).toBeInTheDocument());
     }
 
@@ -696,14 +715,14 @@ describe('PaymentDetailClient', () => {
 
   describe('plan parents (6.20)', () => {
     it('INSTALLMENT parent renders the plan section instead of the legacy placeholder', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment({ type: 'INSTALLMENT' }));
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction({ type: 'INSTALLMENT' }));
       mockGetPlan.mockResolvedValueOnce({
         id: 'plan-1',
-        paymentId: 'p-1',
+        transactionId: 'p-1',
         kind: 'INSTALLMENT',
         principalCents: 120_000,
         interestRate: 0,
-        paymentsCount: 2,
+        transactionsCount: 2,
         frequency: 'MONTHLY',
         firstDueAt: '2026-08-01T00:00:00.000Z',
         amortizationMethod: 'equal',
@@ -733,7 +752,7 @@ describe('PaymentDetailClient', () => {
         ],
       });
 
-      render(<PaymentDetailClient paymentId="p-1" />);
+      render(<TransactionDetailClient transactionId="p-1" />);
       await waitFor(() => expect(screen.getByTestId('plan-section')).toBeInTheDocument());
       expect(mockGetPlan).toHaveBeenCalledWith('p-1', expect.anything());
       expect(screen.getAllByTestId(/^plan-row-\d+$/)).toHaveLength(2);
@@ -743,10 +762,12 @@ describe('PaymentDetailClient', () => {
       expect(mockGetSchedule).not.toHaveBeenCalled();
     });
 
-    it('ONE_TIME payments never fetch a plan', async () => {
-      mockGetPayment.mockResolvedValueOnce(makePayment());
-      render(<PaymentDetailClient paymentId="p-1" />);
-      await waitFor(() => expect(screen.getByTestId('payment-detail-header')).toBeInTheDocument());
+    it('ONE_TIME transactions never fetch a plan', async () => {
+      mockGetTransaction.mockResolvedValueOnce(makeTransaction());
+      render(<TransactionDetailClient transactionId="p-1" />);
+      await waitFor(() =>
+        expect(screen.getByTestId('transaction-detail-header')).toBeInTheDocument(),
+      );
       expect(mockGetPlan).not.toHaveBeenCalled();
     });
   });

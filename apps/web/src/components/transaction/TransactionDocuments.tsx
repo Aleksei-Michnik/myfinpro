@@ -1,8 +1,8 @@
 'use client';
 
-// Phase 8.19 — the payment's Documents panel: the linked receipt as a
+// Phase 8.19 — the transaction's Documents panel: the linked receipt as a
 // viewable document. Uploaded files open in the shared ReceiptDocumentViewer;
-// URL receipts link out. Read access is granted to any payment co-viewer,
+// URL receipts link out. Read access is granted to any transaction co-viewer,
 // group members see it too.
 
 import { useTranslations } from 'next-intl';
@@ -13,12 +13,12 @@ import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-interface PaymentDocumentsProps {
+interface TransactionDocumentsProps {
   receiptId: string;
 }
 
-export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
-  const t = useTranslations('payments.documents');
+export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
+  const t = useTranslations('transactions.documents');
   const { getReceipt, fetchFileBlob } = useReceipts();
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
@@ -73,11 +73,11 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
   return (
     <section
       className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-      aria-labelledby="payment-documents-title"
-      data-testid="payment-documents"
+      aria-labelledby="transaction-documents-title"
+      data-testid="transaction-documents"
     >
       <h2
-        id="payment-documents-title"
+        id="transaction-documents-title"
         className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100"
       >
         {t('title')}
@@ -88,14 +88,14 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
           className="flex justify-center py-2"
           role="status"
           aria-label={t('loading')}
-          data-testid="payment-documents-loading"
+          data-testid="transaction-documents-loading"
         >
           <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary-600" />
         </div>
       ) : notAccessible ? (
         <p
           className="text-sm text-gray-500 dark:text-gray-400"
-          data-testid="payment-documents-unavailable"
+          data-testid="transaction-documents-unavailable"
         >
           {t('unavailable')}
         </p>
@@ -111,14 +111,14 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
           target="_blank"
           rel="noreferrer noopener"
           className="inline-flex items-center gap-1 break-all text-sm text-primary-700 hover:underline dark:text-primary-300"
-          data-testid="payment-document-external"
+          data-testid="transaction-document-external"
         >
           {receipt.sourceUrl} ↗
         </a>
       ) : receipt && receipt.mimeType ? (
         <div
           className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-700"
-          data-testid="payment-document-file"
+          data-testid="transaction-document-file"
         >
           <div className="min-w-0">
             <p className="truncate text-sm text-gray-900 dark:text-gray-100">
@@ -130,7 +130,7 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
             type="button"
             onClick={() => setViewerOpen(true)}
             className="shrink-0 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-            data-testid="payment-document-view"
+            data-testid="transaction-document-view"
           >
             {t('view')}
           </button>
@@ -138,7 +138,7 @@ export function PaymentDocuments({ receiptId }: PaymentDocumentsProps) {
       ) : (
         <p
           className="text-sm text-gray-500 dark:text-gray-400"
-          data-testid="payment-documents-none"
+          data-testid="transaction-documents-none"
         >
           {t('none')}
         </p>

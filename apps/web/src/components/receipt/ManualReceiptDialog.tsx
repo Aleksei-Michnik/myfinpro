@@ -7,7 +7,7 @@
 // (product × quantity × unit price). Price memory: re-scanning a product
 // bumps its quantity; a product's last purchase price prefills the unit
 // price. Submit posts /receipts/manual, born in REVIEW with items
-// pre-linked, and hands off to the same review → confirm → payment pipeline.
+// pre-linked, and hands off to the same review → confirm → transaction pipeline.
 //
 // Accessibility: dialog semantics, focus moved in on open, Esc/backdrop
 // close (suppressed while a sub-dialog is up), scan feedback announced via
@@ -23,12 +23,12 @@ import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { useToast } from '@/components/ui/Toast';
 import { localInputToIso, nowLocalIso } from '@/lib/datetime';
-import { formatAmount } from '@/lib/payment/formatters';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ManualReceiptInput, ReceiptSummary } from '@/lib/receipt/types';
+import { formatAmount } from '@/lib/transaction/formatters';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 const inputClass =

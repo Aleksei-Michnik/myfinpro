@@ -1,6 +1,6 @@
 // Phase 6 · Iteration 6.18.1 — pure formatting helpers for `<ScheduleBadge>`
 // + the schedule sub-form's inline summary. Side-effect free; consumes a
-// next-intl `t` function (relative to the `payments.schedule.badge`
+// next-intl `t` function (relative to the `transactions.schedule.badge`
 // namespace) so the helpers stay testable without mounting React.
 
 import type { ScheduleResponse, ScheduleSpec } from './types';
@@ -43,7 +43,7 @@ export function decomposeEveryMs(everyMs: number): EveryDecomposition {
  *   { everyMs: 86_400_000 }    → "Every 1 day(s)"
  *   { cron: '0 9 * * 1' }      → "Cron: 0 9 * * 1"
  *
- * `t` is a `useTranslations('payments.schedule.badge')` function — it must
+ * `t` is a `useTranslations('transactions.schedule.badge')` function — it must
  * resolve `repeatEveryMinutes / Hours / Days / Weeks / Months / Cron` keys
  * with `{ n }` or `{ expr }` placeholders.
  */

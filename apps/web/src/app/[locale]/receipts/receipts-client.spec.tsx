@@ -83,7 +83,7 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     totalCents: null,
     discountCents: null,
     failureReason: null,
-    paymentId: null,
+    transactionId: null,
     itemsSumCents: 0,
     totalsMismatchCents: null,
     createdAt: '2026-07-04T10:00:00.000Z',

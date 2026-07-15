@@ -1,8 +1,8 @@
 'use client';
 
 // Phase 6 · Iteration 6.14 — shared star-toggle hook with optimistic flip +
-// revert-on-error semantics. Extracted from `<PaymentRow>` so that
-// `<PaymentDetailHeader>` can share the exact same behaviour (DRY).
+// revert-on-error semantics. Extracted from `<TransactionRow>` so that
+// `<TransactionDetailHeader>` can share the exact same behaviour (DRY).
 //
 // Phase 6 · Iteration 6.16.2 — internally rebuilt on top of
 // `useAsyncOperation({ scope: 'control' })`. The control-scope hook gives
@@ -13,7 +13,7 @@
 // existing consumers via `error.message`).
 //
 // Usage:
-//   const { starred, error, pending, toggle } = useStarToggle(payment.id, payment.starredByMe, {
+//   const { starred, error, pending, toggle } = useStarToggle(transaction.id, transaction.starredByMe, {
 //     onToggled: (id, starred) => { /* bubble-up */ },
 //   });
 //   <button disabled={pending} aria-busy={pending} onClick={toggle}>
@@ -21,12 +21,12 @@
 //   </button>
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePayments } from './payment-context';
+import { useTransactions } from './transaction-context';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface UseStarToggleOptions {
   /** Called with the authoritative `starred` value returned by the server. */
-  onToggled?: (paymentId: string, starred: boolean) => void;
+  onToggled?: (transactionId: string, starred: boolean) => void;
 }
 
 export interface UseStarToggleResult {
@@ -41,18 +41,18 @@ export interface UseStarToggleResult {
 }
 
 export function useStarToggle(
-  paymentId: string,
+  transactionId: string,
   initialStarred: boolean,
   options: UseStarToggleOptions = {},
 ): UseStarToggleResult {
-  const { toggleStar } = usePayments();
+  const { toggleStar } = useTransactions();
   const [starred, setStarred] = useState(initialStarred);
   const op = useAsyncOperation<{ starred: boolean }>({
     scope: 'control',
-    id: `star:${paymentId}`,
+    id: `star:${transactionId}`,
   });
 
-  // Keep in sync when the parent-prop changes (e.g. re-fetched payment).
+  // Keep in sync when the parent-prop changes (e.g. re-fetched transaction).
   useEffect(() => {
     setStarred(initialStarred);
   }, [initialStarred]);
@@ -61,15 +61,15 @@ export function useStarToggle(
     const previous = starred;
     // Optimistic flip — visible immediately.
     setStarred(!previous);
-    const result = await op.run((signal) => toggleStar(paymentId, signal));
+    const result = await op.run((signal) => toggleStar(transactionId, signal));
     if (result === undefined) {
       // Failure path — revert and surface the error message.
       setStarred(previous);
       return;
     }
     setStarred(result.starred);
-    options.onToggled?.(paymentId, result.starred);
-  }, [paymentId, starred, toggleStar, op, options]);
+    options.onToggled?.(transactionId, result.starred);
+  }, [transactionId, starred, toggleStar, op, options]);
 
   // Surface the structured error as a string for backward compatibility with
   // existing consumers that show `error` in a `title=` attribute.

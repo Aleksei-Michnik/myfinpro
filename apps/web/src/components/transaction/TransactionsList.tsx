@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.12 — top-level reusable payments list.
+// Phase 6 · Iteration 6.12 — top-level reusable transactions list.
 // Phase 6 · Iteration 6.16.1 — fully controlled (or uncontrolled) by the
 // parent via the `filters` / `onFiltersChange` props.
 // Phase 6 · Iteration 6.16.2 — fully migrated to `useAsyncOperation`. Two
@@ -10,7 +10,7 @@
 //      owns both the first-page fetch and "Load more" pagination through
 //      its own container-scope ops. Filter changes trigger a reset fetch.
 //
-//   2. Orchestrator-owned (`data` prop provided — used by /payments): the
+//   2. Orchestrator-owned (`data` prop provided — used by /transactions): the
 //      orchestrator owns the first-page fetch and recovery UI. The list
 //      reads rows from `data`, and any "Load more" appends are reported
 //      back via `onAppendData`. The list still owns the load-more op.
@@ -20,37 +20,37 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DeletePaymentDialog } from './DeletePaymentDialog';
-import { PaymentFormDialog } from './PaymentFormDialog';
-import { PaymentRow } from './PaymentRow';
-import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
+import { DeleteTransactionDialog } from './DeleteTransactionDialog';
+import { TransactionFormDialog } from './TransactionFormDialog';
+import { TransactionRow } from './TransactionRow';
+import { TransactionsFilters, type TransactionsFiltersValue } from './TransactionsFilters';
 import { AttachReceiptDialog } from '@/components/receipt/AttachReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { useRouter } from '@/i18n/navigation';
-import { defaultFilters, paymentMatchesFilters } from '@/lib/payment/filters';
-import { usePayments } from '@/lib/payment/payment-context';
+import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+import { defaultFilters, transactionMatchesFilters } from '@/lib/transaction/filters';
+import { useTransactions } from '@/lib/transaction/transaction-context';
 import type {
   AttributionChangeResult,
   CategoryDto,
-  ListPaymentsParams,
-  PaymentListResponse,
-  PaymentSummary,
-} from '@/lib/payment/types';
-import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
-import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+  ListTransactionsParams,
+  TransactionListResponse,
+  TransactionSummary,
+} from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface PaymentsListData {
-  rows: PaymentSummary[];
+export interface TransactionsListData {
+  rows: TransactionSummary[];
   cursor: string | null;
   hasMore: boolean;
 }
 
-export interface PaymentsListProps {
-  filters?: PaymentsFiltersValue;
-  onFiltersChange?(next: PaymentsFiltersValue): void;
-  /** Hide the scope dropdown — used by /payments where a tab strip owns scope. */
+export interface TransactionsListProps {
+  filters?: TransactionsFiltersValue;
+  onFiltersChange?(next: TransactionsFiltersValue): void;
+  /** Hide the scope dropdown — used by /transactions where a tab strip owns scope. */
   lockScope?: boolean;
   /** Toggle the filter toolbar entirely. Default true. */
   showFilters?: boolean;
@@ -60,17 +60,17 @@ export interface PaymentsListProps {
   showStar?: boolean;
   limit?: number;
   emptyState?: ReactNode;
-  onPaymentClick?(id: string): void;
-  onPaymentEdit?(id: string): void;
+  onTransactionClick?(id: string): void;
+  onTransactionEdit?(id: string): void;
   /** Pre-fetched categories shared across multiple lists. */
   categories?: CategoryDto[] | null;
-  /** When true, the toolbar doesn't render the inline "Add payment" button. */
+  /** When true, the toolbar doesn't render the inline "Add transaction" button. */
   disableInternalAdd?: boolean;
   /**
    * Orchestrator-owned mode. When provided, the list does NOT self-fetch.
    * The orchestrator drives the data through its own useAsyncOperation.
    */
-  data?: PaymentsListData;
+  data?: TransactionsListData;
   /** Loading flag from the orchestrator — disables the toolbar. */
   loading?: boolean;
   /**
@@ -80,15 +80,15 @@ export interface PaymentsListProps {
    */
   error?: string | null;
   /** Called by the list after a successful "Load more" so the orchestrator can sync. */
-  onAppendData?(append: PaymentsListData): void;
+  onAppendData?(append: TransactionsListData): void;
 }
 
-/** Translate a `PaymentsFiltersValue` into the `usePayments().fetchList` query. */
+/** Translate a `TransactionsFiltersValue` into the `useTransactions().fetchList` query. */
 function mapFiltersToParams(
-  filters: PaymentsFiltersValue,
+  filters: TransactionsFiltersValue,
   limit: number,
   cursor: string | undefined,
-): ListPaymentsParams {
+): ListTransactionsParams {
   return {
     scope: filters.scope === 'all' ? undefined : filters.scope,
     direction: filters.direction,
@@ -105,7 +105,7 @@ function mapFiltersToParams(
 
 const DEFAULT_LIMIT = 20;
 
-export function PaymentsList({
+export function TransactionsList({
   filters: controlledFilters,
   onFiltersChange,
   lockScope,
@@ -114,38 +114,38 @@ export function PaymentsList({
   showStar = true,
   limit = DEFAULT_LIMIT,
   emptyState,
-  onPaymentClick,
-  onPaymentEdit,
+  onTransactionClick,
+  onTransactionEdit,
   categories,
   disableInternalAdd,
   data: orchestratorData,
   loading: orchestratorLoading,
   error: orchestratorError,
   onAppendData,
-}: PaymentsListProps) {
-  const t = useTranslations('payments');
-  const tListLoading = useTranslations('payments.list');
+}: TransactionsListProps) {
+  const t = useTranslations('transactions');
+  const tListLoading = useTranslations('transactions.list');
   const locale = useLocale();
   const router = useRouter();
-  const { fetchList, getPayment } = usePayments();
+  const { fetchList, getTransaction } = useTransactions();
 
   const isOrchestratorMode = orchestratorData !== undefined;
 
   const defaultClickHandler = useMemo(
-    () => (id: string) => router.push(`/payments/${id}`),
+    () => (id: string) => router.push(`/transactions/${id}`),
     [router],
   );
-  const effectiveClick = onPaymentClick ?? defaultClickHandler;
+  const effectiveClick = onTransactionClick ?? defaultClickHandler;
   void locale;
 
   // Filters — controlled-or-uncontrolled, unchanged from 6.16.1.
-  const [internalFilters, setInternalFilters] = useState<PaymentsFiltersValue>(() =>
+  const [internalFilters, setInternalFilters] = useState<TransactionsFiltersValue>(() =>
     defaultFilters(),
   );
   const filters = controlledFilters ?? internalFilters;
 
   const setFilters = useCallback(
-    (next: PaymentsFiltersValue) => {
+    (next: TransactionsFiltersValue) => {
       if (controlledFilters !== undefined) {
         onFiltersChange?.(next);
       } else {
@@ -156,24 +156,24 @@ export function PaymentsList({
   );
 
   // Self-fetch state (used only when not in orchestrator mode).
-  const fetchOp = useAsyncOperation<PaymentListResponse>({
+  const fetchOp = useAsyncOperation<TransactionListResponse>({
     scope: 'container',
-    id: 'payments-list-fetch',
+    id: 'transactions-list-fetch',
   });
-  const [selfRows, setSelfRows] = useState<PaymentSummary[]>([]);
+  const [selfRows, setSelfRows] = useState<TransactionSummary[]>([]);
   const [selfCursor, setSelfCursor] = useState<string | null>(null);
   const [selfHasMore, setSelfHasMore] = useState(false);
 
   // Load-more pagination — same hook in both modes.
-  const loadMoreOp = useAsyncOperation<PaymentListResponse>({
+  const loadMoreOp = useAsyncOperation<TransactionListResponse>({
     scope: 'container',
-    id: 'payments-list-load-more',
+    id: 'transactions-list-load-more',
   });
 
   // Dialog state.
-  const [paymentToDelete, setPaymentToDelete] = useState<PaymentSummary | null>(null);
-  const [paymentToEdit, setPaymentToEdit] = useState<PaymentSummary | null>(null);
-  const [paymentToAttach, setPaymentToAttach] = useState<PaymentSummary | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<TransactionSummary | null>(null);
+  const [transactionToEdit, setTransactionToEdit] = useState<TransactionSummary | null>(null);
+  const [transactionToAttach, setTransactionToAttach] = useState<TransactionSummary | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Track whether the very first self-fetch has completed (used to render
@@ -193,7 +193,7 @@ export function PaymentsList({
   // Self-fetch mode mutates `selfRows`; orchestrator mode bubbles the new
   // shape up via `onAppendData`.
   const applyRowsUpdate = useCallback(
-    (updater: (prev: PaymentSummary[]) => PaymentSummary[]) => {
+    (updater: (prev: TransactionSummary[]) => TransactionSummary[]) => {
       if (isOrchestratorMode) {
         const next = updater(orchestratorData?.rows ?? []);
         onAppendData?.({
@@ -214,50 +214,52 @@ export function PaymentsList({
     ],
   );
 
-  useRealtimeEvents({ type: 'payment.created' }, (event) => {
-    if (!paymentMatchesFilters(event.payment, filters)) return;
+  useRealtimeEvents({ type: 'transaction.created' }, (event) => {
+    if (!transactionMatchesFilters(event.transaction, filters)) return;
     applyRowsUpdate((prev) =>
-      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+      prev.some((r) => r.id === event.transaction.id) ? prev : [event.transaction, ...prev],
     );
   });
 
-  useRealtimeEvents({ type: 'payment.updated' }, (event) => {
+  useRealtimeEvents({ type: 'transaction.updated' }, (event) => {
     applyRowsUpdate((prev) => {
-      const idx = prev.findIndex((r) => r.id === event.payment.id);
+      const idx = prev.findIndex((r) => r.id === event.transaction.id);
       if (idx === -1) {
         // Newly visible due to the update: prepend if it now matches filters.
-        return paymentMatchesFilters(event.payment, filters) ? [event.payment, ...prev] : prev;
+        return transactionMatchesFilters(event.transaction, filters)
+          ? [event.transaction, ...prev]
+          : prev;
       }
       // Already in the list — drop it if it no longer matches, otherwise patch.
-      if (!paymentMatchesFilters(event.payment, filters)) {
-        return prev.filter((r) => r.id !== event.payment.id);
+      if (!transactionMatchesFilters(event.transaction, filters)) {
+        return prev.filter((r) => r.id !== event.transaction.id);
       }
       const next = prev.slice();
-      next[idx] = event.payment;
+      next[idx] = event.transaction;
       return next;
     });
   });
 
-  useRealtimeEvents({ type: 'payment.deleted' }, (event) => {
-    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.paymentId));
+  useRealtimeEvents({ type: 'transaction.deleted' }, (event) => {
+    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.transactionId));
   });
 
-  useRealtimeEvents({ type: 'payment_attribution.removed' }, (event) => {
+  useRealtimeEvents({ type: 'transaction_attribution.removed' }, (event) => {
     // The server may emit this to the user even when they no longer have
     // visibility — treat as a hard remove so stale rows don't linger.
-    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.paymentId));
+    applyRowsUpdate((prev) => prev.filter((r) => r.id !== event.transactionId));
   });
 
   // Phase 6 · Iteration 6.18.1.4.3 — when a recurring schedule fires a new
-  // occurrence (a child Payment), the producer emits `occurrence.created`
-  // (NOT `payment.created`) so detail pages can react with a dedicated
-  // affordance. Dashboard / list views that show all payments still need
+  // occurrence (a child Transaction), the producer emits `occurrence.created`
+  // (NOT `transaction.created`) so detail pages can react with a dedicated
+  // affordance. Dashboard / list views that show all transactions still need
   // the row to appear — handle it here so RecentActivity & friends stay
   // live without each widget re-implementing the dispatch.
   useRealtimeEvents({ type: 'occurrence.created' }, (event) => {
-    if (!paymentMatchesFilters(event.payment, filters)) return;
+    if (!transactionMatchesFilters(event.transaction, filters)) return;
     applyRowsUpdate((prev) =>
-      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+      prev.some((r) => r.id === event.transaction.id) ? prev : [event.transaction, ...prev],
     );
   });
 
@@ -292,7 +294,7 @@ export function PaymentsList({
   // Phase 6 · 6.18.1.4-hotfix (part 2) — gap recovery. On a realtime
   // reconnect-after-gap the in-memory bus has no replay; refetch the
   // first page to re-establish authoritative state. Orchestrator mode
-  // handles its own resync upstream (in payments-list-client).
+  // handles its own resync upstream (in transactions-list-client).
   useRealtimeResync(() => {
     if (isOrchestratorMode) return;
     void fetchPageRef.current(true);
@@ -316,43 +318,43 @@ export function PaymentsList({
 
   const handleDeleted = useCallback(
     async (result: AttributionChangeResult) => {
-      const target = paymentToDelete;
+      const target = transactionToDelete;
       if (!target) return;
       if (isOrchestratorMode) return; // orchestrator refetches lazily
-      if (result.paymentDeleted) {
+      if (result.transactionDeleted) {
         setSelfRows((prev) => prev.filter((r) => r.id !== target.id));
         return;
       }
       try {
-        const fresh = await getPayment(target.id);
+        const fresh = await getTransaction(target.id);
         setSelfRows((prev) => prev.map((r) => (r.id === fresh.id ? fresh : r)));
       } catch {
         setSelfRows((prev) => prev.filter((r) => r.id !== target.id));
       }
     },
-    [getPayment, paymentToDelete, isOrchestratorMode],
+    [getTransaction, transactionToDelete, isOrchestratorMode],
   );
 
   const handleEditClick = useCallback(
     (id: string) => {
-      onPaymentEdit?.(id);
+      onTransactionEdit?.(id);
       const row = rows.find((r) => r.id === id);
-      if (row) setPaymentToEdit(row);
+      if (row) setTransactionToEdit(row);
     },
-    [onPaymentEdit, rows],
+    [onTransactionEdit, rows],
   );
 
   const handleDialogSaved = useCallback(
-    async (saved: PaymentSummary | null) => {
-      if (paymentToEdit && saved) {
+    async (saved: TransactionSummary | null) => {
+      if (transactionToEdit && saved) {
         if (!isOrchestratorMode) {
           setSelfRows((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
         }
         return;
       }
-      if (paymentToEdit && !saved) {
+      if (transactionToEdit && !saved) {
         if (!isOrchestratorMode) {
-          setSelfRows((prev) => prev.filter((r) => r.id !== paymentToEdit.id));
+          setSelfRows((prev) => prev.filter((r) => r.id !== transactionToEdit.id));
         }
         return;
       }
@@ -360,7 +362,7 @@ export function PaymentsList({
         await fetchPageRef.current(true);
       }
     },
-    [paymentToEdit, isOrchestratorMode],
+    [transactionToEdit, isOrchestratorMode],
   );
 
   const handleRetry = () => {
@@ -395,11 +397,11 @@ export function PaymentsList({
   const showAddButton = showControls !== false && !disableInternalAdd;
 
   return (
-    <div className="space-y-4" data-testid="payments-list" aria-live="polite">
+    <div className="space-y-4" data-testid="transactions-list" aria-live="polite">
       {(showFilters || showAddButton) && (
         <div className="flex flex-wrap items-end justify-between gap-2">
           {showFilters ? (
-            <PaymentsFilters
+            <TransactionsFilters
               value={filters}
               onChange={setFilters}
               hide={{ scope: lockScope }}
@@ -415,7 +417,7 @@ export function PaymentsList({
               variant="primary"
               size="sm"
               onClick={() => setCreating(true)}
-              data-testid="payments-list-add"
+              data-testid="transactions-list-add"
             >
               {t('form.addAction')}
             </Button>
@@ -426,7 +428,7 @@ export function PaymentsList({
       {showLoadingFirst && (
         <div
           className="py-8 text-center text-sm text-gray-500 dark:text-gray-400"
-          data-testid="payments-list-loading"
+          data-testid="transactions-list-loading"
           role="status"
           aria-live="polite"
         >
@@ -438,7 +440,7 @@ export function PaymentsList({
         <div
           className="flex items-center justify-between gap-3 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
           role="alert"
-          data-testid="payments-list-error"
+          data-testid="transactions-list-error"
         >
           <span>{t('list.errorLoading', { message: error })}</span>
           <Button
@@ -446,7 +448,7 @@ export function PaymentsList({
             variant="secondary"
             size="sm"
             onClick={handleRetry}
-            data-testid="payments-list-retry"
+            data-testid="transactions-list-retry"
           >
             {t('list.retry')}
           </Button>
@@ -456,7 +458,7 @@ export function PaymentsList({
       {showEmpty && (
         <div
           className="py-8 text-center text-sm text-gray-500 dark:text-gray-400"
-          data-testid="payments-list-empty"
+          data-testid="transactions-list-empty"
         >
           {emptyState ?? t('list.empty')}
         </div>
@@ -464,7 +466,7 @@ export function PaymentsList({
 
       {!showEmpty && rows.length > 0 && (
         <>
-          <div className="hidden overflow-x-auto md:block" data-testid="payments-list-desktop">
+          <div className="hidden overflow-x-auto md:block" data-testid="transactions-list-desktop">
             <table className="w-full text-sm">
               <thead className="text-start text-xs uppercase text-gray-500 dark:text-gray-400">
                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -482,16 +484,16 @@ export function PaymentsList({
               </thead>
               <tbody>
                 {rows.map((p) => (
-                  <PaymentRow
+                  <TransactionRow
                     key={p.id}
-                    payment={p}
+                    transaction={p}
                     variant="desktop"
                     showStar={showStar}
                     showControls={showControls}
                     onClick={effectiveClick}
                     onEditClick={handleEditClick}
-                    onDeleteClick={(payment) => setPaymentToDelete(payment)}
-                    onAttachClick={(payment) => setPaymentToAttach(payment)}
+                    onDeleteClick={(transaction) => setTransactionToDelete(transaction)}
+                    onAttachClick={(transaction) => setTransactionToAttach(transaction)}
                     onStarToggled={handleStarToggled}
                   />
                 ))}
@@ -499,18 +501,18 @@ export function PaymentsList({
             </table>
           </div>
 
-          <ul className="space-y-2 md:hidden" data-testid="payments-list-mobile">
+          <ul className="space-y-2 md:hidden" data-testid="transactions-list-mobile">
             {rows.map((p) => (
-              <PaymentRow
+              <TransactionRow
                 key={p.id}
-                payment={p}
+                transaction={p}
                 variant="card"
                 showStar={showStar}
                 showControls={showControls}
                 onClick={effectiveClick}
                 onEditClick={handleEditClick}
-                onDeleteClick={(payment) => setPaymentToDelete(payment)}
-                onAttachClick={(payment) => setPaymentToAttach(payment)}
+                onDeleteClick={(transaction) => setTransactionToDelete(transaction)}
+                onAttachClick={(transaction) => setTransactionToAttach(transaction)}
                 onStarToggled={handleStarToggled}
               />
             ))}
@@ -526,12 +528,12 @@ export function PaymentsList({
             size="md"
             onClick={handleLoadMore}
             disabled={loading || loadMoreOp.isLoading}
-            data-testid="payments-list-load-more"
+            data-testid="transactions-list-load-more"
           >
             {loadMoreOp.isLoading ? (
               <InlineLoader
                 label={tListLoading('loadingMore')}
-                data-testid="payments-list-load-more-loader"
+                data-testid="transactions-list-load-more-loader"
               />
             ) : (
               t('list.loadMore')
@@ -541,7 +543,7 @@ export function PaymentsList({
             <button
               type="button"
               onClick={() => void loadMoreOp.retry()}
-              data-testid="payments-list-load-more-retry"
+              data-testid="transactions-list-load-more-retry"
               className="text-xs font-medium text-red-700 underline hover:text-red-800 dark:text-red-300"
             >
               {t('list.retry')}
@@ -550,21 +552,21 @@ export function PaymentsList({
         </div>
       )}
 
-      {paymentToDelete && (
-        <DeletePaymentDialog
-          payment={paymentToDelete}
-          onClose={() => setPaymentToDelete(null)}
+      {transactionToDelete && (
+        <DeleteTransactionDialog
+          transaction={transactionToDelete}
+          onClose={() => setTransactionToDelete(null)}
           onDeleted={handleDeleted}
         />
       )}
 
-      {(paymentToEdit || creating) && (
-        <PaymentFormDialog
+      {(transactionToEdit || creating) && (
+        <TransactionFormDialog
           open
-          mode={paymentToEdit ? 'edit' : 'create'}
-          payment={paymentToEdit ?? undefined}
+          mode={transactionToEdit ? 'edit' : 'create'}
+          transaction={transactionToEdit ?? undefined}
           onClose={() => {
-            setPaymentToEdit(null);
+            setTransactionToEdit(null);
             setCreating(false);
           }}
           onSaved={handleDialogSaved}
@@ -572,15 +574,15 @@ export function PaymentsList({
         />
       )}
 
-      {/* Attach a receipt to an existing expense payment (Phase 8.15) — the
+      {/* Attach a receipt to an existing expense transaction (Phase 8.15) — the
           linked receipt hands off to review → reconcile. */}
-      {paymentToAttach && (
+      {transactionToAttach && (
         <AttachReceiptDialog
           open
-          paymentId={paymentToAttach.id}
-          onClose={() => setPaymentToAttach(null)}
+          transactionId={transactionToAttach.id}
+          onClose={() => setTransactionToAttach(null)}
           onAttached={(receipt) => {
-            setPaymentToAttach(null);
+            setTransactionToAttach(null);
             router.push(`/receipts/${receipt.id}`);
           }}
         />

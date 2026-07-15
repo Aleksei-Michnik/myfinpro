@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecurringOccurrencesSection } from './RecurringOccurrencesSection';
-import type { PaymentSummary } from '@/lib/payment/types';
 import { RealtimeContext } from '@/lib/realtime/realtime-context';
 import type { RealtimeEvent } from '@/lib/realtime/realtime-types';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -39,18 +39,18 @@ vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => ({ groups: [] }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
     listOccurrences: mockListOccurrences,
     fetchList: vi.fn(),
-    getPayment: vi.fn(),
+    getTransaction: vi.fn(),
     listCategories: vi.fn().mockResolvedValue([]),
   }),
 }));
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makeChild(over: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeChild(over: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: 'child-1',
     direction: 'OUT',
@@ -65,7 +65,7 @@ function makeChild(over: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: 'parent-1',
+    parentTransactionId: 'parent-1',
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -89,7 +89,7 @@ describe('RecurringOccurrencesSection', () => {
       nextCursor: null,
       hasMore: false,
     });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-section')).toBeInTheDocument(),
     );
@@ -103,7 +103,7 @@ describe('RecurringOccurrencesSection', () => {
 
   it('renders empty state when there are no occurrences yet', async () => {
     mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-empty')).toBeInTheDocument(),
     );
@@ -116,23 +116,25 @@ describe('RecurringOccurrencesSection', () => {
       nextCursor: 'cursor-1',
       hasMore: true,
     });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-load-more')).toBeInTheDocument());
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transactions-list-load-more')).toBeInTheDocument(),
+    );
 
-    // Note: <PaymentsList> "Load more" calls fetchList — the mock above
-    // only mocks listOccurrences. <PaymentsList> uses fetchList from
-    // usePayments, which is also mocked. Adjust mock to assert the load
+    // Note: <TransactionsList> "Load more" calls fetchList — the mock above
+    // only mocks listOccurrences. <TransactionsList> uses fetchList from
+    // useTransactions, which is also mocked. Adjust mock to assert the load
     // path via the section's internal state rather than fetchList.
     // For this test we just confirm the pagination affordance exists when
     // hasMore=true on the initial fetch.
-    expect(screen.getByTestId('payments-list-load-more')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-list-load-more')).toBeInTheDocument();
     // Count reflects the single loaded item.
     expect(screen.getByTestId('recurring-occurrences-count').textContent).toMatch(/countSingular/);
   });
 
   it('shows an inline error banner with a Retry on transient API failure', async () => {
     mockListOccurrences.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }));
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-error')).toBeInTheDocument(),
     );
@@ -155,7 +157,7 @@ describe('RecurringOccurrencesSection', () => {
         resolve = res;
       }),
     );
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     // Overlay debounces 150ms before showing.
     await waitFor(
       () => expect(screen.getByTestId('recurring-occurrences-overlay')).toBeInTheDocument(),
@@ -167,23 +169,25 @@ describe('RecurringOccurrencesSection', () => {
     );
   });
 
-  it('renders each occurrence row via the existing <PaymentRow> component', async () => {
+  it('renders each occurrence row via the existing <TransactionRow> component', async () => {
     mockListOccurrences.mockResolvedValueOnce({
       data: [makeChild({ id: 'c-1' }), makeChild({ id: 'c-2' })],
       nextCursor: null,
       hasMore: false,
     });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-desktop')).toBeInTheDocument());
-    // The existing <PaymentRow> renders cells via testIds we don't need to
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('transactions-list-desktop')).toBeInTheDocument(),
+    );
+    // The existing <TransactionRow> renders cells via testIds we don't need to
     // assert one-by-one — just confirm rows are present in both viewports.
-    expect(screen.getByTestId('payments-list-desktop')).toBeInTheDocument();
-    expect(screen.getByTestId('payments-list-mobile')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-list-desktop')).toBeInTheDocument();
+    expect(screen.getByTestId('transactions-list-mobile')).toBeInTheDocument();
   });
 
   it('is collapsible — the wrapping <details> opens by default and toggles via the summary', async () => {
     mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-section')).toBeInTheDocument(),
     );
@@ -198,9 +202,9 @@ describe('RecurringOccurrencesSection', () => {
     expect(details.open).toBe(false);
   });
 
-  it('passes the parent paymentId + correct query knobs to listOccurrences', async () => {
+  it('passes the parent transactionId + correct query knobs to listOccurrences', async () => {
     mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() => expect(mockListOccurrences).toHaveBeenCalled());
     expect(mockListOccurrences).toHaveBeenCalledWith(
       'parent-1',
@@ -212,7 +216,7 @@ describe('RecurringOccurrencesSection', () => {
   it('renders correctly under the he locale (RTL) — empty state copy still resolves', async () => {
     currentLocale = 'he';
     mockListOccurrences.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
-    render(<RecurringOccurrencesSection paymentId="parent-1" />);
+    render(<RecurringOccurrencesSection transactionId="parent-1" />);
     await waitFor(() =>
       expect(screen.getByTestId('recurring-occurrences-empty')).toBeInTheDocument(),
     );
@@ -237,7 +241,7 @@ describe('RecurringOccurrencesSection', () => {
       <RealtimeContext.Provider
         value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
       >
-        <RecurringOccurrencesSection paymentId="parent-1" />
+        <RecurringOccurrencesSection transactionId="parent-1" />
       </RealtimeContext.Provider>,
     );
 
@@ -250,8 +254,8 @@ describe('RecurringOccurrencesSection', () => {
     act(() => {
       listener?.({
         type: 'occurrence.created',
-        parentPaymentId: 'parent-1',
-        payment: makeChild({ id: 'c-2' }),
+        parentTransactionId: 'parent-1',
+        transaction: makeChild({ id: 'c-2' }),
       });
     });
 
@@ -281,7 +285,7 @@ describe('RecurringOccurrencesSection', () => {
       <RealtimeContext.Provider
         value={{ connectionStatus: 'connected', resyncToken: 0, subscribe }}
       >
-        <RecurringOccurrencesSection paymentId="parent-1" />
+        <RecurringOccurrencesSection transactionId="parent-1" />
       </RealtimeContext.Provider>,
     );
 
@@ -294,8 +298,8 @@ describe('RecurringOccurrencesSection', () => {
     act(() => {
       listener?.({
         type: 'occurrence.created',
-        parentPaymentId: 'other-parent',
-        payment: makeChild({ id: 'c-99' }),
+        parentTransactionId: 'other-parent',
+        transaction: makeChild({ id: 'c-99' }),
       });
     });
 

@@ -1,14 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  PaymentScheduleSubForm,
+  TransactionScheduleSubForm,
   buildScheduleSpec,
   defaultScheduleSubFormState,
   scheduleResponseToFormState,
   type ScheduleSubFormErrors,
   type ScheduleSubFormState,
-} from './PaymentScheduleSubForm';
-import type { ScheduleResponse } from '@/lib/payment/types';
+} from './TransactionScheduleSubForm';
+import type { ScheduleResponse } from '@/lib/transaction/types';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -29,7 +29,7 @@ function controlled(initial?: Partial<ScheduleSubFormState>) {
     disabled?: boolean;
   }) => {
     return (
-      <PaymentScheduleSubForm
+      <TransactionScheduleSubForm
         state={state}
         errors={errors}
         onChange={(next) => {
@@ -47,7 +47,7 @@ function controlled(initial?: Partial<ScheduleSubFormState>) {
   };
 }
 
-describe('PaymentScheduleSubForm — render', () => {
+describe('TransactionScheduleSubForm — render', () => {
   it('renders the every/cron radio group with every preselected by default', () => {
     const { Wrapper } = controlled();
     render(<Wrapper />);
@@ -187,7 +187,7 @@ describe('scheduleResponseToFormState — edit-flow pre-fill', () => {
   function r(p: Partial<ScheduleResponse> = {}): ScheduleResponse {
     return {
       id: 's-1',
-      paymentId: 'p-1',
+      transactionId: 'p-1',
       cron: null,
       everyMs: null,
       startsAt: '2026-05-10T00:00:00Z',

@@ -1,26 +1,26 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentsList } from './PaymentsList';
-import { defaultFilters } from '@/lib/payment/filters';
-import type { PaymentSummary } from '@/lib/payment/types';
+import { TransactionsList } from './TransactionsList';
 import { RealtimeContext } from '@/lib/realtime/realtime-context';
+import { defaultFilters } from '@/lib/transaction/filters';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 // jsdom does not apply Tailwind's `hidden md:block` / `md:hidden` responsive
 // rules, so both desktop and mobile variants render simultaneously. Always
 // scope row queries to the desktop variant in tests to avoid duplicates.
 function inDesktop() {
-  return within(screen.getByTestId('payments-list-desktop'));
+  return within(screen.getByTestId('transactions-list-desktop'));
 }
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockFetchList = vi.fn();
-const mockGetPayment = vi.fn();
-const mockRemovePayment = vi.fn();
+const mockGetTransaction = vi.fn();
+const mockRemoveTransaction = vi.fn();
 const mockToggleStar = vi.fn();
 const mockListCategories = vi.fn();
-const mockCreatePayment = vi.fn();
-const mockUpdatePayment = vi.fn();
+const mockCreateTransaction = vi.fn();
+const mockUpdateTransaction = vi.fn();
 const mockRouterPush = vi.fn();
 
 vi.mock('@/i18n/navigation', () => ({
@@ -49,7 +49,7 @@ vi.mock('@/lib/auth/auth-context', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
 }));
 
-// <PaymentFormDialog> (mounted on Add/Edit) reads the toast context.
+// <TransactionFormDialog> (mounted on Add/Edit) reads the toast context.
 vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }));
@@ -71,15 +71,15 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
     fetchList: mockFetchList,
-    getPayment: mockGetPayment,
-    removePayment: mockRemovePayment,
+    getTransaction: mockGetTransaction,
+    removeTransaction: mockRemoveTransaction,
     toggleStar: mockToggleStar,
     listCategories: mockListCategories,
-    createPayment: mockCreatePayment,
-    updatePayment: mockUpdatePayment,
+    createTransaction: mockCreateTransaction,
+    updateTransaction: mockUpdateTransaction,
   }),
 }));
 
@@ -91,7 +91,7 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: p.id ?? 'p-1',
     direction: p.direction ?? 'OUT',
@@ -114,7 +114,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: p.starredByMe ?? false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -122,7 +122,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
 }
 
 function listResp(
-  rows: PaymentSummary[],
+  rows: TransactionSummary[],
   extra?: Partial<{ nextCursor: string | null; hasMore: boolean }>,
 ) {
   return {
@@ -132,16 +132,16 @@ function listResp(
   };
 }
 
-describe('PaymentsList', () => {
+describe('TransactionsList', () => {
   beforeEach(() => {
     mockFetchList.mockReset();
-    mockGetPayment.mockReset();
-    mockRemovePayment.mockReset();
+    mockGetTransaction.mockReset();
+    mockRemoveTransaction.mockReset();
     mockToggleStar.mockReset();
     mockListCategories.mockReset();
     mockListCategories.mockResolvedValue([]);
-    mockCreatePayment.mockReset();
-    mockUpdatePayment.mockReset();
+    mockCreateTransaction.mockReset();
+    mockUpdateTransaction.mockReset();
     mockRouterPush.mockReset();
   });
 
@@ -150,9 +150,9 @@ describe('PaymentsList', () => {
   });
 
   it('first render fetches with default filters and displays rows', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     expect(mockFetchList).toHaveBeenCalledTimes(1);
     const params = mockFetchList.mock.calls[0][0];
     expect(params.sort).toBe('date_desc');
@@ -167,8 +167,8 @@ describe('PaymentsList', () => {
         resolveFn = resolve;
       }),
     );
-    render(<PaymentsList showFilters={false} />);
-    expect(screen.getByTestId('payments-list-loading')).toBeInTheDocument();
+    render(<TransactionsList showFilters={false} />);
+    expect(screen.getByTestId('transactions-list-loading')).toBeInTheDocument();
     await act(async () => {
       resolveFn!(listResp([]));
     });
@@ -176,55 +176,55 @@ describe('PaymentsList', () => {
 
   it('error state with retry button refetches', async () => {
     mockFetchList.mockRejectedValueOnce(new Error('Boom'));
-    render(<PaymentsList showFilters={false} />);
+    render(<TransactionsList showFilters={false} />);
     await waitFor(() =>
-      expect(screen.getByTestId('payments-list-error')).toHaveTextContent('Boom'),
+      expect(screen.getByTestId('transactions-list-error')).toHaveTextContent('Boom'),
     );
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    fireEvent.click(screen.getByTestId('payments-list-retry'));
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    fireEvent.click(screen.getByTestId('transactions-list-retry'));
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     expect(mockFetchList).toHaveBeenCalledTimes(2);
   });
 
   it('shows the empty state when zero rows are returned', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
   });
 
   it('"Load more" appends rows and sends the cursor on the next call', async () => {
     mockFetchList.mockResolvedValueOnce(
-      listResp([makePayment({ id: 'p-1' })], {
+      listResp([makeTransaction({ id: 'p-1' })], {
         nextCursor: 'CUR1',
         hasMore: true,
       }),
     );
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     mockFetchList.mockResolvedValueOnce(
-      listResp([makePayment({ id: 'p-2' })], {
+      listResp([makeTransaction({ id: 'p-2' })], {
         nextCursor: null,
         hasMore: false,
       }),
     );
-    fireEvent.click(screen.getByTestId('payments-list-load-more'));
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-2')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('transactions-list-load-more'));
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-2')).toBeInTheDocument());
     expect(mockFetchList.mock.calls[0][0].cursor).toBeUndefined();
     expect(mockFetchList.mock.calls[1][0].cursor).toBe('CUR1');
-    expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument();
+    expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument();
   });
 
   it('changing a filter triggers a reset refetch (cursor cleared)', async () => {
     mockFetchList.mockResolvedValueOnce(
-      listResp([makePayment({ id: 'p-1' })], {
+      listResp([makeTransaction({ id: 'p-1' })], {
         nextCursor: 'CUR1',
         hasMore: true,
       }),
     );
-    render(<PaymentsList />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    render(<TransactionsList />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     mockFetchList.mockResolvedValueOnce(
-      listResp([makePayment({ id: 'p-9' })], {
+      listResp([makeTransaction({ id: 'p-9' })], {
         nextCursor: null,
         hasMore: false,
       }),
@@ -238,23 +238,29 @@ describe('PaymentsList', () => {
   });
 
   it('with filters.starred=true, unstarring a row optimistically removes it', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment({ starredByMe: true })]));
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction({ starredByMe: true })]));
     mockToggleStar.mockResolvedValueOnce({ starred: false, starCount: 0 });
-    render(<PaymentsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    render(
+      <TransactionsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />,
+    );
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-star-p-1'));
-    await waitFor(() => expect(screen.queryAllByTestId('payment-row-p-1')).toHaveLength(0));
+    await waitFor(() => expect(screen.queryAllByTestId('transaction-row-p-1')).toHaveLength(0));
   });
 
   // ── Iteration 6.16.1 — controlled-mode regressions ────────────────────────
 
   it('changing the controlled `filters` prop triggers a re-fetch with the new params (bug #2 regression)', async () => {
     mockFetchList.mockResolvedValue(listResp([]));
-    const { rerender } = render(<PaymentsList showFilters={false} filters={defaultFilters()} />);
+    const { rerender } = render(
+      <TransactionsList showFilters={false} filters={defaultFilters()} />,
+    );
     await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(1));
     expect(mockFetchList.mock.calls[0][0].starred).toBeUndefined();
 
-    rerender(<PaymentsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />);
+    rerender(
+      <TransactionsList showFilters={false} filters={{ ...defaultFilters(), starred: true }} />,
+    );
     await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(2));
     expect(mockFetchList.mock.calls[1][0].starred).toBe(true);
   });
@@ -263,7 +269,11 @@ describe('PaymentsList', () => {
     mockFetchList.mockResolvedValue(listResp([]));
     const onFiltersChange = vi.fn();
     render(
-      <PaymentsList filters={defaultFilters()} onFiltersChange={onFiltersChange} categories={[]} />,
+      <TransactionsList
+        filters={defaultFilters()}
+        onFiltersChange={onFiltersChange}
+        categories={[]}
+      />,
     );
     await waitFor(() => expect(mockFetchList).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId('filter-direction-out'));
@@ -271,24 +281,24 @@ describe('PaymentsList', () => {
     expect(onFiltersChange.mock.calls[0][0]).toMatchObject({ direction: 'OUT' });
   });
 
-  it('delete with paymentDeleted=true removes the row from the list', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    mockRemovePayment.mockResolvedValueOnce({
+  it('delete with transactionDeleted=true removes the row from the list', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    mockRemoveTransaction.mockResolvedValueOnce({
       deletedAttributions: 1,
       addedAttributions: 0,
-      paymentDeleted: true,
-      payment: null,
+      transactionDeleted: true,
+      transaction: null,
     });
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
     fireEvent.click(screen.getByTestId('row-delete-p-1'));
-    fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(screen.queryAllByTestId('payment-row-p-1')).toHaveLength(0));
+    fireEvent.click(screen.getByTestId('delete-transaction-confirm'));
+    await waitFor(() => expect(screen.queryAllByTestId('transaction-row-p-1')).toHaveLength(0));
   });
 
-  it('delete with paymentDeleted=false re-fetches the row via getPayment and updates in place', async () => {
-    const original = makePayment({
+  it('delete with transactionDeleted=false re-fetches the row via getTransaction and updates in place', async () => {
+    const original = makeTransaction({
       note: 'original',
       attributions: [
         { scope: 'personal', userId: 'me', groupId: null, groupName: null },
@@ -300,143 +310,145 @@ describe('PaymentsList', () => {
         },
       ],
     });
-    const updated = makePayment({
+    const updated = makeTransaction({
       note: 'updated',
       attributions: original.attributions,
     });
     mockFetchList.mockResolvedValueOnce(listResp([original]));
-    mockRemovePayment.mockResolvedValueOnce({
+    mockRemoveTransaction.mockResolvedValueOnce({
       deletedAttributions: 1,
       addedAttributions: 0,
-      paymentDeleted: false,
-      payment: null,
+      transactionDeleted: false,
+      transaction: null,
     });
-    mockGetPayment.mockResolvedValueOnce(updated);
+    mockGetTransaction.mockResolvedValueOnce(updated);
 
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
     fireEvent.click(screen.getByTestId('row-delete-p-1'));
     fireEvent.click(screen.getByTestId('delete-mode-this'));
-    fireEvent.click(screen.getByTestId('delete-payment-confirm'));
-    await waitFor(() => expect(mockGetPayment).toHaveBeenCalledWith('p-1'));
+    fireEvent.click(screen.getByTestId('delete-transaction-confirm'));
+    await waitFor(() => expect(mockGetTransaction).toHaveBeenCalledWith('p-1'));
     await waitFor(() =>
       expect(inDesktop().getByTestId('row-note-p-1').getAttribute('title')).toBe('updated'),
     );
   });
 
   it('showFilters=false hides the filter toolbar', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
-    expect(screen.queryByTestId('payments-filters')).not.toBeInTheDocument();
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
+    expect(screen.queryByTestId('transactions-filters')).not.toBeInTheDocument();
   });
 
   it('showControls=false hides per-row controls', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList showFilters={false} showControls={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList showFilters={false} showControls={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     expect(inDesktop().queryByTestId('row-controls-p-1')).not.toBeInTheDocument();
   });
 
-  it('onPaymentClick is invoked with the row id', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
+  it('onTransactionClick is invoked with the row id', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
     const onClick = vi.fn();
-    render(<PaymentsList showFilters={false} onPaymentClick={onClick} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
-    fireEvent.click(inDesktop().getByTestId('payment-row-p-1'));
+    render(<TransactionsList showFilters={false} onTransactionClick={onClick} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('transaction-row-p-1'));
     expect(onClick).toHaveBeenCalledWith('p-1');
   });
 
   it('lockScope hides the scope dropdown; filters.scope flows to the fetch', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList lockScope filters={{ ...defaultFilters(), scope: 'group:g-1' }} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList lockScope filters={{ ...defaultFilters(), scope: 'group:g-1' }} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     expect(screen.queryByTestId('filter-scope')).not.toBeInTheDocument();
     expect(mockFetchList.mock.calls[0][0].scope).toBe('group:g-1');
   });
 
-  it('default categories prop forwards a non-undefined value to PaymentsFilters (no auto-fetch)', async () => {
+  it('default categories prop forwards a non-undefined value to TransactionsFilters (no auto-fetch)', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList categories={[]} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
+    render(<TransactionsList categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
     expect(mockListCategories).not.toHaveBeenCalled();
   });
 
   // ── Iteration 6.13 — dialog wiring ─────────────────────────────────────────
 
-  it('toolbar shows "Add payment" button when showControls !== false', async () => {
+  it('toolbar shows "Add transaction" button when showControls !== false', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList showFilters={false} categories={[]} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
-    expect(screen.getByTestId('payments-list-add')).toBeInTheDocument();
+    render(<TransactionsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
+    expect(screen.getByTestId('transactions-list-add')).toBeInTheDocument();
   });
 
-  it('Add payment button is hidden when showControls=false', async () => {
+  it('Add transaction button is hidden when showControls=false', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList showFilters={false} showControls={false} categories={[]} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
-    expect(screen.queryByTestId('payments-list-add')).not.toBeInTheDocument();
+    render(<TransactionsList showFilters={false} showControls={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('transactions-list-add')).not.toBeInTheDocument();
   });
 
-  it('disableInternalAdd hides the toolbar Add payment button', async () => {
+  it('disableInternalAdd hides the toolbar Add transaction button', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList showFilters={false} disableInternalAdd categories={[]} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
-    expect(screen.queryByTestId('payments-list-add')).not.toBeInTheDocument();
+    render(<TransactionsList showFilters={false} disableInternalAdd categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
+    expect(screen.queryByTestId('transactions-list-add')).not.toBeInTheDocument();
   });
 
-  it('clicking Add payment opens the form dialog in create mode', async () => {
+  it('clicking Add transaction opens the form dialog in create mode', async () => {
     mockFetchList.mockResolvedValueOnce(listResp([]));
-    render(<PaymentsList showFilters={false} categories={[]} />);
-    await waitFor(() => expect(screen.getByTestId('payments-list-empty')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('payments-list-add'));
-    expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
+    render(<TransactionsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(screen.getByTestId('transactions-list-empty')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('transactions-list-add'));
+    expect(screen.getByTestId('transaction-form-dialog')).toBeInTheDocument();
   });
 
   it('clicking row Edit opens the form dialog in edit mode', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList showFilters={false} categories={[]} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList showFilters={false} categories={[]} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
     fireEvent.click(inDesktop().getByTestId('row-controls-p-1'));
     fireEvent.click(screen.getByTestId('row-edit-p-1'));
-    expect(screen.getByTestId('payment-form-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-form-dialog')).toBeInTheDocument();
   });
 
   // ── Iteration 6.14 — default row-click handler ───────────────────────────
 
-  it('default onPaymentClick navigates to the detail page via router.push', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
-    fireEvent.click(inDesktop().getByTestId('payment-row-p-1'));
-    expect(mockRouterPush).toHaveBeenCalledWith('/payments/p-1');
+  it('default onTransactionClick navigates to the detail page via router.push', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('transaction-row-p-1'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/transactions/p-1');
   });
 
-  it('explicit onPaymentClick takes precedence over the default router.push', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment()]));
+  it('explicit onTransactionClick takes precedence over the default router.push', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction()]));
     const handler = vi.fn();
-    render(<PaymentsList showFilters={false} onPaymentClick={handler} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-p-1')).toBeInTheDocument());
-    fireEvent.click(inDesktop().getByTestId('payment-row-p-1'));
+    render(<TransactionsList showFilters={false} onTransactionClick={handler} />);
+    await waitFor(() => expect(inDesktop().getByTestId('transaction-row-p-1')).toBeInTheDocument());
+    fireEvent.click(inDesktop().getByTestId('transaction-row-p-1'));
     expect(handler).toHaveBeenCalledWith('p-1');
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it('default router.push navigation path uses the /payments/:id shape (next-intl adds locale)', async () => {
-    mockFetchList.mockResolvedValueOnce(listResp([makePayment({ id: 'abc-123' })]));
-    render(<PaymentsList showFilters={false} />);
-    await waitFor(() => expect(inDesktop().getByTestId('payment-row-abc-123')).toBeInTheDocument());
-    fireEvent.click(inDesktop().getByTestId('payment-row-abc-123'));
+  it('default router.push navigation path uses the /transactions/:id shape (next-intl adds locale)', async () => {
+    mockFetchList.mockResolvedValueOnce(listResp([makeTransaction({ id: 'abc-123' })]));
+    render(<TransactionsList showFilters={false} />);
+    await waitFor(() =>
+      expect(inDesktop().getByTestId('transaction-row-abc-123')).toBeInTheDocument(),
+    );
+    fireEvent.click(inDesktop().getByTestId('transaction-row-abc-123'));
     expect(mockRouterPush).toHaveBeenCalledTimes(1);
     const arg = mockRouterPush.mock.calls[0][0];
-    expect(arg).toBe('/payments/abc-123');
+    expect(arg).toBe('/transactions/abc-123');
   });
 
   // ── Phase 6 · 6.18.1.4-hotfix part 2 — gap recovery (resyncToken) ────────
 
   it('refetches the first page when resyncToken changes (reconnect-after-gap)', async () => {
-    mockFetchList.mockResolvedValue(listResp([makePayment()]));
+    mockFetchList.mockResolvedValue(listResp([makeTransaction()]));
     const ctxValue = (resyncToken: number) => ({
       connectionStatus: 'connected' as const,
       resyncToken,
@@ -444,14 +456,14 @@ describe('PaymentsList', () => {
     });
     const { rerender } = render(
       <RealtimeContext.Provider value={ctxValue(0)}>
-        <PaymentsList showFilters={false} />
+        <TransactionsList showFilters={false} />
       </RealtimeContext.Provider>,
     );
     await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(1));
 
     rerender(
       <RealtimeContext.Provider value={ctxValue(1)}>
-        <PaymentsList showFilters={false} />
+        <TransactionsList showFilters={false} />
       </RealtimeContext.Provider>,
     );
     await waitFor(() => expect(mockFetchList).toHaveBeenCalledTimes(2));
@@ -466,15 +478,15 @@ describe('PaymentsList', () => {
       resyncToken,
       subscribe: () => () => {},
     });
-    const data = { rows: [makePayment()], cursor: null, hasMore: false };
+    const data = { rows: [makeTransaction()], cursor: null, hasMore: false };
     const { rerender } = render(
       <RealtimeContext.Provider value={ctxValue(0)}>
-        <PaymentsList showFilters={false} data={data} />
+        <TransactionsList showFilters={false} data={data} />
       </RealtimeContext.Provider>,
     );
     rerender(
       <RealtimeContext.Provider value={ctxValue(1)}>
-        <PaymentsList showFilters={false} data={data} />
+        <TransactionsList showFilters={false} data={data} />
       </RealtimeContext.Provider>,
     );
     // The orchestrator owns the loader; the list must not fetch on its own.

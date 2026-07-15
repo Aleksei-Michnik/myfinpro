@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.16 — orchestrator for /payments.
+// Phase 6 · Iteration 6.16 — orchestrator for /transactions.
 // Phase 6 · Iteration 6.16.1 — filter state lives in the URL.
 // Phase 6 · Iteration 6.16.2 — full state-machine integration. The
 // orchestrator now:
@@ -18,29 +18,32 @@
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PaymentsList, type PaymentsListData } from '@/components/payment/PaymentsList';
-import { PaymentsScopeTabs } from '@/components/payment/PaymentsScopeTabs';
-import { StarredFilterToggle } from '@/components/payment/StarredFilterToggle';
+import { StarredFilterToggle } from '@/components/transaction/StarredFilterToggle';
+import {
+  TransactionsList,
+  type TransactionsListData,
+} from '@/components/transaction/TransactionsList';
+import { TransactionsScopeTabs } from '@/components/transaction/TransactionsScopeTabs';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { Link, useRouter, usePathname } from '@/i18n/navigation';
 import { useGroups } from '@/lib/group/group-context';
+import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import {
   clearFilters,
   defaultFilters,
   filtersFromQuery,
   filtersToQuery,
   isFiltersDirty,
-  type PaymentFilters,
-} from '@/lib/payment/filters';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { PaymentListResponse } from '@/lib/payment/types';
-import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+  type TransactionFilters,
+} from '@/lib/transaction/filters';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { TransactionListResponse } from '@/lib/transaction/types';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
 const PAGE_LIMIT = 20;
 
-function paramsFor(filters: PaymentFilters, cursor?: string) {
+function paramsFor(filters: TransactionFilters, cursor?: string) {
   return {
     scope: filters.scope === 'all' ? undefined : filters.scope,
     direction: filters.direction,
@@ -55,25 +58,25 @@ function paramsFor(filters: PaymentFilters, cursor?: string) {
   };
 }
 
-export function PaymentsListClient() {
-  const t = useTranslations('payments.page');
+export function TransactionsListClient() {
+  const t = useTranslations('transactions.page');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { groups } = useGroups();
-  const { fetchList } = usePayments();
+  const { fetchList } = useTransactions();
 
   // Initial filters from the URL — this is the *committed* state on mount.
   // The URL is only the source-of-truth on initial mount; subsequent updates
   // flow through committedFilters. We capture the initial value once.
-  const initialFiltersRef = useRef<PaymentFilters | null>(null);
+  const initialFiltersRef = useRef<TransactionFilters | null>(null);
   if (initialFiltersRef.current === null) {
     initialFiltersRef.current = filtersFromQuery(searchParams);
   }
   const initialFilters = initialFiltersRef.current;
 
-  const [committedFilters, setCommittedFilters] = useState<PaymentFilters>(initialFilters);
-  const [data, setData] = useState<PaymentsListData>({
+  const [committedFilters, setCommittedFilters] = useState<TransactionFilters>(initialFilters);
+  const [data, setData] = useState<TransactionsListData>({
     rows: [],
     cursor: null,
     hasMore: false,
@@ -82,7 +85,7 @@ export function PaymentsListClient() {
   const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   // Pending filter intent — set when a fetch is initiated; cleared on commit.
-  const pendingFiltersRef = useRef<PaymentFilters | null>(null);
+  const pendingFiltersRef = useRef<TransactionFilters | null>(null);
   // Track whether the most-recent failed op was the initial mount, so a
   // user-initiated Return resets to default filters.
   const failedOnInitialMountRef = useRef(true);
@@ -94,9 +97,9 @@ export function PaymentsListClient() {
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
-  const op = useAsyncOperation<PaymentListResponse>({
+  const op = useAsyncOperation<TransactionListResponse>({
     scope: 'container',
-    id: 'payments-page-fetch',
+    id: 'transactions-page-fetch',
   });
 
   // Stable refs for op methods so commit() doesn't need to depend on `op`.
@@ -117,7 +120,7 @@ export function PaymentsListClient() {
   // Run a fetch with `intent`. On success, commit `intent` as the new
   // committedFilters AND write the URL — these two are atomic. On failure,
   // open the recovery dialog without touching either.
-  const commit = useCallback(async (intent: PaymentFilters) => {
+  const commit = useCallback(async (intent: TransactionFilters) => {
     pendingFiltersRef.current = intent;
     setShowErrorDialog(false);
     const result = await opRef.current.run((signal) =>
@@ -167,7 +170,7 @@ export function PaymentsListClient() {
 
   // ── Filter change handlers — all funnel into commit() ─────────────────
   const handleFiltersChange = useCallback(
-    (next: PaymentFilters) => {
+    (next: TransactionFilters) => {
       void commit(next);
     },
     [commit],
@@ -216,7 +219,7 @@ export function PaymentsListClient() {
     }
   }, [hasCommittedOnce, committedFilters.scope]);
 
-  const handleAppendData = useCallback((next: PaymentsListData) => {
+  const handleAppendData = useCallback((next: TransactionsListData) => {
     setData(next);
   }, []);
 
@@ -227,13 +230,13 @@ export function PaymentsListClient() {
   const errorStatus = op.error?.httpStatus;
 
   return (
-    <main className="container mx-auto space-y-4 px-4 py-6" data-testid="payments-page">
+    <main className="container mx-auto space-y-4 px-4 py-6" data-testid="transactions-page">
       <header>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
       </header>
 
-      <PaymentsScopeTabs
+      <TransactionsScopeTabs
         current={scope}
         groups={groups}
         onChange={handleScopeChange}
@@ -243,14 +246,14 @@ export function PaymentsListClient() {
       {noAccess ? (
         <div
           className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300"
-          data-testid="payments-page-no-access"
+          data-testid="transactions-page-no-access"
           role="alert"
         >
           <p>{t('scopeTabs.noAccess')}</p>
           <Link
             href="/dashboard"
             className="mt-2 inline-block text-sm font-medium text-primary-600 hover:underline"
-            data-testid="payments-page-back-to-dashboard"
+            data-testid="transactions-page-back-to-dashboard"
           >
             {t('scopeTabs.backToDashboard')}
           </Link>
@@ -269,15 +272,15 @@ export function PaymentsListClient() {
                 onClick={handleClear}
                 disabled={orchestratorLoading}
                 aria-disabled={orchestratorLoading || undefined}
-                data-testid="payments-clear-filters"
+                data-testid="transactions-clear-filters"
                 className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 {t('clearFilters')}
               </button>
             )}
           </div>
-          <div className="relative" data-testid="payments-page-content">
-            <PaymentsList
+          <div className="relative" data-testid="transactions-page-content">
+            <TransactionsList
               filters={committedFilters}
               onFiltersChange={handleFiltersChange}
               lockScope

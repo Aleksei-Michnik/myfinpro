@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.12 — toolbar of filter controls used by <PaymentsList>.
+// Phase 6 · Iteration 6.12 — toolbar of filter controls used by <TransactionsList>.
 //
 // Self-contained: parent owns the value, this component only emits `onChange`
 // with a fresh object on every interaction. The category dropdown can be
@@ -11,12 +11,12 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { useGroups } from '@/lib/group/group-context';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 
-export type PaymentsFiltersSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
+export type TransactionsFiltersSort = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
-export interface PaymentsFiltersValue {
+export interface TransactionsFiltersValue {
   /** undefined = both directions */
   direction?: 'IN' | 'OUT';
   /** 'all' | 'personal' | 'group:<id>' */
@@ -27,12 +27,12 @@ export interface PaymentsFiltersValue {
   /** ISO YYYY-MM-DD (or empty) */
   from?: string;
   to?: string;
-  sort: PaymentsFiltersSort;
+  sort: TransactionsFiltersSort;
 }
 
-export interface PaymentsFiltersProps {
-  value: PaymentsFiltersValue;
-  onChange(next: PaymentsFiltersValue): void;
+export interface TransactionsFiltersProps {
+  value: TransactionsFiltersValue;
+  onChange(next: TransactionsFiltersValue): void;
   /**
    * Hide certain controls when the parent forces them. E.g. when scope is
    * locked by the page (group-tab), we hide the scope dropdown.
@@ -73,16 +73,16 @@ function groupCategories(cats: CategoryDto[]): {
   return { system, personal, groups };
 }
 
-export function PaymentsFilters({
+export function TransactionsFilters({
   value,
   onChange,
   hide,
   categories: categoriesProp,
   disabled,
-}: PaymentsFiltersProps) {
-  const t = useTranslations('payments.filters');
+}: TransactionsFiltersProps) {
+  const t = useTranslations('transactions.filters');
   const { groups } = useGroups();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
 
   // Local search state so we can debounce 300 ms before bubbling up.
   const [searchLocal, setSearchLocal] = useState<string>(value.search ?? '');
@@ -144,7 +144,7 @@ export function PaymentsFilters({
   const setScope = (scope: 'all' | 'personal' | string) => onChange({ ...value, scope });
 
   // Note: starred is intentionally not handled here — it lives in the page-
-  // level <StarredFilterToggle> on /payments. See iteration 6.16.1 notes.
+  // level <StarredFilterToggle> on /transactions. See iteration 6.16.1 notes.
 
   const setCategoryId = (categoryId: string) =>
     onChange({ ...value, categoryId: categoryId || undefined });
@@ -152,7 +152,7 @@ export function PaymentsFilters({
   const setFrom = (from: string) => onChange({ ...value, from: from || undefined });
   const setTo = (to: string) => onChange({ ...value, to: to || undefined });
 
-  const setSort = (sort: PaymentsFiltersSort) => onChange({ ...value, sort });
+  const setSort = (sort: TransactionsFiltersSort) => onChange({ ...value, sort });
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -164,9 +164,9 @@ export function PaymentsFilters({
   return (
     <div
       className="flex flex-wrap items-end gap-2"
-      data-testid="payments-filters"
+      data-testid="transactions-filters"
       role="group"
-      aria-label="Payments filters"
+      aria-label="Transactions filters"
     >
       {/* Direction tri-toggle */}
       <div
@@ -337,7 +337,7 @@ export function PaymentsFilters({
         <span className="sr-only">{t('sort')}</span>
         <select
           value={value.sort}
-          onChange={(e) => setSort(e.target.value as PaymentsFiltersSort)}
+          onChange={(e) => setSort(e.target.value as TransactionsFiltersSort)}
           disabled={disabled}
           aria-disabled={disabled || undefined}
           data-testid="filter-sort"

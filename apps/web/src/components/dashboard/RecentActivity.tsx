@@ -1,14 +1,14 @@
 'use client';
 
 // Phase 6 · Iteration 6.15 — "Recent activity" section on the dashboard.
-// Thin wrapper around `<PaymentsList>` with the inline add button suppressed
-// (the dashboard provides its own primary `<QuickAddPaymentButton>`).
+// Thin wrapper around `<TransactionsList>` with the inline add button suppressed
+// (the dashboard provides its own primary `<QuickAddTransactionButton>`).
 
 import { useTranslations } from 'next-intl';
 import { useMemo } from 'react';
-import { PaymentsList } from '@/components/payment/PaymentsList';
+import { TransactionsList } from '@/components/transaction/TransactionsList';
 import { Link } from '@/i18n/navigation';
-import { defaultFilters } from '@/lib/payment/filters';
+import { defaultFilters } from '@/lib/transaction/filters';
 
 export interface RecentActivityProps {
   /** Optional cap. Defaults to 10. */
@@ -33,14 +33,14 @@ export function RecentActivity({ limit = 10 }: RecentActivityProps) {
           {t('title')}
         </h2>
         <Link
-          href="/payments"
+          href="/transactions"
           className="text-sm text-primary-600 hover:underline"
           data-testid="recent-activity-view-all"
         >
           {t('viewAll')}
         </Link>
       </header>
-      <PaymentsList
+      <TransactionsList
         showFilters={false}
         showControls={true}
         showStar={true}

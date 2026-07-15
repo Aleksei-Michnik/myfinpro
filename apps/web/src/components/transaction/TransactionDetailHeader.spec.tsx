@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentDetailHeader } from './PaymentDetailHeader';
-import type { PaymentSummary } from '@/lib/payment/types';
+import { TransactionDetailHeader } from './TransactionDetailHeader';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 const mockToggleStar = vi.fn();
 
@@ -40,11 +40,11 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ toggleStar: mockToggleStar }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ toggleStar: mockToggleStar }),
 }));
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: 'p-1',
     direction: 'OUT',
@@ -59,7 +59,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -67,7 +67,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
   };
 }
 
-describe('PaymentDetailHeader', () => {
+describe('TransactionDetailHeader', () => {
   beforeEach(() => {
     mockToggleStar.mockReset();
   });
@@ -79,8 +79,8 @@ describe('PaymentDetailHeader', () => {
 
   it('IN direction badge uses the green class', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ direction: 'IN' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ direction: 'IN' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -90,8 +90,8 @@ describe('PaymentDetailHeader', () => {
 
   it('OUT direction badge uses the red class', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ direction: 'OUT' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ direction: 'OUT' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -100,20 +100,32 @@ describe('PaymentDetailHeader', () => {
   });
 
   it('amount uses formatSignedAmount (sign + currency)', () => {
-    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+    render(
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     expect(screen.getByTestId('detail-amount').textContent).toMatch(/^-/);
     expect(screen.getByTestId('detail-amount').textContent).toMatch(/12\.34/);
   });
 
   it('no-note placeholder is shown when note is empty', () => {
-    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+    render(
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     expect(screen.getByTestId('detail-no-note')).toBeInTheDocument();
   });
 
   it('blockquote renders when note is present', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ note: 'weekly shopping' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ note: 'weekly shopping' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -121,15 +133,21 @@ describe('PaymentDetailHeader', () => {
     expect(screen.getByTestId('detail-note')).toHaveTextContent('weekly shopping');
   });
 
-  it('edit button enabled for creator of a ONE_TIME non-occurrence payment', () => {
-    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+  it('edit button enabled for creator of a ONE_TIME non-occurrence transaction', () => {
+    render(
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     expect(screen.getByTestId('detail-edit')).not.toBeDisabled();
   });
 
   it('edit button disabled for non-creator with tooltip explaining why', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ createdById: 'someone-else' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ createdById: 'someone-else' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -141,8 +159,8 @@ describe('PaymentDetailHeader', () => {
 
   it('edit button disabled for generated occurrences (child) with the right tooltip', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ parentPaymentId: 'parent-1' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ parentTransactionId: 'parent-1' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -156,10 +174,10 @@ describe('PaymentDetailHeader', () => {
   // Phase 6 · Iteration 6.18.1.2 — RECURRING parents are now editable
   // (the form ships the schedule sub-form). Regression for the lifted
   // 6.13 ONE_TIME-only guard.
-  it('edit button enabled for RECURRING parent (parentPaymentId === null)', () => {
+  it('edit button enabled for RECURRING parent (parentTransactionId === null)', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ type: 'RECURRING' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ type: 'RECURRING' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -169,8 +187,8 @@ describe('PaymentDetailHeader', () => {
 
   it('edit button disabled for unsupported types (INSTALLMENT) with the right tooltip', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ type: 'INSTALLMENT' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ type: 'INSTALLMENT' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -182,8 +200,8 @@ describe('PaymentDetailHeader', () => {
 
   it('delete button visible and enabled regardless of creator', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ createdById: 'someone-else' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ createdById: 'someone-else' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -197,8 +215,8 @@ describe('PaymentDetailHeader', () => {
   // still detach their own attribution via the dialog).
   it('delete button disabled for child occurrences with tooltip', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ parentPaymentId: 'parent-1' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ parentTransactionId: 'parent-1' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -210,8 +228,8 @@ describe('PaymentDetailHeader', () => {
 
   it('delete button enabled for RECURRING parent', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({ type: 'RECURRING' })}
+      <TransactionDetailHeader
+        transaction={makeTransaction({ type: 'RECURRING' })}
         onEditClick={noop}
         onDeleteClick={noop}
       />,
@@ -225,7 +243,13 @@ describe('PaymentDetailHeader', () => {
   // idle. Also: the button must NOT be disabled when the page is idle —
   // any disabled-state bleed-through from an unrelated async op is forbidden.
   it('delete button uses solid danger variant (WCAG-AA contrast) and is enabled when idle', () => {
-    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+    render(
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     const btn = screen.getByTestId('detail-delete');
     // Solid red background + white foreground → matches `<Button variant="danger">`.
     expect(btn.className).toContain('bg-red-600');
@@ -242,8 +266,8 @@ describe('PaymentDetailHeader', () => {
     mockToggleStar.mockResolvedValueOnce({ starred: true, starCount: 1 });
     const onStar = vi.fn();
     render(
-      <PaymentDetailHeader
-        payment={makePayment()}
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
         onEditClick={noop}
         onDeleteClick={noop}
         onStarToggled={onStar}
@@ -259,7 +283,13 @@ describe('PaymentDetailHeader', () => {
 
   it('star toggle reverts on error', async () => {
     mockToggleStar.mockRejectedValueOnce(new Error('boom'));
-    render(<PaymentDetailHeader payment={makePayment()} onEditClick={noop} onDeleteClick={noop} />);
+    render(
+      <TransactionDetailHeader
+        transaction={makeTransaction()}
+        onEditClick={noop}
+        onDeleteClick={noop}
+      />,
+    );
     const btn = screen.getByTestId('detail-star');
     fireEvent.click(btn);
     await waitFor(() => expect(btn.textContent).toMatch(/☆/));
@@ -267,8 +297,8 @@ describe('PaymentDetailHeader', () => {
 
   it('group attribution renders as a link to /groups/:id when user is a member', () => {
     render(
-      <PaymentDetailHeader
-        payment={makePayment({
+      <TransactionDetailHeader
+        transaction={makeTransaction({
           attributions: [
             {
               scope: 'group',

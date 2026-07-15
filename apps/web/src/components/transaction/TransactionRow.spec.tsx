@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentRow } from './PaymentRow';
+import { TransactionRow } from './TransactionRow';
 import enMessages from '@/../messages/en.json';
-import type { PaymentSummary } from '@/lib/payment/types';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 const mockToggleStar = vi.fn();
 
@@ -34,13 +34,13 @@ vi.mock('next-intl', () => ({
     },
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
     toggleStar: mockToggleStar,
   }),
 }));
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: p.id ?? 'p-1',
     direction: p.direction ?? 'OUT',
@@ -68,33 +68,41 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: p.starredByMe ?? false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'u-1',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
   };
 }
 
-/** Wrap a `<PaymentRow variant="desktop">` in a table for valid HTML. */
-function renderDesktop(props: Partial<Parameters<typeof PaymentRow>[0]> = {}) {
+/** Wrap a `<TransactionRow variant="desktop">` in a table for valid HTML. */
+function renderDesktop(props: Partial<Parameters<typeof TransactionRow>[0]> = {}) {
   return render(
     <table>
       <tbody>
-        <PaymentRow payment={props.payment ?? makePayment()} variant="desktop" {...props} />
+        <TransactionRow
+          transaction={props.transaction ?? makeTransaction()}
+          variant="desktop"
+          {...props}
+        />
       </tbody>
     </table>,
   );
 }
 
-function renderCard(props: Partial<Parameters<typeof PaymentRow>[0]> = {}) {
+function renderCard(props: Partial<Parameters<typeof TransactionRow>[0]> = {}) {
   return render(
     <ul>
-      <PaymentRow payment={props.payment ?? makePayment()} variant="card" {...props} />
+      <TransactionRow
+        transaction={props.transaction ?? makeTransaction()}
+        variant="card"
+        {...props}
+      />
     </ul>,
   );
 }
 
-describe('PaymentRow', () => {
+describe('TransactionRow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -110,14 +118,14 @@ describe('PaymentRow', () => {
   });
 
   it('card variant renders header amount + scopes block', () => {
-    const payment = makePayment({ note: 'Lunch' });
-    renderCard({ payment });
-    expect(screen.getByTestId(`row-amount-${payment.id}`)).toBeInTheDocument();
+    const transaction = makeTransaction({ note: 'Lunch' });
+    renderCard({ transaction });
+    expect(screen.getByTestId(`row-amount-${transaction.id}`)).toBeInTheDocument();
     // Regression for 6.15.2 — the rendered scope cell must be the resolved
     // human label "Personal", NOT the literal i18n key.
-    const scopes = screen.getByTestId(`row-scopes-${payment.id}`);
+    const scopes = screen.getByTestId(`row-scopes-${transaction.id}`);
     expect(scopes).toHaveTextContent('Personal');
-    expect(scopes.textContent).not.toMatch(/payments\.payments\./);
+    expect(scopes.textContent).not.toMatch(/transactions\.transactions\./);
     expect(scopes.textContent).not.toMatch(/scope\.personal/);
   });
 
@@ -165,7 +173,7 @@ describe('PaymentRow', () => {
     );
   });
 
-  it('onEditClick fires with the payment id', () => {
+  it('onEditClick fires with the transaction id', () => {
     const onEdit = vi.fn();
     renderDesktop({ onEditClick: onEdit });
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
@@ -173,32 +181,32 @@ describe('PaymentRow', () => {
     expect(onEdit).toHaveBeenCalledWith('p-1');
   });
 
-  it('onDeleteClick fires with the full payment payload', () => {
+  it('onDeleteClick fires with the full transaction payload', () => {
     const onDelete = vi.fn();
-    const payment = makePayment();
-    renderDesktop({ payment, onDeleteClick: onDelete });
+    const transaction = makeTransaction();
+    renderDesktop({ transaction, onDeleteClick: onDelete });
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
     fireEvent.click(screen.getByTestId('row-delete-p-1'));
-    expect(onDelete).toHaveBeenCalledWith(payment);
+    expect(onDelete).toHaveBeenCalledWith(transaction);
   });
 
-  it('onAttachClick fires for an expense payment and passes the payload', () => {
+  it('onAttachClick fires for an expense transaction and passes the payload', () => {
     const onAttach = vi.fn();
-    const payment = makePayment({ direction: 'OUT' });
-    renderDesktop({ payment, onAttachClick: onAttach });
+    const transaction = makeTransaction({ direction: 'OUT' });
+    renderDesktop({ transaction, onAttachClick: onAttach });
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
     fireEvent.click(screen.getByTestId('row-attach-p-1'));
-    expect(onAttach).toHaveBeenCalledWith(payment);
+    expect(onAttach).toHaveBeenCalledWith(transaction);
   });
 
-  it('the attach action is hidden for income payments', () => {
-    renderDesktop({ payment: makePayment({ direction: 'IN' }), onAttachClick: vi.fn() });
+  it('the attach action is hidden for income transactions', () => {
+    renderDesktop({ transaction: makeTransaction({ direction: 'IN' }), onAttachClick: vi.fn() });
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
     expect(screen.queryByTestId('row-attach-p-1')).not.toBeInTheDocument();
   });
 
   it('the attach action is absent when no handler is wired', () => {
-    renderDesktop({ payment: makePayment({ direction: 'OUT' }) });
+    renderDesktop({ transaction: makeTransaction({ direction: 'OUT' }) });
     fireEvent.click(screen.getByTestId('row-controls-p-1'));
     expect(screen.queryByTestId('row-attach-p-1')).not.toBeInTheDocument();
   });
@@ -206,33 +214,33 @@ describe('PaymentRow', () => {
   it('onClick fires with the id when the row is clicked', () => {
     const onClick = vi.fn();
     renderDesktop({ onClick });
-    fireEvent.click(screen.getByTestId('payment-row-p-1'));
+    fireEvent.click(screen.getByTestId('transaction-row-p-1'));
     expect(onClick).toHaveBeenCalledWith('p-1');
   });
 
-  it('direction badge applies the green class for IN payments', () => {
-    renderDesktop({ payment: makePayment({ direction: 'IN' }) });
+  it('direction badge applies the green class for IN transactions', () => {
+    renderDesktop({ transaction: makeTransaction({ direction: 'IN' }) });
     const pill = screen.getByTestId('row-direction-p-1');
     expect(pill.className).toMatch(/green/);
     expect(pill.dataset.direction).toBe('IN');
   });
 
-  it('direction badge applies the red class for OUT payments', () => {
-    renderDesktop({ payment: makePayment({ direction: 'OUT' }) });
+  it('direction badge applies the red class for OUT transactions', () => {
+    renderDesktop({ transaction: makeTransaction({ direction: 'OUT' }) });
     const pill = screen.getByTestId('row-direction-p-1');
     expect(pill.className).toMatch(/red/);
   });
 
   it('amount uses formatSignedAmount (sign + currency)', () => {
     renderDesktop({
-      payment: makePayment({ direction: 'OUT', amountCents: 1234 }),
+      transaction: makeTransaction({ direction: 'OUT', amountCents: 1234 }),
     });
     expect(screen.getByTestId('row-amount-p-1').textContent).toMatch(/^-/);
     expect(screen.getByTestId('row-amount-p-1').textContent).toMatch(/12\.34/);
   });
 
   it('scope label resolves to the group name when given a group attribution', () => {
-    const payment = makePayment({
+    const transaction = makeTransaction({
       attributions: [
         {
           scope: 'group',
@@ -242,15 +250,15 @@ describe('PaymentRow', () => {
         },
       ],
     });
-    renderDesktop({ payment });
+    renderDesktop({ transaction });
     expect(screen.getByTestId('row-scopes-p-1').textContent).toBe('Family');
   });
 
   it('note is truncated and the title attribute carries the full text', () => {
-    const payment = makePayment({
+    const transaction = makeTransaction({
       note: 'A very long note that should be truncated visually',
     });
-    renderDesktop({ payment });
+    renderDesktop({ transaction });
     const noteEl = screen.getByTestId('row-note-p-1');
     expect(noteEl.className).toMatch(/truncate/);
     expect(noteEl.getAttribute('title')).toBe('A very long note that should be truncated visually');
@@ -267,7 +275,7 @@ describe('PaymentRow', () => {
   });
 
   it('truncates a >3 scope list and exposes the full list via title', () => {
-    const payment = makePayment({
+    const transaction = makeTransaction({
       attributions: [
         { scope: 'personal', userId: 'u-1', groupId: null, groupName: null },
         { scope: 'group', userId: null, groupId: 'g-1', groupName: 'A' },
@@ -276,7 +284,7 @@ describe('PaymentRow', () => {
         { scope: 'group', userId: null, groupId: 'g-4', groupName: 'D' },
       ],
     });
-    renderDesktop({ payment });
+    renderDesktop({ transaction });
     const scopes = screen.getByTestId('row-scopes-p-1');
     expect(scopes.textContent).toMatch(/\+2/);
     expect(scopes.getAttribute('title')).toContain('D');
@@ -284,10 +292,10 @@ describe('PaymentRow', () => {
 
   // ── Iteration 6.14 additions ─────────────────────────────────────────────
 
-  it('row body click invokes onClick with the payment id', () => {
+  it('row body click invokes onClick with the transaction id', () => {
     const onClick = vi.fn();
     renderDesktop({ onClick });
-    fireEvent.click(screen.getByTestId('payment-row-p-1'));
+    fireEvent.click(screen.getByTestId('transaction-row-p-1'));
     expect(onClick).toHaveBeenCalledWith('p-1');
   });
 
@@ -309,9 +317,9 @@ describe('PaymentRow', () => {
   // ── Iteration 6.18.1.2 additions ─────────────────────────────────────────
 
   it('date cell renders the time-of-day component', () => {
-    const payment = makePayment();
-    renderDesktop({ payment });
-    const tr = screen.getByTestId(`payment-row-${payment.id}`);
+    const transaction = makeTransaction();
+    renderDesktop({ transaction });
+    const tr = screen.getByTestId(`transaction-row-${transaction.id}`);
     // The date cell is the second `<td>` (after the star cell).
     const dateCell = tr.querySelectorAll('td')[1] as HTMLTableCellElement;
     expect(dateCell.textContent).toMatch(/\d{1,2}:\d{2}/);
@@ -319,28 +327,28 @@ describe('PaymentRow', () => {
   });
 
   it('Edit/Delete menu entries disabled for child occurrences', () => {
-    const payment = makePayment();
-    // Override parentPaymentId so the helper reports a generated occurrence.
-    const child: PaymentSummary = { ...payment, parentPaymentId: 'parent-1' };
-    renderDesktop({ payment: child });
+    const transaction = makeTransaction();
+    // Override parentTransactionId so the helper reports a generated occurrence.
+    const child: TransactionSummary = { ...transaction, parentTransactionId: 'parent-1' };
+    renderDesktop({ transaction: child });
     fireEvent.click(screen.getByTestId(`row-controls-${child.id}`));
     expect(screen.getByTestId(`row-edit-${child.id}`)).toBeDisabled();
     expect(screen.getByTestId(`row-delete-${child.id}`)).toBeDisabled();
   });
 
   it('Edit/Delete menu entries disabled for unsupported types (INSTALLMENT)', () => {
-    const payment: PaymentSummary = { ...makePayment(), type: 'INSTALLMENT' };
-    renderDesktop({ payment });
-    fireEvent.click(screen.getByTestId(`row-controls-${payment.id}`));
-    expect(screen.getByTestId(`row-edit-${payment.id}`)).toBeDisabled();
-    expect(screen.getByTestId(`row-delete-${payment.id}`)).toBeDisabled();
+    const transaction: TransactionSummary = { ...makeTransaction(), type: 'INSTALLMENT' };
+    renderDesktop({ transaction });
+    fireEvent.click(screen.getByTestId(`row-controls-${transaction.id}`));
+    expect(screen.getByTestId(`row-edit-${transaction.id}`)).toBeDisabled();
+    expect(screen.getByTestId(`row-delete-${transaction.id}`)).toBeDisabled();
   });
 
   it('Edit/Delete menu entries enabled for RECURRING parent', () => {
-    const payment: PaymentSummary = { ...makePayment(), type: 'RECURRING' };
-    renderDesktop({ payment });
-    fireEvent.click(screen.getByTestId(`row-controls-${payment.id}`));
-    expect(screen.getByTestId(`row-edit-${payment.id}`)).not.toBeDisabled();
-    expect(screen.getByTestId(`row-delete-${payment.id}`)).not.toBeDisabled();
+    const transaction: TransactionSummary = { ...makeTransaction(), type: 'RECURRING' };
+    renderDesktop({ transaction });
+    fireEvent.click(screen.getByTestId(`row-controls-${transaction.id}`));
+    expect(screen.getByTestId(`row-edit-${transaction.id}`)).not.toBeDisabled();
+    expect(screen.getByTestId(`row-delete-${transaction.id}`)).not.toBeDisabled();
   });
 });

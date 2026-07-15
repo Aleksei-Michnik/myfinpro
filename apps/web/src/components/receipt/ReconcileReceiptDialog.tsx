@@ -1,12 +1,12 @@
 'use client';
 
-// Phase 8 · Iteration 8.15 — reconcile an attached receipt with its payment
-// (design §3). When a receipt attached to an existing payment finishes
-// extraction, this compares the payment's current total and category against
+// Phase 8 · Iteration 8.15 — reconcile an attached receipt with its transaction
+// (design §3). When a receipt attached to an existing transaction finishes
+// extraction, this compares the transaction's current total and category against
 // what the receipt analysis found. For each field that differs the user
 // keeps the current value or takes the receipt's; item/product links are
 // saved regardless (that happened during review). Submitting confirms the
-// receipt (REVIEW → CONFIRMED) without creating a new payment.
+// receipt (REVIEW → CONFIRMED) without creating a new transaction.
 //
 // Accessibility: dialog semantics, focus moved in on open, Esc/backdrop
 // close, each choice is a labelled radio group; dark-mode variants throughout.
@@ -18,11 +18,11 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { useToast } from '@/components/ui/Toast';
-import { formatAmount } from '@/lib/payment/formatters';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto, PaymentSummary } from '@/lib/payment/types';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
+import { formatAmount } from '@/lib/transaction/formatters';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto, TransactionSummary } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface ReconcileReceiptDialogProps {
@@ -30,8 +30,8 @@ export interface ReconcileReceiptDialogProps {
   receipt: ReceiptSummary;
   categories: CategoryDto[];
   onCancel(): void;
-  /** The receipt is now CONFIRMED and reconciled — the parent routes to the payment. */
-  onReconciled(paymentId: string): void;
+  /** The receipt is now CONFIRMED and reconciled — the parent routes to the transaction. */
+  onReconciled(transactionId: string): void;
 }
 
 /** One reconciliation field: current value vs. the receipt's, and the choice. */
@@ -98,16 +98,16 @@ export function ReconcileReceiptDialog({
 }: ReconcileReceiptDialogProps) {
   const t = useTranslations('receipts.reconcile');
   const locale = useLocale();
-  const { getPayment } = usePayments();
+  const { getTransaction } = useTransactions();
   const { reconcileReceipt } = useReceipts();
   const { addToast } = useToast();
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const [payment, setPayment] = useState<PaymentSummary | null>(null);
+  const [transaction, setTransaction] = useState<TransactionSummary | null>(null);
   const [applyTotal, setApplyTotal] = useState(false);
   const [applyCategory, setApplyCategory] = useState(false);
 
-  const loadOp = useAsyncOperation<PaymentSummary>({ scope: 'control' });
+  const loadOp = useAsyncOperation<TransactionSummary>({ scope: 'control' });
   const submitOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
 
   const categoryName = useMemo(() => {
@@ -123,19 +123,19 @@ export function ReconcileReceiptDialog({
     [receipt.items],
   );
 
-  // Load the payment once per open so we can compare against it.
+  // Load the transaction once per open so we can compare against it.
   useEffect(() => {
-    if (!open || !receipt.paymentId) return;
+    if (!open || !receipt.transactionId) return;
     setApplyTotal(false);
     setApplyCategory(false);
     setTimeout(() => dialogRef.current?.focus(), 0);
     void loadOp
-      .run((signal) => getPayment(receipt.paymentId as string, signal))
+      .run((signal) => getTransaction(receipt.transactionId as string, signal))
       .then((p) => {
         if (p === undefined) return;
-        setPayment(p);
+        setTransaction(p);
         // Default each differing field to "take the receipt" — the user
-        // attached it precisely to update the payment.
+        // attached it precisely to update the transaction.
         const totalDiffers =
           receipt.totalCents !== null &&
           (receipt.totalCents !== p.amountCents ||
@@ -144,10 +144,10 @@ export function ReconcileReceiptDialog({
         setApplyTotal(totalDiffers);
         setApplyCategory(catDiffers);
       });
-    // Deliberately keyed on open (+ the payment link) alone — re-loading on
+    // Deliberately keyed on open (+ the transaction link) alone — re-loading on
     // every receipt/category change would clobber the user's in-progress
     // radio choices.
-  }, [open, receipt.paymentId]);
+  }, [open, receipt.transactionId]);
 
   useEffect(() => {
     if (submitOp.error && submitOp.error.reason !== 'aborted') {
@@ -168,18 +168,18 @@ export function ReconcileReceiptDialog({
   }, [open, onCancel]);
 
   const totalDiffers =
-    !!payment &&
+    !!transaction &&
     receipt.totalCents !== null &&
-    (receipt.totalCents !== payment.amountCents ||
-      (!!receipt.currency && receipt.currency !== payment.currency));
+    (receipt.totalCents !== transaction.amountCents ||
+      (!!receipt.currency && receipt.currency !== transaction.currency));
   const categoryDiffers =
-    !!payment && !!receiptCategoryId && receiptCategoryId !== payment.category.id;
+    !!transaction && !!receiptCategoryId && receiptCategoryId !== transaction.category.id;
 
   const submit = () => {
     void submitOp
       .run((signal) => reconcileReceipt(receipt.id, { applyTotal, applyCategory }, signal))
       .then((fresh) => {
-        if (fresh !== undefined && receipt.paymentId) onReconciled(receipt.paymentId);
+        if (fresh !== undefined && receipt.transactionId) onReconciled(receipt.transactionId);
       });
   };
 
@@ -229,11 +229,11 @@ export function ReconcileReceiptDialog({
           </button>
         </div>
 
-        {loadOp.isLoading && !payment ? (
+        {loadOp.isLoading && !transaction ? (
           <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
             {t('loading')}
           </p>
-        ) : !payment ? (
+        ) : !transaction ? (
           <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
             {t('loadFailed')}
           </p>
@@ -250,10 +250,10 @@ export function ReconcileReceiptDialog({
                   <ChoiceRow
                     name="total"
                     label={t('totalLabel')}
-                    current={formatAmount(payment.amountCents, payment.currency, locale)}
+                    current={formatAmount(transaction.amountCents, transaction.currency, locale)}
                     proposed={formatAmount(
                       receipt.totalCents as number,
-                      receipt.currency ?? payment.currency,
+                      receipt.currency ?? transaction.currency,
                       locale,
                     )}
                     apply={applyTotal}
@@ -264,7 +264,7 @@ export function ReconcileReceiptDialog({
                   <ChoiceRow
                     name="category"
                     label={t('categoryLabel')}
-                    current={categoryName(payment.category.id)}
+                    current={categoryName(transaction.category.id)}
                     proposed={categoryName(receiptCategoryId)}
                     apply={applyCategory}
                     onChange={setApplyCategory}

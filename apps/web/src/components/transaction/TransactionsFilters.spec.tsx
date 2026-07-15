@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentsFilters, type PaymentsFiltersValue } from './PaymentsFilters';
-import type { CategoryDto } from '@/lib/payment/types';
+import { TransactionsFilters, type TransactionsFiltersValue } from './TransactionsFilters';
+import type { CategoryDto } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -43,15 +43,15 @@ vi.mock('@/lib/group/group-context', () => ({
   }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({
     listCategories: mockListCategories,
   }),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function defaultValue(): PaymentsFiltersValue {
+function defaultValue(): TransactionsFiltersValue {
   return { sort: 'date_desc' };
 }
 
@@ -71,7 +71,7 @@ function makeCategory(p: Partial<CategoryDto>): CategoryDto {
   };
 }
 
-describe('PaymentsFilters', () => {
+describe('TransactionsFilters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListCategories.mockResolvedValue([]);
@@ -82,7 +82,7 @@ describe('PaymentsFilters', () => {
   });
 
   it('renders every control by default', () => {
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
     expect(screen.getByTestId('filter-direction-all')).toBeInTheDocument();
     expect(screen.getByTestId('filter-direction-in')).toBeInTheDocument();
     expect(screen.getByTestId('filter-direction-out')).toBeInTheDocument();
@@ -95,20 +95,20 @@ describe('PaymentsFilters', () => {
   });
 
   it('does NOT render an internal starred control (deduped in 6.16.1)', () => {
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
     expect(screen.queryByTestId('filter-starred')).not.toBeInTheDocument();
   });
 
   it('clicking IN sets direction to "IN"; clicking All clears it', () => {
     const onChange = vi.fn();
     const { rerender } = render(
-      <PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />,
+      <TransactionsFilters value={defaultValue()} onChange={onChange} categories={[]} />,
     );
     fireEvent.click(screen.getByTestId('filter-direction-in'));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ direction: 'IN' }));
 
     rerender(
-      <PaymentsFilters
+      <TransactionsFilters
         value={{ ...defaultValue(), direction: 'IN' }}
         onChange={onChange}
         categories={[]}
@@ -120,7 +120,7 @@ describe('PaymentsFilters', () => {
 
   it('OUT button sets direction to "OUT"', () => {
     const onChange = vi.fn();
-    render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
     fireEvent.click(screen.getByTestId('filter-direction-out'));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ direction: 'OUT' }));
   });
@@ -128,7 +128,7 @@ describe('PaymentsFilters', () => {
   it('search debounce: emits onChange exactly once after 300 ms', async () => {
     vi.useFakeTimers();
     const onChange = vi.fn();
-    render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
     const input = screen.getByTestId('filter-search') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'f' } });
     fireEvent.change(input, { target: { value: 'fo' } });
@@ -147,7 +147,7 @@ describe('PaymentsFilters', () => {
 
   it('sort change triggers onChange with the new sort key', () => {
     const onChange = vi.fn();
-    render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
     fireEvent.change(screen.getByTestId('filter-sort'), {
       target: { value: 'amount_desc' },
     });
@@ -156,7 +156,7 @@ describe('PaymentsFilters', () => {
 
   it('date inputs emit onChange', () => {
     const onChange = vi.fn();
-    render(<PaymentsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={onChange} categories={[]} />);
     fireEvent.change(screen.getByTestId('filter-from'), {
       target: { value: '2026-01-01' },
     });
@@ -169,7 +169,7 @@ describe('PaymentsFilters', () => {
 
   it('hide.scope=true hides the scope dropdown', () => {
     render(
-      <PaymentsFilters
+      <TransactionsFilters
         value={defaultValue()}
         onChange={vi.fn()}
         hide={{ scope: true }}
@@ -180,7 +180,7 @@ describe('PaymentsFilters', () => {
   });
 
   it('scope dropdown lists All / Personal / per-group entries', () => {
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />);
     const select = screen.getByTestId('filter-scope') as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
     expect(values).toEqual(['all', 'personal', 'group:g-1', 'group:g-2']);
@@ -202,7 +202,7 @@ describe('PaymentsFilters', () => {
         ownerId: 'g-1',
       }),
     ];
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={cats} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} categories={cats} />);
     const select = screen.getByTestId('filter-category') as HTMLSelectElement;
     expect(select.options[0].value).toBe('');
     const ids = Array.from(select.options).map((o) => o.value);
@@ -213,7 +213,7 @@ describe('PaymentsFilters', () => {
     mockListCategories.mockResolvedValueOnce([
       makeCategory({ id: 's-1', name: 'Salary', ownerType: 'system' }),
     ]);
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} />);
     await waitFor(() => {
       expect(mockListCategories).toHaveBeenCalledTimes(1);
     });
@@ -225,11 +225,11 @@ describe('PaymentsFilters', () => {
 
   it('refetches categories when direction changes', async () => {
     mockListCategories.mockResolvedValue([]);
-    const { rerender } = render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} />);
+    const { rerender } = render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} />);
     await waitFor(() => expect(mockListCategories).toHaveBeenCalledTimes(1));
     expect(mockListCategories).toHaveBeenLastCalledWith(undefined);
     rerender(
-      <PaymentsFilters value={{ ...defaultValue(), direction: 'OUT' }} onChange={vi.fn()} />,
+      <TransactionsFilters value={{ ...defaultValue(), direction: 'OUT' }} onChange={vi.fn()} />,
     );
     await waitFor(() => expect(mockListCategories).toHaveBeenCalledTimes(2));
     expect(mockListCategories).toHaveBeenLastCalledWith({ direction: 'OUT' });
@@ -237,17 +237,17 @@ describe('PaymentsFilters', () => {
 
   it('does not impose any inline LTR/RTL style (RTL smoke test)', () => {
     const { container } = render(
-      <PaymentsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />,
+      <TransactionsFilters value={defaultValue()} onChange={vi.fn()} categories={[]} />,
     );
-    const root = container.querySelector('[data-testid="payments-filters"]') as HTMLElement;
+    const root = container.querySelector('[data-testid="transactions-filters"]') as HTMLElement;
     expect(root.style.direction).toBe('');
   });
 
   // ── Phase 6 · Iteration 6.16.5 — single-source-of-truth ─────────────────
   // The filter dropdown and the form-dialog category picker must source
-  // categories from the SAME endpoint (`usePayments().listCategories()`).
+  // categories from the SAME endpoint (`useTransactions().listCategories()`).
   // This guards against the staging bug where the two lists drifted out of
-  // sync. We assert the option labels surfaced by <PaymentsFilters> match
+  // sync. We assert the option labels surfaced by <TransactionsFilters> match
   // exactly what `listCategories()` returns — no client-side filtering or
   // sorting that the form picker doesn't also apply.
   it('filter dropdown options exactly mirror listCategories() (same source as form dialog)', async () => {
@@ -262,7 +262,7 @@ describe('PaymentsFilters', () => {
       makeCategory({ id: 'p-1', name: 'Custom', ownerType: 'user', direction: 'OUT' }),
     ];
     mockListCategories.mockResolvedValue(cats);
-    render(<PaymentsFilters value={defaultValue()} onChange={vi.fn()} />);
+    render(<TransactionsFilters value={defaultValue()} onChange={vi.fn()} />);
     await waitFor(() => expect(mockListCategories).toHaveBeenCalledTimes(1));
     const select = await screen.findByTestId('filter-category');
     const options = Array.from((select as HTMLSelectElement).options).filter((o) => o.value);

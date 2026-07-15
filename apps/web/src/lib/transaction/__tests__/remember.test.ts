@@ -81,20 +81,20 @@ describe('remember.ts — with mocked localStorage', () => {
   });
 
   it('returns default when stored JSON is corrupt', async () => {
-    storage.setItem('myfin.payment.lastScopes', '{not json');
+    storage.setItem('myfin.transaction.lastScopes', '{not json');
     const { getLastUsedScopes } = await importFresh();
     expect(getLastUsedScopes()).toEqual([{ scope: 'personal' }]);
   });
 
   it('returns default when stored value is an empty array', async () => {
-    storage.setItem('myfin.payment.lastScopes', '[]');
+    storage.setItem('myfin.transaction.lastScopes', '[]');
     const { getLastUsedScopes } = await importFresh();
     expect(getLastUsedScopes()).toEqual([{ scope: 'personal' }]);
   });
 
   it('filters out invalid group entries missing groupId', async () => {
     storage.setItem(
-      'myfin.payment.lastScopes',
+      'myfin.transaction.lastScopes',
       JSON.stringify([{ scope: 'group' }, { scope: 'personal' }]),
     );
     const { getLastUsedScopes } = await importFresh();
@@ -102,7 +102,10 @@ describe('remember.ts — with mocked localStorage', () => {
   });
 
   it('returns default when all entries are invalid', async () => {
-    storage.setItem('myfin.payment.lastScopes', JSON.stringify([{ scope: 'nonsense' }, null, 42]));
+    storage.setItem(
+      'myfin.transaction.lastScopes',
+      JSON.stringify([{ scope: 'nonsense' }, null, 42]),
+    );
     const { getLastUsedScopes } = await importFresh();
     expect(getLastUsedScopes()).toEqual([{ scope: 'personal' }]);
   });
@@ -116,12 +119,12 @@ describe('remember.ts — with mocked localStorage', () => {
   });
 
   it('returns default direction for an invalid stored value', async () => {
-    storage.setItem('myfin.payment.lastDirection', 'SIDEWAYS');
+    storage.setItem('myfin.transaction.lastDirection', 'SIDEWAYS');
     const { getLastUsedDirection } = await importFresh();
     expect(getLastUsedDirection()).toBe('OUT');
   });
 
-  it('round-trips every valid payment type', async () => {
+  it('round-trips every valid transaction type', async () => {
     const { getLastUsedType, setLastUsedType } = await importFresh();
     const types = [
       'ONE_TIME',
@@ -138,7 +141,7 @@ describe('remember.ts — with mocked localStorage', () => {
   });
 
   it('returns default type for an invalid stored value', async () => {
-    storage.setItem('myfin.payment.lastType', 'GARBAGE');
+    storage.setItem('myfin.transaction.lastType', 'GARBAGE');
     const { getLastUsedType } = await importFresh();
     expect(getLastUsedType()).toBe('ONE_TIME');
   });

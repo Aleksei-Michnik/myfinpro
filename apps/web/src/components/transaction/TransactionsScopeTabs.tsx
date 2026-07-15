@@ -1,13 +1,13 @@
 'use client';
 
-// Phase 6 · Iteration 6.16 — horizontal scope-tab strip for the /payments page.
+// Phase 6 · Iteration 6.16 — horizontal scope-tab strip for the /transactions page.
 // Phase 6 · Iteration 6.16.2 — converted from <Link>-based tabs to controlled
 // <button> tabs. The orchestrator owns URL writes (only emitted on commit).
 // Tabs accept a `disabled` prop that cascades from the in-flight container op.
 
 import { useTranslations } from 'next-intl';
 
-export interface PaymentsScopeTabsProps {
+export interface TransactionsScopeTabsProps {
   /** `'all'` | `'personal'` | `'group:<id>'`. */
   current: string;
   groups: { id: string; name: string }[];
@@ -17,8 +17,13 @@ export interface PaymentsScopeTabsProps {
   disabled?: boolean;
 }
 
-export function PaymentsScopeTabs({ current, groups, onChange, disabled }: PaymentsScopeTabsProps) {
-  const t = useTranslations('payments.page.scopeTabs');
+export function TransactionsScopeTabs({
+  current,
+  groups,
+  onChange,
+  disabled,
+}: TransactionsScopeTabsProps) {
+  const t = useTranslations('transactions.page.scopeTabs');
 
   const tabs: { key: string; label: string }[] = [
     { key: 'all', label: t('all') },
@@ -31,7 +36,7 @@ export function PaymentsScopeTabs({ current, groups, onChange, disabled }: Payme
       role="tablist"
       aria-label={t('all')}
       className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-700"
-      data-testid="payments-scope-tabs"
+      data-testid="transactions-scope-tabs"
     >
       {tabs.map((tab) => {
         const isActive = current === tab.key;

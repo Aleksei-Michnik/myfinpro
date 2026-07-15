@@ -13,9 +13,9 @@ import { createPortal } from 'react-dom';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 const inputClass =

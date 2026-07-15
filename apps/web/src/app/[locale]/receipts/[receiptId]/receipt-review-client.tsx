@@ -5,7 +5,7 @@
 // registry, date, currency, totals with a live mismatch warning) and an
 // editable line-items table with per-item category selects. Save = PATCH
 // header + PUT items. Only REVIEW receipts are editable; other statuses
-// render a read-only summary. Confirm (→ payment) lands in 7.9.
+// render a read-only summary. Confirm (→ transaction) lands in 7.9.
 
 import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
@@ -19,12 +19,12 @@ import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { MerchantSuggestion, ReceiptItemInput, ReceiptSummary } from '@/lib/receipt/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 interface ItemRow {
@@ -70,7 +70,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const tViewer = useTranslations('receipts.viewer');
   const { getReceipt, updateReceipt, replaceItems, searchMerchants, fetchFileBlob, retryReceipt } =
     useReceipts();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
   const { addToast } = useToast();
   const router = useRouter();
 
@@ -129,11 +129,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   // Attached receipt reaches REVIEW → pop the reconciliation dialog once, so
   // the comparison surfaces the moment extraction lands (design §3).
   useEffect(() => {
-    if (receipt?.paymentId && receipt.status === 'REVIEW' && !autoReconciledRef.current) {
+    if (receipt?.transactionId && receipt.status === 'REVIEW' && !autoReconciledRef.current) {
       autoReconciledRef.current = true;
       setReconcileOpen(true);
     }
-  }, [receipt?.paymentId, receipt?.status]);
+  }, [receipt?.transactionId, receipt?.status]);
 
   useRealtimeResync(() => {
     // Don't clobber in-progress edits on reconnect; refetch otherwise.
@@ -243,7 +243,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     [receipt],
   );
 
-  // Pre-select the payment's primary category from the most common line-item
+  // Pre-select the transaction's primary category from the most common line-item
   // category (confirm dialog default).
   const defaultCategoryId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -383,10 +383,10 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           >
             ← {t('back')}
           </Link>
-          {/* 8.19 — this receipt proves a payment; link back to it. */}
-          {receipt.paymentId && (
+          {/* 8.19 — this receipt proves a transaction; link back to it. */}
+          {receipt.transactionId && (
             <Link
-              href={`/payments/${receipt.paymentId}`}
+              href={`/transactions/${receipt.transactionId}`}
               className="text-sm text-primary-700 hover:underline dark:text-primary-300"
               data-testid="receipt-review-transaction-link"
             >
@@ -780,7 +780,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               >
                 {t('save')}
               </Button>
-              {receipt.paymentId ? (
+              {receipt.transactionId ? (
                 <Button
                   type="button"
                   variant="primary"
@@ -814,23 +814,23 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         categories={categories}
         defaultCategoryId={defaultCategoryId}
         onCancel={() => setConfirmOpen(false)}
-        onConfirmed={(paymentId) => {
+        onConfirmed={(transactionId) => {
           setConfirmOpen(false);
-          router.push(`/payments/${paymentId}`);
+          router.push(`/transactions/${transactionId}`);
         }}
       />
 
       {/* Attached-receipt finish (Phase 8.15). Mounted only while open — its
-          payment fetch shouldn't run for plain confirm flows. */}
-      {reconcileOpen && receipt.paymentId && (
+          transaction fetch shouldn't run for plain confirm flows. */}
+      {reconcileOpen && receipt.transactionId && (
         <ReconcileReceiptDialog
           open
           receipt={receipt}
           categories={categories}
           onCancel={() => setReconcileOpen(false)}
-          onReconciled={(paymentId) => {
+          onReconciled={(transactionId) => {
             setReconcileOpen(false);
-            router.push(`/payments/${paymentId}`);
+            router.push(`/transactions/${transactionId}`);
           }}
         />
       )}

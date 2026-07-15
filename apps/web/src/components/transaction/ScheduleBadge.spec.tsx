@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ScheduleBadge } from './ScheduleBadge';
-import type { ScheduleResponse } from '@/lib/payment/types';
+import type { ScheduleResponse } from '@/lib/transaction/types';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, string | number>) =>
@@ -15,7 +15,7 @@ vi.mock('next-intl', () => ({
 function s(p: Partial<ScheduleResponse> = {}): ScheduleResponse {
   return {
     id: 's-1',
-    paymentId: 'p-1',
+    transactionId: 'p-1',
     cron: null,
     everyMs: 86_400_000,
     startsAt: '2026-05-10T00:00:00Z',

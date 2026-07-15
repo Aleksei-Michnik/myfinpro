@@ -13,10 +13,10 @@ import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductPurchasesResponse, ProductSummary } from '@/lib/product/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 function formatMoney(cents: number | null, currency: string | null, locale: string): string {
@@ -40,7 +40,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
   const t = useTranslations('products.detail');
   const locale = useLocale();
   const { getProduct, fetchPurchases, addAlias, uploadImage, imageUrl } = useProducts();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
   const { addToast } = useToast();
 
   const [product, setProduct] = useState<ProductSummary | null>(null);

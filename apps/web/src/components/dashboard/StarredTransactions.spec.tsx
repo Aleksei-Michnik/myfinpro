@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { StarredPayments } from './StarredPayments';
+import { StarredTransactions } from './StarredTransactions';
 
-const paymentsListProps = vi.fn();
+const transactionsListProps = vi.fn();
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -16,39 +16,39 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-vi.mock('@/components/payment/PaymentsList', () => ({
-  PaymentsList: (props: Record<string, unknown>) => {
-    paymentsListProps(props);
-    return <div data-testid="mocked-payments-list" />;
+vi.mock('@/components/transaction/TransactionsList', () => ({
+  TransactionsList: (props: Record<string, unknown>) => {
+    transactionsListProps(props);
+    return <div data-testid="mocked-transactions-list" />;
   },
 }));
 
-describe('StarredPayments', () => {
-  it('renders <PaymentsList> with starred=true and limit=5', () => {
-    paymentsListProps.mockClear();
-    render(<StarredPayments />);
-    const props = paymentsListProps.mock.calls[0]![0] as Record<string, unknown>;
+describe('StarredTransactions', () => {
+  it('renders <TransactionsList> with starred=true and limit=5', () => {
+    transactionsListProps.mockClear();
+    render(<StarredTransactions />);
+    const props = transactionsListProps.mock.calls[0]![0] as Record<string, unknown>;
     expect(props.limit).toBe(5);
     expect(props.disableInternalAdd).toBe(true);
     expect(props.filters).toMatchObject({ scope: 'all', starred: true, sort: 'date_desc' });
   });
 
   it('header includes the "All starred" link', () => {
-    render(<StarredPayments />);
-    const link = screen.getByTestId('starred-payments-view-all');
-    expect(link.getAttribute('href')).toBe('/payments?starred=1');
+    render(<StarredTransactions />);
+    const link = screen.getByTestId('starred-transactions-view-all');
+    expect(link.getAttribute('href')).toBe('/transactions?starred=1');
   });
 
-  it('passes a custom emptyState node to <PaymentsList>', () => {
-    paymentsListProps.mockClear();
-    render(<StarredPayments />);
-    const props = paymentsListProps.mock.calls[0]![0] as Record<string, unknown>;
+  it('passes a custom emptyState node to <TransactionsList>', () => {
+    transactionsListProps.mockClear();
+    render(<StarredTransactions />);
+    const props = transactionsListProps.mock.calls[0]![0] as Record<string, unknown>;
     expect(props.emptyState).toBeDefined();
   });
 
   it('mounts cleanly when re-keyed (refresh-key pattern)', () => {
-    const { rerender } = render(<StarredPayments key="a" />);
-    rerender(<StarredPayments key="b" />);
-    expect(screen.getByTestId('mocked-payments-list')).toBeInTheDocument();
+    const { rerender } = render(<StarredTransactions key="a" />);
+    rerender(<StarredTransactions key="b" />);
+    expect(screen.getByTestId('mocked-transactions-list')).toBeInTheDocument();
   });
 });

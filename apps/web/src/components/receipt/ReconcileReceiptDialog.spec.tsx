@@ -1,17 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReconcileReceiptDialog } from './ReconcileReceiptDialog';
-import type { CategoryDto, PaymentSummary } from '@/lib/payment/types';
 import type { ReceiptItem, ReceiptSummary } from '@/lib/receipt/types';
+import type { CategoryDto, TransactionSummary } from '@/lib/transaction/types';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => 'en',
 }));
 
-const getPaymentMock = vi.fn();
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ getPayment: getPaymentMock }),
+const getTransactionMock = vi.fn();
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ getTransaction: getTransactionMock }),
 }));
 
 const reconcileMock = vi.fn();
@@ -51,7 +51,7 @@ function receipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
   return {
     id: 'r-1',
     status: 'REVIEW',
-    paymentId: 'pay-1',
+    transactionId: 'pay-1',
     currency: 'USD',
     totalCents: 4200,
     items: [
@@ -62,7 +62,7 @@ function receipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
   } as ReceiptSummary;
 }
 
-const cat = (id: string, name: string): PaymentSummary['category'] => ({
+const cat = (id: string, name: string): TransactionSummary['category'] => ({
   id,
   name,
   slug: id,
@@ -70,14 +70,14 @@ const cat = (id: string, name: string): PaymentSummary['category'] => ({
   color: null,
 });
 
-function payment(over: Partial<PaymentSummary> = {}): PaymentSummary {
+function transaction(over: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: 'pay-1',
     amountCents: 1000,
     currency: 'USD',
     category: cat('cat-food', 'Food'),
     ...over,
-  } as PaymentSummary;
+  } as TransactionSummary;
 }
 
 function renderDialog(r: ReceiptSummary = receipt()) {
@@ -102,7 +102,7 @@ describe('ReconcileReceiptDialog (8.15)', () => {
   });
 
   it('shows both differing fields with the receipt value defaulted', async () => {
-    getPaymentMock.mockResolvedValue(payment());
+    getTransactionMock.mockResolvedValue(transaction());
     renderDialog();
 
     // total: 1000 vs 4200 differs; category: cat-food vs dominant cat-dining differs.
@@ -115,8 +115,8 @@ describe('ReconcileReceiptDialog (8.15)', () => {
     );
   });
 
-  it('submits the chosen flags and routes to the payment', async () => {
-    getPaymentMock.mockResolvedValue(payment());
+  it('submits the chosen flags and routes to the transaction', async () => {
+    getTransactionMock.mockResolvedValue(transaction());
     const { onReconciled } = renderDialog();
     await waitFor(() => expect(screen.getByTestId('reconcile-field-total')).toBeTruthy());
 
@@ -134,9 +134,9 @@ describe('ReconcileReceiptDialog (8.15)', () => {
     await waitFor(() => expect(onReconciled).toHaveBeenCalledWith('pay-1'));
   });
 
-  it('shows the no-differences state when the receipt matches the payment', async () => {
-    getPaymentMock.mockResolvedValue(
-      payment({ amountCents: 4200, currency: 'USD', category: cat('cat-dining', 'Dining') }),
+  it('shows the no-differences state when the receipt matches the transaction', async () => {
+    getTransactionMock.mockResolvedValue(
+      transaction({ amountCents: 4200, currency: 'USD', category: cat('cat-dining', 'Dining') }),
     );
     renderDialog();
 
@@ -146,7 +146,7 @@ describe('ReconcileReceiptDialog (8.15)', () => {
   });
 
   it('toasts on a failed reconcile', async () => {
-    getPaymentMock.mockResolvedValue(payment());
+    getTransactionMock.mockResolvedValue(transaction());
     reconcileMock.mockRejectedValue(new Error('nope'));
     const { onReconciled } = renderDialog();
     await waitFor(() => expect(screen.getByTestId('reconcile-submit')).toBeTruthy());

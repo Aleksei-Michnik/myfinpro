@@ -20,11 +20,11 @@ import { BarcodeScannerDialog } from './BarcodeScannerDialog';
 import { ProductFormDialog } from './ProductFormDialog';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductMatchCandidate, ProductSummary } from '@/lib/product/types';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptItem, ReceiptSummary } from '@/lib/receipt/types';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 const SEARCH_DEBOUNCE_MS = 300;

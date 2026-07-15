@@ -10,7 +10,10 @@ vi.mock('next-intl', () => ({
 const attachFileMock = vi.fn();
 const attachUrlMock = vi.fn();
 vi.mock('@/lib/receipt/receipt-context', () => ({
-  useReceipts: () => ({ attachFileToPayment: attachFileMock, attachUrlToPayment: attachUrlMock }),
+  useReceipts: () => ({
+    attachFileToTransaction: attachFileMock,
+    attachUrlToTransaction: attachUrlMock,
+  }),
 }));
 
 const addToastMock = vi.fn();
@@ -21,7 +24,9 @@ vi.mock('@/components/ui/Toast', () => ({
 function renderDialog() {
   const onClose = vi.fn();
   const onAttached = vi.fn();
-  render(<AttachReceiptDialog open paymentId="pay-1" onClose={onClose} onAttached={onAttached} />);
+  render(
+    <AttachReceiptDialog open transactionId="pay-1" onClose={onClose} onAttached={onAttached} />,
+  );
   return { onClose, onAttached };
 }
 
@@ -30,7 +35,7 @@ describe('AttachReceiptDialog (8.15)', () => {
     vi.clearAllMocks();
   });
 
-  it('uploads a device file to the payment and hands back the receipt', async () => {
+  it('uploads a device file to the transaction and hands back the receipt', async () => {
     const created = { id: 'r-1' } as ReceiptSummary;
     attachFileMock.mockResolvedValue(created);
     const { onAttached } = renderDialog();
@@ -44,7 +49,7 @@ describe('AttachReceiptDialog (8.15)', () => {
     await waitFor(() => expect(onAttached).toHaveBeenCalledWith(created));
   });
 
-  it('attaches a trimmed URL to the payment', async () => {
+  it('attaches a trimmed URL to the transaction', async () => {
     const created = { id: 'r-2' } as ReceiptSummary;
     attachUrlMock.mockResolvedValue(created);
     const { onAttached } = renderDialog();
@@ -65,7 +70,7 @@ describe('AttachReceiptDialog (8.15)', () => {
   });
 
   it('toasts and stays open when the attach fails', async () => {
-    attachUrlMock.mockRejectedValue(new Error('This payment already has a receipt'));
+    attachUrlMock.mockRejectedValue(new Error('This transaction already has a receipt'));
     const { onAttached } = renderDialog();
 
     fireEvent.change(screen.getByTestId('attach-receipt-url-input'), {

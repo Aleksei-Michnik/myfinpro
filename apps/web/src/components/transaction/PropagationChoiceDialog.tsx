@@ -2,11 +2,11 @@
 
 // Phase 6 · Iteration 6.18.1.5 — propagation choice dialog.
 //
-// Shown when a user edits a RECURRING parent payment's non-period fields and
+// Shown when a user edits a RECURRING parent transaction's non-period fields and
 // the parent has ≥1 child occurrence. The user picks how far the change
 // reaches (self / future / all); the backend applies it transactionally.
 //
-// The async submit is owned by the caller (<PaymentFormDialog>'s saveOp), so
+// The async submit is owned by the caller (<TransactionFormDialog>'s saveOp), so
 // this component is purely presentational: it surfaces the three modes and
 // reports the chosen one via onConfirm. The `pending` prop drives the confirm
 // button's spinner / disabled state.
@@ -19,7 +19,10 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
-import { PAYMENT_PROPAGATE_MODES, type PaymentPropagateMode } from '@/lib/payment/types';
+import {
+  TRANSACTION_PROPAGATE_MODES,
+  type TransactionPropagateMode,
+} from '@/lib/transaction/types';
 
 export interface PropagationChoiceDialogProps {
   open: boolean;
@@ -30,7 +33,7 @@ export interface PropagationChoiceDialogProps {
   destructive?: boolean;
   /** Disables inputs + shows the confirm spinner while the edit is in flight. */
   pending?: boolean;
-  onConfirm(mode: PaymentPropagateMode): void;
+  onConfirm(mode: TransactionPropagateMode): void;
   onCancel(): void;
 }
 
@@ -41,15 +44,15 @@ export function PropagationChoiceDialog({
   onConfirm,
   onCancel,
 }: PropagationChoiceDialogProps) {
-  const t = useTranslations('payments.propagate');
-  const [mode, setMode] = useState<PaymentPropagateMode>('self');
+  const t = useTranslations('transactions.propagate');
+  const [mode, setMode] = useState<TransactionPropagateMode>('self');
 
   // Reset to the default selection each time the dialog opens.
   useEffect(() => {
     if (open) setMode('self');
   }, [open]);
 
-  // ESC cancels (mirrors the other payment dialogs).
+  // ESC cancels (mirrors the other transaction dialogs).
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -99,7 +102,7 @@ export function PropagationChoiceDialog({
         )}
 
         <div className="mb-5 space-y-3" role="radiogroup" aria-label={t('title')}>
-          {PAYMENT_PROPAGATE_MODES.map((m) => (
+          {TRANSACTION_PROPAGATE_MODES.map((m) => (
             <label
               key={m}
               className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200"

@@ -1,16 +1,16 @@
 'use client';
 
-// Phase 6 · Iteration 6.13 — multi-select checkbox list used by the payment
-// form dialog to choose which attribution scopes a payment belongs to.
+// Phase 6 · Iteration 6.13 — multi-select checkbox list used by the transaction
+// form dialog to choose which attribution scopes a transaction belongs to.
 //
 // Controlled component. Validation (at least one scope) is enforced by the
 // parent — this component only emits the next value.
 
 import { useTranslations } from 'next-intl';
 import { useGroups } from '@/lib/group/group-context';
-import type { AttributionScope } from '@/lib/payment/types';
+import type { AttributionScope } from '@/lib/transaction/types';
 
-export interface PaymentScopeSelectorProps {
+export interface TransactionScopeSelectorProps {
   value: AttributionScope[];
   onChange(next: AttributionScope[]): void;
   /** When true, "Personal" is hidden — used by group-only forms. */
@@ -28,14 +28,14 @@ function hasGroup(scopes: AttributionScope[], groupId: string): boolean {
   return scopes.some((s) => s.scope === 'group' && s.groupId === groupId);
 }
 
-export function PaymentScopeSelector({
+export function TransactionScopeSelector({
   value,
   onChange,
   hidePersonal,
   allowedGroupIds,
   disabled,
-}: PaymentScopeSelectorProps) {
-  const t = useTranslations('payments.scopeSelector');
+}: TransactionScopeSelectorProps) {
+  const t = useTranslations('transactions.scopeSelector');
   const { groups } = useGroups();
 
   const visibleGroups = allowedGroupIds
@@ -65,7 +65,7 @@ export function PaymentScopeSelector({
   return (
     <div
       className="space-y-1 rounded-md border border-gray-200 p-2 dark:border-gray-700"
-      data-testid="payment-scope-selector"
+      data-testid="transaction-scope-selector"
     >
       {!hidePersonal && (
         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">

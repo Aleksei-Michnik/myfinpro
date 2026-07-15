@@ -1,35 +1,35 @@
 'use client';
 
-// Phase 6 · Iteration 6.13 — create + edit ONE_TIME payment dialog.
+// Phase 6 · Iteration 6.13 — create + edit ONE_TIME transaction dialog.
 // Phase 6 · Iteration 6.16.4 — save flow migrated to useAsyncOperation
 // ({ scope: 'control' }). Save button shows <ButtonSpinner>, disabled
 // inputs and aria-busy on the form. Cancel triggers cancel() on the
 // in-flight op. Network/timeout/HTTP failures shown via inline banner
-// with Retry. Domain errors (PAYMENT_INVALID_*) still map to per-field
+// with Retry. Domain errors (TRANSACTION_INVALID_*) still map to per-field
 // errors.
 
 import { CURRENCY_CODES, isPlanKind } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PaymentCategoryPicker } from './PaymentCategoryPicker';
+import { PropagationChoiceDialog } from './PropagationChoiceDialog';
+import { TransactionCategoryPicker } from './TransactionCategoryPicker';
 import {
-  PaymentPlanSubForm,
+  TransactionPlanSubForm,
   buildPlanSpec,
   defaultPlanSubFormState,
   type PlanSubFormErrors,
   type PlanSubFormState,
-} from './PaymentPlanSubForm';
+} from './TransactionPlanSubForm';
 import {
-  PaymentScheduleSubForm,
+  TransactionScheduleSubForm,
   buildScheduleSpec,
   defaultScheduleSubFormState,
   scheduleResponseToFormState,
   type ScheduleSubFormErrors,
   type ScheduleSubFormState,
-} from './PaymentScheduleSubForm';
-import { PaymentScopeSelector } from './PaymentScopeSelector';
-import { PaymentTypeSelector } from './PaymentTypeSelector';
-import { PropagationChoiceDialog } from './PropagationChoiceDialog';
+} from './TransactionScheduleSubForm';
+import { TransactionScopeSelector } from './TransactionScopeSelector';
+import { TransactionTypeSelector } from './TransactionTypeSelector';
 import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
@@ -39,54 +39,54 @@ import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { isoToLocalInput, localInputToIso, nowLocalIso } from '@/lib/datetime';
 import { useGroups } from '@/lib/group/group-context';
-import { usePayments } from '@/lib/payment/payment-context';
+import { useReceipts } from '@/lib/receipt/receipt-context';
 import {
   getLastUsedDirection,
   getLastUsedScopes,
   setLastUsedDirection,
   setLastUsedScopes,
   setLastUsedType,
-} from '@/lib/payment/remember';
+} from '@/lib/transaction/remember';
+import { useTransactions } from '@/lib/transaction/transaction-context';
 import type {
   AttributionScope,
   CascadeEditResult,
   CategoryDto,
-  CreatePaymentInput,
-  PaymentDirection,
-  PaymentPropagateMode,
-  PaymentSummary,
-  PaymentType,
+  CreateTransactionInput,
+  TransactionDirection,
+  TransactionPropagateMode,
+  TransactionSummary,
+  TransactionType,
   ScheduleResponse,
-  UpdatePaymentInput,
-} from '@/lib/payment/types';
-import { useReceipts } from '@/lib/receipt/receipt-context';
+  UpdateTransactionInput,
+} from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface PaymentFormDialogProps {
+export interface TransactionFormDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
   /** Required in 'edit' mode. */
-  payment?: PaymentSummary;
+  transaction?: TransactionSummary;
   /**
-   * Existing schedule attached to `payment` (edit mode). Required for
-   * pre-filling the schedule sub-form when editing a RECURRING payment.
+   * Existing schedule attached to `transaction` (edit mode). Required for
+   * pre-filling the schedule sub-form when editing a RECURRING transaction.
    * `null` when no schedule is attached or when the parent is ONE_TIME.
    */
   existingSchedule?: ScheduleResponse | null;
   defaults?: Partial<{
-    direction: PaymentDirection;
+    direction: TransactionDirection;
     scope: AttributionScope[];
     categoryId: string;
     currency: string;
   }>;
   onClose(): void;
-  onSaved(payment: PaymentSummary | null): void;
+  onSaved(transaction: TransactionSummary | null): void;
   /** Optional shared categories list. */
   categories?: CategoryDto[] | null;
 }
 
 interface FormState {
-  direction: PaymentDirection;
+  direction: TransactionDirection;
   amountStr: string; // raw string so we can validate empty / negative.
   currency: string;
   /**
@@ -99,7 +99,7 @@ interface FormState {
   categoryId: string | null;
   scopes: AttributionScope[];
   note: string;
-  type: PaymentType;
+  type: TransactionType;
 }
 
 interface ValidationErrors {
@@ -111,7 +111,7 @@ interface ValidationErrors {
   note?: string;
 }
 
-function paymentToState(p: PaymentSummary): FormState {
+function transactionToState(p: TransactionSummary): FormState {
   return {
     direction: p.direction,
     amountStr: (p.amountCents / 100).toFixed(2),
@@ -124,17 +124,17 @@ function paymentToState(p: PaymentSummary): FormState {
         : ({ scope: 'group', groupId: a.groupId! } as AttributionScope),
     ),
     note: p.note ?? '',
-    type: (p.type as PaymentType) || 'ONE_TIME',
+    type: (p.type as TransactionType) || 'ONE_TIME',
   };
 }
 
-/** Determine which attributions on an existing payment are NOT accessible by the caller. */
+/** Determine which attributions on an existing transaction are NOT accessible by the caller. */
 function findNonAccessibleAttributions(
-  payment: PaymentSummary,
+  transaction: TransactionSummary,
   currentUserId: string | null,
   groupIds: Set<string>,
-): PaymentSummary['attributions'] {
-  return payment.attributions.filter((a) => {
+): TransactionSummary['attributions'] {
+  return transaction.attributions.filter((a) => {
     if (a.scope === 'personal') return a.userId !== currentUserId;
     if (a.scope === 'group') return !(a.groupId && groupIds.has(a.groupId));
     return true;
@@ -142,12 +142,12 @@ function findNonAccessibleAttributions(
 }
 
 function findAccessibleAttributions(
-  payment: PaymentSummary,
+  transaction: TransactionSummary,
   currentUserId: string | null,
   groupIds: Set<string>,
 ): AttributionScope[] {
   const result: AttributionScope[] = [];
-  for (const a of payment.attributions) {
+  for (const a of transaction.attributions) {
     if (a.scope === 'personal' && a.userId === currentUserId) {
       result.push({ scope: 'personal' });
     } else if (a.scope === 'group' && a.groupId && groupIds.has(a.groupId)) {
@@ -157,14 +157,14 @@ function findAccessibleAttributions(
   return result;
 }
 
-/** Build a minimal UpdatePaymentInput containing only the changed fields. */
+/** Build a minimal UpdateTransactionInput containing only the changed fields. */
 export function computeDiff(
-  original: PaymentSummary,
+  original: TransactionSummary,
   draft: FormState,
   draftAmountCents: number,
   draftOccurredAt: string,
-): UpdatePaymentInput {
-  const diff: UpdatePaymentInput = {};
+): UpdateTransactionInput {
+  const diff: UpdateTransactionInput = {};
 
   if (draft.direction !== original.direction) diff.direction = draft.direction;
   if (draftAmountCents !== original.amountCents) diff.amountCents = draftAmountCents;
@@ -219,42 +219,42 @@ function extractMessage(err: unknown): string {
   return 'Unexpected error';
 }
 
-export function PaymentFormDialog({
+export function TransactionFormDialog({
   open,
   mode,
-  payment,
+  transaction,
   existingSchedule,
   defaults,
   onClose,
   onSaved,
   categories,
-}: PaymentFormDialogProps) {
-  const t = useTranslations('payments.form');
-  const tValidation = useTranslations('payments.form.validation');
-  const tSchedule = useTranslations('payments.schedule.form');
-  const tScheduleValidation = useTranslations('payments.schedule.form.validation');
-  const tPropagate = useTranslations('payments.propagate');
-  const tPlanValidation = useTranslations('payments.plan.form.validation');
+}: TransactionFormDialogProps) {
+  const t = useTranslations('transactions.form');
+  const tValidation = useTranslations('transactions.form.validation');
+  const tSchedule = useTranslations('transactions.schedule.form');
+  const tScheduleValidation = useTranslations('transactions.schedule.form.validation');
+  const tPropagate = useTranslations('transactions.propagate');
+  const tPlanValidation = useTranslations('transactions.plan.form.validation');
   const { addToast } = useToast();
   const { user } = useAuth();
   const { groups } = useGroups();
   const {
-    createPayment,
-    updatePayment,
-    editPaymentWithPropagation,
-    removePayment,
+    createTransaction,
+    updateTransaction,
+    editTransactionWithPropagation,
+    removeTransaction,
     createSchedule,
     replaceSchedule,
-    getPayment,
+    getTransaction,
     listOccurrences,
-  } = usePayments();
+  } = useTransactions();
 
-  // Phase 7.13 — payment-first receipt intake: a receipt is the payment's
+  // Phase 7.13 — transaction-first receipt intake: a receipt is the transaction's
   // proving document, so its upload starts here. Phase 8.13 turns the single
   // file picker into an intake chooser (device upload / e-receipt URL —
   // design: docs/phase-8-receipt-intake-design.md §1). Either path creates
   // the receipt and hands off to the extract → review → confirm pipeline,
-  // which ends in the payment this dialog would otherwise create by hand.
+  // which ends in the transaction this dialog would otherwise create by hand.
   const router = useRouter();
   const { uploadReceipt, createFromUrl } = useReceipts();
   const receiptFileRef = useRef<HTMLInputElement | null>(null);
@@ -293,29 +293,29 @@ export function PaymentFormDialog({
     }
   }, [receiptOp.error, addToast, t]);
 
-  // Phase 6 · 6.18.1.4-hotfix — refetch the freshest copy of the payment
+  // Phase 6 · 6.18.1.4-hotfix — refetch the freshest copy of the transaction
   // when the dialog opens in edit mode. Without this we'd render stale
-  // data from the list cache (a payment edited on another tab/device
+  // data from the list cache (a transaction edited on another tab/device
   // would surface old values until the user navigated away). Falls back
   // to the prop if the fetch fails.
-  const refetchOp = useAsyncOperation<PaymentSummary>({ scope: 'control' });
-  const [refetchedPayment, setRefetchedPayment] = useState<PaymentSummary | null>(null);
+  const refetchOp = useAsyncOperation<TransactionSummary>({ scope: 'control' });
+  const [refetchedTransaction, setRefetchedTransaction] = useState<TransactionSummary | null>(null);
   const isInitialLoad =
-    mode === 'edit' && !!payment && refetchOp.isLoading && refetchedPayment === null;
+    mode === 'edit' && !!transaction && refetchOp.isLoading && refetchedTransaction === null;
 
   // The form populates from the freshest copy when available; otherwise
   // the prop, which preserves the existing behaviour when the fetch
   // fails or while the request is in flight.
-  const effectivePayment: PaymentSummary | undefined =
-    mode === 'edit' ? (refetchedPayment ?? payment) : payment;
+  const effectiveTransaction: TransactionSummary | undefined =
+    mode === 'edit' ? (refetchedTransaction ?? transaction) : transaction;
 
   const groupIdSet = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
 
   // ── Build initial state ─────────────────────────────────────────────────
 
   const initialState = useMemo<FormState>(() => {
-    if (mode === 'edit' && effectivePayment) {
-      return paymentToState(effectivePayment);
+    if (mode === 'edit' && effectiveTransaction) {
+      return transactionToState(effectiveTransaction);
     }
     const direction = defaults?.direction ?? getLastUsedDirection();
     const scopes =
@@ -331,7 +331,7 @@ export function PaymentFormDialog({
       note: '',
       type: 'ONE_TIME',
     };
-  }, [mode, effectivePayment?.id, refetchedPayment]);
+  }, [mode, effectiveTransaction?.id, refetchedTransaction]);
 
   // Schedule sub-form state — sticky across type-toggles. Pre-filled from
   // the existing schedule on the edit path; otherwise defaults.
@@ -352,7 +352,7 @@ export function PaymentFormDialog({
   const initialScheduleStateRef = useRef(initialScheduleState);
 
   // Save flow runs through the universal control-scope async hook.
-  const saveOp = useAsyncOperation<PaymentSummary | null>({ scope: 'control' });
+  const saveOp = useAsyncOperation<TransactionSummary | null>({ scope: 'control' });
   // Cascade-edit flow (Phase 6 · 6.18.1.5) — its own control-scope op so the
   // confirm spinner in <PropagationChoiceDialog> is independent of saveOp.
   const cascadeOp = useAsyncOperation<CascadeEditResult>({ scope: 'control' });
@@ -364,7 +364,7 @@ export function PaymentFormDialog({
   const [showPropagation, setShowPropagation] = useState(false);
   // The validated edit payload, stashed while the propagation dialog is open.
   const pendingEditRef = useRef<{
-    diff: UpdatePaymentInput;
+    diff: UpdateTransactionInput;
     scheduleBuild: ReturnType<typeof buildScheduleSpec> | null;
     willBeRecurring: boolean;
   } | null>(null);
@@ -385,42 +385,42 @@ export function PaymentFormDialog({
     } else {
       // Closed mid-flight → abort.
       saveOp.cancel();
-      // Drop any refetched copy so reopening for a different payment
+      // Drop any refetched copy so reopening for a different transaction
       // does not flash old data while the new fetch is in flight.
-      setRefetchedPayment(null);
+      setRefetchedTransaction(null);
       refetchOp.cancel();
     }
     // saveOp identity is stable; including it would re-fire on unrelated churn.
   }, [open, initialState, initialScheduleState]);
 
-  // Phase 6 · 6.18.1.4-hotfix — fetch the freshest payment when the
+  // Phase 6 · 6.18.1.4-hotfix — fetch the freshest transaction when the
   // dialog opens in edit mode. Falls back to the prop on failure.
   useEffect(() => {
-    if (!open || mode !== 'edit' || !payment) return;
+    if (!open || mode !== 'edit' || !transaction) return;
     void refetchOp
-      .run((signal) => getPayment(payment.id, signal))
+      .run((signal) => getTransaction(transaction.id, signal))
       .then((fresh) => {
-        if (fresh) setRefetchedPayment(fresh);
+        if (fresh) setRefetchedTransaction(fresh);
       });
-    // refetchOp / getPayment identities are stable; the only dependencies
-    // that should re-fire the fetch are open / mode / payment.id.
-  }, [open, mode, payment?.id]);
+    // refetchOp / getTransaction identities are stable; the only dependencies
+    // that should re-fire the fetch are open / mode / transaction.id.
+  }, [open, mode, transaction?.id]);
 
   // Phase 6 · 6.18.1.5 — detect whether a RECURRING parent has ≥1 child
   // occurrence. Drives whether Save opens the propagation dialog. Probe with
   // limit=1 (we only need presence; the exact counts come from the cascade
-  // response). Non-recurring payments never have children → skip.
+  // response). Non-recurring transactions never have children → skip.
   useEffect(() => {
-    if (!open || mode !== 'edit' || !payment) {
+    if (!open || mode !== 'edit' || !transaction) {
       setHasChildren(false);
       return;
     }
-    if (payment.type !== 'RECURRING') {
+    if (transaction.type !== 'RECURRING') {
       setHasChildren(false);
       return;
     }
     let cancelled = false;
-    void listOccurrences(payment.id, { limit: 1 })
+    void listOccurrences(transaction.id, { limit: 1 })
       .then((res) => {
         if (!cancelled) setHasChildren(res.data.length > 0);
       })
@@ -430,7 +430,7 @@ export function PaymentFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, mode, payment?.id, payment?.type, listOccurrences]);
+  }, [open, mode, transaction?.id, transaction?.type, listOccurrences]);
 
   // Focus direction button on open.
   const directionRef = useRef<HTMLButtonElement | null>(null);
@@ -442,32 +442,32 @@ export function PaymentFormDialog({
 
   // ── Edit-mode constraints ────────────────────────────────────────────────
 
-  // A child occurrence (server-generated, parentPaymentId set) is read-only.
-  // RECURRING parent payments are editable from 6.18.1 onwards (the schedule
+  // A child occurrence (server-generated, parentTransactionId set) is read-only.
+  // RECURRING parent transactions are editable from 6.18.1 onwards (the schedule
   // sub-form drives the spec). Other non-ONE_TIME types ship later.
   const isGeneratedOccurrence =
-    mode === 'edit' && effectivePayment
-      ? effectivePayment.parentPaymentId !== null ||
-        (effectivePayment.type !== 'ONE_TIME' && effectivePayment.type !== 'RECURRING')
+    mode === 'edit' && effectiveTransaction
+      ? effectiveTransaction.parentTransactionId !== null ||
+        (effectiveTransaction.type !== 'ONE_TIME' && effectiveTransaction.type !== 'RECURRING')
       : false;
 
   const nonAccessibleAttributions =
-    mode === 'edit' && effectivePayment
-      ? findNonAccessibleAttributions(effectivePayment, user?.id ?? null, groupIdSet)
+    mode === 'edit' && effectiveTransaction
+      ? findNonAccessibleAttributions(effectiveTransaction, user?.id ?? null, groupIdSet)
       : [];
 
   const accessibleInitial =
-    mode === 'edit' && effectivePayment
-      ? findAccessibleAttributions(effectivePayment, user?.id ?? null, groupIdSet)
+    mode === 'edit' && effectiveTransaction
+      ? findAccessibleAttributions(effectiveTransaction, user?.id ?? null, groupIdSet)
       : [];
 
   // For edit mode with non-accessible attributions, constrain scopes to only the accessible ones.
   useEffect(() => {
-    if (mode === 'edit' && effectivePayment && nonAccessibleAttributions.length > 0) {
+    if (mode === 'edit' && effectiveTransaction && nonAccessibleAttributions.length > 0) {
       setState((s) => ({ ...s, scopes: accessibleInitial }));
       initialStateRef.current = { ...initialStateRef.current, scopes: accessibleInitial };
     }
-  }, [mode, effectivePayment?.id]);
+  }, [mode, effectiveTransaction?.id]);
 
   // ── Validation ───────────────────────────────────────────────────────────
 
@@ -534,39 +534,42 @@ export function PaymentFormDialog({
     if (!(err instanceof Error)) return false;
     const code = (err as Error & { errorCode?: string }).errorCode;
     if (!code) return false;
-    if (code === 'PAYMENT_INVALID_AMOUNT') {
+    if (code === 'TRANSACTION_INVALID_AMOUNT') {
       setErrors((prev) => ({ ...prev, amount: extractMessage(err) }));
       return true;
     }
-    if (code === 'PAYMENT_INVALID_CURRENCY') {
+    if (code === 'TRANSACTION_INVALID_CURRENCY') {
       setErrors((prev) => ({ ...prev, currency: extractMessage(err) }));
       return true;
     }
-    if (code === 'PAYMENT_INVALID_DATE') {
+    if (code === 'TRANSACTION_INVALID_DATE') {
       setErrors((prev) => ({ ...prev, date: extractMessage(err) }));
       return true;
     }
-    if (code === 'PAYMENT_CATEGORY_INVALID' || code === 'PAYMENT_CATEGORY_DIRECTION_MISMATCH') {
+    if (
+      code === 'TRANSACTION_CATEGORY_INVALID' ||
+      code === 'TRANSACTION_CATEGORY_DIRECTION_MISMATCH'
+    ) {
       setErrors((prev) => ({ ...prev, category: extractMessage(err) }));
       return true;
     }
     // Schedule-side domain errors map onto the schedule sub-form.
-    if (code === 'PAYMENT_SCHEDULE_INVALID_CRON') {
+    if (code === 'TRANSACTION_SCHEDULE_INVALID_CRON') {
       setScheduleErrors((prev) => ({ ...prev, cron: extractMessage(err) }));
       return true;
     }
-    if (code === 'PAYMENT_SCHEDULE_INVALID_INTERVAL') {
+    if (code === 'TRANSACTION_SCHEDULE_INVALID_INTERVAL') {
       setScheduleErrors((prev) => ({ ...prev, every: extractMessage(err) }));
       return true;
     }
-    if (code === 'PAYMENT_SCHEDULE_INVALID_END_DATE') {
+    if (code === 'TRANSACTION_SCHEDULE_INVALID_END_DATE') {
       setScheduleErrors((prev) => ({ ...prev, endsAt: extractMessage(err) }));
       return true;
     }
     if (
-      code === 'PAYMENT_SCHEDULE_INVALID_SPEC' ||
-      code === 'PAYMENT_SCHEDULE_PARENT_NOT_RECURRING' ||
-      code === 'PAYMENT_SCHEDULE_ALREADY_EXISTS'
+      code === 'TRANSACTION_SCHEDULE_INVALID_SPEC' ||
+      code === 'TRANSACTION_SCHEDULE_PARENT_NOT_RECURRING' ||
+      code === 'TRANSACTION_SCHEDULE_ALREADY_EXISTS'
     ) {
       setScheduleErrors((prev) => ({ ...prev, spec: extractMessage(err) }));
       return true;
@@ -579,12 +582,12 @@ export function PaymentFormDialog({
     const { ok, amountCents, occurredAtIso, errors: valErrors } = validate(state, categories);
     setErrors(valErrors);
 
-    // When the payment is RECURRING (create or edit-with-existing-or-new-schedule),
+    // When the transaction is RECURRING (create or edit-with-existing-or-new-schedule),
     // also validate the schedule sub-form. Mirror its build result locally so
     // the network calls don't fire on a partially-filled spec.
     let scheduleBuild: ReturnType<typeof buildScheduleSpec> | null = null;
     const wasRecurring =
-      !!existingSchedule || (mode === 'edit' && effectivePayment?.type === 'RECURRING');
+      !!existingSchedule || (mode === 'edit' && effectiveTransaction?.type === 'RECURRING');
     const willBeRecurring = state.type === 'RECURRING';
     if (willBeRecurring) {
       scheduleBuild = buildScheduleSpec(scheduleState, tScheduleValidation);
@@ -612,13 +615,14 @@ export function PaymentFormDialog({
     // and open <PropagationChoiceDialog> so the user picks self/future/all.
     // occurredAt and type are NOT cascadeable (period/schedule stays read-only,
     // deferred to 6.18.2), so they don't trigger the dialog on their own.
-    if (mode === 'edit' && effectivePayment) {
-      const diff = computeDiff(effectivePayment, state, amountCents, occurredAtIso);
+    if (mode === 'edit' && effectiveTransaction) {
+      const diff = computeDiff(effectiveTransaction, state, amountCents, occurredAtIso);
       const isTypeChange =
-        state.type !== effectivePayment.type &&
+        state.type !== effectiveTransaction.type &&
         (state.type === 'ONE_TIME' || state.type === 'RECURRING');
       if (isTypeChange) diff.type = state.type as 'ONE_TIME' | 'RECURRING';
-      const isRecurringParent = effectivePayment.type === 'RECURRING' && state.type === 'RECURRING';
+      const isRecurringParent =
+        effectiveTransaction.type === 'RECURRING' && state.type === 'RECURRING';
       const cascadeableKeys = Object.keys(diff).filter((k) => k !== 'occurredAt' && k !== 'type');
       if (isRecurringParent && hasChildren && cascadeableKeys.length > 0) {
         pendingEditRef.current = { diff, scheduleBuild, willBeRecurring };
@@ -631,7 +635,7 @@ export function PaymentFormDialog({
       .run(async (signal) => {
         try {
           if (mode === 'create') {
-            const payload: CreatePaymentInput = {
+            const payload: CreateTransactionInput = {
               direction: state.direction,
               type: isPlanCreate
                 ? (state.type as 'INSTALLMENT' | 'LOAN' | 'MORTGAGE')
@@ -646,9 +650,9 @@ export function PaymentFormDialog({
               note: state.note.length > 0 ? state.note : undefined,
               attributions: state.scopes,
             };
-            const created = await createPayment(payload, signal);
-            // Two-step create for RECURRING: payment, then schedule. Roll
-            // back the payment via DELETE on schedule failure to keep the
+            const created = await createTransaction(payload, signal);
+            // Two-step create for RECURRING: transaction, then schedule. Roll
+            // back the transaction via DELETE on schedule failure to keep the
             // invariant "no recurring parent without a schedule" — see
             // 6.18.1 task spec.
             if (willBeRecurring && scheduleBuild) {
@@ -658,34 +662,34 @@ export function PaymentFormDialog({
                 // Best-effort rollback. Use a fresh signal-less call so the
                 // delete still completes if the user has navigated away.
                 try {
-                  await removePayment(created.id, 'all');
+                  await removeTransaction(created.id, 'all');
                 } catch {
-                  // Swallow — the payment is now an orphan, but we've
+                  // Swallow — the transaction is now an orphan, but we've
                   // already surfaced the schedule error to the user.
                 }
                 throw scheduleErr;
               }
             }
-            return created as PaymentSummary | null;
+            return created as TransactionSummary | null;
           }
-          if (mode === 'edit' && effectivePayment) {
-            const diff = computeDiff(effectivePayment, state, amountCents, occurredAtIso);
+          if (mode === 'edit' && effectiveTransaction) {
+            const diff = computeDiff(effectiveTransaction, state, amountCents, occurredAtIso);
             // Type changed → include in diff so the API drives the cascade
             // (RECURRING → ONE_TIME tears down the schedule server-side per
-            // 6.17.4). PATCH /payments accepts `type` from 6.18.1 onwards.
+            // 6.17.4). PATCH /transactions accepts `type` from 6.18.1 onwards.
             // The sub-form only ever lets the user pick ONE_TIME / RECURRING
             // in this iteration; narrow the assertion accordingly.
             if (
-              state.type !== effectivePayment.type &&
+              state.type !== effectiveTransaction.type &&
               (state.type === 'ONE_TIME' || state.type === 'RECURRING')
             ) {
               diff.type = state.type;
             }
-            let result: PaymentSummary | null = effectivePayment;
+            let result: TransactionSummary | null = effectiveTransaction;
             if (Object.keys(diff).length > 0) {
-              result = await updatePayment(effectivePayment.id, diff, signal);
+              result = await updateTransaction(effectiveTransaction.id, diff, signal);
             }
-            // Schedule edit: PUT when the payment is (or becomes) RECURRING.
+            // Schedule edit: PUT when the transaction is (or becomes) RECURRING.
             if (willBeRecurring && scheduleBuild && result) {
               await replaceSchedule(result.id, scheduleBuild.spec, signal);
             }
@@ -720,14 +724,14 @@ export function PaymentFormDialog({
   // Phase 6 · 6.18.1.5 — submit the stashed edit with the chosen propagation
   // mode. Runs through the dedicated cascadeOp (control scope). On success a
   // result toast summarises the affected + skipped child counts.
-  function submitWithPropagation(propagate: PaymentPropagateMode) {
+  function submitWithPropagation(propagate: TransactionPropagateMode) {
     const pending = pendingEditRef.current;
-    if (!pending || !effectivePayment) return;
+    if (!pending || !effectiveTransaction) return;
     void cascadeOp
       .run(async (signal) => {
         try {
-          const result = await editPaymentWithPropagation(
-            effectivePayment.id,
+          const result = await editTransactionWithPropagation(
+            effectiveTransaction.id,
             pending.diff,
             propagate,
             signal,
@@ -736,7 +740,7 @@ export function PaymentFormDialog({
           // period spec is deferred to 6.18.2). Replace it if the sub-form
           // produced a new spec.
           if (pending.willBeRecurring && pending.scheduleBuild) {
-            await replaceSchedule(result.payment.id, pending.scheduleBuild.spec, signal);
+            await replaceSchedule(result.transaction.id, pending.scheduleBuild.spec, signal);
           }
           return result;
         } catch (e) {
@@ -754,7 +758,7 @@ export function PaymentFormDialog({
         }
         pendingEditRef.current = null;
         setShowPropagation(false);
-        onSaved(result.payment);
+        onSaved(result.transaction);
         onClose();
       });
   }
@@ -837,14 +841,14 @@ export function PaymentFormDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="payment-form-title"
-      data-testid="payment-form-dialog"
+      aria-labelledby="transaction-form-title"
+      data-testid="transaction-form-dialog"
       onMouseDown={handleBackdrop}
     >
       <div className="mx-4 max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between">
           <h3
-            id="payment-form-title"
+            id="transaction-form-title"
             className="text-lg font-semibold text-gray-900 dark:text-gray-100"
           >
             {mode === 'create' ? t('createTitle') : t('editTitle')}
@@ -854,7 +858,7 @@ export function PaymentFormDialog({
             onClick={() => (isDirty() ? setConfirmDiscard(true) : handleCancel())}
             className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
             aria-label={t('close')}
-            data-testid="payment-form-close"
+            data-testid="transaction-form-close"
           >
             ✕
           </button>
@@ -863,7 +867,7 @@ export function PaymentFormDialog({
         {mode === 'create' && (
           <div
             className="mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
-            data-testid="payment-form-from-receipt"
+            data-testid="transaction-form-from-receipt"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-gray-600 dark:text-gray-300">
@@ -879,7 +883,7 @@ export function PaymentFormDialog({
                     handleReceiptFile(e.target.files?.[0]);
                     e.target.value = '';
                   }}
-                  data-testid="payment-form-receipt-input"
+                  data-testid="transaction-form-receipt-input"
                 />
                 <Button
                   type="button"
@@ -887,7 +891,7 @@ export function PaymentFormDialog({
                   size="sm"
                   disabled={receiptOp.isLoading}
                   onClick={() => receiptFileRef.current?.click()}
-                  data-testid="payment-form-receipt-button"
+                  data-testid="transaction-form-receipt-button"
                 >
                   {receiptOp.isLoading ? <ButtonSpinner /> : null}
                   {t('fromReceiptDevice')}
@@ -898,12 +902,12 @@ export function PaymentFormDialog({
                   size="sm"
                   disabled={receiptOp.isLoading}
                   aria-expanded={receiptUrlOpen}
-                  aria-controls="payment-form-receipt-url-row"
+                  aria-controls="transaction-form-receipt-url-row"
                   onClick={() => {
                     setReceiptUrlOpen((v) => !v);
                     setTimeout(() => receiptUrlInputRef.current?.focus(), 0);
                   }}
-                  data-testid="payment-form-receipt-url-toggle"
+                  data-testid="transaction-form-receipt-url-toggle"
                 >
                   {t('fromReceiptUrl')}
                 </Button>
@@ -913,26 +917,26 @@ export function PaymentFormDialog({
                   size="sm"
                   disabled={receiptOp.isLoading}
                   onClick={() => setManualReceiptOpen(true)}
-                  data-testid="payment-form-receipt-barcodes"
+                  data-testid="transaction-form-receipt-barcodes"
                 >
                   {t('fromReceiptBarcodes')}
                 </Button>
               </div>
             </div>
             {receiptUrlOpen && (
-              <div id="payment-form-receipt-url-row" className="mt-2 flex gap-2">
-                <label htmlFor="payment-form-receipt-url" className="sr-only">
+              <div id="transaction-form-receipt-url-row" className="mt-2 flex gap-2">
+                <label htmlFor="transaction-form-receipt-url" className="sr-only">
                   {t('fromReceiptUrlLabel')}
                 </label>
                 <input
-                  id="payment-form-receipt-url"
+                  id="transaction-form-receipt-url"
                   ref={receiptUrlInputRef}
                   type="url"
                   inputMode="url"
                   value={receiptUrl}
                   onChange={(e) => setReceiptUrl(e.target.value)}
                   onKeyDown={(e) => {
-                    // Enter adds the receipt; never submits the payment form.
+                    // Enter adds the receipt; never submits the transaction form.
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleReceiptUrl();
@@ -940,7 +944,7 @@ export function PaymentFormDialog({
                   }}
                   placeholder={t('fromReceiptUrlPlaceholder')}
                   className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                  data-testid="payment-form-receipt-url-input"
+                  data-testid="transaction-form-receipt-url-input"
                 />
                 <Button
                   type="button"
@@ -948,7 +952,7 @@ export function PaymentFormDialog({
                   size="sm"
                   disabled={receiptOp.isLoading || receiptUrl.trim().length === 0}
                   onClick={handleReceiptUrl}
-                  data-testid="payment-form-receipt-url-submit"
+                  data-testid="transaction-form-receipt-url-submit"
                 >
                   {receiptOp.isLoading ? <ButtonSpinner /> : null}
                   {t('fromReceiptUrlSubmit')}
@@ -956,7 +960,7 @@ export function PaymentFormDialog({
               </div>
             )}
             {/* Mounted only while open so its product/receipt hooks (and their
-                providers) aren't required by every payment-form host. */}
+                providers) aren't required by every transaction-form host. */}
             {manualReceiptOpen && (
               <ManualReceiptDialog
                 open
@@ -976,7 +980,7 @@ export function PaymentFormDialog({
           <div
             className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200"
             role="alert"
-            data-testid="payment-form-occurrence-banner"
+            data-testid="transaction-form-occurrence-banner"
           >
             {t('occurrenceNotEditable')}
           </div>
@@ -987,7 +991,7 @@ export function PaymentFormDialog({
             className="mb-3 rounded-md bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-700/40 dark:text-gray-300"
             role="status"
             aria-live="polite"
-            data-testid="payment-form-loading"
+            data-testid="transaction-form-loading"
           >
             <span className="inline-flex items-center gap-2">
               <ButtonSpinner />
@@ -1001,14 +1005,14 @@ export function PaymentFormDialog({
             copy so the user can still proceed, but they should know the
             data may not reflect concurrent changes. */}
         {mode === 'edit' &&
-          !!payment &&
+          !!transaction &&
           !refetchOp.isLoading &&
-          refetchedPayment === null &&
+          refetchedTransaction === null &&
           !!refetchOp.error && (
             <div
               className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
               role="alert"
-              data-testid="payment-form-load-error"
+              data-testid="transaction-form-load-error"
             >
               {t('loadError')}
             </div>
@@ -1131,7 +1135,7 @@ export function PaymentFormDialog({
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('category')}</span>
               <div className="mt-1">
-                <PaymentCategoryPicker
+                <TransactionCategoryPicker
                   direction={state.direction}
                   value={state.categoryId}
                   onChange={(id) => setState((s) => ({ ...s, categoryId: id }))}
@@ -1153,7 +1157,7 @@ export function PaymentFormDialog({
             <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
               {t('attributedTo')}
             </div>
-            <PaymentScopeSelector
+            <TransactionScopeSelector
               value={state.scopes}
               onChange={(next) => setState((s) => ({ ...s, scopes: next }))}
               disabled={allInputsDisabled}
@@ -1198,7 +1202,7 @@ export function PaymentFormDialog({
 
           {/* Type */}
           <div className="mb-4">
-            <PaymentTypeSelector
+            <TransactionTypeSelector
               value={state.type}
               onChange={(next) => setState((s) => ({ ...s, type: next }))}
               disabled={allInputsDisabled}
@@ -1210,7 +1214,7 @@ export function PaymentFormDialog({
               schedule server-side (cascade audit). Surface the warning so
               the user is not surprised when they hit Save. */}
           {mode === 'edit' &&
-            effectivePayment?.type === 'RECURRING' &&
+            effectiveTransaction?.type === 'RECURRING' &&
             state.type !== 'RECURRING' && (
               <div
                 className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
@@ -1225,7 +1229,7 @@ export function PaymentFormDialog({
               by the parent so toggling type preserves draft values. */}
           {state.type === 'RECURRING' && (
             <div className="mb-4">
-              <PaymentScheduleSubForm
+              <TransactionScheduleSubForm
                 state={scheduleState}
                 errors={scheduleErrors}
                 onChange={setScheduleState}
@@ -1238,7 +1242,7 @@ export function PaymentFormDialog({
               MORTGAGE; plan parents are read-only in edit mode. */}
           {mode === 'create' && isPlanKind(state.type) && (
             <div className="mb-4">
-              <PaymentPlanSubForm
+              <TransactionPlanSubForm
                 state={planState}
                 errors={planErrors}
                 onChange={setPlanState}

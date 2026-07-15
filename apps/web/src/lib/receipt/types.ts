@@ -49,7 +49,7 @@ export interface ReceiptSummary {
   totalCents: number | null;
   discountCents: number | null;
   failureReason: string | null;
-  paymentId: string | null;
+  transactionId: string | null;
   itemsSumCents: number;
   /** Advisory Σitems-vs-total delta; non-zero renders a review warning. */
   totalsMismatchCents: number | null;
@@ -103,11 +103,11 @@ export interface ManualReceiptInput {
   items: Array<{ productId: string; quantity: number; unitPriceCents: number }>;
 }
 
-/** POST /receipts/:id/confirm body — turns a reviewed receipt into a payment. */
+/** POST /receipts/:id/confirm body — turns a reviewed receipt into a transaction. */
 export interface ConfirmReceiptInput {
-  /** Primary OUT category for the resulting payment. */
+  /** Primary OUT category for the resulting transaction. */
   categoryId: string;
-  /** Attribution scopes to remember (personal / group), mirrors POST /payments. */
+  /** Attribution scopes to remember (personal / group), mirrors POST /transactions. */
   attributions: AttributionScope[];
   note?: string;
 }

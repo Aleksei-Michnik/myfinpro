@@ -1,7 +1,7 @@
 // Phase 6 · Iteration 6.16 — Category management types.
-// Re-uses CategoryDto from payment types (shape returned by API).
+// Re-uses CategoryDto from transaction types (shape returned by API).
 
-export type { CategoryDto } from '@/lib/payment/types';
+export type { CategoryDto } from '@/lib/transaction/types';
 
 export interface CreateCategoryInput {
   name: string;

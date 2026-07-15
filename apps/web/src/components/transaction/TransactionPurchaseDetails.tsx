@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 8.18 — foldable "purchase details" on the payment view: the linked
+// Phase 8.18 — foldable "purchase details" on the transaction view: the linked
 // receipt's products/services, lazy-loaded the first time the section is
 // expanded. Accessible disclosure (a button with aria-expanded/aria-controls
 // toggling a labelled panel). Read-only — editing stays on the receipt review
@@ -10,19 +10,22 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useId, useRef, useState } from 'react';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Link } from '@/i18n/navigation';
-import { formatAmount } from '@/lib/payment/formatters';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
+import { formatAmount } from '@/lib/transaction/formatters';
 import { useAsyncOperation } from '@/lib/ui';
 
-interface PaymentPurchaseDetailsProps {
+interface TransactionPurchaseDetailsProps {
   receiptId: string;
-  /** Payment currency — item amounts are rendered in it. */
+  /** Transaction currency — item amounts are rendered in it. */
   currency: string;
 }
 
-export function PaymentPurchaseDetails({ receiptId, currency }: PaymentPurchaseDetailsProps) {
-  const t = useTranslations('payments.detail');
+export function TransactionPurchaseDetails({
+  receiptId,
+  currency,
+}: TransactionPurchaseDetailsProps) {
+  const t = useTranslations('transactions.detail');
   const locale = useLocale();
   const { getReceipt } = useReceipts();
   const [open, setOpen] = useState(false);
@@ -47,7 +50,7 @@ export function PaymentPurchaseDetails({ receiptId, currency }: PaymentPurchaseD
     if (!startedRef.current) loadReceipt();
   }, [loadReceipt]);
 
-  // A receipt is private to its uploader; a co-viewer of a shared payment may
+  // A receipt is private to its uploader; a co-viewer of a shared transaction may
   // not be able to read it (404/403). Treat that as "no details to show" here
   // rather than a hard error.
   const notAccessible =
@@ -66,7 +69,7 @@ export function PaymentPurchaseDetails({ receiptId, currency }: PaymentPurchaseD
   return (
     <section
       className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
-      data-testid="payment-purchase-details"
+      data-testid="transaction-purchase-details"
     >
       <button
         type="button"

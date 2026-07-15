@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReceiptConfirmDialog } from './ReceiptConfirmDialog';
-import type { CategoryDto } from '@/lib/payment/types';
+import type { CategoryDto } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -20,14 +20,14 @@ vi.mock('@/components/ui/Toast', () => ({
 }));
 
 const setLastUsedScopesMock = vi.fn();
-vi.mock('@/lib/payment/remember', () => ({
+vi.mock('@/lib/transaction/remember', () => ({
   getLastUsedScopes: () => [{ scope: 'personal' }],
   setLastUsedScopes: (s: unknown) => setLastUsedScopesMock(s),
 }));
 
 // Stub the reused pickers so this spec isolates the dialog's own logic.
-vi.mock('@/components/payment/PaymentCategoryPicker', () => ({
-  PaymentCategoryPicker: ({
+vi.mock('@/components/transaction/TransactionCategoryPicker', () => ({
+  TransactionCategoryPicker: ({
     value,
     onChange,
     testId,
@@ -47,8 +47,8 @@ vi.mock('@/components/payment/PaymentCategoryPicker', () => ({
   ),
 }));
 
-vi.mock('@/components/payment/PaymentScopeSelector', () => ({
-  PaymentScopeSelector: ({
+vi.mock('@/components/transaction/TransactionScopeSelector', () => ({
+  TransactionScopeSelector: ({
     value,
     onChange,
   }: {
@@ -102,7 +102,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof ReceiptConfirmD
 describe('ReceiptConfirmDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    confirmReceiptMock.mockResolvedValue({ paymentId: 'p-1' });
+    confirmReceiptMock.mockResolvedValue({ transactionId: 'p-1' });
   });
 
   it('renders nothing when closed', () => {

@@ -5,81 +5,81 @@
 //
 // Thin orchestrator: owns the container-scope async op + the cursor /
 // rows state, then delegates rendering to the existing reusable
-// <PaymentsList> in orchestrator mode (so each row uses the same
-// <PaymentRow> component as everywhere else).
+// <TransactionsList> in orchestrator mode (so each row uses the same
+// <TransactionRow> component as everywhere else).
 //
 // Constraints:
 //   • No new npm dependency. Collapsibility uses the native
 //     <details>/<summary> elements (keyboard-accessible by default).
 //   • aria-live="polite" on the count line so AT announces additions.
 //   • Initial fetch shows <LoadingOverlay>; in-list "Load more" + retry
-//     are owned by <PaymentsList>'s own load-more op.
+//     are owned by <TransactionsList>'s own load-more op.
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PaymentsList, type PaymentsListData } from './PaymentsList';
+import { TransactionsList, type TransactionsListData } from './TransactionsList';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { PaymentListResponse, PaymentSummary } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { TransactionListResponse, TransactionSummary } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface RecurringOccurrencesSectionProps {
   /** The recurring parent's id. */
-  paymentId: string;
+  transactionId: string;
 }
 
 const PAGE_SIZE = 20;
 
-export function RecurringOccurrencesSection({ paymentId }: RecurringOccurrencesSectionProps) {
-  const t = useTranslations('payments.detail.occurrences');
+export function RecurringOccurrencesSection({ transactionId }: RecurringOccurrencesSectionProps) {
+  const t = useTranslations('transactions.detail.occurrences');
 
-  const { listOccurrences } = usePayments();
+  const { listOccurrences } = useTransactions();
 
   // Container-scope op for the initial fetch (drives <LoadingOverlay>).
-  // <PaymentsList> owns its own load-more op, so we don't double-up here.
-  const initialOp = useAsyncOperation<PaymentListResponse>({
+  // <TransactionsList> owns its own load-more op, so we don't double-up here.
+  const initialOp = useAsyncOperation<TransactionListResponse>({
     scope: 'container',
     id: 'recurring-occurrences-initial',
   });
 
-  const [items, setItems] = useState<PaymentSummary[]>([]);
+  const [items, setItems] = useState<TransactionSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const result = await initialOp.run((signal) =>
-      listOccurrences(paymentId, { limit: PAGE_SIZE, sort: 'date_desc' }, signal),
+      listOccurrences(transactionId, { limit: PAGE_SIZE, sort: 'date_desc' }, signal),
     );
     if (!result) return;
     setItems(result.data);
     setCursor(result.nextCursor);
     setHasMore(result.hasMore);
     setLoaded(true);
-  }, [initialOp, listOccurrences, paymentId]);
+  }, [initialOp, listOccurrences, transactionId]);
 
-  // The fetch effect depends only on paymentId. Including `load` directly
+  // The fetch effect depends only on transactionId. Including `load` directly
   // would re-fire continuously because the op identity changes on every
-  // render. Same ref pattern as <PaymentsList>'s fetchPageRef.
+  // render. Same ref pattern as <TransactionsList>'s fetchPageRef.
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => {
     void loadRef.current();
-  }, [paymentId]);
+  }, [transactionId]);
 
-  const handleAppend = useCallback((next: PaymentsListData) => {
+  const handleAppend = useCallback((next: TransactionsListData) => {
     setItems(next.rows);
     setCursor(next.cursor);
     setHasMore(next.hasMore);
   }, []);
 
   // Realtime: prepend newly created occurrences for this parent.
-  useRealtimeEvents({ type: 'occurrence.created', parentPaymentId: paymentId }, (event) => {
+  useRealtimeEvents({ type: 'occurrence.created', parentTransactionId: transactionId }, (event) => {
     setItems((prev) =>
-      prev.some((r) => r.id === event.payment.id) ? prev : [event.payment, ...prev],
+      prev.some((r) => r.id === event.transaction.id) ? prev : [event.transaction, ...prev],
     );
   });
 
@@ -90,7 +90,7 @@ export function RecurringOccurrencesSection({ paymentId }: RecurringOccurrencesS
     void loadRef.current();
   });
 
-  const data: PaymentsListData = { rows: items, cursor, hasMore };
+  const data: TransactionsListData = { rows: items, cursor, hasMore };
 
   // Count line — singular vs plural keys give translators full control
   // over the "1 occurrence" form.
@@ -144,7 +144,7 @@ export function RecurringOccurrencesSection({ paymentId }: RecurringOccurrencesS
             {t('empty')}
           </p>
         ) : (
-          <PaymentsList
+          <TransactionsList
             data={data}
             loading={initialOp.isLoading}
             error={errorReason ? (initialOp.error?.message ?? null) : null}

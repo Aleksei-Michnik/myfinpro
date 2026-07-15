@@ -1,18 +1,18 @@
 // Phase 6 · Iteration 6.11 — SSR-safe localStorage wrapper for last-used
-// selections on the payment entry form (scope, direction, type). Every
+// selections on the transaction entry form (scope, direction, type). Every
 // accessor guards against `window === undefined`, JSON parse errors, and
 // localStorage quota errors, and falls back to spec-defined defaults.
 
-import { PAYMENT_TYPES } from '@myfinpro/shared';
-import type { AttributionScope, PaymentDirection, PaymentType } from './types';
+import { TRANSACTION_TYPES } from '@myfinpro/shared';
+import type { AttributionScope, TransactionDirection, TransactionType } from './types';
 
-const KEY_SCOPES = 'myfin.payment.lastScopes';
-const KEY_DIRECTION = 'myfin.payment.lastDirection';
-const KEY_TYPE = 'myfin.payment.lastType';
+const KEY_SCOPES = 'myfin.transaction.lastScopes';
+const KEY_DIRECTION = 'myfin.transaction.lastDirection';
+const KEY_TYPE = 'myfin.transaction.lastType';
 
 const DEFAULT_SCOPES: AttributionScope[] = [{ scope: 'personal' }];
-const DEFAULT_DIRECTION: PaymentDirection = 'OUT';
-const DEFAULT_TYPE: PaymentType = 'ONE_TIME';
+const DEFAULT_DIRECTION: TransactionDirection = 'OUT';
+const DEFAULT_TYPE: TransactionType = 'ONE_TIME';
 
 /** Return the browser's localStorage, or null when not available (SSR, privacy mode). */
 function safeStorage(): Storage | null {
@@ -56,7 +56,7 @@ export function setLastUsedScopes(scopes: AttributionScope[]): void {
   }
 }
 
-export function getLastUsedDirection(): PaymentDirection {
+export function getLastUsedDirection(): TransactionDirection {
   const s = safeStorage();
   if (!s) return DEFAULT_DIRECTION;
   try {
@@ -67,7 +67,7 @@ export function getLastUsedDirection(): PaymentDirection {
   }
 }
 
-export function setLastUsedDirection(direction: PaymentDirection): void {
+export function setLastUsedDirection(direction: TransactionDirection): void {
   const s = safeStorage();
   if (!s) return;
   try {
@@ -77,13 +77,13 @@ export function setLastUsedDirection(direction: PaymentDirection): void {
   }
 }
 
-export function getLastUsedType(): PaymentType {
+export function getLastUsedType(): TransactionType {
   const s = safeStorage();
   if (!s) return DEFAULT_TYPE;
   try {
     const raw = s.getItem(KEY_TYPE);
-    if (raw && (PAYMENT_TYPES as readonly string[]).includes(raw)) {
-      return raw as PaymentType;
+    if (raw && (TRANSACTION_TYPES as readonly string[]).includes(raw)) {
+      return raw as TransactionType;
     }
     return DEFAULT_TYPE;
   } catch {
@@ -91,7 +91,7 @@ export function getLastUsedType(): PaymentType {
   }
 }
 
-export function setLastUsedType(type: PaymentType): void {
+export function setLastUsedType(type: TransactionType): void {
   const s = safeStorage();
   if (!s) return;
   try {

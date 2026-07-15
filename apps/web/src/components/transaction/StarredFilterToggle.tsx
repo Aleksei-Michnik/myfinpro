@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.16 — star icon toggle button for the /payments page.
+// Phase 6 · Iteration 6.16 — star icon toggle button for the /transactions page.
 // `aria-pressed` reflects state; clicking calls `onChange(!starred)`.
 // Phase 6 · Iteration 6.16.2 — gains `disabled` to participate in the
 // orchestrator's container-op cascade.
@@ -14,7 +14,7 @@ export interface StarredFilterToggleProps {
 }
 
 export function StarredFilterToggle({ starred, onChange, disabled }: StarredFilterToggleProps) {
-  const t = useTranslations('payments.page.starredToggle');
+  const t = useTranslations('transactions.page.starredToggle');
 
   return (
     <button

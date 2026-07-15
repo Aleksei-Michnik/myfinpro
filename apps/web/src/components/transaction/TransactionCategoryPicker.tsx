@@ -9,11 +9,11 @@
 import { useTranslations } from 'next-intl';
 import { useEffect } from 'react';
 import { useGroups } from '@/lib/group/group-context';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface PaymentCategoryPickerProps {
+export interface TransactionCategoryPickerProps {
   direction: 'IN' | 'OUT';
   value: string | null;
   onChange(categoryId: string): void;
@@ -74,17 +74,17 @@ function filterByDirection(cats: CategoryDto[], direction: 'IN' | 'OUT'): Catego
   return cats.filter((c) => c.direction === direction || c.direction === 'BOTH');
 }
 
-export function PaymentCategoryPicker({
+export function TransactionCategoryPicker({
   direction,
   value,
   onChange,
   categories: categoriesProp,
   disabled,
   testId,
-}: PaymentCategoryPickerProps) {
-  const t = useTranslations('payments.categoryPicker');
+}: TransactionCategoryPickerProps) {
+  const t = useTranslations('transactions.categoryPicker');
   const { groups } = useGroups();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
 
   const fetchOp = useAsyncOperation<CategoryDto[]>({ scope: 'container' });
   const useOwn = categoriesProp === undefined || categoriesProp === null;
@@ -113,7 +113,7 @@ export function PaymentCategoryPicker({
   };
 
   return (
-    <div data-testid={testId ?? 'payment-category-picker'}>
+    <div data-testid={testId ?? 'transaction-category-picker'}>
       <select
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}

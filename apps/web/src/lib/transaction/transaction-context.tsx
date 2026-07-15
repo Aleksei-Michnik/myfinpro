@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.11 — PaymentProvider.
+// Phase 6 · Iteration 6.11 — TransactionProvider.
 // Phase 6 · Iteration 6.16.2 — every public method now accepts an optional
 // `AbortSignal` so callers wired through `useAsyncOperation()` can cancel
 // in-flight requests on filter change, retry, or component unmount. The
@@ -13,119 +13,129 @@ import type {
   CategoryDto,
   Comment,
   CommentListResponse,
-  CreatePaymentInput,
+  CreateTransactionInput,
   ListCategoriesParams,
   ListCommentsParams,
   ListOccurrencesParams,
-  ListPaymentsParams,
-  PaymentListResponse,
-  PaymentPropagateMode,
-  PaymentSummary,
+  ListTransactionsParams,
+  TransactionListResponse,
+  TransactionPropagateMode,
+  TransactionSummary,
   PlanResponse,
   ScheduleResponse,
   ScheduleSpec,
   ToggleStarResult,
-  UpdatePaymentInput,
+  UpdateTransactionInput,
 } from './types';
 import { useAuth } from '@/lib/auth/auth-context';
 
-export interface PaymentApiError extends Error {
+export interface TransactionApiError extends Error {
   errorCode?: string;
   status?: number;
 }
 
-interface PaymentContextValue {
-  // Payments
-  fetchList(params?: ListPaymentsParams, signal?: AbortSignal): Promise<PaymentListResponse>;
-  getPayment(id: string, signal?: AbortSignal): Promise<PaymentSummary>;
-  createPayment(input: CreatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary>;
-  /** Returns null when the API responds 204 — signals payment hard-deletion. */
-  updatePayment(
-    id: string,
-    input: UpdatePaymentInput,
+interface TransactionContextValue {
+  // Transactions
+  fetchList(
+    params?: ListTransactionsParams,
     signal?: AbortSignal,
-  ): Promise<PaymentSummary | null>;
+  ): Promise<TransactionListResponse>;
+  getTransaction(id: string, signal?: AbortSignal): Promise<TransactionSummary>;
+  createTransaction(
+    input: CreateTransactionInput,
+    signal?: AbortSignal,
+  ): Promise<TransactionSummary>;
+  /** Returns null when the API responds 204 — signals transaction hard-deletion. */
+  updateTransaction(
+    id: string,
+    input: UpdateTransactionInput,
+    signal?: AbortSignal,
+  ): Promise<TransactionSummary | null>;
   /**
    * Iteration 6.18.1.5 — edit a RECURRING parent's non-period fields and
    * cascade the deltas to its child occurrences per `propagate`. Returns the
    * cascade-edit envelope (updated parent + affected/skipped child counts).
    * For `self` the parent is edited with zero children touched.
    */
-  editPaymentWithPropagation(
+  editTransactionWithPropagation(
     id: string,
-    input: UpdatePaymentInput,
-    propagate: PaymentPropagateMode,
+    input: UpdateTransactionInput,
+    propagate: TransactionPropagateMode,
     signal?: AbortSignal,
   ): Promise<CascadeEditResult>;
-  removePayment(id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult>;
+  removeTransaction(
+    id: string,
+    scope?: string,
+    signal?: AbortSignal,
+  ): Promise<AttributionChangeResult>;
   toggleStar(id: string, signal?: AbortSignal): Promise<ToggleStarResult>;
 
   /**
    * Iteration 6.18.1.3 — list child occurrences of a recurring parent.
    *
-   * Thin wrapper over `GET /payments/:paymentId/occurrences`. The response
+   * Thin wrapper over `GET /transactions/:transactionId/occurrences`. The response
    * shape is identical to the existing `fetchList` (cursor + hasMore). The
    * server enforces visibility on the parent and returns 404 if the caller
    * cannot see it (no existence leak).
    */
   listOccurrences(
-    parentPaymentId: string,
+    parentTransactionId: string,
     query?: ListOccurrencesParams,
     signal?: AbortSignal,
-  ): Promise<PaymentListResponse>;
+  ): Promise<TransactionListResponse>;
 
   // Comments
   listComments(
-    paymentId: string,
+    transactionId: string,
     opts?: ListCommentsParams,
     signal?: AbortSignal,
   ): Promise<CommentListResponse>;
-  postComment(paymentId: string, content: string, signal?: AbortSignal): Promise<Comment>;
+  postComment(transactionId: string, content: string, signal?: AbortSignal): Promise<Comment>;
   editComment(
-    paymentId: string,
+    transactionId: string,
     commentId: string,
     content: string,
     signal?: AbortSignal,
   ): Promise<Comment>;
-  deleteComment(paymentId: string, commentId: string, signal?: AbortSignal): Promise<void>;
+  deleteComment(transactionId: string, commentId: string, signal?: AbortSignal): Promise<void>;
 
   // Categories (read-only in 6.11; CRUD comes in 6.16)
   listCategories(query?: ListCategoriesParams, signal?: AbortSignal): Promise<CategoryDto[]>;
 
   // Schedules (Phase 6 · Iteration 6.18.1)
-  /** Create the schedule attached to a RECURRING payment. */
+  /** Create the schedule attached to a RECURRING transaction. */
   createSchedule(
-    paymentId: string,
+    transactionId: string,
     spec: ScheduleSpec,
     signal?: AbortSignal,
   ): Promise<ScheduleResponse>;
   /**
-   * Read the schedule. The API responds 404 when the parent payment has no
+   * Read the schedule. The API responds 404 when the parent transaction has no
    * schedule attached — we translate that to `null` so the absence is not a
    * UI-level error.
    */
-  getSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse | null>;
+  getSchedule(transactionId: string, signal?: AbortSignal): Promise<ScheduleResponse | null>;
   /** Idempotent upsert of the schedule's spec. */
   replaceSchedule(
-    paymentId: string,
+    transactionId: string,
     spec: ScheduleSpec,
     signal?: AbortSignal,
   ): Promise<ScheduleResponse>;
   /** Remove the schedule + its BullMQ scheduler entry. */
-  removeSchedule(paymentId: string, signal?: AbortSignal): Promise<void>;
+  removeSchedule(transactionId: string, signal?: AbortSignal): Promise<void>;
 
   // Schedule lifecycle (Phase 6 · Iteration 6.18.2). Creator-only on the
   // API side (404 for everyone else). `cancel` is terminal — the API
   // answers 409 for any transition out of the cancelled state.
-  pauseSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
-  resumeSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
-  cancelSchedule(paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+  pauseSchedule(transactionId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+  resumeSchedule(transactionId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
+  cancelSchedule(transactionId: string, signal?: AbortSignal): Promise<ScheduleResponse>;
 
-  // Plans (Phase 6 · Iteration 6.20). Creation is inline on createPayment
+  // Plans (Phase 6 · Iteration 6.20). Creation is inline on createTransaction
   // (plan body); these cover the detail-page read + terminal cancel.
   /** 404 (no plan) is translated to `null` so absence is not a UI error. */
-  getPlan(paymentId: string, signal?: AbortSignal): Promise<PlanResponse | null>;
-  cancelPlan(paymentId: string, signal?: AbortSignal): Promise<PlanResponse>;
+  getPlan(transactionId: string, signal?: AbortSignal): Promise<PlanResponse | null>;
+  cancelPlan(transactionId: string, signal?: AbortSignal): Promise<PlanResponse>;
 
   // Transient state
   isLoading: boolean;
@@ -133,7 +143,7 @@ interface PaymentContextValue {
   clearError(): void;
 }
 
-const PaymentContext = createContext<PaymentContextValue | null>(null);
+const TransactionContext = createContext<TransactionContextValue | null>(null);
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
@@ -150,14 +160,14 @@ function buildQuery(params?: Record<string, unknown>): string {
   return s ? `?${s}` : '';
 }
 
-/** Parse a failed Response into a rich `PaymentApiError`. */
+/** Parse a failed Response into a rich `TransactionApiError`. */
 async function throwApiError(res: Response, fallback: string): Promise<never> {
   const body = (await res.json().catch(() => ({}))) as {
     message?: string | string[];
     errorCode?: string;
   };
   const msg = Array.isArray(body.message) ? body.message.join(', ') : body.message;
-  const err = new Error(msg || fallback) as PaymentApiError;
+  const err = new Error(msg || fallback) as TransactionApiError;
   if (body.errorCode) err.errorCode = body.errorCode;
   err.status = res.status;
   throw err;
@@ -184,7 +194,7 @@ function isAbortError(err: unknown): boolean {
   return false;
 }
 
-export function PaymentProvider({ children }: { children: ReactNode }) {
+export function TransactionProvider({ children }: { children: ReactNode }) {
   const { getAccessToken } = useAuth();
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,100 +227,104 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Payments ───────────────────────────────────────────────────────────
+  // ── Transactions ───────────────────────────────────────────────────────────
 
   const fetchList = useCallback(
-    (params?: ListPaymentsParams, signal?: AbortSignal): Promise<PaymentListResponse> =>
+    (params?: ListTransactionsParams, signal?: AbortSignal): Promise<TransactionListResponse> =>
       run(async () => {
         const qs = buildQuery(params as Record<string, unknown> | undefined);
-        const res = await fetch(`${API_BASE}/payments${qs}`, {
+        const res = await fetch(`${API_BASE}/transactions${qs}`, {
           method: 'GET',
           headers: authHeaders(),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to load payments');
-        return (await res.json()) as PaymentListResponse;
+        if (!res.ok) await throwApiError(res, 'Failed to load transactions');
+        return (await res.json()) as TransactionListResponse;
       }),
     [authHeaders, run],
   );
 
-  const getPayment = useCallback(
-    (id: string, signal?: AbortSignal): Promise<PaymentSummary> =>
+  const getTransaction = useCallback(
+    (id: string, signal?: AbortSignal): Promise<TransactionSummary> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}`, {
+        const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {
           method: 'GET',
           headers: authHeaders(),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to load payment');
-        return (await res.json()) as PaymentSummary;
+        if (!res.ok) await throwApiError(res, 'Failed to load transaction');
+        return (await res.json()) as TransactionSummary;
       }),
     [authHeaders, run],
   );
 
-  const createPayment = useCallback(
-    (input: CreatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary> =>
+  const createTransaction = useCallback(
+    (input: CreateTransactionInput, signal?: AbortSignal): Promise<TransactionSummary> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments`, {
+        const res = await fetch(`${API_BASE}/transactions`, {
           method: 'POST',
           headers: authHeaders(),
           body: JSON.stringify(input),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to create payment');
-        return (await res.json()) as PaymentSummary;
+        if (!res.ok) await throwApiError(res, 'Failed to create transaction');
+        return (await res.json()) as TransactionSummary;
       }),
     [authHeaders, run],
   );
 
-  const updatePayment = useCallback(
-    (id: string, input: UpdatePaymentInput, signal?: AbortSignal): Promise<PaymentSummary | null> =>
+  const updateTransaction = useCallback(
+    (
+      id: string,
+      input: UpdateTransactionInput,
+      signal?: AbortSignal,
+    ): Promise<TransactionSummary | null> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}`, {
+        const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`, {
           method: 'PATCH',
           headers: authHeaders(),
           body: JSON.stringify(input),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to update payment');
-        // 204 No Content → payment was hard-deleted by the attribution change.
+        if (!res.ok) await throwApiError(res, 'Failed to update transaction');
+        // 204 No Content → transaction was hard-deleted by the attribution change.
         if (res.status === 204) return null;
-        return (await res.json()) as PaymentSummary;
+        return (await res.json()) as TransactionSummary;
       }),
     [authHeaders, run],
   );
 
-  const editPaymentWithPropagation = useCallback(
+  const editTransactionWithPropagation = useCallback(
     (
       id: string,
-      input: UpdatePaymentInput,
-      propagate: PaymentPropagateMode,
+      input: UpdateTransactionInput,
+      propagate: TransactionPropagateMode,
       signal?: AbortSignal,
     ): Promise<CascadeEditResult> =>
       run(async () => {
         const qs = buildQuery({ propagate });
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}${qs}`, {
+        const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}${qs}`, {
           method: 'PATCH',
           headers: authHeaders(),
           body: JSON.stringify(input),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to update payment');
+        if (!res.ok) await throwApiError(res, 'Failed to update transaction');
         return (await res.json()) as CascadeEditResult;
       }),
     [authHeaders, run],
   );
 
-  const removePayment = useCallback(
+  const removeTransaction = useCallback(
     (id: string, scope?: string, signal?: AbortSignal): Promise<AttributionChangeResult> =>
       run(async () => {
         const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}${qs}`, {
+        const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}${qs}`, {
           method: 'DELETE',
           headers: authHeaders(),
           signal,
         });
-        if (!res.ok) await throwApiError(res, 'Failed to delete payment');
+        if (!res.ok) await throwApiError(res, 'Failed to delete transaction');
         return (await res.json()) as AttributionChangeResult;
       }),
     [authHeaders, run],
@@ -319,7 +333,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   const toggleStar = useCallback(
     (id: string, signal?: AbortSignal): Promise<ToggleStarResult> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(id)}/star`, {
+        const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}/star`, {
           method: 'POST',
           headers: authHeaders(),
           signal,
@@ -332,18 +346,18 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 
   const listOccurrences = useCallback(
     (
-      parentPaymentId: string,
+      parentTransactionId: string,
       query?: ListOccurrencesParams,
       signal?: AbortSignal,
-    ): Promise<PaymentListResponse> =>
+    ): Promise<TransactionListResponse> =>
       run(async () => {
         const qs = buildQuery(query as Record<string, unknown> | undefined);
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(parentPaymentId)}/occurrences${qs}`,
+          `${API_BASE}/transactions/${encodeURIComponent(parentTransactionId)}/occurrences${qs}`,
           { method: 'GET', headers: authHeaders(), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to load occurrences');
-        return (await res.json()) as PaymentListResponse;
+        return (await res.json()) as TransactionListResponse;
       }),
     [authHeaders, run],
   );
@@ -352,14 +366,14 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 
   const listComments = useCallback(
     (
-      paymentId: string,
+      transactionId: string,
       opts?: ListCommentsParams,
       signal?: AbortSignal,
     ): Promise<CommentListResponse> =>
       run(async () => {
         const qs = buildQuery(opts as Record<string, unknown> | undefined);
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments${qs}`,
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/comments${qs}`,
           { method: 'GET', headers: authHeaders(), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to load comments');
@@ -369,14 +383,17 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const postComment = useCallback(
-    (paymentId: string, content: string, signal?: AbortSignal): Promise<Comment> =>
+    (transactionId: string, content: string, signal?: AbortSignal): Promise<Comment> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ content }),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/comments`,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ content }),
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to post comment');
         return (await res.json()) as Comment;
       }),
@@ -385,14 +402,14 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 
   const editComment = useCallback(
     (
-      paymentId: string,
+      transactionId: string,
       commentId: string,
       content: string,
       signal?: AbortSignal,
     ): Promise<Comment> =>
       run(async () => {
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments/${encodeURIComponent(commentId)}`,
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/comments/${encodeURIComponent(commentId)}`,
           {
             method: 'PATCH',
             headers: authHeaders(),
@@ -407,10 +424,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteComment = useCallback(
-    (paymentId: string, commentId: string, signal?: AbortSignal): Promise<void> =>
+    (transactionId: string, commentId: string, signal?: AbortSignal): Promise<void> =>
       run(async () => {
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/comments/${encodeURIComponent(commentId)}`,
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/comments/${encodeURIComponent(commentId)}`,
           { method: 'DELETE', headers: authHeaders(), signal },
         );
         if (!res.ok) await throwApiError(res, 'Failed to delete comment');
@@ -439,14 +456,17 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // ── Schedules (Phase 6 · Iteration 6.18.1) ─────────────────────────────
 
   const createSchedule = useCallback(
-    (paymentId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
+    (transactionId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify(spec),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/schedule`,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(spec),
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to create schedule');
         return (await res.json()) as ScheduleResponse;
       }),
@@ -454,13 +474,16 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const getSchedule = useCallback(
-    (paymentId: string, signal?: AbortSignal): Promise<ScheduleResponse | null> =>
+    (transactionId: string, signal?: AbortSignal): Promise<ScheduleResponse | null> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
-          method: 'GET',
-          headers: authHeaders(),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/schedule`,
+          {
+            method: 'GET',
+            headers: authHeaders(),
+            signal,
+          },
+        );
         if (res.status === 404) return null;
         if (!res.ok) await throwApiError(res, 'Failed to load schedule');
         return (await res.json()) as ScheduleResponse;
@@ -469,14 +492,17 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const replaceSchedule = useCallback(
-    (paymentId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
+    (transactionId: string, spec: ScheduleSpec, signal?: AbortSignal): Promise<ScheduleResponse> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
-          method: 'PUT',
-          headers: authHeaders(),
-          body: JSON.stringify(spec),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/schedule`,
+          {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(spec),
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to update schedule');
         return (await res.json()) as ScheduleResponse;
       }),
@@ -484,13 +510,16 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const removeSchedule = useCallback(
-    (paymentId: string, signal?: AbortSignal): Promise<void> =>
+    (transactionId: string, signal?: AbortSignal): Promise<void> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule`, {
-          method: 'DELETE',
-          headers: authHeaders(),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/schedule`,
+          {
+            method: 'DELETE',
+            headers: authHeaders(),
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to delete schedule');
         // 204 → nothing to read.
       }),
@@ -498,17 +527,17 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   // ── Schedule lifecycle (Phase 6 · Iteration 6.18.2) ────────────────────
-  // All three share the same POST /payments/:id/schedule/<action> shape and
+  // All three share the same POST /transactions/:id/schedule/<action> shape and
   // return the updated ScheduleResponse, so they funnel through one helper.
   const scheduleLifecycle = useCallback(
     (
-      paymentId: string,
+      transactionId: string,
       action: 'pause' | 'resume' | 'cancel',
       signal?: AbortSignal,
     ): Promise<ScheduleResponse> =>
       run(async () => {
         const res = await fetch(
-          `${API_BASE}/payments/${encodeURIComponent(paymentId)}/schedule/${action}`,
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/schedule/${action}`,
           {
             method: 'POST',
             headers: authHeaders(),
@@ -522,27 +551,33 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const pauseSchedule = useCallback(
-    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'pause', signal),
+    (transactionId: string, signal?: AbortSignal) =>
+      scheduleLifecycle(transactionId, 'pause', signal),
     [scheduleLifecycle],
   );
   const resumeSchedule = useCallback(
-    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'resume', signal),
+    (transactionId: string, signal?: AbortSignal) =>
+      scheduleLifecycle(transactionId, 'resume', signal),
     [scheduleLifecycle],
   );
   const cancelSchedule = useCallback(
-    (paymentId: string, signal?: AbortSignal) => scheduleLifecycle(paymentId, 'cancel', signal),
+    (transactionId: string, signal?: AbortSignal) =>
+      scheduleLifecycle(transactionId, 'cancel', signal),
     [scheduleLifecycle],
   );
 
   // ── Plans (Phase 6 · Iteration 6.20) ────────────────────────────────────
 
   const getPlan = useCallback(
-    (paymentId: string, signal?: AbortSignal): Promise<PlanResponse | null> =>
+    (transactionId: string, signal?: AbortSignal): Promise<PlanResponse | null> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/plan`, {
-          headers: authHeaders(),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/plan`,
+          {
+            headers: authHeaders(),
+            signal,
+          },
+        );
         if (res.status === 404) return null;
         if (!res.ok) await throwApiError(res, 'Failed to load plan');
         return (await res.json()) as PlanResponse;
@@ -551,13 +586,16 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   );
 
   const cancelPlan = useCallback(
-    (paymentId: string, signal?: AbortSignal): Promise<PlanResponse> =>
+    (transactionId: string, signal?: AbortSignal): Promise<PlanResponse> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}/plan`, {
-          method: 'DELETE',
-          headers: authHeaders(),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/plan`,
+          {
+            method: 'DELETE',
+            headers: authHeaders(),
+            signal,
+          },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to cancel plan');
         return (await res.json()) as PlanResponse;
       }),
@@ -566,14 +604,14 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  const value = useMemo<PaymentContextValue>(
+  const value = useMemo<TransactionContextValue>(
     () => ({
       fetchList,
-      getPayment,
-      createPayment,
-      updatePayment,
-      editPaymentWithPropagation,
-      removePayment,
+      getTransaction,
+      createTransaction,
+      updateTransaction,
+      editTransactionWithPropagation,
+      removeTransaction,
       toggleStar,
       listOccurrences,
       listComments,
@@ -596,11 +634,11 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     }),
     [
       fetchList,
-      getPayment,
-      createPayment,
-      updatePayment,
-      editPaymentWithPropagation,
-      removePayment,
+      getTransaction,
+      createTransaction,
+      updateTransaction,
+      editTransactionWithPropagation,
+      removeTransaction,
       toggleStar,
       listOccurrences,
       listComments,
@@ -623,13 +661,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <PaymentContext.Provider value={value}>{children}</PaymentContext.Provider>;
+  return <TransactionContext.Provider value={value}>{children}</TransactionContext.Provider>;
 }
 
-export function usePayments(): PaymentContextValue {
-  const ctx = useContext(PaymentContext);
+export function useTransactions(): TransactionContextValue {
+  const ctx = useContext(TransactionContext);
   if (!ctx) {
-    throw new Error('usePayments must be used within a PaymentProvider');
+    throw new Error('useTransactions must be used within a TransactionProvider');
   }
   return ctx;
 }

@@ -1,11 +1,11 @@
 'use client';
 
-// Phase 6 · Iteration 6.14 — top section of the payment detail page.
+// Phase 6 · Iteration 6.14 — top section of the transaction detail page.
 //
 // Visual: direction badge, amount, date, category, attributions list with
 // group links, note (or "no note" fallback), star/edit/delete controls.
 // Star behaviour is delegated to the shared `useStarToggle` hook so the
-// optimistic flip + revert logic is DRY with `<PaymentRow>`.
+// optimistic flip + revert logic is DRY with `<TransactionRow>`.
 
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
@@ -13,26 +13,30 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
-import { formatOccurredAt, formatScopeLabel, formatSignedAmount } from '@/lib/payment/formatters';
-import { canEditPayment, cannotEditReason } from '@/lib/payment/types';
-import type { PaymentSummary } from '@/lib/payment/types';
-import { useStarToggle } from '@/lib/payment/use-star-toggle';
+import {
+  formatOccurredAt,
+  formatScopeLabel,
+  formatSignedAmount,
+} from '@/lib/transaction/formatters';
+import { canEditTransaction, cannotEditReason } from '@/lib/transaction/types';
+import type { TransactionSummary } from '@/lib/transaction/types';
+import { useStarToggle } from '@/lib/transaction/use-star-toggle';
 
-export interface PaymentDetailHeaderProps {
-  payment: PaymentSummary;
+export interface TransactionDetailHeaderProps {
+  transaction: TransactionSummary;
   onEditClick(): void;
   onDeleteClick(): void;
   onStarToggled?(starred: boolean): void;
 }
 
-export function PaymentDetailHeader({
-  payment,
+export function TransactionDetailHeader({
+  transaction,
   onEditClick,
   onDeleteClick,
   onStarToggled,
-}: PaymentDetailHeaderProps) {
-  const t = useTranslations('payments');
-  const tDetail = useTranslations('payments.detail');
+}: TransactionDetailHeaderProps) {
+  const t = useTranslations('transactions');
+  const tDetail = useTranslations('transactions.detail');
   const locale = useLocale();
   const { user } = useAuth();
   const { groups } = useGroups();
@@ -42,32 +46,32 @@ export function PaymentDetailHeader({
     error: starError,
     pending: starPending,
     toggle: runToggleStar,
-  } = useStarToggle(payment.id, payment.starredByMe, {
+  } = useStarToggle(transaction.id, transaction.starredByMe, {
     onToggled: (_id, s) => onStarToggled?.(s),
   });
 
-  const dateText = formatOccurredAt(payment.occurredAt, locale);
-  const amountText = formatSignedAmount(payment, locale);
+  const dateText = formatOccurredAt(transaction.occurredAt, locale);
+  const amountText = formatSignedAmount(transaction, locale);
   const directionClass =
-    payment.direction === 'IN'
+    transaction.direction === 'IN'
       ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
       : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
-  const directionLabel = payment.direction === 'IN' ? t('directions.in') : t('directions.out');
+  const directionLabel = transaction.direction === 'IN' ? t('directions.in') : t('directions.out');
 
   const tFn = (key: string) => t(key);
 
   // Phase 6 · Iteration 6.18.1.2 — edit/delete eligibility is a single
-  // shared rule (`canEditPayment`): not a generated occurrence + a type
+  // shared rule (`canEditTransaction`): not a generated occurrence + a type
   // the form supports (`ONE_TIME` / `RECURRING`). Authorisation (creator)
   // is layered on top.
   // Phase 6 · Iteration 6.18.1.2 — edit/delete eligibility is a single
-  // shared rule (`canEditPayment`): not a generated occurrence + a type
+  // shared rule (`canEditTransaction`): not a generated occurrence + a type
   // the form supports (`ONE_TIME` / `RECURRING`). The Edit button is
   // additionally guarded by creator authorisation; the Delete button is
   // not (the API allows a non-creator to remove their own attribution).
-  const isCreator = !!user && user.id === payment.createdById;
-  const formCanEdit = canEditPayment(payment);
-  const cannotReason = cannotEditReason(payment);
+  const isCreator = !!user && user.id === transaction.createdById;
+  const formCanEdit = canEditTransaction(transaction);
+  const cannotReason = cannotEditReason(transaction);
   const canEdit = isCreator && formCanEdit;
   const canDelete = formCanEdit;
   const formDisabledReason =
@@ -79,21 +83,21 @@ export function PaymentDetailHeader({
   const editDisabledReason = !isCreator ? tDetail('editDisabledNotCreator') : formDisabledReason;
 
   const groupMembership = new Set(groups.map((g) => g.id));
-  const note = (payment.note ?? '').trim();
+  const note = (transaction.note ?? '').trim();
   const starGlyph = starred ? '★' : '☆';
   const starLabel = starred ? tDetail('starRemove') : tDetail('starAdd');
   const starColor = starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500';
 
   return (
     <header
-      data-testid="payment-detail-header"
+      data-testid="transaction-detail-header"
       className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span
           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${directionClass}`}
           data-testid="detail-direction"
-          data-direction={payment.direction}
+          data-direction={transaction.direction}
         >
           {directionLabel}
         </span>
@@ -101,13 +105,13 @@ export function PaymentDetailHeader({
           className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
           data-testid="detail-type"
         >
-          {payment.type}
+          {transaction.type}
         </span>
         <span
           className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
           data-testid="detail-status"
         >
-          {payment.status}
+          {transaction.status}
         </span>
       </div>
 
@@ -125,14 +129,14 @@ export function PaymentDetailHeader({
         </div>
         <div className="flex gap-2">
           <dt className="text-gray-500 dark:text-gray-400">{tDetail('categoryLabel')}:</dt>
-          <dd data-testid="detail-category">{payment.category.name}</dd>
+          <dd data-testid="detail-category">{transaction.category.name}</dd>
         </div>
         <div className="flex gap-2 sm:col-span-2">
           <dt className="text-gray-500 dark:text-gray-400">{tDetail('attributionsLabel')}:</dt>
           <dd className="flex flex-wrap gap-x-1 gap-y-0" data-testid="detail-attributions">
-            {payment.attributions.map((a, idx) => {
+            {transaction.attributions.map((a, idx) => {
               const label = formatScopeLabel(a, tFn);
-              const comma = idx < payment.attributions.length - 1 ? ',' : '';
+              const comma = idx < transaction.attributions.length - 1 ? ',' : '';
               if (a.scope === 'group' && a.groupId && groupMembership.has(a.groupId)) {
                 return (
                   <span key={`${a.scope}-${a.groupId ?? idx}`}>

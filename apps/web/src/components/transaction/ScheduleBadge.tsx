@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.18.1 — schedule badge for the payment detail page.
+// Phase 6 · Iteration 6.18.1 — schedule badge for the transaction detail page.
 // Iteration 6.18.2 adds the lifecycle controls (pause / resume / cancel):
 // the badge stays presentational — the async submit and the resulting
 // schedule state live in the caller; `pending` drives the disabled state.
@@ -10,8 +10,8 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { humanReadableRepeat } from '@/lib/payment/schedule-formatters';
-import { deriveScheduleStatus, type ScheduleResponse } from '@/lib/payment/types';
+import { humanReadableRepeat } from '@/lib/transaction/schedule-formatters';
+import { deriveScheduleStatus, type ScheduleResponse } from '@/lib/transaction/types';
 
 export interface ScheduleBadgeProps {
   schedule: ScheduleResponse;
@@ -19,7 +19,7 @@ export interface ScheduleBadgeProps {
   locale?: string;
   /**
    * Lifecycle controls render only when true (the API is creator-only —
-   * mirroring `PaymentDetailHeader`'s edit gating).
+   * mirroring `TransactionDetailHeader`'s edit gating).
    */
   canManage?: boolean;
   /** Disables the lifecycle buttons while an action is in flight. */
@@ -67,7 +67,7 @@ export function ScheduleBadge({
   onResume,
   onCancel,
 }: ScheduleBadgeProps) {
-  const t = useTranslations('payments.schedule.badge');
+  const t = useTranslations('transactions.schedule.badge');
   const status = deriveScheduleStatus(schedule) ?? 'active';
   // Inline two-step confirm for the terminal cancel action.
   const [confirmingCancel, setConfirmingCancel] = useState(false);

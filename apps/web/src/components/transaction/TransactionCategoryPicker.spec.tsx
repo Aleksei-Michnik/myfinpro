@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentCategoryPicker } from './PaymentCategoryPicker';
-import type { CategoryDto } from '@/lib/payment/types';
+import { TransactionCategoryPicker } from './TransactionCategoryPicker';
+import type { CategoryDto } from '@/lib/transaction/types';
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, string>) => {
@@ -17,8 +17,8 @@ vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => ({ groups: [{ id: 'g1', name: 'Family' }] }),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ listCategories: listCategoriesMock }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ listCategories: listCategoriesMock }),
 }));
 
 function cat(partial: Partial<CategoryDto>): CategoryDto {
@@ -37,14 +37,14 @@ function cat(partial: Partial<CategoryDto>): CategoryDto {
   };
 }
 
-describe('PaymentCategoryPicker', () => {
+describe('TransactionCategoryPicker', () => {
   beforeEach(() => {
     listCategoriesMock.mockReset();
   });
 
   it('fetches on mount when categories prop is undefined', async () => {
     listCategoriesMock.mockResolvedValueOnce([]);
-    render(<PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
+    render(<TransactionCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
     await waitFor(() =>
       expect(listCategoriesMock).toHaveBeenCalledWith(
         { direction: 'OUT' },
@@ -56,17 +56,17 @@ describe('PaymentCategoryPicker', () => {
   it('refetches when direction changes', async () => {
     listCategoriesMock.mockResolvedValue([]);
     const { rerender } = render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} />,
+      <TransactionCategoryPicker direction="OUT" value={null} onChange={() => {}} />,
     );
     await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(1));
-    rerender(<PaymentCategoryPicker direction="IN" value={null} onChange={() => {}} />);
+    rerender(<TransactionCategoryPicker direction="IN" value={null} onChange={() => {}} />);
     await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(2));
     expect((listCategoriesMock.mock.calls[1][0] as { direction: string }).direction).toBe('IN');
   });
 
   it('does not fetch when categories prop is provided', async () => {
     render(
-      <PaymentCategoryPicker
+      <TransactionCategoryPicker
         direction="OUT"
         value={null}
         onChange={() => {}}
@@ -84,7 +84,12 @@ describe('PaymentCategoryPicker', () => {
       cat({ id: 'g1c', name: 'Rent', ownerType: 'group', ownerId: 'g1', direction: 'OUT' }),
     ];
     render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} categories={cats} />,
+      <TransactionCategoryPicker
+        direction="OUT"
+        value={null}
+        onChange={() => {}}
+        categories={cats}
+      />,
     );
     const select = screen.getByTestId('category-picker-select');
     expect(select.querySelector('optgroup[label="groupSystem"]')).toBeTruthy();
@@ -99,7 +104,12 @@ describe('PaymentCategoryPicker', () => {
       cat({ id: 'c3', name: 'Both', ownerType: 'system', direction: 'BOTH' }),
     ];
     render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} categories={cats} />,
+      <TransactionCategoryPicker
+        direction="OUT"
+        value={null}
+        onChange={() => {}}
+        categories={cats}
+      />,
     );
     const select = screen.getByTestId('category-picker-select');
     const values = Array.from(select.querySelectorAll('option')).map(
@@ -113,7 +123,12 @@ describe('PaymentCategoryPicker', () => {
   it('shows BOTH badge next to BOTH-direction categories', () => {
     const cats = [cat({ id: 'c3', name: 'Both', ownerType: 'system', direction: 'BOTH' })];
     render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} categories={cats} />,
+      <TransactionCategoryPicker
+        direction="OUT"
+        value={null}
+        onChange={() => {}}
+        categories={cats}
+      />,
     );
     expect(screen.getByRole('option', { name: /bothBadge/ })).toBeInTheDocument();
   });
@@ -122,7 +137,12 @@ describe('PaymentCategoryPicker', () => {
     const onChange = vi.fn();
     const cats = [cat({ id: 'c1', name: 'X', ownerType: 'system', direction: 'OUT' })];
     render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={onChange} categories={cats} />,
+      <TransactionCategoryPicker
+        direction="OUT"
+        value={null}
+        onChange={onChange}
+        categories={cats}
+      />,
     );
     fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c1' } });
     expect(onChange).toHaveBeenCalledWith('c1');
@@ -135,7 +155,7 @@ describe('PaymentCategoryPicker', () => {
         resolveFn = resolve;
       }),
     );
-    render(<PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
+    render(<TransactionCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
     expect(screen.getByTestId('category-picker-select')).toHaveAttribute('aria-busy', 'true');
     await act(async () => {
       resolveFn!([]);
@@ -144,7 +164,7 @@ describe('PaymentCategoryPicker', () => {
 
   it('shows error banner when fetch fails', async () => {
     listCategoriesMock.mockRejectedValueOnce(new Error('Boom'));
-    render(<PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
+    render(<TransactionCategoryPicker direction="OUT" value={null} onChange={() => {}} />);
     await waitFor(() =>
       expect(screen.getByTestId('category-picker-error')).toHaveTextContent('Boom'),
     );
@@ -153,7 +173,7 @@ describe('PaymentCategoryPicker', () => {
   it('disabled=true disables the select', () => {
     const cats = [cat({ id: 'c1', name: 'X', ownerType: 'system', direction: 'OUT' })];
     render(
-      <PaymentCategoryPicker
+      <TransactionCategoryPicker
         direction="OUT"
         value={null}
         onChange={() => {}}
@@ -166,7 +186,12 @@ describe('PaymentCategoryPicker', () => {
 
   it('renders placeholder option when no value', () => {
     render(
-      <PaymentCategoryPicker direction="OUT" value={null} onChange={() => {}} categories={[]} />,
+      <TransactionCategoryPicker
+        direction="OUT"
+        value={null}
+        onChange={() => {}}
+        categories={[]}
+      />,
     );
     expect(screen.getByRole('option', { name: 'placeholder' })).toBeInTheDocument();
   });

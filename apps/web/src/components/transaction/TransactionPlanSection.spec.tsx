@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentPlanSection } from './PaymentPlanSection';
-import type { PlanResponse } from '@/lib/payment/types';
+import { TransactionPlanSection } from './TransactionPlanSection';
+import type { PlanResponse } from '@/lib/transaction/types';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -15,8 +15,8 @@ const getPlanMock = vi.fn();
 const cancelPlanMock = vi.fn();
 const addToastMock = vi.fn();
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ getPlan: getPlanMock, cancelPlan: cancelPlanMock }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ getPlan: getPlanMock, cancelPlan: cancelPlanMock }),
 }));
 
 vi.mock('@/lib/auth/auth-context', () => ({
@@ -32,11 +32,11 @@ vi.mock('@/components/ui/Toast', () => ({
 function makePlan(over: Partial<PlanResponse> = {}): PlanResponse {
   return {
     id: 'plan-1',
-    paymentId: 'pay-1',
+    transactionId: 'pay-1',
     kind: 'INSTALLMENT',
     principalCents: 120_000,
     interestRate: 0,
-    paymentsCount: 3,
+    transactionsCount: 3,
     frequency: 'MONTHLY',
     firstDueAt: '2026-08-01T00:00:00.000Z',
     amortizationMethod: 'equal',
@@ -57,10 +57,12 @@ function makePlan(over: Partial<PlanResponse> = {}): PlanResponse {
 }
 
 function renderSection(createdById = 'me') {
-  return render(<PaymentPlanSection paymentId="pay-1" createdById={createdById} currency="USD" />);
+  return render(
+    <TransactionPlanSection transactionId="pay-1" createdById={createdById} currency="USD" />,
+  );
 }
 
-describe('PaymentPlanSection', () => {
+describe('TransactionPlanSection', () => {
   beforeEach(() => {
     getPlanMock.mockReset();
     cancelPlanMock.mockReset();
@@ -76,11 +78,11 @@ describe('PaymentPlanSection', () => {
     expect(screen.getByTestId('plan-table')).toBeInTheDocument();
     expect(screen.getAllByTestId(/^plan-row-\d+$/)).toHaveLength(3);
     expect(screen.getByTestId('plan-row-status-1').textContent).toBe('rowStatus.PENDING');
-    // Money formatted in the payment's currency.
+    // Money formatted in the transaction's currency.
     expect(screen.getByTestId('plan-row-1').textContent).toContain('$400.00');
   });
 
-  it('renders nothing when the payment has no plan (404 → null)', async () => {
+  it('renders nothing when the transaction has no plan (404 → null)', async () => {
     getPlanMock.mockResolvedValueOnce(null);
     const { container } = renderSection();
     await waitFor(() => expect(getPlanMock).toHaveBeenCalled());

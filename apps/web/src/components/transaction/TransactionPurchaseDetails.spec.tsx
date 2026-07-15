@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PaymentPurchaseDetails } from './PaymentPurchaseDetails';
+import { TransactionPurchaseDetails } from './TransactionPurchaseDetails';
 import type { ReceiptItem, ReceiptSummary } from '@/lib/receipt/types';
 
 const mockGetReceipt = vi.fn();
@@ -42,11 +42,11 @@ function item(over: Partial<ReceiptItem>): ReceiptItem {
 }
 const receipt = (items: ReceiptItem[]): ReceiptSummary => ({ id: 'r-42', items }) as ReceiptSummary;
 
-describe('PaymentPurchaseDetails (8.18)', () => {
+describe('TransactionPurchaseDetails (8.18)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('is collapsed by default and fetches nothing until expanded', () => {
-    render(<PaymentPurchaseDetails receiptId="r-42" currency="USD" />);
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
     expect(screen.getByTestId('purchase-details-toggle')).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('purchase-details-panel')).not.toBeInTheDocument();
     expect(mockGetReceipt).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('PaymentPurchaseDetails (8.18)', () => {
         item({ id: 'i2', rawName: 'Bread', totalCents: 1200 }),
       ]),
     );
-    render(<PaymentPurchaseDetails receiptId="r-42" currency="USD" />);
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
 
     fireEvent.click(screen.getByTestId('purchase-details-toggle'));
     expect(mockGetReceipt).toHaveBeenCalledWith('r-42', expect.anything());
@@ -74,7 +74,7 @@ describe('PaymentPurchaseDetails (8.18)', () => {
     await waitFor(() => expect(screen.getByTestId('purchase-details-items')).toBeInTheDocument());
     expect(screen.getAllByTestId('purchase-details-item')).toHaveLength(2);
     expect(screen.getByText('Milk 3%')).toBeInTheDocument();
-    // Amounts render in the PAYMENT currency.
+    // Amounts render in the TRANSACTION currency.
     expect(screen.getByText(/\$8\.80/)).toBeInTheDocument();
     expect(screen.getByTestId('purchase-details-receipt-link')).toHaveAttribute(
       'href',
@@ -85,7 +85,7 @@ describe('PaymentPurchaseDetails (8.18)', () => {
 
   it('fetches only once across collapse/expand toggles', async () => {
     mockGetReceipt.mockResolvedValueOnce(receipt([item({ id: 'i1', totalCents: 100 })]));
-    render(<PaymentPurchaseDetails receiptId="r-42" currency="USD" />);
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
     const toggle = screen.getByTestId('purchase-details-toggle');
 
     fireEvent.click(toggle); // open + fetch
@@ -97,14 +97,14 @@ describe('PaymentPurchaseDetails (8.18)', () => {
 
   it('shows an empty note when the receipt has no line items', async () => {
     mockGetReceipt.mockResolvedValueOnce(receipt([]));
-    render(<PaymentPurchaseDetails receiptId="r-42" currency="USD" />);
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
     fireEvent.click(screen.getByTestId('purchase-details-toggle'));
     await waitFor(() => expect(screen.getByTestId('purchase-details-empty')).toBeInTheDocument());
   });
 
   it('shows an "unavailable" note when the receipt is not readable by this viewer (404)', async () => {
     mockGetReceipt.mockRejectedValueOnce(Object.assign(new Error('nf'), { status: 404 }));
-    render(<PaymentPurchaseDetails receiptId="r-42" currency="USD" />);
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
     fireEvent.click(screen.getByTestId('purchase-details-toggle'));
     await waitFor(() =>
       expect(screen.getByTestId('purchase-details-unavailable')).toBeInTheDocument(),

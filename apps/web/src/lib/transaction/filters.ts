@@ -1,9 +1,9 @@
 // Phase 6 · Iteration 6.16.1 — single source of truth for the URL ↔ filter
-// mapping used by `<PaymentsList>` + `<PaymentsFilters>` on /payments.
+// mapping used by `<TransactionsList>` + `<TransactionsFilters>` on /transactions.
 //
-// Re-uses the existing `PaymentsFiltersValue` shape (defined alongside the
+// Re-uses the existing `TransactionsFiltersValue` shape (defined alongside the
 // component) so that dashboard widgets like <RecentActivity> /
-// <StarredPayments> can keep using `initialFilters` unchanged. This module
+// <StarredTransactions> can keep using `initialFilters` unchanged. This module
 // only adds:
 //   - `defaultFilters(scope)` — canonical empty state.
 //   - `filtersToQuery(filters)` — emit URLSearchParams for the page URL.
@@ -13,10 +13,10 @@
 //     filter is set (drives "Clear filters" button visibility).
 //   - `clearFilters(scope)` — alias for `defaultFilters(scope)`.
 
-import type { PaymentsFiltersValue } from '@/components/payment/PaymentsFilters';
+import type { TransactionsFiltersValue } from '@/components/transaction/TransactionsFilters';
 
 /**
- * Iteration 6.18.1.3 — partition the visible payments by parent/child.
+ * Iteration 6.18.1.3 — partition the visible transactions by parent/child.
  *
  * - `'all'` (default): both parents and occurrences. No API constraint.
  * - `'parents'`: parents only — `withParent=true` on the API.
@@ -31,7 +31,7 @@ export type ChildScope = 'all' | 'parents' | 'occurrences';
  * Re-export under a name closer to how it's discussed in the design doc,
  * extended with the iteration 6.18.1.3 `childScope` partition.
  */
-export type PaymentFilters = PaymentsFiltersValue & {
+export type TransactionFilters = TransactionsFiltersValue & {
   /** Default `'all'`. */
   childScope?: ChildScope;
 };
@@ -60,7 +60,7 @@ function isChildScope(v: string | null | undefined): v is ChildScope {
 }
 
 /** Canonical empty filter state. Scope defaults to `'all'`. */
-export function defaultFilters(scope: FiltersScope = 'all'): PaymentFilters {
+export function defaultFilters(scope: FiltersScope = 'all'): TransactionFilters {
   return { scope, sort: 'date_desc' };
 }
 
@@ -69,7 +69,7 @@ export function defaultFilters(scope: FiltersScope = 'all'): PaymentFilters {
  * dropped (e.g. `scope=all`, `sort=date_desc`, falsy `starred`) so the URL
  * stays clean for the common case.
  */
-export function filtersToQuery(filters: PaymentFilters): URLSearchParams {
+export function filtersToQuery(filters: TransactionFilters): URLSearchParams {
   const params = new URLSearchParams();
   const scope = filters.scope ?? 'all';
   if (scope !== 'all') params.set('scope', scope);
@@ -92,10 +92,10 @@ export interface FilterQueryReader {
 }
 
 /**
- * Parse URL search params into a fresh `PaymentFilters`. Invalid values
+ * Parse URL search params into a fresh `TransactionFilters`. Invalid values
  * (e.g. `direction=foo`, `sort=bogus`) are ignored — defaults take over.
  */
-export function filtersFromQuery(searchParams: FilterQueryReader): PaymentFilters {
+export function filtersFromQuery(searchParams: FilterQueryReader): TransactionFilters {
   const rawScope = searchParams.get('scope');
   let scope: FiltersScope = 'all';
   if (rawScope === 'personal') scope = 'personal';
@@ -123,7 +123,7 @@ export function filtersFromQuery(searchParams: FilterQueryReader): PaymentFilter
  * "Dirty" = any non-scope filter is set away from its default. Used to
  * decide whether the page should render a "Clear filters" affordance.
  */
-export function isFiltersDirty(filters: PaymentFilters): boolean {
+export function isFiltersDirty(filters: TransactionFilters): boolean {
   return Boolean(
     filters.starred ||
     filters.direction ||
@@ -137,24 +137,24 @@ export function isFiltersDirty(filters: PaymentFilters): boolean {
 }
 
 /** Reset all filters but preserve the active scope tab. */
-export function clearFilters(scope: FiltersScope = 'all'): PaymentFilters {
+export function clearFilters(scope: FiltersScope = 'all'): TransactionFilters {
   return defaultFilters(scope);
 }
 
 // ── Realtime support (Phase 6 · Iteration 6.18.1.4.1) ───────────────────────
 
 /**
- * Minimal payment shape required to evaluate filter membership. Mirrors the
- * client-facing `PaymentSummary` but kept structural so realtime event payloads
+ * Minimal transaction shape required to evaluate filter membership. Mirrors the
+ * client-facing `TransactionSummary` but kept structural so realtime event payloads
  * (which already match this shape) can be tested without a cast.
  */
-export interface FilterablePayment {
+export interface FilterableTransaction {
   direction: 'IN' | 'OUT';
   category: { id: string };
   occurredAt: string;
   starredByMe: boolean;
   note?: string | null;
-  parentPaymentId?: string | null;
+  parentTransactionId?: string | null;
   attributions: Array<{
     scope: 'personal' | 'group';
     userId?: string | null;
@@ -163,18 +163,21 @@ export interface FilterablePayment {
 }
 
 /**
- * Decide whether a payment should be visible under the active filters. Used
- * by realtime subscribers (`payment.created` / `payment.updated`) to decide
+ * Decide whether a transaction should be visible under the active filters. Used
+ * by realtime subscribers (`transaction.created` / `transaction.updated`) to decide
  * whether to inject the row into the local list before the user issues a
  * fresh fetch. Server-side authoritative filtering still happens on the next
  * pagination call; this is a best-effort optimistic predicate so the user
  * sees their own (and collaborators') changes without a refresh.
  *
  * Caller must already have applied any cross-cutting visibility filter (the
- * SSE stream only delivers events for payments the user can see, so we don't
+ * SSE stream only delivers events for transactions the user can see, so we don't
  * re-check membership here).
  */
-export function paymentMatchesFilters(p: FilterablePayment, f: PaymentFilters): boolean {
+export function transactionMatchesFilters(
+  p: FilterableTransaction,
+  f: TransactionFilters,
+): boolean {
   // Scope.
   const scope = f.scope ?? 'all';
   if (scope === 'personal') {
@@ -186,8 +189,8 @@ export function paymentMatchesFilters(p: FilterablePayment, f: PaymentFilters): 
 
   // Child scope.
   const childScope = f.childScope ?? 'all';
-  if (childScope === 'parents' && p.parentPaymentId) return false;
-  if (childScope === 'occurrences' && !p.parentPaymentId) return false;
+  if (childScope === 'parents' && p.parentTransactionId) return false;
+  if (childScope === 'occurrences' && !p.parentTransactionId) return false;
 
   if (f.direction && p.direction !== f.direction) return false;
   if (f.categoryId && p.category.id !== f.categoryId) return false;

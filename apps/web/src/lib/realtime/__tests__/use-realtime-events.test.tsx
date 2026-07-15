@@ -22,14 +22,14 @@ class MockEventSource {
   }
 }
 
-function PaymentListener({
-  paymentId,
+function TransactionListener({
+  transactionId,
   onEvent,
 }: {
-  paymentId?: string;
-  onEvent: (e: Extract<RealtimeEvent, { type: 'payment.deleted' }>) => void;
+  transactionId?: string;
+  onEvent: (e: Extract<RealtimeEvent, { type: 'transaction.deleted' }>) => void;
 }) {
-  useRealtimeEvents({ type: 'payment.deleted', paymentId }, onEvent);
+  useRealtimeEvents({ type: 'transaction.deleted', transactionId }, onEvent);
   return null;
 }
 
@@ -48,41 +48,41 @@ describe('useRealtimeEvents', () => {
     const handler = vi.fn();
     render(
       <RealtimeProvider enabled>
-        <PaymentListener onEvent={handler} />
+        <TransactionListener onEvent={handler} />
       </RealtimeProvider>,
     );
     act(() => {
-      MockEventSource.instances[0]!.emit({ type: 'payment.deleted', paymentId: 'p1' });
+      MockEventSource.instances[0]!.emit({ type: 'transaction.deleted', transactionId: 'p1' });
       MockEventSource.instances[0]!.emit({
         type: 'comment.deleted',
-        paymentId: 'p1',
+        transactionId: 'p1',
         commentId: 'c1',
       });
     });
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith({ type: 'payment.deleted', paymentId: 'p1' });
+    expect(handler).toHaveBeenCalledWith({ type: 'transaction.deleted', transactionId: 'p1' });
   });
 
-  it('filters by paymentId when provided', () => {
+  it('filters by transactionId when provided', () => {
     const handler = vi.fn();
     render(
       <RealtimeProvider enabled>
-        <PaymentListener paymentId="p1" onEvent={handler} />
+        <TransactionListener transactionId="p1" onEvent={handler} />
       </RealtimeProvider>,
     );
     act(() => {
-      MockEventSource.instances[0]!.emit({ type: 'payment.deleted', paymentId: 'other' });
-      MockEventSource.instances[0]!.emit({ type: 'payment.deleted', paymentId: 'p1' });
+      MockEventSource.instances[0]!.emit({ type: 'transaction.deleted', transactionId: 'other' });
+      MockEventSource.instances[0]!.emit({ type: 'transaction.deleted', transactionId: 'p1' });
     });
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0]![0]).toMatchObject({ paymentId: 'p1' });
+    expect(handler.mock.calls[0]![0]).toMatchObject({ transactionId: 'p1' });
   });
 
   it('cleans up on unmount', () => {
     const handler = vi.fn();
     const { unmount } = render(
       <RealtimeProvider enabled>
-        <PaymentListener onEvent={handler} />
+        <TransactionListener onEvent={handler} />
       </RealtimeProvider>,
     );
     unmount();
@@ -98,7 +98,7 @@ describe('useRealtimeEvents', () => {
       const [label, setLabel] = useState('a');
       trigger = setLabel;
       return (
-        <PaymentListener
+        <TransactionListener
           onEvent={() => {
             calls.push(label);
           }}
@@ -114,7 +114,7 @@ describe('useRealtimeEvents', () => {
       trigger('b');
     });
     act(() => {
-      MockEventSource.instances[0]!.emit({ type: 'payment.deleted', paymentId: 'p1' });
+      MockEventSource.instances[0]!.emit({ type: 'transaction.deleted', transactionId: 'p1' });
     });
     expect(calls).toEqual(['b']);
   });

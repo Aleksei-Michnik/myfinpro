@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.13 — disclosure-based PaymentType picker.
+// Phase 6 · Iteration 6.13 — disclosure-based TransactionType picker.
 // 6.18.1 enabled RECURRING; 6.20 enables the plan kinds (INSTALLMENT /
 // LOAN / MORTGAGE) in CREATE mode — plan parents are not editable, so the
 // edit flow passes `planKindsEnabled={false}` and they fall back to the
@@ -8,15 +8,15 @@
 
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
-import type { PaymentType } from '@/lib/payment/types';
+import type { TransactionType } from '@/lib/transaction/types';
 
-export interface PaymentTypeSelectorProps {
-  value: PaymentType;
-  onChange(next: PaymentType): void;
+export interface TransactionTypeSelectorProps {
+  value: TransactionType;
+  onChange(next: TransactionType): void;
   /** When true, every option — including ONE_TIME — is disabled. */
   disabled?: boolean;
   /**
-   * Plan kinds are create-only (the API cannot convert an existing payment
+   * Plan kinds are create-only (the API cannot convert an existing transaction
    * into a plan parent). Defaults to true; the edit flow passes false.
    */
   planKindsEnabled?: boolean;
@@ -24,28 +24,28 @@ export interface PaymentTypeSelectorProps {
 
 // Phase 6 · Iteration 6.18.1 — RECURRING moves out of the "coming soon"
 // list; 6.20 moves the plan kinds out too (create mode only).
-const PLAN_KIND_TYPES: PaymentType[] = ['INSTALLMENT', 'LOAN', 'MORTGAGE'];
-const ALWAYS_COMING_SOON: PaymentType[] = ['LIMITED_PERIOD'];
+const PLAN_KIND_TYPES: TransactionType[] = ['INSTALLMENT', 'LOAN', 'MORTGAGE'];
+const ALWAYS_COMING_SOON: TransactionType[] = ['LIMITED_PERIOD'];
 
-export function PaymentTypeSelector({
+export function TransactionTypeSelector({
   value,
   onChange,
   disabled,
   planKindsEnabled = true,
-}: PaymentTypeSelectorProps) {
-  const enabledAdvancedTypes: PaymentType[] = planKindsEnabled
+}: TransactionTypeSelectorProps) {
+  const enabledAdvancedTypes: TransactionType[] = planKindsEnabled
     ? ['RECURRING', ...PLAN_KIND_TYPES]
     : ['RECURRING'];
-  const comingSoonTypes: PaymentType[] = planKindsEnabled
+  const comingSoonTypes: TransactionType[] = planKindsEnabled
     ? ALWAYS_COMING_SOON
     : [...ALWAYS_COMING_SOON, ...PLAN_KIND_TYPES];
-  const t = useTranslations('payments.types');
+  const t = useTranslations('transactions.types');
   const [expanded, setExpanded] = useState(false);
 
   return (
     <fieldset
       className="rounded-md border border-gray-200 p-3 dark:border-gray-700"
-      data-testid="payment-type-selector"
+      data-testid="transaction-type-selector"
     >
       <legend className="px-1 text-xs font-medium text-gray-500 dark:text-gray-400">
         {t('label')}
@@ -55,7 +55,7 @@ export function PaymentTypeSelector({
       <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
         <input
           type="radio"
-          name="payment-type"
+          name="transaction-type"
           value="ONE_TIME"
           checked={value === 'ONE_TIME'}
           disabled={disabled}
@@ -85,7 +85,7 @@ export function PaymentTypeSelector({
             >
               <input
                 type="radio"
-                name="payment-type"
+                name="transaction-type"
                 value={type}
                 checked={value === type}
                 disabled={disabled}
@@ -104,7 +104,7 @@ export function PaymentTypeSelector({
             >
               <input
                 type="radio"
-                name="payment-type"
+                name="transaction-type"
                 value={type}
                 checked={value === type}
                 disabled

@@ -11,21 +11,25 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { Comment } from '@/lib/payment/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { Comment } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
-export interface PaymentCommentInputProps {
-  paymentId: string;
+export interface TransactionCommentInputProps {
+  transactionId: string;
   onPosted(comment: Comment): void;
   disabled?: boolean;
 }
 
 const MAX_LEN = 2000;
 
-export function PaymentCommentInput({ paymentId, onPosted, disabled }: PaymentCommentInputProps) {
-  const t = useTranslations('payments.comments');
-  const { postComment } = usePayments();
+export function TransactionCommentInput({
+  transactionId,
+  onPosted,
+  disabled,
+}: TransactionCommentInputProps) {
+  const t = useTranslations('transactions.comments');
+  const { postComment } = useTransactions();
   const [value, setValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -35,7 +39,7 @@ export function PaymentCommentInput({ paymentId, onPosted, disabled }: PaymentCo
 
   const runSubmit = (content: string) =>
     submitOp
-      .run((signal) => postComment(paymentId, content, signal))
+      .run((signal) => postComment(transactionId, content, signal))
       .then((c) => {
         if (c) {
           setValue('');
@@ -66,7 +70,7 @@ export function PaymentCommentInput({ paymentId, onPosted, disabled }: PaymentCo
   return (
     <div
       className="space-y-2"
-      data-testid="payment-comment-input"
+      data-testid="transaction-comment-input"
       aria-busy={isLoading || undefined}
     >
       <label className="block">

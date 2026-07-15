@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { QuickAddPaymentButton } from './QuickAddPaymentButton';
+import { QuickAddTransactionButton } from './QuickAddTransactionButton';
 
 const dialogProps = vi.fn();
 
@@ -8,11 +8,11 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-vi.mock('@/components/payment/PaymentFormDialog', () => ({
-  PaymentFormDialog: (props: Record<string, unknown>) => {
+vi.mock('@/components/transaction/TransactionFormDialog', () => ({
+  TransactionFormDialog: (props: Record<string, unknown>) => {
     dialogProps(props);
     return (
-      <div data-testid="mocked-payment-form-dialog">
+      <div data-testid="mocked-transaction-form-dialog">
         <button
           type="button"
           data-testid="mocked-form-save"
@@ -32,45 +32,45 @@ vi.mock('@/components/payment/PaymentFormDialog', () => ({
   },
 }));
 
-describe('QuickAddPaymentButton', () => {
+describe('QuickAddTransactionButton', () => {
   it('renders the button visible by default', () => {
-    render(<QuickAddPaymentButton />);
-    expect(screen.getByTestId('quick-add-payment-button')).toBeInTheDocument();
+    render(<QuickAddTransactionButton />);
+    expect(screen.getByTestId('quick-add-transaction-button')).toBeInTheDocument();
   });
 
   it('does not render the dialog until the button is clicked', () => {
-    render(<QuickAddPaymentButton />);
-    expect(screen.queryByTestId('mocked-payment-form-dialog')).not.toBeInTheDocument();
+    render(<QuickAddTransactionButton />);
+    expect(screen.queryByTestId('mocked-transaction-form-dialog')).not.toBeInTheDocument();
   });
 
   it('clicking the button opens the dialog', () => {
-    render(<QuickAddPaymentButton />);
-    fireEvent.click(screen.getByTestId('quick-add-payment-button'));
-    expect(screen.getByTestId('mocked-payment-form-dialog')).toBeInTheDocument();
+    render(<QuickAddTransactionButton />);
+    fireEvent.click(screen.getByTestId('quick-add-transaction-button'));
+    expect(screen.getByTestId('mocked-transaction-form-dialog')).toBeInTheDocument();
   });
 
   it('opens the dialog in mode="create"', () => {
     dialogProps.mockClear();
-    render(<QuickAddPaymentButton />);
-    fireEvent.click(screen.getByTestId('quick-add-payment-button'));
+    render(<QuickAddTransactionButton />);
+    fireEvent.click(screen.getByTestId('quick-add-transaction-button'));
     expect(dialogProps.mock.calls[0]![0]).toMatchObject({ open: true, mode: 'create' });
   });
 
-  it('after onSaved fires, calls onPaymentCreated and closes the dialog', () => {
+  it('after onSaved fires, calls onTransactionCreated and closes the dialog', () => {
     const onCreated = vi.fn();
-    render(<QuickAddPaymentButton onPaymentCreated={onCreated} />);
-    fireEvent.click(screen.getByTestId('quick-add-payment-button'));
+    render(<QuickAddTransactionButton onTransactionCreated={onCreated} />);
+    fireEvent.click(screen.getByTestId('quick-add-transaction-button'));
     fireEvent.click(screen.getByTestId('mocked-form-save'));
     expect(onCreated).toHaveBeenCalledWith({ id: 'new-1' });
-    expect(screen.queryByTestId('mocked-payment-form-dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mocked-transaction-form-dialog')).not.toBeInTheDocument();
   });
 
-  it('clicking close on the dialog closes without invoking onPaymentCreated', () => {
+  it('clicking close on the dialog closes without invoking onTransactionCreated', () => {
     const onCreated = vi.fn();
-    render(<QuickAddPaymentButton onPaymentCreated={onCreated} />);
-    fireEvent.click(screen.getByTestId('quick-add-payment-button'));
+    render(<QuickAddTransactionButton onTransactionCreated={onCreated} />);
+    fireEvent.click(screen.getByTestId('quick-add-transaction-button'));
     fireEvent.click(screen.getByTestId('mocked-form-close'));
     expect(onCreated).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('mocked-payment-form-dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mocked-transaction-form-dialog')).not.toBeInTheDocument();
   });
 });

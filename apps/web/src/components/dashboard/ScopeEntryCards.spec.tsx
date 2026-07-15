@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ScopeEntryCards } from './ScopeEntryCards';
-import type { PaymentSummary } from '@/lib/payment/types';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 const mockFetchList = vi.fn();
 const mockUseGroups = vi.fn();
@@ -31,11 +31,11 @@ vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => mockUseGroups(),
 }));
 
-vi.mock('@/lib/payment/payment-context', () => ({
-  usePayments: () => ({ fetchList: mockFetchList }),
+vi.mock('@/lib/transaction/transaction-context', () => ({
+  useTransactions: () => ({ fetchList: mockFetchList }),
 }));
 
-function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
+function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummary {
   return {
     id: p.id ?? 'p',
     direction: p.direction ?? 'OUT',
@@ -52,7 +52,7 @@ function makePayment(p: Partial<PaymentSummary> = {}): PaymentSummary {
     commentCount: 0,
     starredByMe: false,
     hasDocuments: false,
-    parentPaymentId: null,
+    parentTransactionId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -70,7 +70,7 @@ describe('ScopeEntryCards', () => {
   });
 
   it('Personal card always rendered first', async () => {
-    render(<ScopeEntryCards payments={[]} groups={[{ id: 'g1', name: 'Family' }]} />);
+    render(<ScopeEntryCards transactions={[]} groups={[{ id: 'g1', name: 'Family' }]} />);
     const list = await screen.findByTestId('scope-cards');
     const items = list.querySelectorAll('article');
     expect(items[0]?.getAttribute('data-testid')).toBe('scope-card-personal');
@@ -80,7 +80,7 @@ describe('ScopeEntryCards', () => {
   it('renders one card per group provided via prop', async () => {
     render(
       <ScopeEntryCards
-        payments={[]}
+        transactions={[]}
         groups={[
           { id: 'g1', name: 'Family' },
           { id: 'g2', name: 'Roommates' },
@@ -93,23 +93,23 @@ describe('ScopeEntryCards', () => {
 
   it('renders the role badge when group has role', async () => {
     render(
-      <ScopeEntryCards payments={[]} groups={[{ id: 'g1', name: 'Family', role: 'admin' }]} />,
+      <ScopeEntryCards transactions={[]} groups={[{ id: 'g1', name: 'Family', role: 'admin' }]} />,
     );
     expect(await screen.findByTestId('scope-card-group-g1-role')).toBeInTheDocument();
   });
 
-  it('computes per-card totals locally from `payments` prop', async () => {
+  it('computes per-card totals locally from `transactions` prop', async () => {
     render(
       <ScopeEntryCards
         groups={[{ id: 'g1', name: 'Family' }]}
-        payments={[
-          makePayment({
+        transactions={[
+          makeTransaction({
             id: 'a',
             direction: 'OUT',
             amountCents: 5000,
             attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
           }),
-          makePayment({
+          makeTransaction({
             id: 'b',
             direction: 'IN',
             amountCents: 8000,
@@ -127,14 +127,14 @@ describe('ScopeEntryCards', () => {
   it('uses `dashboard.totals.in/out/net` for amount labels (DRY: same as <TotalsCard>)', async () => {
     render(
       <ScopeEntryCards
-        payments={[
-          makePayment({
+        transactions={[
+          makeTransaction({
             id: 'a',
             direction: 'IN',
             amountCents: 1000,
             attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
           }),
-          makePayment({
+          makeTransaction({
             id: 'b',
             direction: 'OUT',
             amountCents: 823,
@@ -153,14 +153,14 @@ describe('ScopeEntryCards', () => {
   it('regression: never references `dashboard.scopes.in/out/net` (the phantom keys)', async () => {
     const { container } = render(
       <ScopeEntryCards
-        payments={[
-          makePayment({
+        transactions={[
+          makeTransaction({
             id: 'a',
             direction: 'IN',
             amountCents: 1000,
             attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
           }),
-          makePayment({
+          makeTransaction({
             id: 'b',
             direction: 'OUT',
             amountCents: 823,
@@ -178,21 +178,21 @@ describe('ScopeEntryCards', () => {
   });
 
   it('"View" links use the correct scope query param', async () => {
-    render(<ScopeEntryCards payments={[]} groups={[{ id: 'g1', name: 'Family' }]} />);
+    render(<ScopeEntryCards transactions={[]} groups={[{ id: 'g1', name: 'Family' }]} />);
     expect((await screen.findByTestId('scope-card-personal-view')).getAttribute('href')).toBe(
-      '/payments?scope=personal',
+      '/transactions?scope=personal',
     );
     expect(screen.getByTestId('scope-card-group-g1-view').getAttribute('href')).toBe(
-      '/payments?scope=group:g1',
+      '/transactions?scope=group:g1',
     );
   });
 
-  it('shows "No activity yet" when the scope has no matching payments', async () => {
+  it('shows "No activity yet" when the scope has no matching transactions', async () => {
     render(
       <ScopeEntryCards
         groups={[{ id: 'g1', name: 'Family' }]}
-        payments={[
-          makePayment({
+        transactions={[
+          makeTransaction({
             attributions: [{ scope: 'personal', userId: 'me', groupId: null, groupName: null }],
           }),
         ]}
@@ -202,17 +202,17 @@ describe('ScopeEntryCards', () => {
   });
 
   it('shows "Create a group" CTA when user has no groups', async () => {
-    render(<ScopeEntryCards payments={[]} groups={[]} />);
+    render(<ScopeEntryCards transactions={[]} groups={[]} />);
     expect(await screen.findByTestId('scope-cards-empty-groups')).toBeInTheDocument();
   });
 
   it('falls back to useGroups() when groups prop is omitted', async () => {
     mockUseGroups.mockReturnValue({ groups: [{ id: 'gx', name: 'Hookbacks' }] });
-    render(<ScopeEntryCards payments={[]} />);
+    render(<ScopeEntryCards transactions={[]} />);
     expect(await screen.findByTestId('scope-card-group-gx')).toBeInTheDocument();
   });
 
-  it('fetches payments when neither `payments` nor groups have data', async () => {
+  it('fetches transactions when neither `transactions` nor groups have data', async () => {
     mockFetchList.mockResolvedValueOnce({ data: [], nextCursor: null, hasMore: false });
     render(
       <ScopeEntryCards groups={[]} fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />,
