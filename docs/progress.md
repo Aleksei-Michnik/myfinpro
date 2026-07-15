@@ -5,7 +5,7 @@
 > **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
-> **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
+> **Design doc**: [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md)
 >
 > **Scope change (2026-04-25)**: Original Phase 6 (Income, 10 iterations) and Phase 7 (Expense, 13 iterations) are merged into a single **Phase 6: Payment Management** (21 iterations). Incomes and expenses now share a single `Payment` entity with a `direction` field (`IN` / `OUT`) — dramatically reducing duplication. Phase 6 also introduces payment notes, a documents placeholder for Phase 9 receipts, per-user stars, and comments. Phase 7 is now empty / subsumed.
 
@@ -2584,7 +2584,7 @@ Additional requirements added during planning (per user direction):
 - **Comments** — any user with access to a payment can post comments; author can edit/delete their own.
 - **Star / favourite** — per-user, with a "Starred" filter/shortcut.
 
-### Design Decisions (see [`docs/phase-6-payments-design.md`](phase-6-payments-design.md))
+### Design Decisions (see [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md))
 
 | Area               | Decision                                                                                                                                                          |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2793,7 +2793,7 @@ All 22 rows present with `is_system=1`: `bonus`, `clothing`, `education`, `enter
 | PATCH  | `/categories/:id` | 20/min     | Edit name/icon/color/direction; direction change blocked when in use                             |
 | DELETE | `/categories/:id` | 20/min     | Delete, optionally reassigning payments via `?replaceWithCategoryId=<uuid>`                      |
 
-Rate limits match `docs/phase-6-payments-design.md` §5.8 exactly.
+Rate limits match `docs/phase-6-transactions-design.md` §5.8 exactly.
 
 **Error codes** — centralised in [`apps/api/src/category/constants/category-errors.ts`](../apps/api/src/category/constants/category-errors.ts:1):
 
@@ -3069,7 +3069,7 @@ count: 0
 - Introduced `PAYMENT_DETAIL_INCLUDE` + `buildDetailInclude(userId)` helper so list / get / update all feed the exact same relation shape into `mapPaymentToSummary()`. Include drift is now structurally impossible.
 - Split validation into `validateAmount()`, `parseAndValidateOccurredAt()`, `loadCategoryOrThrow()`, `ensureCategoryDirectionMatches()` helpers shared by `create()` and `update()`.
 
-**Error codes added** (docs/phase-6-payments-design.md §5.7)
+**Error codes added** (docs/phase-6-transactions-design.md §5.7)
 
 - `PAYMENT_NOT_FOUND`
 - `PAYMENT_NOT_OWNER`
@@ -3138,7 +3138,7 @@ Going with **`PaymentSummaryDto | 204`**, not a wrapped change-result. PATCH rem
 - `validateAttributions(userId, attrs, memberGroupsCache?, { allowEmpty? })` — parameterised. `create()` calls with defaults (non-empty); `update()` calls with `allowEmpty: true` and lets the validator do its own membership fetch (desired entries may reference groups not on the payment yet).
 - `buildVisibilityWhere()`, `PAYMENT_DETAIL_INCLUDE`, `mapPaymentToSummary()` — unchanged from 6.7, still the single source of truth.
 
-**Error codes added** (docs/phase-6-payments-design.md §5.7)
+**Error codes added** (docs/phase-6-transactions-design.md §5.7)
 
 - `PAYMENT_SCOPE_AMBIGUOUS` — implicit scope with >1 accessible attributions; error body includes `details.accessibleScopes: ["personal", "group:<id>", ...]`.
 - `PAYMENT_SCOPE_NOT_ATTRIBUTED` — explicit scope the caller has no accessible attribution for.
@@ -5225,7 +5225,7 @@ performs an in-place `UPDATE categories SET name='Gifts received'
 WHERE slug='gift_in' AND owner_type='system' AND name='Gift'` — fully
 idempotent. The architectural rule (filter dropdown and form dialog
 share `usePayments().listCategories()` as the single source of truth)
-is now documented in [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)
+is now documented in [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1)
 under "Category visibility policy" and asserted by a parity test.
 
 The `@myfinpro/shared` seed test was extended with two regression
@@ -5310,7 +5310,7 @@ on white text yields ≈ 4.83 : 1 — also AA-compliant.
   "Iteration 6.16.5" subsection codifying the AbortError silent
   no-op rule and the `useResetOnLocaleChange` requirement for
   page-level orchestrators.
-- [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1) —
+- [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1) —
   new "Category visibility policy" subsection.
 
 #### No new npm dependency.
@@ -5372,7 +5372,7 @@ asked for it as a top-level dep, so the workspace lockfile only gained
 | [`.env.example`](../.env.example:1)                                                                                     | Adds `REDIS_HOST/PORT/PASSWORD/TLS`.                                                         |
 | [`.env.staging.template`](../.env.staging.template:1) / [`.env.production.template`](../.env.production.template:1)     | Document the four typed vars + secret-name mapping.                                          |
 | [`apps/api/.env.example`](../apps/api/.env.example:1)                                                                   | Adds `REDIS_TLS`.                                                                            |
-| [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)                                                       | New `§7 Job Queue Infrastructure` block inside section 11.                                   |
+| [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1)                                               | New `§7 Job Queue Infrastructure` block inside section 11.                                   |
 | [`docs/deployment.md`](deployment.md:1)                                                                                 | Application-secrets table swaps `*_REDIS_URL` → `*_REDIS_PASSWORD`; new "Redis" subsection.  |
 
 **GitHub-secrets diff.** New secret added on the staging environment;
@@ -5503,7 +5503,7 @@ singular path because of the 1:1 cardinality with the parent):
 | [`apps/api/src/health/indicators/redis.indicator.ts`](apps/api/src/health/indicators/redis.indicator.ts:1)                                                                                           | modified |
 | [`apps/api/src/health/indicators/redis.indicator.spec.ts`](apps/api/src/health/indicators/redis.indicator.spec.ts:1)                                                                                 | modified |
 | [`apps/api/test/integration/payment-schedule.integration.spec.ts`](apps/api/test/integration/payment-schedule.integration.spec.ts:1)                                                                 | new      |
-| [`docs/phase-6-payments-design.md`](docs/phase-6-payments-design.md:1)                                                                                                                               | modified |
+| [`docs/phase-6-transactions-design.md`](docs/phase-6-transactions-design.md:1)                                                                                                                       | modified |
 
 **Schema change.** The 6.2 `PaymentSchedule` columns
 (`frequency`/`interval`/`next_occurrence_at`/`max_occurrences`/
@@ -6376,7 +6376,7 @@ app.
 | `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
 | `apps/web/messages/en.json`                                                | modified |
 | `apps/web/messages/he.json`                                                | modified |
-| `docs/phase-6-payments-design.md`                                          | modified |
+| `docs/phase-6-transactions-design.md`                                      | modified |
 
 **Tests.** ~21 new cases:
 
@@ -6478,7 +6478,7 @@ app.
 | `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
 | `apps/web/messages/en.json`                                                | modified |
 | `apps/web/messages/he.json`                                                | modified |
-| `docs/phase-6-payments-design.md`                                          | modified |
+| `docs/phase-6-transactions-design.md`                                      | modified |
 
 **Tests.** ~21 new cases:
 
@@ -8143,3 +8143,49 @@ into an endless spinner now surfaces a `loadFailed` error in the viewer
 reopen retries. Also: the viewer is now titled by the **file name** — leading
 with the merchant name (receipt data in the receipt's own language, e.g.
 "קסטרו") read as a localisation bug for an EN user.
+
+### 8.20 - Rename Payment → Transaction end-to-end
+
+Per user decision: "Payment" was the wrong umbrella term for an entity that
+also models incomes and (future) user-to-user transfers; the product term is
+**Transaction** (HE: תנועה, plural תנועות). ~6,000 occurrences across ~200
+files renamed in one sweep (design §8).
+
+**DB.** Hand-written migration `20260715120000_rename_payments_to_transactions`:
+7 tables, all `payment_id`/`parent_payment_id`/`payments_count` columns, every
+index and FK constraint name — FKs dropped → renamed → re-added with identical
+referential actions; pure renames, zero data touched. Two uniques whose new
+default names exceed MySQL's 64-char limit pinned via `map:`. Validated with
+`prisma migrate diff` against the applied DB: **no drift** (the check caught
+one missed column, `payments_count`, before anything shipped).
+
+**API.** `src/payment` → `src/transaction`; routes `/api/v1/transactions`;
+`TRANSACTION_*` error codes/audit actions; realtime events
+`transaction.*`; queue `transaction-occurrences` + scheduler ids. BullMQ job
+schedulers live only in Redis keyed by queue name, so the rename added an
+`onApplicationBootstrap` **scheduler reconciliation** (re-upserts every live
+schedule from the DB) — this also permanently self-heals Redis loss, which
+previously would have silently killed all recurring schedules. Old
+`bull:payment-occurrences:*` Redis keys are orphaned and cleaned manually on
+the servers.
+
+**Web.** Route `/payments` → `/transactions` (segment `[transactionId]`),
+`lib/transaction` + `components/transaction`, testids, i18n keys and values in
+BOTH locales. The Hebrew pass rewrote gender agreement (תשלום m. → תנועה f.:
+נמחק→נמחקה, זה→זו, חוזר→חוזרת, …). Kept real-world payment senses:
+"repayment" (loan DTOs), "payment cards" (pairzon reducer), and the DUE status
+label לתשלום (the act of paying, not the entity). localStorage last-used keys
+renamed (users lose remembered form defaults once).
+
+**Docs.** Living docs renamed (`phase-6-payments-design.md` →
+`phase-6-transactions-design.md`, receipt/products/budgets design docs,
+UI conventions, IMPLEMENTATION-PLAN); the progress journal and RCA
+post-mortems stay historical — only link paths updated.
+
+**Tests.** api unit **1143** green; web **1190** green; both typechecks +
+lints clean. Full API integration suite run: all transaction/receipt/product
+suites pass; one stale expectation fixed (INSTALLMENT now correctly demands a
+plan body — plans shipped in 6.20); remaining failures are pre-existing
+environmental issues in legacy auth-era suites (they boot AppModule against
+the shared dev DB with hard-coded emails and no cleanup — rerun-hostile) plus
+testcontainer start flakes; none touch the renamed surface.

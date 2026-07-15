@@ -74,7 +74,7 @@ existing ones bump the counter — future alias-stage matches get slightly
 higher confidence. Confirm may also override the item's category, and the
 product's `default_category_id` backfills item categories the extraction
 left empty. Walkthrough is allowed in `REVIEW` **and** `CONFIRMED` receipts
-(matching after payment creation is still valuable — price history counts
+(matching after transaction creation is still valuable — price history counts
 only confirmed receipts).
 
 ### 1.4 Barcode & Open Food Facts
@@ -137,7 +137,7 @@ model ReceiptItem {                             // additions
 queries (`product × merchant × date × unit price`) hit the
 `(product_id, purchased_at)` index without joining `receipts` for the date.
 It is written by the extraction worker, kept in sync by the header PATCH /
-items PUT paths, and stamped with the payment date on confirm.
+items PUT paths, and stamped with the transaction date on confirm.
 
 ## 3. API surface (8.2, 8.4–8.8)
 

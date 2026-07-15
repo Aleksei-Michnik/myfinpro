@@ -11,7 +11,7 @@ Realtime is for **read-only UI freshness only**. Use it to:
   group) changes data on another tab or device,
 - nudge a comment thread, schedule card, or starred indicator without a
   manual refresh,
-- mark a payment as deleted/updated in the cache.
+- mark a transaction as deleted/updated in the cache.
 
 Realtime is **never the source of truth**:
 
@@ -30,7 +30,7 @@ idempotent:
 
 - Replace-by-id on `*.created` / `*.updated` instead of append-blindly.
 - Tolerate `*.deleted` for a record that's already gone.
-- Treat each event as authoritative for its `paymentId` / `commentId` /
+- Treat each event as authoritative for its `transactionId` / `commentId` /
   `scheduleId` — don't merge fields from stale local state.
 
 ## Per-component pattern
@@ -38,7 +38,7 @@ idempotent:
 ```tsx
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 
-useRealtimeEvents({ type: 'comment.created', paymentId }, (event) => {
+useRealtimeEvents({ type: 'comment.created', transactionId }, (event) => {
   setComments((current) => mergeComment(current, event.comment));
 });
 ```
@@ -46,7 +46,7 @@ useRealtimeEvents({ type: 'comment.created', paymentId }, (event) => {
 Rules:
 
 - **Tight filter, single subscription.** Always pass the narrowest filter
-  you need (`paymentId`, `parentPaymentId`, `commentId`). Avoid wildcard
+  you need (`transactionId`, `parentTransactionId`, `commentId`). Avoid wildcard
   subscriptions — they make idempotency harder and waste re-renders.
 - **One hook = one event type.** Subscribing to multiple event types from
   the same component means multiple hook calls. The discriminated union
@@ -146,16 +146,16 @@ their own effect, the hook only reacts to subsequent token changes.
 
 The dashboard subscribes once at the top level
 ([`apps/web/src/app/[locale]/dashboard/dashboard-client.tsx`](../apps/web/src/app/%5Blocale%5D/dashboard/dashboard-client.tsx))
-to the payment events that touch any of its widgets:
+to the transaction events that touch any of its widgets:
 
-- `payment.created`
-- `payment.updated`
-- `payment.deleted`
-- `payment_attribution.removed`
+- `transaction.created`
+- `transaction.updated`
+- `transaction.deleted`
+- `transaction_attribution.removed`
 - `occurrence.created`
 
 Each event schedules a `refreshKey` bump after a **500 ms** debounce
-window — a single edit on /payments typically emits update + attribution
+window — a single edit on /transactions typically emits update + attribution
 add + attribution remove, and we want one refresh, not three. The bump
 re-mounts every section so each widget re-fetches with its own existing
 loader. `resyncToken` changes also bump `refreshKey` (immediately, no
@@ -184,7 +184,7 @@ debounce).
 ## Future work (not blocking)
 
 - **Multi-instance fan-out.** Today the `EventBus` is in-process — a
-  payment service running on instance A cannot reach an SSE client on
+  transaction service running on instance A cannot reach an SSE client on
   instance B. When we scale beyond a single API replica, swap the
   underlying `Subject` for **Redis Pub/Sub** (already in our stack via
   BullMQ). The bus interface stays the same.
@@ -193,7 +193,7 @@ debounce).
   per user and replay missed events on reconnect.
 - **Server-side filter shortcuts.** Today every event is fanned out to
   every subscriber whose `userIds` matches; for very large groups we may
-  add per-(payment, comment) topics if profiling shows it matters.
+  add per-(transaction, comment) topics if profiling shows it matters.
 
 ## Testing
 

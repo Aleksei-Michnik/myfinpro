@@ -1,4 +1,4 @@
-# Phase 6: Payment Management — Design Document
+# Phase 6: Transaction Management — Design Document
 
 > **Status**: Approved 2026-04-25 · Replaces original Phase 6 (Income) + Phase 7 (Expense) · 21 iterations
 >
@@ -23,15 +23,15 @@
 
 ## 1. Overview
 
-Phase 6 unifies **incomes** and **expenses** into a single **Payment** entity whose `direction` field (`IN` / `OUT`) distinguishes the flow. All CRUD flows, categories, attributions, scheduling, stars, comments, and UI components are shared between the two directions — the only difference is the direction toggle and which default category set appears in the picker.
+Phase 6 unifies **incomes** and **expenses** into a single **Transaction** entity whose `direction` field (`IN` / `OUT`) distinguishes the flow. All CRUD flows, categories, attributions, scheduling, stars, comments, and UI components are shared between the two directions — the only difference is the direction toggle and which default category set appears in the picker.
 
 The phase delivers:
 
-- A single **`/dashboard`** page with aggregated totals, recent activity, starred payments, and entry points to per-scope views.
-- An **expanded view per scope** — personal payments at `/payments?scope=personal` and group payments embedded in the existing `/groups/[groupId]` page.
-- A **single payment detail page** at `/payments/:id` showing the amount, note, documents (placeholder for Phase 9), comments thread, and star toggle.
+- A single **`/dashboard`** page with aggregated totals, recent activity, starred transactions, and entry points to per-scope views.
+- An **expanded view per scope** — personal transactions at `/transactions?scope=personal` and group transactions embedded in the existing `/groups/[groupId]` page.
+- A **single transaction detail page** at `/transactions/:id` showing the amount, note, documents (placeholder for Phase 9), comments thread, and star toggle.
 - **Categories** — system defaults + user- and group-scoped custom categories.
-- **Payment types**: `ONE_TIME`, `RECURRING`, `LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`, `MORTGAGE`.
+- **Transaction types**: `ONE_TIME`, `RECURRING`, `LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`, `MORTGAGE`.
 - **Recurring engine** (BullMQ cron worker) that auto-creates occurrences and recovers from missed runs.
 - **Amortization service** for installments and loans.
 
@@ -44,13 +44,13 @@ The phase delivers:
 
 ### User stories **deferred** to later phases
 
-| Story                                                                  | Phase  |
-| ---------------------------------------------------------------------- | ------ |
-| Receipt upload (photos, PDFs, URLs), OCR, LLM extraction               | 9 & 15 |
-| Purchase places/stores/goods analytics, price history                  | 10     |
-| Notifications (email, Telegram, push) about due payments / low balance | 8, 11  |
-| Telegram bot + mini-app payment entry                                  | 11–13  |
-| LLM-based Q&A on finances                                              | 15     |
+| Story                                                                      | Phase  |
+| -------------------------------------------------------------------------- | ------ |
+| Receipt upload (photos, PDFs, URLs), OCR, LLM extraction                   | 9 & 15 |
+| Purchase places/stores/goods analytics, price history                      | 10     |
+| Notifications (email, Telegram, push) about due transactions / low balance | 8, 11  |
+| Telegram bot + mini-app transaction entry                                  | 11–13  |
+| LLM-based Q&A on finances                                                  | 15     |
 
 ---
 
@@ -59,7 +59,7 @@ The phase delivers:
 ### 2.1 Direction
 
 ```ts
-export type PaymentDirection = 'IN' | 'OUT';
+export type TransactionDirection = 'IN' | 'OUT';
 ```
 
 - `IN` = income (positive to balance).
@@ -67,32 +67,32 @@ export type PaymentDirection = 'IN' | 'OUT';
 
 No separate "income" or "expense" entity — one table, one code path.
 
-### 2.2 Payment types
+### 2.2 Transaction types
 
-| Type             | Description                                                       | Backing data                                   |
-| ---------------- | ----------------------------------------------------------------- | ---------------------------------------------- |
-| `ONE_TIME`       | Single occurrence at a specific date.                             | `Payment` row only.                            |
-| `RECURRING`      | Repeats indefinitely on a fixed frequency.                        | `Payment` row + `PaymentSchedule`.             |
-| `LIMITED_PERIOD` | Repeats on a frequency but with a fixed end (date or count).      | `Payment` row + `PaymentSchedule` with bounds. |
-| `INSTALLMENT`    | Fixed count of equal payments, optional interest (e.g. 0 % BNPL). | `Payment` row + `PaymentPlan` + N occurrences. |
-| `LOAN`           | Amortised principal + interest over N payments.                   | `Payment` row + `PaymentPlan` + N occurrences. |
-| `MORTGAGE`       | Same as loan; kept as a distinct label for UX clarity.            | Same as `LOAN`.                                |
+| Type             | Description                                                           | Backing data                                           |
+| ---------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
+| `ONE_TIME`       | Single occurrence at a specific date.                                 | `Transaction` row only.                                |
+| `RECURRING`      | Repeats indefinitely on a fixed frequency.                            | `Transaction` row + `TransactionSchedule`.             |
+| `LIMITED_PERIOD` | Repeats on a frequency but with a fixed end (date or count).          | `Transaction` row + `TransactionSchedule` with bounds. |
+| `INSTALLMENT`    | Fixed count of equal transactions, optional interest (e.g. 0 % BNPL). | `Transaction` row + `TransactionPlan` + N occurrences. |
+| `LOAN`           | Amortised principal + interest over N transactions.                   | `Transaction` row + `TransactionPlan` + N occurrences. |
+| `MORTGAGE`       | Same as loan; kept as a distinct label for UX clarity.                | Same as `LOAN`.                                        |
 
-The "parent" [`Payment`](../apps/api/prisma/schema.prisma:1) row acts as the **template** for schedules/plans. Every generated occurrence is itself a `Payment` row with `parentPaymentId` set to the template.
+The "parent" [`Transaction`](../apps/api/prisma/schema.prisma:1) row acts as the **template** for schedules/plans. Every generated occurrence is itself a `Transaction` row with `parentTransactionId` set to the template.
 
 ### 2.3 Attribution model
 
-A single payment can be attributed to multiple **scopes**. A scope is either the user's own personal account or a group.
+A single transaction can be attributed to multiple **scopes**. A scope is either the user's own personal account or a group.
 
 ```
-Payment (1) ─── has many ──▶ PaymentAttribution
+Transaction (1) ─── has many ──▶ TransactionAttribution
                                   │
                                   ├─ scopeType: 'personal' | 'group'
                                   ├─ userId  (when scopeType = 'personal')
                                   └─ groupId (when scopeType = 'group')
 ```
 
-A user **accesses** a payment if **any** of its attributions matches:
+A user **accesses** a transaction if **any** of its attributions matches:
 
 - `scopeType='personal' AND userId = currentUser`, or
 - `scopeType='group' AND currentUser ∈ group.memberships`.
@@ -101,22 +101,22 @@ A user **accesses** a payment if **any** of its attributions matches:
 
 Two delete operations:
 
-1. **Delete from current scope** — default. Removes one `PaymentAttribution`. The payment row stays alive if any other attribution remains.
+1. **Delete from current scope** — default. Removes one `TransactionAttribution`. The transaction row stays alive if any other attribution remains.
 2. **Delete from all accessible scopes** — removes attributions **only in scopes the current user controls** (their personal + groups where they are a member). Other users' personal attributions and non-member-group attributions are left untouched.
 
-When the last attribution is removed, the `Payment` row (and its comments, stars, schedule/plan, documents) are hard-deleted via cascade.
+When the last attribution is removed, the `Transaction` row (and its comments, stars, schedule/plan, documents) are hard-deleted via cascade.
 
 ### 2.5 Star / favourite
 
-A per-user toggle (`PaymentStar` unique `(paymentId, userId)`), not a shared flag. Each user has their own starred collection. Star is allowed for any payment the user can access.
+A per-user toggle (`TransactionStar` unique `(transactionId, userId)`), not a shared flag. Each user has their own starred collection. Star is allowed for any transaction the user can access.
 
 ### 2.6 Comments
 
-Any user who can access a payment can comment on it. Comments support plain text initially; markdown/mentions/hashtags deferred to later phases. Only the author can edit or delete their own comment (soft-delete → `deletedAt`). Group admins **cannot** delete others' comments in this phase (kept simple; revisit if abused).
+Any user who can access a transaction can comment on it. Comments support plain text initially; markdown/mentions/hashtags deferred to later phases. Only the author can edit or delete their own comment (soft-delete → `deletedAt`). Group admins **cannot** delete others' comments in this phase (kept simple; revisit if abused).
 
 ### 2.7 Documents (placeholder)
 
-`PaymentDocument` schema is created now so later phases can attach files without migrations:
+`TransactionDocument` schema is created now so later phases can attach files without migrations:
 
 - `kind`: `image` | `pdf` | `url` | `other`.
 - `fileRef`: local path or URL.
@@ -132,29 +132,29 @@ No upload UI in this phase — only a placeholder section on the detail page sta
 
 ```
 apps/api/src/
-  payment/
-    payment.module.ts
-    payment.controller.ts             # /payments/*
-    payment.service.ts                # CRUD + attribution logic
-    payment-comment.controller.ts     # /payments/:id/comments
-    payment-comment.service.ts
-    payment-star.controller.ts        # /payments/:id/star (toggle)
-    payment-schedule.service.ts       # RECURRING / LIMITED_PERIOD
-    payment-plan.service.ts           # INSTALLMENT / LOAN / MORTGAGE
-    payment-recurring.processor.ts    # BullMQ cron worker
+  transaction/
+    transaction.module.ts
+    transaction.controller.ts             # /transactions/*
+    transaction.service.ts                # CRUD + attribution logic
+    transaction-comment.controller.ts     # /transactions/:id/comments
+    transaction-comment.service.ts
+    transaction-star.controller.ts        # /transactions/:id/star (toggle)
+    transaction-schedule.service.ts       # RECURRING / LIMITED_PERIOD
+    transaction-plan.service.ts           # INSTALLMENT / LOAN / MORTGAGE
+    transaction-recurring.processor.ts    # BullMQ cron worker
     amortization.util.ts              # Pure amortization math
     guards/
-      payment-access.guard.ts         # user can access payment (any scope match)
-      payment-owner.guard.ts          # user is creator
+      transaction-access.guard.ts         # user can access transaction (any scope match)
+      transaction-owner.guard.ts          # user is creator
     constants/
-      payment-errors.ts
+      transaction-errors.ts
     dto/
-      create-payment.dto.ts
-      update-payment.dto.ts
-      list-payments-query.dto.ts
-      delete-payment.query.dto.ts
-      create-payment-schedule.dto.ts
-      create-payment-plan.dto.ts
+      create-transaction.dto.ts
+      update-transaction.dto.ts
+      list-transactions-query.dto.ts
+      delete-transaction.query.dto.ts
+      create-transaction-schedule.dto.ts
+      create-transaction-plan.dto.ts
       create-comment.dto.ts
       update-comment.dto.ts
   category/
@@ -176,36 +176,36 @@ Registered in [`AppModule`](../apps/api/src/app.module.ts:1) alongside existing 
 apps/web/src/
   app/[locale]/
     dashboard/page.tsx                   # Aggregated dashboard (updated)
-    payments/
-      page.tsx                           # Expanded payments list (/payments?scope=...)
-      [paymentId]/page.tsx               # Single payment detail
-      starred/page.tsx                   # Starred payments (optional; filter also available in list)
-    groups/[groupId]/page.tsx            # Adds a "Payments" tab using <PaymentsList>
+    transactions/
+      page.tsx                           # Expanded transactions list (/transactions?scope=...)
+      [transactionId]/page.tsx               # Single transaction detail
+      starred/page.tsx                   # Starred transactions (optional; filter also available in list)
+    groups/[groupId]/page.tsx            # Adds a "Transactions" tab using <TransactionsList>
   components/
-    payment/
-      PaymentsList.tsx                   # Generic filter/sort/list component
-      PaymentRow.tsx                     # Single row with star, controls
-      PaymentFormDialog.tsx              # Add / edit (ONE_TIME, RECURRING, etc.)
-      PaymentDetail.tsx                  # Used by detail page
-      PaymentCommentList.tsx             # Comment thread
-      PaymentCommentInput.tsx            # Comment composer
-      PaymentScopeSelector.tsx           # Multi-select: personal + my groups
-      PaymentCategoryPicker.tsx          # Hierarchical categories
-      PaymentTypeSelector.tsx            # One-time / recurring / installment / loan
-      PaymentAmountInput.tsx             # Amount + currency
-      PaymentsFilters.tsx                # Date range, direction, category, starred, scope
-      PaymentPlanTable.tsx               # Amortization table
-      PaymentScheduleSummary.tsx         # Next occurrence, frequency display
+    transaction/
+      TransactionsList.tsx                   # Generic filter/sort/list component
+      TransactionRow.tsx                     # Single row with star, controls
+      TransactionFormDialog.tsx              # Add / edit (ONE_TIME, RECURRING, etc.)
+      TransactionDetail.tsx                  # Used by detail page
+      TransactionCommentList.tsx             # Comment thread
+      TransactionCommentInput.tsx            # Comment composer
+      TransactionScopeSelector.tsx           # Multi-select: personal + my groups
+      TransactionCategoryPicker.tsx          # Hierarchical categories
+      TransactionTypeSelector.tsx            # One-time / recurring / installment / loan
+      TransactionAmountInput.tsx             # Amount + currency
+      TransactionsFilters.tsx                # Date range, direction, category, starred, scope
+      TransactionPlanTable.tsx               # Amortization table
+      TransactionScheduleSummary.tsx         # Next occurrence, frequency display
     category/
       CategoryManager.tsx                # List/create/edit/delete (personal + group)
     dashboard/
       TotalsCard.tsx                     # Income / expense / net this period
-      RecentActivity.tsx                 # Recent payments across all scopes
-      StarredPayments.tsx                # Starred section
+      RecentActivity.tsx                 # Recent transactions across all scopes
+      StarredTransactions.tsx                # Starred section
       ScopeEntryCards.tsx                # Personal + per-group links
   lib/
-    payment/
-      payment-context.tsx                # Payment state + API calls
+    transaction/
+      transaction-context.tsx                # Transaction state + API calls
       types.ts
       formatters.ts                      # formatAmount, formatDate, currency helpers
       remember.ts                        # localStorage helper for last-used scope
@@ -213,11 +213,11 @@ apps/web/src/
 
 ### 3.3 Worker / scheduler
 
-A dedicated **BullMQ** queue + worker process handles recurring-payment generation:
+A dedicated **BullMQ** queue + worker process handles recurring-transaction generation:
 
-- Queue name: `payment-recurring`.
-- Scheduled job: cron `0 * * * *` (hourly) → checks all active `PaymentSchedule` rows whose `nextOccurrenceAt <= now`.
-- For each due schedule: creates the occurrence `Payment` row (copies direction, amount, currency, category, note, attributions from the parent) inside a transaction, then advances `nextOccurrenceAt` using the frequency, and respects `endDate` / `occurrenceCount`.
+- Queue name: `transaction-recurring`.
+- Scheduled job: cron `0 * * * *` (hourly) → checks all active `TransactionSchedule` rows whose `nextOccurrenceAt <= now`.
+- For each due schedule: creates the occurrence `Transaction` row (copies direction, amount, currency, category, note, attributions from the parent) inside a transaction, then advances `nextOccurrenceAt` using the frequency, and respects `endDate` / `occurrenceCount`.
 - Catch-up: if the worker was down, it iterates `nextOccurrenceAt` forward generating every missed occurrence (capped at 100 per run per schedule to protect against runaway loops).
 - For `INSTALLMENT` / `LOAN` / `MORTGAGE`, all occurrences are **pre-generated** at plan creation time — the worker only flips `status` from `PENDING` to `DUE` when `occurredAt <= now`. This keeps amortization deterministic and auditable.
 
@@ -233,26 +233,26 @@ BullMQ worker runs in-process inside the existing API container. Cron triggers u
 
 ```mermaid
 erDiagram
-    User ||--o{ PaymentAttribution : "has personal"
-    Group ||--o{ PaymentAttribution : "has group"
-    User ||--o{ Payment : "creates"
+    User ||--o{ TransactionAttribution : "has personal"
+    Group ||--o{ TransactionAttribution : "has group"
+    User ||--o{ Transaction : "creates"
     User ||--o{ Category : "owns (personal)"
     Group ||--o{ Category : "owns (group)"
 
-    Payment ||--o{ PaymentAttribution : "attributed to"
-    Payment ||--o{ PaymentComment : "has"
-    Payment ||--o{ PaymentStar : "starred by"
-    Payment ||--o{ PaymentDocument : "has"
-    Payment ||--o| PaymentSchedule : "template of"
-    Payment ||--o| PaymentPlan : "template of"
-    Payment ||--o{ Payment : "parent -> occurrences"
+    Transaction ||--o{ TransactionAttribution : "attributed to"
+    Transaction ||--o{ TransactionComment : "has"
+    Transaction ||--o{ TransactionStar : "starred by"
+    Transaction ||--o{ TransactionDocument : "has"
+    Transaction ||--o| TransactionSchedule : "template of"
+    Transaction ||--o| TransactionPlan : "template of"
+    Transaction ||--o{ Transaction : "parent -> occurrences"
 
-    Category ||--o{ Payment : "classifies"
+    Category ||--o{ Transaction : "classifies"
 
-    PaymentComment }o--|| User : "author"
-    PaymentStar }o--|| User : "owner"
+    TransactionComment }o--|| User : "author"
+    TransactionStar }o--|| User : "owner"
 
-    Payment {
+    Transaction {
         string id PK
         string direction
         string type
@@ -261,16 +261,16 @@ erDiagram
         datetime occurred_at
         string status
         string category_id FK
-        string parent_payment_id FK
+        string parent_transaction_id FK
         string note
         string created_by_id
         datetime created_at
         datetime updated_at
     }
 
-    PaymentAttribution {
+    TransactionAttribution {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string scope_type
         string user_id
         string group_id
@@ -288,9 +288,9 @@ erDiagram
         bool is_system
     }
 
-    PaymentSchedule {
+    TransactionSchedule {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string frequency
         datetime starts_at
         datetime next_occurrence_at
@@ -300,21 +300,21 @@ erDiagram
         bool is_active
     }
 
-    PaymentPlan {
+    TransactionPlan {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string kind
         int principal_cents
         decimal interest_rate
-        int payments_count
+        int transactions_count
         string frequency
         datetime first_due_at
         string amortization_method
     }
 
-    PaymentDocument {
+    TransactionDocument {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string kind
         string file_ref
         string original_name
@@ -323,9 +323,9 @@ erDiagram
         string uploaded_by_id
     }
 
-    PaymentComment {
+    TransactionComment {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string user_id
         string content
         datetime created_at
@@ -333,24 +333,24 @@ erDiagram
         datetime deleted_at
     }
 
-    PaymentStar {
+    TransactionStar {
         string id PK
-        string payment_id FK
+        string transaction_id FK
         string user_id
     }
 ```
 
 ### 4.2 Prisma schema (additions)
 
-Stored as one migration `20260425_phase6_payments` so blue-green deploy stays additive (expand-only).
+Stored as one migration `20260425_phase6_transactions` so blue-green deploy stays additive (expand-only).
 
 ```prisma
-// ── Phase 6: Payment Management ──
+// ── Phase 6: Transaction Management ──
 
-enum PaymentDirection { IN  OUT }
+enum TransactionDirection { IN  OUT }
 // Prisma w/ MySQL: use String + @db.VarChar(N) + app-level validation to stay flexible.
 
-model Payment {
+model Transaction {
   id               String    @id @default(uuid()) @db.VarChar(36)
   direction        String    @db.VarChar(3)   // 'IN' | 'OUT'
   type             String    @db.VarChar(20)  // 'ONE_TIME' | 'RECURRING' | ...
@@ -360,43 +360,43 @@ model Payment {
   status           String    @default("POSTED") @db.VarChar(20) // 'POSTED' | 'PENDING' | 'DUE' | 'CANCELLED'
   categoryId       String    @map("category_id") @db.VarChar(36)
   category         Category  @relation(fields: [categoryId], references: [id])
-  parentPaymentId  String?   @map("parent_payment_id") @db.VarChar(36)
-  parent           Payment?  @relation("PaymentOccurrences", fields: [parentPaymentId], references: [id], onDelete: Cascade)
-  occurrences      Payment[] @relation("PaymentOccurrences")
+  parentTransactionId  String?   @map("parent_transaction_id") @db.VarChar(36)
+  parent           Transaction?  @relation("TransactionOccurrences", fields: [parentTransactionId], references: [id], onDelete: Cascade)
+  occurrences      Transaction[] @relation("TransactionOccurrences")
   note             String?   @db.Text
   createdById      String    @map("created_by_id") @db.VarChar(36)
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  attributions PaymentAttribution[]
-  comments     PaymentComment[]
-  stars        PaymentStar[]
-  documents    PaymentDocument[]
-  schedule     PaymentSchedule?
-  plan         PaymentPlan?
+  attributions TransactionAttribution[]
+  comments     TransactionComment[]
+  stars        TransactionStar[]
+  documents    TransactionDocument[]
+  schedule     TransactionSchedule?
+  plan         TransactionPlan?
 
   @@index([direction, occurredAt])
   @@index([categoryId])
   @@index([createdById, occurredAt])
-  @@index([parentPaymentId])
+  @@index([parentTransactionId])
   @@index([type, status])
-  @@map("payments")
+  @@map("transactions")
 }
 
-model PaymentAttribution {
+model TransactionAttribution {
   id        String   @id @default(uuid()) @db.VarChar(36)
-  paymentId String   @map("payment_id") @db.VarChar(36)
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId String   @map("transaction_id") @db.VarChar(36)
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   scopeType String   @map("scope_type") @db.VarChar(10) // 'personal' | 'group'
   userId    String?  @map("user_id") @db.VarChar(36)
   groupId   String?  @map("group_id") @db.VarChar(36)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@unique([paymentId, scopeType, userId, groupId], name: "payment_scope_unique")
+  @@unique([transactionId, scopeType, userId, groupId], name: "transaction_scope_unique")
   @@index([userId, scopeType])
   @@index([groupId, scopeType])
-  @@index([paymentId])
-  @@map("payment_attributions")
+  @@index([transactionId])
+  @@map("transaction_attributions")
 }
 
 model Category {
@@ -412,7 +412,7 @@ model Category {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  payments Payment[]
+  transactions Transaction[]
 
   @@unique([ownerType, ownerId, slug, direction], name: "category_owner_slug_unique")
   @@index([ownerType, ownerId])
@@ -420,10 +420,10 @@ model Category {
   @@map("categories")
 }
 
-model PaymentSchedule {
+model TransactionSchedule {
   id                String    @id @default(uuid()) @db.VarChar(36)
-  paymentId         String    @unique @map("payment_id") @db.VarChar(36)
-  payment           Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId         String    @unique @map("transaction_id") @db.VarChar(36)
+  transaction           Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   frequency         String    @db.VarChar(20) // 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL'
   interval          Int       @default(1)     // e.g. every 2 weeks
   startsAt          DateTime  @map("starts_at")
@@ -436,30 +436,30 @@ model PaymentSchedule {
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([isActive, nextOccurrenceAt])
-  @@map("payment_schedules")
+  @@map("transaction_schedules")
 }
 
-model PaymentPlan {
+model TransactionPlan {
   id                  String    @id @default(uuid()) @db.VarChar(36)
-  paymentId           String    @unique @map("payment_id") @db.VarChar(36)
-  payment             Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId           String    @unique @map("transaction_id") @db.VarChar(36)
+  transaction             Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   kind                String    @db.VarChar(20) // 'INSTALLMENT' | 'LOAN' | 'MORTGAGE'
   principalCents      Int       @map("principal_cents")
   interestRate        Decimal   @default(0) @map("interest_rate") @db.Decimal(8, 6) // annual APR
-  paymentsCount       Int       @map("payments_count")
+  transactionsCount       Int       @map("transactions_count")
   frequency           String    @db.VarChar(20) // typically MONTHLY
   firstDueAt          DateTime  @map("first_due_at")
   amortizationMethod  String    @default("french") @map("amortization_method") @db.VarChar(16)
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  @@map("payment_plans")
+  @@map("transaction_plans")
 }
 
-model PaymentDocument {
+model TransactionDocument {
   id            String   @id @default(uuid()) @db.VarChar(36)
-  paymentId     String   @map("payment_id") @db.VarChar(36)
-  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId     String   @map("transaction_id") @db.VarChar(36)
+  transaction       Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   kind          String   @db.VarChar(20) // 'image' | 'pdf' | 'url' | 'other'
   fileRef       String   @map("file_ref") @db.VarChar(500)
   originalName  String?  @map("original_name") @db.VarChar(255)
@@ -468,68 +468,68 @@ model PaymentDocument {
   uploadedById  String   @map("uploaded_by_id") @db.VarChar(36)
   createdAt     DateTime @default(now()) @map("created_at")
 
-  @@index([paymentId])
-  @@map("payment_documents")
+  @@index([transactionId])
+  @@map("transaction_documents")
 }
 
-model PaymentComment {
+model TransactionComment {
   id         String    @id @default(uuid()) @db.VarChar(36)
-  paymentId  String    @map("payment_id") @db.VarChar(36)
-  payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId  String    @map("transaction_id") @db.VarChar(36)
+  transaction    Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   userId     String    @map("user_id") @db.VarChar(36)
   content    String    @db.Text
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   deletedAt  DateTime? @map("deleted_at")
 
-  @@index([paymentId, createdAt])
+  @@index([transactionId, createdAt])
   @@index([userId])
-  @@map("payment_comments")
+  @@map("transaction_comments")
 }
 
-model PaymentStar {
+model TransactionStar {
   id        String   @id @default(uuid()) @db.VarChar(36)
-  paymentId String   @map("payment_id") @db.VarChar(36)
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionId String   @map("transaction_id") @db.VarChar(36)
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   userId    String   @map("user_id") @db.VarChar(36)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@unique([paymentId, userId])
+  @@unique([transactionId, userId])
   @@index([userId, createdAt])
-  @@map("payment_stars")
+  @@map("transaction_stars")
 }
 ```
 
 ### 4.3 Indexing strategy
 
-- **Read patterns**: most queries are "payments visible to user X, in scope S, over date range D, direction Dir, category C".
-- **Primary index for personal listing**: `payment_attributions (user_id, scope_type)` → drives the initial scope filter; then joined to `payments` ordered by `occurred_at DESC`.
-- **Group listing**: `payment_attributions (group_id, scope_type)` analogue.
-- **Date range**: `payments (direction, occurred_at)` + `payments (created_by_id, occurred_at)`.
-- **Category aggregation** (Phase 10): `payments (category_id, occurred_at)`.
-- **Recurring worker**: `payment_schedules (is_active, next_occurrence_at)` partial-covers the hot path.
+- **Read patterns**: most queries are "transactions visible to user X, in scope S, over date range D, direction Dir, category C".
+- **Primary index for personal listing**: `transaction_attributions (user_id, scope_type)` → drives the initial scope filter; then joined to `transactions` ordered by `occurred_at DESC`.
+- **Group listing**: `transaction_attributions (group_id, scope_type)` analogue.
+- **Date range**: `transactions (direction, occurred_at)` + `transactions (created_by_id, occurred_at)`.
+- **Category aggregation** (Phase 10): `transactions (category_id, occurred_at)`.
+- **Recurring worker**: `transaction_schedules (is_active, next_occurrence_at)` partial-covers the hot path.
 
 ### 4.4 User & Group model updates
 
 ```prisma
 model User {
   // existing fields ...
-  paymentAttributions PaymentAttribution[] @relation(..., fields: [id], references: [userId])
-  paymentComments     PaymentComment[]
-  paymentStars        PaymentStar[]
+  transactionAttributions TransactionAttribution[] @relation(..., fields: [id], references: [userId])
+  transactionComments     TransactionComment[]
+  transactionStars        TransactionStar[]
   categoriesOwned     Category[]           // filtered on owner_type='user'
-  paymentsCreated     Payment[]
-  paymentDocuments    PaymentDocument[]
+  transactionsCreated     Transaction[]
+  transactionDocuments    TransactionDocument[]
 }
 
 model Group {
   // existing fields ...
-  paymentAttributions PaymentAttribution[]
+  transactionAttributions TransactionAttribution[]
   categoriesOwned     Category[]           // filtered on owner_type='group'
 }
 ```
 
-(Exact Prisma relation annotations are finalised in iteration 6.2. Relations on `User` to `PaymentAttribution.userId` use explicit `@relation` with `fields`/`references` matching the foreign-key columns.)
+(Exact Prisma relation annotations are finalised in iteration 6.2. Relations on `User` to `TransactionAttribution.userId` use explicit `@relation` with `fields`/`references` matching the foreign-key columns.)
 
 ---
 
@@ -539,34 +539,34 @@ All endpoints are under `/api/v1`. All require `JwtAuthGuard` unless noted.
 
 ### 5.1 Categories
 
-| Method | Endpoint          | Auth + Guard             | Description                                                                                                  |
-| ------ | ----------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------- | -------- | ----------- |
-| GET    | `/categories`     | JWT                      | List categories visible to user: system + user + member groups. Query: `direction=IN                         | OUT`, `scope=system  | personal | group:<id>` |
-| POST   | `/categories`     | JWT                      | Create a category. Body: `{ name, slug?, icon?, color?, direction, scope: 'personal'                         | 'group', groupId? }` |
-| PATCH  | `/categories/:id` | JWT + CategoryOwnerGuard | Update (owner or group admin only). Cannot edit `is_system`.                                                 |
-| DELETE | `/categories/:id` | JWT + CategoryOwnerGuard | Delete (owner or group admin). Reject if any payment uses it; require `force=true` to reassign to a default. |
+| Method | Endpoint          | Auth + Guard             | Description                                                                                                      |
+| ------ | ----------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------- | -------- | ----------- |
+| GET    | `/categories`     | JWT                      | List categories visible to user: system + user + member groups. Query: `direction=IN                             | OUT`, `scope=system  | personal | group:<id>` |
+| POST   | `/categories`     | JWT                      | Create a category. Body: `{ name, slug?, icon?, color?, direction, scope: 'personal'                             | 'group', groupId? }` |
+| PATCH  | `/categories/:id` | JWT + CategoryOwnerGuard | Update (owner or group admin only). Cannot edit `is_system`.                                                     |
+| DELETE | `/categories/:id` | JWT + CategoryOwnerGuard | Delete (owner or group admin). Reject if any transaction uses it; require `force=true` to reassign to a default. |
 
 Default slugs (seeded):
 
 - `OUT`: `groceries`, `home`, `restaurants`, `transport`, `utilities`, `health`, `entertainment`, `clothing`, `travel`, `education`, `taxes`, `fees`, `insurance`, `gifts`, `other`.
 - `IN`: `salary`, `bonus`, `freelance`, `investment`, `refund`, `gift`, `other`.
 
-### 5.2 Payments
+### 5.2 Transactions
 
-| Method | Endpoint                            | Guard                      | Description                                                                                  |
-| ------ | ----------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| POST   | `/payments`                         | JWT                        | Create payment + attributions + optional schedule/plan.                                      |
-| GET    | `/payments`                         | JWT                        | List with cursor pagination & filters (see below).                                           |
-| GET    | `/payments/:id`                     | JWT + `PaymentAccessGuard` | Get single payment + attributions + category + schedule/plan + counts (comments, stars).     |
-| PATCH  | `/payments/:id`                     | JWT + `PaymentOwnerGuard`  | Update mutable fields (creator only).                                                        |
-| DELETE | `/payments/:id`                     | JWT + `PaymentAccessGuard` | Delete attribution; `?scope=all` removes all accessible; when 0 attributions left, row gone. |
-| POST   | `/payments/:id/star`                | JWT + `PaymentAccessGuard` | Toggle star for current user. Response: `{ starred: boolean }`.                              |
-| GET    | `/payments/:id/comments`            | JWT + `PaymentAccessGuard` | List comments (cursor paginated).                                                            |
-| POST   | `/payments/:id/comments`            | JWT + `PaymentAccessGuard` | Create comment.                                                                              |
-| PATCH  | `/payments/:id/comments/:commentId` | JWT + comment-author       | Update own comment.                                                                          |
-| DELETE | `/payments/:id/comments/:commentId` | JWT + comment-author       | Soft-delete own comment.                                                                     |
+| Method | Endpoint                                | Guard                          | Description                                                                                  |
+| ------ | --------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------- |
+| POST   | `/transactions`                         | JWT                            | Create transaction + attributions + optional schedule/plan.                                  |
+| GET    | `/transactions`                         | JWT                            | List with cursor pagination & filters (see below).                                           |
+| GET    | `/transactions/:id`                     | JWT + `TransactionAccessGuard` | Get single transaction + attributions + category + schedule/plan + counts (comments, stars). |
+| PATCH  | `/transactions/:id`                     | JWT + `TransactionOwnerGuard`  | Update mutable fields (creator only).                                                        |
+| DELETE | `/transactions/:id`                     | JWT + `TransactionAccessGuard` | Delete attribution; `?scope=all` removes all accessible; when 0 attributions left, row gone. |
+| POST   | `/transactions/:id/star`                | JWT + `TransactionAccessGuard` | Toggle star for current user. Response: `{ starred: boolean }`.                              |
+| GET    | `/transactions/:id/comments`            | JWT + `TransactionAccessGuard` | List comments (cursor paginated).                                                            |
+| POST   | `/transactions/:id/comments`            | JWT + `TransactionAccessGuard` | Create comment.                                                                              |
+| PATCH  | `/transactions/:id/comments/:commentId` | JWT + comment-author           | Update own comment.                                                                          |
+| DELETE | `/transactions/:id/comments/:commentId` | JWT + comment-author           | Soft-delete own comment.                                                                     |
 
-#### `POST /payments` body
+#### `POST /transactions` body
 
 ```jsonc
 {
@@ -591,7 +591,7 @@ Default slugs (seeded):
     "kind": "INSTALLMENT",
     "principalCents": 120000,
     "interestRate": 0.0,
-    "paymentsCount": 12,
+    "transactionsCount": 12,
     "frequency": "MONTHLY",
     "firstDueAt": "2026-05-25",
     "amortizationMethod": "equal", // 'equal' for zero-interest installments, 'french' for loans
@@ -599,17 +599,17 @@ Default slugs (seeded):
 }
 ```
 
-Validation rules (enforced in `PaymentService`):
+Validation rules (enforced in `TransactionService`):
 
 - Attributions non-empty.
 - Each attribution references either current user's personal or a group where current user is a member.
 - Category must be visible to the user (system OR owned by user OR owned by a group the user is in).
-- Category's `direction` must equal payment `direction` (or `BOTH`).
+- Category's `direction` must equal transaction `direction` (or `BOTH`).
 - `schedule` or `plan` presence matches the `type`.
 - `amountCents > 0`.
 - `occurredAt <= today` for `ONE_TIME` (allow future dates for scheduled/plan occurrences).
 
-#### `GET /payments` query
+#### `GET /transactions` query
 
 ```
 ?scope=personal                 # personal-only
@@ -629,13 +629,13 @@ Returns the shared pagination envelope:
 
 ```jsonc
 {
-  "data": [ PaymentSummaryDto ],
+  "data": [ TransactionSummaryDto ],
   "nextCursor": "...",
   "hasMore": true
 }
 ```
 
-`PaymentSummaryDto` is a flattened view with:
+`TransactionSummaryDto` is a flattened view with:
 
 ```jsonc
 {
@@ -645,53 +645,53 @@ Returns the shared pagination envelope:
   "attributions": [ { "scope", "userId?", "groupId?", "groupName?" } ],
   "note",
   "commentCount", "starredByMe", "hasDocuments",
-  "parentPaymentId", "schedule?", "plan?",
+  "parentTransactionId", "schedule?", "plan?",
   "createdById", "createdAt", "updatedAt"
 }
 ```
 
-#### `DELETE /payments/:id` semantics
+#### `DELETE /transactions/:id` semantics
 
 ```
-DELETE /payments/:id                 # remove attribution for current scope (see body/query below)
-DELETE /payments/:id?scope=personal  # explicit: remove personal attribution
-DELETE /payments/:id?scope=group:<groupId>   # remove specific group attribution
-DELETE /payments/:id?scope=all       # remove every accessible attribution
+DELETE /transactions/:id                 # remove attribution for current scope (see body/query below)
+DELETE /transactions/:id?scope=personal  # explicit: remove personal attribution
+DELETE /transactions/:id?scope=group:<groupId>   # remove specific group attribution
+DELETE /transactions/:id?scope=all       # remove every accessible attribution
 ```
 
-Response: `{ deletedAttributions: 2, paymentDeleted: true|false }`.
+Response: `{ deletedAttributions: 2, transactionDeleted: true|false }`.
 
 ### 5.3 Stars
 
-| Method | Endpoint             |
-| ------ | -------------------- |
-| POST   | `/payments/:id/star` |
+| Method | Endpoint                 |
+| ------ | ------------------------ |
+| POST   | `/transactions/:id/star` |
 
 Toggles (create if missing, delete if present). Returns `{ starred }`.
 
 ### 5.4 Comments
 
-Paginated under the parent payment; all bodies use a simple `{ content: string (1..2000) }`.
+Paginated under the parent transaction; all bodies use a simple `{ content: string (1..2000) }`.
 
 ### 5.5 Schedules
 
-| Method | Endpoint                 | Description                                                  |
-| ------ | ------------------------ | ------------------------------------------------------------ |
-| POST   | `/payments/:id/schedule` | Attach a schedule to an existing ONE_TIME payment (convert). |
-| PATCH  | `/payments/:id/schedule` | Update frequency/interval/ends/max (creator only).           |
-| DELETE | `/payments/:id/schedule` | Deactivate (`isActive=false`); keep row for audit.           |
+| Method | Endpoint                     | Description                                                      |
+| ------ | ---------------------------- | ---------------------------------------------------------------- |
+| POST   | `/transactions/:id/schedule` | Attach a schedule to an existing ONE_TIME transaction (convert). |
+| PATCH  | `/transactions/:id/schedule` | Update frequency/interval/ends/max (creator only).               |
+| DELETE | `/transactions/:id/schedule` | Deactivate (`isActive=false`); keep row for audit.               |
 
-`POST /payments` with `type=RECURRING|LIMITED_PERIOD` creates the schedule atomically — these endpoints are for post-hoc edits.
+`POST /transactions` with `type=RECURRING|LIMITED_PERIOD` creates the schedule atomically — these endpoints are for post-hoc edits.
 
 #### Recurring occurrences listing (iteration 6.18.1.3)
 
 Two ways to enumerate the occurrences generated from a recurring parent:
 
-1. **Query filter on `/payments`** — `?parentPaymentId=<uuid>` narrows the
-   listing to occurrences whose `parentPaymentId === <uuid>`. Visibility on
+1. **Query filter on `/transactions`** — `?parentTransactionId=<uuid>` narrows the
+   listing to occurrences whose `parentTransactionId === <uuid>`. Visibility on
    the parent is enforced (404 leak-free) so a non-member cannot probe child
    ids by guessing a parent uuid.
-2. **Ergonomic alias** — `GET /payments/:paymentId/occurrences` is a thin
+2. **Ergonomic alias** — `GET /transactions/:transactionId/occurrences` is a thin
    wrapper that forces the parent filter from the path param. Same
    visibility rules; same cursor pagination + sort knobs as the main list
    endpoint.
@@ -699,45 +699,45 @@ Two ways to enumerate the occurrences generated from a recurring parent:
 The filter UI control for "occurrences only / parents only / both" lands in
 iteration 6.18.3. The wire shape of the partition is already public:
 
-| Param        | Values           | Effect                                                                                                                       |
-| ------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `withParent` | `true` / `false` | `true` → only parents (`parentPaymentId === null`); `false` → only occurrences (`parentPaymentId !== null`); omitted → both. |
+| Param        | Values           | Effect                                                                                                                               |
+| ------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `withParent` | `true` / `false` | `true` → only parents (`parentTransactionId === null`); `false` → only occurrences (`parentTransactionId !== null`); omitted → both. |
 
-Combined with `parentPaymentId` it is a no-op (the identity filter wins).
-URL state on `/payments` carries a `childScope=parents|occurrences` key
+Combined with `parentTransactionId` it is a no-op (the identity filter wins).
+URL state on `/transactions` carries a `childScope=parents|occurrences` key
 (default `all`, omitted from the URL) which the frontend translates into
 the API's `withParent` partition.
 
 ### 5.6 Plans
 
-| Method | Endpoint             | Description                                                                          |
-| ------ | -------------------- | ------------------------------------------------------------------------------------ |
-| POST   | `/payments/:id/plan` | Attach a plan to an existing ONE_TIME (creates the amortization schedule).           |
-| GET    | `/payments/:id/plan` | Return plan metadata + amortization table.                                           |
-| PATCH  | `/payments/:id/plan` | Update plan (regenerates unpaid occurrences). Only allowed while no occurrence paid. |
-| DELETE | `/payments/:id/plan` | Cancel plan; cascades to pending occurrences (CANCELLED status, never removed).      |
+| Method | Endpoint                 | Description                                                                          |
+| ------ | ------------------------ | ------------------------------------------------------------------------------------ |
+| POST   | `/transactions/:id/plan` | Attach a plan to an existing ONE_TIME (creates the amortization schedule).           |
+| GET    | `/transactions/:id/plan` | Return plan metadata + amortization table.                                           |
+| PATCH  | `/transactions/:id/plan` | Update plan (regenerates unpaid occurrences). Only allowed while no occurrence paid. |
+| DELETE | `/transactions/:id/plan` | Cancel plan; cascades to pending occurrences (CANCELLED status, never removed).      |
 
-The initial flow creates plan via `POST /payments` — these endpoints exist for advanced edits.
+The initial flow creates plan via `POST /transactions` — these endpoints exist for advanced edits.
 
 ### 5.7 Error codes
 
 ```ts
-export const PAYMENT_ERRORS = {
-  PAYMENT_NOT_FOUND: 'PAYMENT_NOT_FOUND',
-  PAYMENT_ACCESS_DENIED: 'PAYMENT_ACCESS_DENIED',
-  PAYMENT_NOT_OWNER: 'PAYMENT_NOT_OWNER',
-  PAYMENT_INVALID_AMOUNT: 'PAYMENT_INVALID_AMOUNT',
-  PAYMENT_INVALID_DATE: 'PAYMENT_INVALID_DATE',
-  PAYMENT_INVALID_CATEGORY: 'PAYMENT_INVALID_CATEGORY',
-  PAYMENT_CATEGORY_DIRECTION_MISMATCH: 'PAYMENT_CATEGORY_DIRECTION_MISMATCH',
-  PAYMENT_NO_ATTRIBUTIONS: 'PAYMENT_NO_ATTRIBUTIONS',
-  PAYMENT_INVALID_ATTRIBUTION: 'PAYMENT_INVALID_ATTRIBUTION',
-  PAYMENT_ATTRIBUTION_OUT_OF_SCOPE: 'PAYMENT_ATTRIBUTION_OUT_OF_SCOPE',
-  PAYMENT_SCHEDULE_REQUIRED: 'PAYMENT_SCHEDULE_REQUIRED',
-  PAYMENT_PLAN_REQUIRED: 'PAYMENT_PLAN_REQUIRED',
-  PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE: 'PAYMENT_CANNOT_EDIT_GENERATED_OCCURRENCE',
-  PAYMENT_COMMENT_NOT_FOUND: 'PAYMENT_COMMENT_NOT_FOUND',
-  PAYMENT_COMMENT_NOT_AUTHOR: 'PAYMENT_COMMENT_NOT_AUTHOR',
+export const TRANSACTION_ERRORS = {
+  TRANSACTION_NOT_FOUND: 'TRANSACTION_NOT_FOUND',
+  TRANSACTION_ACCESS_DENIED: 'TRANSACTION_ACCESS_DENIED',
+  TRANSACTION_NOT_OWNER: 'TRANSACTION_NOT_OWNER',
+  TRANSACTION_INVALID_AMOUNT: 'TRANSACTION_INVALID_AMOUNT',
+  TRANSACTION_INVALID_DATE: 'TRANSACTION_INVALID_DATE',
+  TRANSACTION_INVALID_CATEGORY: 'TRANSACTION_INVALID_CATEGORY',
+  TRANSACTION_CATEGORY_DIRECTION_MISMATCH: 'TRANSACTION_CATEGORY_DIRECTION_MISMATCH',
+  TRANSACTION_NO_ATTRIBUTIONS: 'TRANSACTION_NO_ATTRIBUTIONS',
+  TRANSACTION_INVALID_ATTRIBUTION: 'TRANSACTION_INVALID_ATTRIBUTION',
+  TRANSACTION_ATTRIBUTION_OUT_OF_SCOPE: 'TRANSACTION_ATTRIBUTION_OUT_OF_SCOPE',
+  TRANSACTION_SCHEDULE_REQUIRED: 'TRANSACTION_SCHEDULE_REQUIRED',
+  TRANSACTION_PLAN_REQUIRED: 'TRANSACTION_PLAN_REQUIRED',
+  TRANSACTION_CANNOT_EDIT_GENERATED_OCCURRENCE: 'TRANSACTION_CANNOT_EDIT_GENERATED_OCCURRENCE',
+  TRANSACTION_COMMENT_NOT_FOUND: 'TRANSACTION_COMMENT_NOT_FOUND',
+  TRANSACTION_COMMENT_NOT_AUTHOR: 'TRANSACTION_COMMENT_NOT_AUTHOR',
   CATEGORY_NOT_FOUND: 'CATEGORY_NOT_FOUND',
   CATEGORY_NOT_OWNER: 'CATEGORY_NOT_OWNER',
   CATEGORY_IN_USE: 'CATEGORY_IN_USE',
@@ -746,13 +746,13 @@ export const PAYMENT_ERRORS = {
 
 ### 5.8 Rate limiting
 
-| Action                       | Limit       |
-| ---------------------------- | ----------- |
-| Create/update/delete payment | `30 / min`  |
-| Create comment               | `20 / min`  |
-| Toggle star                  | `60 / min`  |
-| List payments                | `120 / min` |
-| Category CRUD                | `20 / min`  |
+| Action                           | Limit       |
+| -------------------------------- | ----------- |
+| Create/update/delete transaction | `30 / min`  |
+| Create comment                   | `20 / min`  |
+| Toggle star                      | `60 / min`  |
+| List transactions                | `120 / min` |
+| Category CRUD                    | `20 / min`  |
 
 Applied via the existing `@CustomThrottle()` decorator.
 
@@ -765,12 +765,12 @@ Applied via the existing `@CustomThrottle()` decorator.
 | Path                                      | Purpose                                                       |
 | ----------------------------------------- | ------------------------------------------------------------- |
 | `/dashboard`                              | Aggregated overview with totals, recent, starred, scope cards |
-| `/payments`                               | Expanded list (default `scope=all`)                           |
-| `/payments?scope=personal`                | Personal-only list                                            |
-| `/payments?scope=group:<id>`              | Group-only list (also accessible as a tab on group page)      |
-| `/payments/starred`                       | Starred-only list (shortcut for `?starred=true`)              |
-| `/payments/:id`                           | Single payment detail (note, docs, comments, star)            |
-| `/groups/[groupId]`                       | Group dashboard with embedded Payments tab                    |
+| `/transactions`                           | Expanded list (default `scope=all`)                           |
+| `/transactions?scope=personal`            | Personal-only list                                            |
+| `/transactions?scope=group:<id>`          | Group-only list (also accessible as a tab on group page)      |
+| `/transactions/starred`                   | Starred-only list (shortcut for `?starred=true`)              |
+| `/transactions/:id`                       | Single transaction detail (note, docs, comments, star)        |
+| `/groups/[groupId]`                       | Group dashboard with embedded Transactions tab                |
 | `/settings/account` → Categories section  | Personal category management                                  |
 | `/groups/[groupId]/settings` → Categories | Group category management (admins)                            |
 
@@ -779,38 +779,38 @@ Applied via the existing `@CustomThrottle()` decorator.
 ```
 ┌───────────────────────────── /dashboard ─────────────────────────────┐
 │ [ Totals card: this month • In / Out / Net ]                         │
-│ [ Quick action: + Add payment (opens dialog with last-used scopes) ] │
+│ [ Quick action: + Add transaction (opens dialog with last-used scopes) ] │
 ├──────────────────────────────────────────────────────────────────────┤
 │ [ Scope entry cards (grid) ]                                         │
 │   ┌ Personal ┐  ┌ Family ┐  ┌ Work team ┐ ...                        │
 │   └──────────┘  └────────┘  └───────────┘                            │
 ├──────────────────────────────────────────────────────────────────────┤
-│ [ Recent activity: PaymentsList (limit=10, sort=date_desc) ]         │
+│ [ Recent activity: TransactionsList (limit=10, sort=date_desc) ]         │
 ├──────────────────────────────────────────────────────────────────────┤
-│ [ Starred: PaymentsList (filter starred, limit=5) ]                  │
+│ [ Starred: TransactionsList (filter starred, limit=5) ]                  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.3 PaymentsList component (6.12)
+### 6.3 TransactionsList component (6.12)
 
 Props:
 
 ```ts
-interface PaymentsListProps {
+interface TransactionsListProps {
   scope?: 'all' | 'personal' | { groupId: string };
-  initialFilters?: Partial<PaymentsFilters>;
+  initialFilters?: Partial<TransactionsFilters>;
   showFilters?: boolean; // default true
   showControls?: boolean; // edit/delete; default true
   showStar?: boolean; // default true
   limit?: number; // 20 default
   emptyState?: React.ReactNode;
-  onPaymentClick?: (id: string) => void;
+  onTransactionClick?: (id: string) => void;
 }
 ```
 
 Renders a filter/sort bar, responsive table (desktop) / card list (mobile) with columns: **Date · Direction · Amount · Category · Scope(s) · Note · ★ · Controls**. Infinite scroll / "Load more" via cursor.
 
-### 6.4 PaymentFormDialog (6.13)
+### 6.4 TransactionFormDialog (6.13)
 
 - Direction toggle (In / Out) — defaults to the value chosen last time (`remember.ts`).
 - Amount + currency picker (defaults to user's default currency, or first selected scope's default).
@@ -820,12 +820,12 @@ Renders a filter/sort bar, responsive table (desktop) / card list (mobile) with 
 - Note (textarea, optional).
 - Type selector with a disclosure: _Default is one-time. Click to make recurring, installment, or loan._
 - Type-specific sub-forms render when expanded (frequency, end date, principal + rate + count).
-- "Save" calls `POST /payments` or `PATCH /payments/:id`; persists last-used scopes/direction to localStorage.
+- "Save" calls `POST /transactions` or `PATCH /transactions/:id`; persists last-used scopes/direction to localStorage.
 
-### 6.5 Payment detail page (6.14)
+### 6.5 Transaction detail page (6.14)
 
 ```
-┌ /payments/:id ────────────────────────────────────────────────┐
+┌ /transactions/:id ────────────────────────────────────────────────┐
 │ [← Back]                                                     │
 │ { direction badge }  { type badge }  { status pill }          │
 │ Amount: $12.50  Currency: USD   Date: 2026-04-25              │
@@ -849,15 +849,15 @@ Renders a filter/sort bar, responsive table (desktop) / card list (mobile) with 
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### 6.6 Group dashboard Payments tab (6.16)
+### 6.6 Group dashboard Transactions tab (6.16)
 
 The existing [`/groups/[groupId]/page.tsx`](../apps/web/src/app/[locale]/groups/[groupId]/page.tsx:1) gets a new tab list:
 
 ```
-[ Overview ] [ Payments ] [ Members ] [ (admin) Settings → ]
+[ Overview ] [ Transactions ] [ Members ] [ (admin) Settings → ]
 ```
 
-The **Payments** tab renders `<PaymentsList scope={{ groupId }} />`. The existing member list remains as a tab.
+The **Transactions** tab renders `<TransactionsList scope={{ groupId }} />`. The existing member list remains as a tab.
 
 ### 6.7 Categories management UI (6.16)
 
@@ -872,7 +872,7 @@ Both use the same `<CategoryManager ownerType="..." ownerId="..." />` component.
 
 New translation namespaces:
 
-- `payments.*` — list, controls, filters, dialogs, detail page.
+- `transactions.*` — list, controls, filters, dialogs, detail page.
 - `categories.*` — category CRUD + default category display names.
 - `dashboard.*` — totals, recent, starred, scope cards.
 
@@ -895,31 +895,31 @@ If the locale-specific label is missing, fall back to `name` from the API.
 
 The whole point of merging Phases 6 and 7 is to avoid any "incomes" vs "expenses" duplication. Concrete rules applied throughout the design:
 
-| Rule                                                                                        | Enforcement                                                                       |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
-| A **single** `Payment` table/model for both directions.                                     | [`payments`](../apps/api/prisma/schema.prisma:1) with `direction` column.         |
-| A **single** CRUD service (`PaymentService`) handling both directions.                      | `payment.service.ts` — no direction-specific methods.                             |
-| A **single** controller and set of endpoints `/payments/*`.                                 | `payment.controller.ts`.                                                          |
-| A **single** list query with a `direction` filter.                                          | `GET /payments?direction=IN                                                       | OUT`.                      |
-| A **single** React component for the list (`<PaymentsList>`).                               | Used on dashboard, personal page, group tab, starred page.                        |
-| A **single** add/edit dialog (`<PaymentFormDialog>`) with a direction toggle.               | Used everywhere payments are added.                                               |
-| Category schema is direction-aware (`direction IN                                           | OUT                                                                               | BOTH`) but uses one table. | `categories` with `direction` column; default seeds cover both. |
-| Translations share the `payments.*` namespace — only labels differ by direction.            | `payments.in.*` and `payments.out.*` only for strings like "Income" vs "Expense". |
-| Audit log `action` values follow `PAYMENT_CREATED` / `PAYMENT_UPDATED` / `PAYMENT_DELETED`. | No `INCOME_CREATED` / `EXPENSE_CREATED` split.                                    |
-| Error codes prefixed `PAYMENT_*`.                                                           | `payment-errors.ts`.                                                              |
-| `SERVER_NAME`-style secrets re-used; no new `PAYMENT_DOMAIN`-style vars introduced.         | Follows [`dna.md`](../.kilocode/rules/dna.md:1).                                  |
+| Rule                                                                                                    | Enforcement                                                                               |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
+| A **single** `Transaction` table/model for both directions.                                             | [`transactions`](../apps/api/prisma/schema.prisma:1) with `direction` column.             |
+| A **single** CRUD service (`TransactionService`) handling both directions.                              | `transaction.service.ts` — no direction-specific methods.                                 |
+| A **single** controller and set of endpoints `/transactions/*`.                                         | `transaction.controller.ts`.                                                              |
+| A **single** list query with a `direction` filter.                                                      | `GET /transactions?direction=IN                                                           | OUT`.                      |
+| A **single** React component for the list (`<TransactionsList>`).                                       | Used on dashboard, personal page, group tab, starred page.                                |
+| A **single** add/edit dialog (`<TransactionFormDialog>`) with a direction toggle.                       | Used everywhere transactions are added.                                                   |
+| Category schema is direction-aware (`direction IN                                                       | OUT                                                                                       | BOTH`) but uses one table. | `categories` with `direction` column; default seeds cover both. |
+| Translations share the `transactions.*` namespace — only labels differ by direction.                    | `transactions.in.*` and `transactions.out.*` only for strings like "Income" vs "Expense". |
+| Audit log `action` values follow `TRANSACTION_CREATED` / `TRANSACTION_UPDATED` / `TRANSACTION_DELETED`. | No `INCOME_CREATED` / `EXPENSE_CREATED` split.                                            |
+| Error codes prefixed `TRANSACTION_*`.                                                                   | `transaction-errors.ts`.                                                                  |
+| `SERVER_NAME`-style secrets re-used; no new `TRANSACTION_DOMAIN`-style vars introduced.                 | Follows [`dna.md`](../.kilocode/rules/dna.md:1).                                          |
 
 ---
 
 ## 8. Shared Package Extensions
 
-New module [`packages/shared/src/types/payment.types.ts`](../packages/shared/src/types/payment.types.ts:1):
+New module [`packages/shared/src/types/transaction.types.ts`](../packages/shared/src/types/transaction.types.ts:1):
 
 ```ts
-export const PAYMENT_DIRECTIONS = ['IN', 'OUT'] as const;
-export type PaymentDirection = (typeof PAYMENT_DIRECTIONS)[number];
+export const TRANSACTION_DIRECTIONS = ['IN', 'OUT'] as const;
+export type TransactionDirection = (typeof TRANSACTION_DIRECTIONS)[number];
 
-export const PAYMENT_TYPES = [
+export const TRANSACTION_TYPES = [
   'ONE_TIME',
   'RECURRING',
   'LIMITED_PERIOD',
@@ -927,12 +927,12 @@ export const PAYMENT_TYPES = [
   'LOAN',
   'MORTGAGE',
 ] as const;
-export type PaymentType = (typeof PAYMENT_TYPES)[number];
+export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
-export const PAYMENT_STATUSES = ['POSTED', 'PENDING', 'DUE', 'CANCELLED'] as const;
-export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const TRANSACTION_STATUSES = ['POSTED', 'PENDING', 'DUE', 'CANCELLED'] as const;
+export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
-export const PAYMENT_FREQUENCIES = [
+export const TRANSACTION_FREQUENCIES = [
   'DAILY',
   'WEEKLY',
   'BIWEEKLY',
@@ -940,7 +940,7 @@ export const PAYMENT_FREQUENCIES = [
   'QUARTERLY',
   'ANNUAL',
 ] as const;
-export type PaymentFrequency = (typeof PAYMENT_FREQUENCIES)[number];
+export type TransactionFrequency = (typeof TRANSACTION_FREQUENCIES)[number];
 
 export const CATEGORY_OWNER_TYPES = ['system', 'user', 'group'] as const;
 export type CategoryOwnerType = (typeof CATEGORY_OWNER_TYPES)[number];
@@ -950,11 +950,11 @@ export type AttributionScopeType = (typeof ATTRIBUTION_SCOPE_TYPES)[number];
 
 export type AttributionScope = { scope: 'personal' } | { scope: 'group'; groupId: string };
 
-export const PAYMENT_SORTS = ['date_desc', 'date_asc', 'amount_desc', 'amount_asc'] as const;
-export type PaymentSort = (typeof PAYMENT_SORTS)[number];
+export const TRANSACTION_SORTS = ['date_desc', 'date_asc', 'amount_desc', 'amount_asc'] as const;
+export type TransactionSort = (typeof TRANSACTION_SORTS)[number];
 ```
 
-And `packages/shared/src/dto/payment.dto.ts` with the serialisable DTO shapes (backend emits, frontend consumes).
+And `packages/shared/src/dto/transaction.dto.ts` with the serialisable DTO shapes (backend emits, frontend consumes).
 
 Default category slugs live in a single module `packages/shared/src/constants/default-categories.ts` so the API seed and the frontend i18n dictionary stay in sync.
 
@@ -977,7 +977,7 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 #### 6.1 Shared types & DTOs
 
-- Add [`packages/shared/src/types/payment.types.ts`](../packages/shared/src/types/payment.types.ts:1), [`constants/default-categories.ts`](../packages/shared/src/constants/default-categories.ts:1).
+- Add [`packages/shared/src/types/transaction.types.ts`](../packages/shared/src/types/transaction.types.ts:1), [`constants/default-categories.ts`](../packages/shared/src/constants/default-categories.ts:1).
 - Extend barrel exports.
 - Unit tests (vitest) assert the string-literal arrays are non-empty and roundtrip via `JSON.stringify`.
 - No runtime code changes in `api`/`web` yet (types only).
@@ -987,7 +987,7 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 #### 6.2 DB schema + migration
 
 - Prisma models from [§4.2](#42-prisma-schema-additions).
-- New migration `20260425_phase6_payments/migration.sql` (expand-only).
+- New migration `20260425_phase6_transactions/migration.sql` (expand-only).
 - Manual SQL review: all FKs indexed, no destructive ops.
 - Run `prisma generate`; confirm integration test setup still works via testcontainers.
 
@@ -1006,27 +1006,27 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 - `CategoryModule`, `CategoryService`, `CategoryController`, DTOs, guard `CategoryOwnerGuard`.
 - List combines system + user + member-group categories with the optional direction filter.
 - Personal create/update/delete restricted to the user; group-owned restricted to group admins.
-- Refusal when a category is in use by any payment (`CATEGORY_IN_USE`) unless a replacement category is provided.
+- Refusal when a category is in use by any transaction (`CATEGORY_IN_USE`) unless a replacement category is provided.
 - Tests: 15+ service + 10+ controller unit tests.
 
 **Acceptance**: Category CRUD works via Swagger; listing returns expected visibility.
 
-### Part B — One-time payment core API
+### Part B — One-time transaction core API
 
-#### 6.5 Create payment API
+#### 6.5 Create transaction API
 
-- `PaymentModule`, `PaymentService`, `PaymentController`.
-- `POST /payments` for `type=ONE_TIME` only (schedule/plan branches in later iterations). Validates attributions, category, direction, amounts.
-- Transaction: insert `Payment` + N `PaymentAttribution` rows.
-- Audit log: `PAYMENT_CREATED`.
+- `TransactionModule`, `TransactionService`, `TransactionController`.
+- `POST /transactions` for `type=ONE_TIME` only (schedule/plan branches in later iterations). Validates attributions, category, direction, amounts.
+- Transaction: insert `Transaction` + N `TransactionAttribution` rows.
+- Audit log: `TRANSACTION_CREATED`.
 - Tests: unit + integration (Testcontainers). Permission tests for attribution scoping.
 
-**Acceptance**: can create a personal payment, a group payment, and a mixed personal+group payment via Swagger.
+**Acceptance**: can create a personal transaction, a group transaction, and a mixed personal+group transaction via Swagger.
 
-#### 6.6 List payments API
+#### 6.6 List transactions API
 
-- `GET /payments` with filters ([§5.2](#52-payments)).
-- Visibility filter: join `payment_attributions` on either `user_id=currentUser` or `group_id IN (member-groups)`.
+- `GET /transactions` with filters ([§5.2](#52-transactions)).
+- Visibility filter: join `transaction_attributions` on either `user_id=currentUser` or `group_id IN (member-groups)`.
 - Cursor pagination using composite cursor `(occurredAt, id)` reversed.
 - Efficient query (no N+1; attribute eager-loading with `include: { attributions: true, category: true, _count: { comments, stars } }`).
 - Tests: unit + integration with seeded data for each filter combination.
@@ -1035,20 +1035,20 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 #### 6.7 Edit + get-one
 
-- `GET /payments/:id` with `PaymentAccessGuard` (existing access rules).
-- `PATCH /payments/:id` with `PaymentOwnerGuard` (creator only); mutable fields: `amountCents`, `currency`, `occurredAt`, `categoryId`, `note`, `direction` (only while no occurrences exist).
+- `GET /transactions/:id` with `TransactionAccessGuard` (existing access rules).
+- `PATCH /transactions/:id` with `TransactionOwnerGuard` (creator only); mutable fields: `amountCents`, `currency`, `occurredAt`, `categoryId`, `note`, `direction` (only while no occurrences exist).
 - Attribution edits handled in iteration 6.8 (they share the delete-per-scope code path internally).
-- Audit log: `PAYMENT_UPDATED`.
+- Audit log: `TRANSACTION_UPDATED`.
 - Tests: unit + integration.
 
 **Acceptance**: creator can edit; non-creator receives 403; access guard rejects non-members.
 
-#### 6.8 Delete payment API
+#### 6.8 Delete transaction API
 
-- `DELETE /payments/:id` with query `?scope=personal|group:<id>|all` (default = the scope the caller "owns" by default — personal if they have it, otherwise the single accessible group; explicit error if ambiguous).
+- `DELETE /transactions/:id` with query `?scope=personal|group:<id>|all` (default = the scope the caller "owns" by default — personal if they have it, otherwise the single accessible group; explicit error if ambiguous).
 - Removes only accessible attributions; hard-deletes row when zero attributions left.
-- Audit log: `PAYMENT_ATTRIBUTION_REMOVED` and optionally `PAYMENT_DELETED` when the row is removed.
-- Internally reused: attribution mutation when `PATCH /payments/:id` includes new attributions (iteration 6.7 calls through here).
+- Audit log: `TRANSACTION_ATTRIBUTION_REMOVED` and optionally `TRANSACTION_DELETED` when the row is removed.
+- Internally reused: attribution mutation when `PATCH /transactions/:id` includes new attributions (iteration 6.7 calls through here).
 - Tests: unit + integration — including the "other user's personal attribution is preserved" case.
 
 **Acceptance**: delete semantics from [§2.4](#24-delete-semantics) all observable via integration tests.
@@ -1057,48 +1057,48 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 #### 6.9 Star/unstar API
 
-- `POST /payments/:id/star` toggles (create if missing, delete if present).
+- `POST /transactions/:id/star` toggles (create if missing, delete if present).
 - Returns `{ starred, starCount }`.
-- `GET /payments?starred=true` already implemented in 6.6 (flag added here).
-- Audit log: `PAYMENT_STARRED` / `PAYMENT_UNSTARRED` (best-effort — failure does not fail the request).
+- `GET /transactions?starred=true` already implemented in 6.6 (flag added here).
+- Audit log: `TRANSACTION_STARRED` / `TRANSACTION_UNSTARRED` (best-effort — failure does not fail the request).
 
 **Acceptance**: star toggle works; list returns `starredByMe=true` for current user only.
 
 #### 6.10 Comments API
 
-- `GET/POST /payments/:id/comments`, `PATCH/DELETE /payments/:id/comments/:commentId`.
+- `GET/POST /transactions/:id/comments`, `PATCH/DELETE /transactions/:id/comments/:commentId`.
 - Soft-delete on DELETE (sets `deletedAt`, content replaced with `""`, returns 204).
 - List excludes soft-deleted rows by default; admin query `?includeDeleted=true` **not** exposed in this phase.
 - Tests: unit + integration with second-user scenarios.
 
-**Acceptance**: users can comment on any payment they can access; can only edit/delete their own.
+**Acceptance**: users can comment on any transaction they can access; can only edit/delete their own.
 
 ### Part D — DRY frontend
 
-#### 6.11 PaymentContext + types + helpers
+#### 6.11 TransactionContext + types + helpers
 
-- `apps/web/src/lib/payment/payment-context.tsx` with methods `fetchList`, `getPayment`, `create`, `update`, `remove`, `toggleStar`, `listComments`, `postComment`, `editComment`, `deleteComment`.
-- `apps/web/src/lib/payment/types.ts` — frontend-facing types (import from shared).
-- `apps/web/src/lib/payment/formatters.ts` — `formatAmount(moneyCents, currency, locale)`, `formatOccurredAt(date, locale)`.
-- `apps/web/src/lib/payment/remember.ts` — `getLastUsedScopes() / setLastUsedScopes(scopes)`, same for direction and type.
+- `apps/web/src/lib/transaction/transaction-context.tsx` with methods `fetchList`, `getTransaction`, `create`, `update`, `remove`, `toggleStar`, `listComments`, `postComment`, `editComment`, `deleteComment`.
+- `apps/web/src/lib/transaction/types.ts` — frontend-facing types (import from shared).
+- `apps/web/src/lib/transaction/formatters.ts` — `formatAmount(moneyCents, currency, locale)`, `formatOccurredAt(date, locale)`.
+- `apps/web/src/lib/transaction/remember.ts` — `getLastUsedScopes() / setLastUsedScopes(scopes)`, same for direction and type.
 - Provider added to [`[locale]/layout.tsx`](../apps/web/src/app/[locale]/layout.tsx:1) inside `<GroupProvider>`.
 - Component-level unit tests covering the helpers.
 
 **Acceptance**: context mounts, methods callable from a test component; formatters handle USD/ILS/EUR + `en-US`/`he-IL`.
 
-#### 6.12 `<PaymentsList>` + `<PaymentRow>`
+#### 6.12 `<TransactionsList>` + `<TransactionRow>`
 
 - Reusable table/list with filter bar (direction toggle, scope dropdown, date range, category select, starred checkbox, search).
-- Controls: star icon, Edit (opens `<PaymentFormDialog>`), Delete (opens confirm with "Delete from current scope" + "Delete from all my accessible scopes" options).
+- Controls: star icon, Edit (opens `<TransactionFormDialog>`), Delete (opens confirm with "Delete from current scope" + "Delete from all my accessible scopes" options).
 - Responsive: table on ≥md, card list on <md.
 - Tests: ~15 interaction tests (filter changes trigger fetch, star click flips UI, delete dialog options).
 
 **Acceptance**: component renders in Storybook-style test harness and integrates with the context.
 
-#### 6.13 `<PaymentFormDialog>`
+#### 6.13 `<TransactionFormDialog>`
 
-- Controlled dialog; accepts `{ paymentId?, defaults?: Partial<PaymentInput>, onClose }`.
-- Fields per [§6.4](#64-paymentformdialog-613).
+- Controlled dialog; accepts `{ transactionId?, defaults?: Partial<TransactionInput>, onClose }`.
+- Fields per [§6.4](#64-transactionformdialog-613).
 - Scope multi-select draws from `useAuth()` + `useGroups()`; defaults populated from `remember.ts`.
 - Type selector opens a second section where schedule/plan inputs appear (initially collapsed).
 - Category picker filters by direction.
@@ -1106,13 +1106,13 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 **Acceptance**: add + edit flows produce correct API payloads; last-used scopes persisted.
 
-#### 6.14 Payment detail page `/payments/:id`
+#### 6.14 Transaction detail page `/transactions/:id`
 
-- Server-side fetch via `getPayment`; 404 / 403 dedicated error cards.
-- Layout from [§6.5](#65-payment-detail-page-614).
-- Comments thread: `<PaymentCommentList>` (pagination) + `<PaymentCommentInput>`.
+- Server-side fetch via `getTransaction`; 404 / 403 dedicated error cards.
+- Layout from [§6.5](#65-transaction-detail-page-614).
+- Comments thread: `<TransactionCommentList>` (pagination) + `<TransactionCommentInput>`.
 - Star button wired to context.
-- Edit button opens `<PaymentFormDialog>`; Delete button opens the same confirm dialog as list.
+- Edit button opens `<TransactionFormDialog>`; Delete button opens the same confirm dialog as list.
 - Documents section: static placeholder "Attachments coming in Phase 9" + link to feature tracker.
 - Tests: rendering, comment flow, star flow, edit/delete navigation.
 
@@ -1121,21 +1121,21 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 #### 6.15 Aggregated dashboard
 
 - Rebuild [`/dashboard`](../apps/web/src/app/[locale]/dashboard/page.tsx:1) (remove placeholder) with the four sections from [§6.2](#62-dashboard-layout-615).
-- `<TotalsCard>` — this-month totals (in, out, net) via `GET /payments?from=…&to=…` (aggregated client-side for now; server aggregation in Phase 10).
-- `<RecentActivity>` — latest 10 payments across all scopes.
-- `<StarredPayments>` — starred section, top 5.
+- `<TotalsCard>` — this-month totals (in, out, net) via `GET /transactions?from=…&to=…` (aggregated client-side for now; server aggregation in Phase 10).
+- `<RecentActivity>` — latest 10 transactions across all scopes.
+- `<StarredTransactions>` — starred section, top 5.
 - `<ScopeEntryCards>` — personal card + one per group with quick totals.
 - Tests: ensures correct props flow + skeleton states.
 
-**Acceptance**: dashboard is the landing page for authenticated users; clicking a scope card takes the user to `/payments?scope=...`.
+**Acceptance**: dashboard is the landing page for authenticated users; clicking a scope card takes the user to `/transactions?scope=...`.
 
 ### Part E — Per-scope views + categories UI
 
 #### 6.16 Personal page, group tab, categories UI
 
-- New route `/payments/page.tsx` — thin page that reads `scope` query param and renders `<PaymentsList>`.
-- Starred shortcut `/payments/starred/page.tsx` → `<PaymentsList initialFilters={{ starred: true }} />`.
-- Group page: add a tabs component (Overview / Payments / Members) on [`/groups/[groupId]`](../apps/web/src/app/[locale]/groups/[groupId]/page.tsx:1); the Payments tab embeds `<PaymentsList scope={{ groupId }} />`.
+- New route `/transactions/page.tsx` — thin page that reads `scope` query param and renders `<TransactionsList>`.
+- Starred shortcut `/transactions/starred/page.tsx` → `<TransactionsList initialFilters={{ starred: true }} />`.
+- Group page: add a tabs component (Overview / Transactions / Members) on [`/groups/[groupId]`](../apps/web/src/app/[locale]/groups/[groupId]/page.tsx:1); the Transactions tab embeds `<TransactionsList scope={{ groupId }} />`.
 - `<CategoryManager>` component mounted inside:
   - `/settings/account` (personal categories section).
   - `/groups/[groupId]/settings` (group categories section, admin only).
@@ -1147,43 +1147,43 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 #### 6.17 Schedules API + BullMQ worker
 
-- Extend `PaymentService` to accept `schedule` in `POST /payments` when `type=RECURRING|LIMITED_PERIOD`.
-- `PaymentScheduleService` — `scheduleNext()`, `catchUp(scheduleId)`.
-- BullMQ queue `payment-recurring`; hourly cron via `@nestjs/schedule` enqueues a single "tick" job that iterates due schedules.
+- Extend `TransactionService` to accept `schedule` in `POST /transactions` when `type=RECURRING|LIMITED_PERIOD`.
+- `TransactionScheduleService` — `scheduleNext()`, `catchUp(scheduleId)`.
+- BullMQ queue `transaction-recurring`; hourly cron via `@nestjs/schedule` enqueues a single "tick" job that iterates due schedules.
 - Missed-run detection via `nextOccurrenceAt <= now`; catch-up loop advances and inserts occurrences until caught up.
 - Occurrence rows copy attribution from the parent.
-- Audit log: `PAYMENT_OCCURRENCE_GENERATED`, `PAYMENT_SCHEDULE_CAUGHT_UP`.
-- New config vars: `REDIS_URL` (already present), `PAYMENT_RECURRING_MAX_PER_RUN` (default 100).
+- Audit log: `TRANSACTION_OCCURRENCE_GENERATED`, `TRANSACTION_SCHEDULE_CAUGHT_UP`.
+- New config vars: `REDIS_URL` (already present), `TRANSACTION_RECURRING_MAX_PER_RUN` (default 100).
 - Tests: unit (pure scheduler math) + integration (ensure a manual tick generates correct occurrences for each frequency).
 
-**Acceptance**: creating a recurring payment with `startsAt=2 days ago` generates the missed two occurrences on the first tick.
+**Acceptance**: creating a recurring transaction with `startsAt=2 days ago` generates the missed two occurrences on the first tick.
 
 #### 6.18 Recurring UI
 
-- "Make recurring" disclosure inside `<PaymentFormDialog>` with frequency, interval, end (date or count).
-- New `/payments/schedules` page (list the user's active schedules) — not strictly required but useful for Day-2 ops; can ship as a small embedded panel on the detail page instead — decision finalised during this iteration.
+- "Make recurring" disclosure inside `<TransactionFormDialog>` with frequency, interval, end (date or count).
+- New `/transactions/schedules` page (list the user's active schedules) — not strictly required but useful for Day-2 ops; can ship as a small embedded panel on the detail page instead — decision finalised during this iteration.
 - Pause/resume/cancel buttons on detail page.
 - Tests: create → appears in list → cancel → disappears.
 
-**Acceptance**: user can create/cancel recurring payments from the UI; occurrences show up automatically.
+**Acceptance**: user can create/cancel recurring transactions from the UI; occurrences show up automatically.
 
 ### Part G — Plans (installments, loans, mortgages)
 
 #### 6.19 Plans API + amortization service
 
-- Pure util `amortization.util.ts` — `calculateAmortization({ principalCents, interestRate, paymentsCount, method })` → array of `{ dueAt, principalCents, interestCents, totalCents, remainingCents }`.
-- Supports `equal` (zero-interest installments) and `french` (equal monthly payment with interest).
-- `PaymentPlanService.createPlan()` — validates inputs, pre-generates all N occurrence rows (status `PENDING`, with parent link).
-- `POST /payments` with `type=INSTALLMENT|LOAN|MORTGAGE` delegates here.
-- `GET /payments/:id/plan` returns the plan + amortization schedule.
+- Pure util `amortization.util.ts` — `calculateAmortization({ principalCents, interestRate, transactionsCount, method })` → array of `{ dueAt, principalCents, interestCents, totalCents, remainingCents }`.
+- Supports `equal` (zero-interest installments) and `french` (equal monthly transaction with interest).
+- `TransactionPlanService.createPlan()` — validates inputs, pre-generates all N occurrence rows (status `PENDING`, with parent link).
+- `POST /transactions` with `type=INSTALLMENT|LOAN|MORTGAGE` delegates here.
+- `GET /transactions/:id/plan` returns the plan + amortization schedule.
 - Tests: exhaustive amortization unit tests (hand-calculated fixtures) + integration.
 
-**Acceptance**: 12-payment 0% installment of $1200 → 12 rows of $100; 60-month 5% loan of $10 000 → row values match spreadsheet reference.
+**Acceptance**: 12-transaction 0% installment of $1200 → 12 rows of $100; 60-month 5% loan of $10 000 → row values match spreadsheet reference.
 
 #### 6.20 Plans UI
 
-- `<PaymentFormDialog>` shows a "Make installment / loan" disclosure mutually exclusive with the recurring one; inputs: principal, rate, count, frequency, first due.
-- Detail page renders `<PaymentPlanTable>` with per-row status.
+- `<TransactionFormDialog>` shows a "Make installment / loan" disclosure mutually exclusive with the recurring one; inputs: principal, rate, count, frequency, first due.
+- Detail page renders `<TransactionPlanTable>` with per-row status.
 - Cancellation button on the parent: flips remaining PENDING occurrences to CANCELLED (never deletes for audit).
 - Tests: create → occurrences appear in list → cancel → remaining flip to CANCELLED.
 
@@ -1195,7 +1195,7 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 - Audit-log pass: every mutating endpoint produces a log row; unified table summarising `action` → `entity` mapping.
 - Integration suite review: full coverage of permission matrix (creator vs member vs non-member; admin vs member; personal vs group scope).
-- Playwright E2E: full happy path (create personal payment → appears on dashboard → edit → add group attribution → delete from all → vanishes) + recurring happy path + loan happy path.
+- Playwright E2E: full happy path (create personal transaction → appears on dashboard → edit → add group attribution → delete from all → vanishes) + recurring happy path + loan happy path.
 - i18n review: no English strings in `he.json`; RTL layout check on detail page and form dialog.
 - Dark-mode contrast pass for every new component.
 - Merge `develop` → `main` via squash or no-ff (match Phase 5 style: `--no-ff`) and watch production deploy.
@@ -1208,15 +1208,15 @@ The end of the phase (after 6.21) merges `develop` → `main` and watches the pr
 
 Following the existing test pyramid ([§3.5 of IMPLEMENTATION-PLAN.md](../IMPLEMENTATION-PLAN.md:148)):
 
-| Layer             | Tooling                           | Target coverage                                |
-| ----------------- | --------------------------------- | ---------------------------------------------- |
-| Unit (backend)    | Jest                              | ≥ 80 % for `PaymentService`, amortization util |
-| Unit (frontend)   | Vitest + Testing Library          | Components: render + interaction               |
-| Integration (API) | Jest + supertest + Testcontainers | Every endpoint × permission matrix             |
-| E2E (web)         | Playwright                        | Smoke happy path for one-time, recurring, loan |
-| Staging E2E       | Playwright (staging config)       | A single payment round-trip against staging    |
+| Layer             | Tooling                           | Target coverage                                    |
+| ----------------- | --------------------------------- | -------------------------------------------------- |
+| Unit (backend)    | Jest                              | ≥ 80 % for `TransactionService`, amortization util |
+| Unit (frontend)   | Vitest + Testing Library          | Components: render + interaction                   |
+| Integration (API) | Jest + supertest + Testcontainers | Every endpoint × permission matrix                 |
+| E2E (web)         | Playwright                        | Smoke happy path for one-time, recurring, loan     |
+| Staging E2E       | Playwright (staging config)       | A single transaction round-trip against staging    |
 
-Fixtures live in `apps/api/test/integration/payments/fixtures.ts` (reusable factory `createPaymentFixtures(prisma)`).
+Fixtures live in `apps/api/test/integration/transactions/fixtures.ts` (reusable factory `createTransactionFixtures(prisma)`).
 
 ---
 
@@ -1229,7 +1229,7 @@ Fixtures live in `apps/api/test/integration/payments/fixtures.ts` (reusable fact
 
 ### §7 Job Queue Infrastructure (landed in iteration 6.17.1)
 
-The recurring-payment scheduler (Phase 6.17) runs on top of [BullMQ](https://docs.bullmq.io/) v5+. The foundation landed in iteration 6.17.1 — schedule CRUD lands in 6.17.2 and the processor in 6.17.3.
+The recurring-transaction scheduler (Phase 6.17) runs on top of [BullMQ](https://docs.bullmq.io/) v5+. The foundation landed in iteration 6.17.1 — schedule CRUD lands in 6.17.2 and the processor in 6.17.3.
 
 **Redis service.** A `redis:8-alpine` container ships in every environment's infra compose:
 
@@ -1239,7 +1239,7 @@ The recurring-payment scheduler (Phase 6.17) runs on top of [BullMQ](https://doc
 
 Each container runs `redis-server --appendonly yes --maxmemory <N>mb --maxmemory-policy allkeys-lru` and conditionally appends `--requirepass "$REDIS_PASSWORD"` when the env var is non-empty. The healthcheck shells out to `redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping` (or unauthenticated `redis-cli ping` when the password is empty).
 
-**BullModule wiring.** A single `@Global()` module — [`QueueModule`](../apps/api/src/queue/queue.module.ts:1) — calls `BullModule.forRootAsync` with the typed connection produced by [`buildRedisConnection`](../apps/api/src/config/redis.config.ts:1) and `BullModule.registerQueue` for every queue. Today there is exactly one queue, `payment-occurrences`, registered via the [`PAYMENT_OCCURRENCES_QUEUE`](../apps/api/src/queue/queue.constants.ts:1) constant (no string literals at call sites). Adding a new queue is two lines: a new constant and a new `registerQueue` entry.
+**BullModule wiring.** A single `@Global()` module — [`QueueModule`](../apps/api/src/queue/queue.module.ts:1) — calls `BullModule.forRootAsync` with the typed connection produced by [`buildRedisConnection`](../apps/api/src/config/redis.config.ts:1) and `BullModule.registerQueue` for every queue. Today there is exactly one queue, `transaction-occurrences`, registered via the [`TRANSACTION_OCCURRENCES_QUEUE`](../apps/api/src/queue/queue.constants.ts:1) constant (no string literals at call sites). Adding a new queue is two lines: a new constant and a new `registerQueue` entry.
 
 **Env-var contract.** The API consumes four typed vars; everything else is derived:
 
@@ -1261,40 +1261,40 @@ The Redis ping reuses the BullMQ-managed ioredis connection rather than opening 
 
 **Graceful shutdown.** `@nestjs/bullmq` registers `OnApplicationShutdown` hooks on every queue/worker provider it creates. With shutdown hooks enabled in [`main.ts`](../apps/api/src/main.ts:1) (already the case for Prisma's `$disconnect`), `app.close()` — fired automatically on `SIGTERM` from Docker — closes the underlying ioredis client cleanly. No bespoke lifecycle hook is needed at the Queue or QueueModule level.
 
-### §8 PaymentSchedule CRUD (landed in iteration 6.17.2)
+### §8 TransactionSchedule CRUD (landed in iteration 6.17.2)
 
-The recurring-payment surface is a 1:1 sub-resource of a parent `RECURRING` payment. Every write to the DB is mirrored into BullMQ via [`Queue.upsertJobScheduler`](https://docs.bullmq.io/) under a deterministic, never-reused key.
+The recurring-transaction surface is a 1:1 sub-resource of a parent `RECURRING` transaction. Every write to the DB is mirrored into BullMQ via [`Queue.upsertJobScheduler`](https://docs.bullmq.io/) under a deterministic, never-reused key.
 
-**Schema.** [`PaymentSchedule`](../apps/api/prisma/schema.prisma:1) (post-6.17.2 migration `20260515230000_phase6_172_payment_schedule_cron_every`):
+**Schema.** [`TransactionSchedule`](../apps/api/prisma/schema.prisma:1) (post-6.17.2 migration `20260515230000_phase6_172_transaction_schedule_cron_every`):
 
-| Column         | Type                  | Notes                                                                 |
-| -------------- | --------------------- | --------------------------------------------------------------------- |
-| `id`           | `varchar(36)` PK      | UUID.                                                                 |
-| `payment_id`   | `varchar(36)` FK uniq | `→ payments.id ON DELETE CASCADE`. 1:1 with the parent.               |
-| `cron`         | `varchar(120)` null   | Standard 5- or 6-field cron. **Service invariant:** exactly one of    |
-| `every_ms`     | `int` null            | `cron` / `every_ms` is non-null. MySQL CHECK omitted (Prisma limit).  |
-| `starts_at`    | `datetime(3)`         | Defaults to `CURRENT_TIMESTAMP(3)`.                                   |
-| `ends_at`      | `datetime(3)` null    | Translates to BullMQ `endDate`. Service rejects `<= starts_at` (400). |
-| `limit`        | `int` null            | Translates to BullMQ `limit`.                                         |
-| `next_run_at`  | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
-| `last_run_at`  | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
-| `paused_at`    | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
-| `cancelled_at` | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
-| `created_at`   | `datetime(3)`         | `CURRENT_TIMESTAMP(3)`.                                               |
-| `updated_at`   | `datetime(3)`         | Prisma `@updatedAt`.                                                  |
+| Column           | Type                  | Notes                                                                 |
+| ---------------- | --------------------- | --------------------------------------------------------------------- |
+| `id`             | `varchar(36)` PK      | UUID.                                                                 |
+| `transaction_id` | `varchar(36)` FK uniq | `→ transactions.id ON DELETE CASCADE`. 1:1 with the parent.           |
+| `cron`           | `varchar(120)` null   | Standard 5- or 6-field cron. **Service invariant:** exactly one of    |
+| `every_ms`       | `int` null            | `cron` / `every_ms` is non-null. MySQL CHECK omitted (Prisma limit).  |
+| `starts_at`      | `datetime(3)`         | Defaults to `CURRENT_TIMESTAMP(3)`.                                   |
+| `ends_at`        | `datetime(3)` null    | Translates to BullMQ `endDate`. Service rejects `<= starts_at` (400). |
+| `limit`          | `int` null            | Translates to BullMQ `limit`.                                         |
+| `next_run_at`    | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
+| `last_run_at`    | `datetime(3)` null    | Denormalized — written by the worker (lands in 6.17.3).               |
+| `paused_at`      | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
+| `cancelled_at`   | `datetime(3)` null    | Forward-compat — lifecycle endpoints land in 6.17.4.                  |
+| `created_at`     | `datetime(3)`         | `CURRENT_TIMESTAMP(3)`.                                               |
+| `updated_at`     | `datetime(3)`         | Prisma `@updatedAt`.                                                  |
 
-Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, supports the 6.17.3 catch-up scan.
+Index: `transaction_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, supports the 6.17.3 catch-up scan.
 
-**Scheduler id.** [`buildSchedulerId(scheduleId)`](../apps/api/src/payment/payment-schedule.service.ts:1) returns `` `payment-schedule:${schedule.id}` ``. This id is stable for the schedule's lifetime and is never reused — re-upserting under the same id replaces the existing repeat entry atomically (BullMQ idempotency contract).
+**Scheduler id.** [`buildSchedulerId(scheduleId)`](../apps/api/src/transaction/transaction-schedule.service.ts:1) returns `` `transaction-schedule:${schedule.id}` ``. This id is stable for the schedule's lifetime and is never reused — re-upserting under the same id replaces the existing repeat entry atomically (BullMQ idempotency contract).
 
-**REST contract** (under `/api/v1/payments/:paymentId/schedule` — singular path because of the 1:1 cardinality):
+**REST contract** (under `/api/v1/transactions/:transactionId/schedule` — singular path because of the 1:1 cardinality):
 
-| Verb     | Status | Behavior                                                                                                                                               |
-| -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST`   | 201    | Create. Parent must be visible + `type=RECURRING`. `409 PAYMENT_SCHEDULE_ALREADY_EXISTS` if one exists. Audit `PAYMENT_SCHEDULE_CREATED`.              |
-| `GET`    | 200    | Read. `404 PAYMENT_SCHEDULE_NOT_FOUND` if no row. Existence is not leaked — invisible parent → also 404.                                               |
-| `PUT`    | 200    | Replace (idempotent upsert). Re-upserts BullMQ under the same key. Audit `PAYMENT_SCHEDULE_UPDATED`.                                                   |
-| `DELETE` | 204    | Hard-delete the row + `removeJobScheduler`. Already-fired children stay (history immutable). `404` when no schedule. Audit `PAYMENT_SCHEDULE_DELETED`. |
+| Verb     | Status | Behavior                                                                                                                                                   |
+| -------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | 201    | Create. Parent must be visible + `type=RECURRING`. `409 TRANSACTION_SCHEDULE_ALREADY_EXISTS` if one exists. Audit `TRANSACTION_SCHEDULE_CREATED`.          |
+| `GET`    | 200    | Read. `404 TRANSACTION_SCHEDULE_NOT_FOUND` if no row. Existence is not leaked — invisible parent → also 404.                                               |
+| `PUT`    | 200    | Replace (idempotent upsert). Re-upserts BullMQ under the same key. Audit `TRANSACTION_SCHEDULE_UPDATED`.                                                   |
+| `DELETE` | 204    | Hard-delete the row + `removeJobScheduler`. Already-fired children stay (history immutable). `404` when no schedule. Audit `TRANSACTION_SCHEDULE_DELETED`. |
 
 **Idempotency / consistency.**
 
@@ -1302,9 +1302,9 @@ Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, s
 - PUT writes the DB row first (Prisma `upsert`), then `upsertJobScheduler`. On queue failure we propagate the error and leave the DB row — the caller can retry the PUT (idempotent) and operator alerting surfaces the divergence.
 - DELETE deletes the DB row first, then attempts `removeJobScheduler`. Queue removal failures are swallowed (DB row is the source of truth; an orphan scheduler entry will be acked by the no-op processor).
 
-**Worker.** [`PaymentOccurrenceProcessor`](../apps/api/src/payment/payment-occurrence.processor.ts:1) is registered in 6.17.2 as a **no-op** that logs `[no-op] would create occurrence for schedule X (payment Y) at Z` and returns `{ acknowledged: true }`. Real occurrence creation lands in 6.17.3. Job options use `attempts: 1` during this transition iteration to avoid retry loops.
+**Worker.** [`TransactionOccurrenceProcessor`](../apps/api/src/transaction/transaction-occurrence.processor.ts:1) is registered in 6.17.2 as a **no-op** that logs `[no-op] would create occurrence for schedule X (transaction Y) at Z` and returns `{ acknowledged: true }`. Real occurrence creation lands in 6.17.3. Job options use `attempts: 1` during this transition iteration to avoid retry loops.
 
-**Error codes.** Added in 6.17.2 — `PAYMENT_SCHEDULE_PARENT_NOT_RECURRING` (409), `PAYMENT_SCHEDULE_ALREADY_EXISTS` (409), `PAYMENT_SCHEDULE_NOT_FOUND` (404), `PAYMENT_SCHEDULE_INVALID_CRON` (400), `PAYMENT_SCHEDULE_INVALID_INTERVAL` (400, when `everyMs < 60_000`), `PAYMENT_SCHEDULE_INVALID_END_DATE` (400, when `endsAt ≤ startsAt`), `PAYMENT_SCHEDULE_INVALID_SPEC` (400, when neither/both of `cron`/`everyMs` are present).
+**Error codes.** Added in 6.17.2 — `TRANSACTION_SCHEDULE_PARENT_NOT_RECURRING` (409), `TRANSACTION_SCHEDULE_ALREADY_EXISTS` (409), `TRANSACTION_SCHEDULE_NOT_FOUND` (404), `TRANSACTION_SCHEDULE_INVALID_CRON` (400), `TRANSACTION_SCHEDULE_INVALID_INTERVAL` (400, when `everyMs < 60_000`), `TRANSACTION_SCHEDULE_INVALID_END_DATE` (400, when `endsAt ≤ startsAt`), `TRANSACTION_SCHEDULE_INVALID_SPEC` (400, when neither/both of `cron`/`everyMs` are present).
 
 **Health-ping polish.** [`RedisHealthIndicator`](../apps/api/src/health/indicators/redis.indicator.ts:1) now wraps `client.ping()` in `Promise.race([ping(), timeout(2000)])`. A hung Redis surfaces as `503` + `redis: { status: 'down', reason: 'ping_timeout' }` within ~2 s, instead of the upstream proxy's 504 after 30+ s.
 
@@ -1312,9 +1312,9 @@ Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, s
 
 **Producer side (unchanged).** `Queue.upsertJobScheduler` continues to fire the `create-occurrence` job per the schedule's `cron` / `everyMs`. Job options bumped to `attempts: 3` with `backoff: { type: 'exponential', delay: 5_000 }` now that the worker performs real DB writes — transient Prisma / Redis blips retry; the unique `idempotencyKey` column guards against double-creation across retries.
 
-**Worker decision tree** (`PaymentOccurrenceProcessor.process`, skip-don't-throw on normal eventual-consistency edges):
+**Worker decision tree** (`TransactionOccurrenceProcessor.process`, skip-don't-throw on normal eventual-consistency edges):
 
-1. Read `PaymentSchedule` + parent `Payment` (with attributions) by `scheduleId` in one query.
+1. Read `TransactionSchedule` + parent `Transaction` (with attributions) by `scheduleId` in one query.
 2. Schedule row missing → `[orphan]` log + `Queue.removeJobScheduler` + return success.
 3. `cancelledAt !== null` → `[skipped] schedule cancelled` + return success (no `removeJobScheduler` — the row is the source of truth; lifecycle behaviour lands in 6.17.4).
 4. `pausedAt !== null` → `[skipped] schedule paused` + return success.
@@ -1322,18 +1322,18 @@ Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, s
 6. Parent type ≠ `RECURRING` → `[skipped] parent is no longer RECURRING` + `removeJobScheduler` + return success.
 7. Compute `firedMs = floor((job.processedOn ?? Date.now()) / 1000) * 1000` (rounded to second so a re-fired clone with slightly different `processedOn` hits the same idempotency key).
 8. `idempotencyKey = ${scheduleId}:${firedMs}`.
-9. In a single `$transaction`: INSERT child Payment (`type: ONE_TIME`, `parentPaymentId`, parent's `direction/amountCents/currency/categoryId/note/createdById`, `occurredAt = firedAt`, `status: POSTED`, `idempotencyKey`) + clone every parent attribution (`scopeType/userId/groupId`) + UPDATE schedule `lastRunAt = firedAt`, `nextRunAt = computeNextRunAt(spec, firedAt)`.
+9. In a single `$transaction`: INSERT child Transaction (`type: ONE_TIME`, `parentTransactionId`, parent's `direction/amountCents/currency/categoryId/note/createdById`, `occurredAt = firedAt`, `status: POSTED`, `idempotencyKey`) + clone every parent attribution (`scopeType/userId/groupId`) + UPDATE schedule `lastRunAt = firedAt`, `nextRunAt = computeNextRunAt(spec, firedAt)`.
 10. Catch Prisma `P2002` on `idempotency_key` → `[duplicate]` log, fetch + return existing `occurrenceId` without inserting.
-11. Best-effort `auditLog.create({ action: 'PAYMENT_OCCURRENCE_CREATED', entity: 'Payment', entityId: parentId, userId: parent.createdById, details: { scheduleId, parentId, occurrenceId, firedAt } })` — failures logged but never break the success result.
+11. Best-effort `auditLog.create({ action: 'TRANSACTION_OCCURRENCE_CREATED', entity: 'Transaction', entityId: parentId, userId: parent.createdById, details: { scheduleId, parentId, occurrenceId, firedAt } })` — failures logged but never break the success result.
 12. Unrecoverable errors propagate; BullMQ retries per the `attempts: 3` opt.
 
-**Idempotency design.** `payments.idempotency_key` is a nullable VARCHAR(120) UNIQUE column added in migration [`20260516125000_phase6_173_payment_idempotency_key`](../apps/api/prisma/migrations/20260516125000_phase6_173_payment_idempotency_key/migration.sql:1). Format `${scheduleId}:${firedAtMs}` is human-debuggable, narrow enough for a B-tree index, and deterministic per (schedule, fire-second). Manual rows + ONE_TIME parents leave the column NULL (uniqueness is over non-null values per MySQL semantics).
+**Idempotency design.** `transactions.idempotency_key` is a nullable VARCHAR(120) UNIQUE column added in migration [`20260516125000_phase6_173_transaction_idempotency_key`](../apps/api/prisma/migrations/20260516125000_phase6_173_transaction_idempotency_key/migration.sql:1). Format `${scheduleId}:${firedAtMs}` is human-debuggable, narrow enough for a B-tree index, and deterministic per (schedule, fire-second). Manual rows + ONE_TIME parents leave the column NULL (uniqueness is over non-null values per MySQL semantics).
 
-**`nextRunAt` computation strategy.** Computed locally by [`computeNextRunAt(spec, lastRunAt)`](../apps/api/src/payment/utils/next-run-at.ts:1) using the `cron-parser` package (transitive dep of `bullmq`, declared explicitly in [`apps/api/package.json`](../apps/api/package.json:1) so we don't depend on hoisting) for cron specs and `lastRunAt + everyMs` for fixed-interval specs. Returns `null` for invalid specs — the caller leaves the field untouched. Same helper is used by `PaymentScheduleService` to pre-populate `nextRunAt` on `POST` / `PUT` so a fresh `GET /schedule` returns a useful value before the first firing.
+**`nextRunAt` computation strategy.** Computed locally by [`computeNextRunAt(spec, lastRunAt)`](../apps/api/src/transaction/utils/next-run-at.ts:1) using the `cron-parser` package (transitive dep of `bullmq`, declared explicitly in [`apps/api/package.json`](../apps/api/package.json:1) so we don't depend on hoisting) for cron specs and `lastRunAt + everyMs` for fixed-interval specs. Returns `null` for invalid specs — the caller leaves the field untouched. Same helper is used by `TransactionScheduleService` to pre-populate `nextRunAt` on `POST` / `PUT` so a fresh `GET /schedule` returns a useful value before the first firing.
 
-**Test-environment interval floor.** `PaymentScheduleService` resolves the `everyMs` floor from `process.env.PAYMENT_SCHEDULE_MIN_INTERVAL_MS` (fallback `60_000`). Production keeps the 60 s minimum; integration tests set it to `200` so they can observe ≥ 2 firings within Jest's per-suite budget. The DTO-level `@Min` decorator is relaxed to `1` (positive integer) — policy enforcement lives in the service, decorators only enforce wire-shape.
+**Test-environment interval floor.** `TransactionScheduleService` resolves the `everyMs` floor from `process.env.TRANSACTION_SCHEDULE_MIN_INTERVAL_MS` (fallback `60_000`). Production keeps the 60 s minimum; integration tests set it to `200` so they can observe ≥ 2 firings within Jest's per-suite budget. The DTO-level `@Min` decorator is relaxed to `1` (positive integer) — policy enforcement lives in the service, decorators only enforce wire-shape.
 
-**Audit code.** `PAYMENT_OCCURRENCE_CREATED` lives in [`payment-errors.ts`](../apps/api/src/payment/constants/payment-errors.ts:1) for symmetry with the existing `PAYMENT_SCHEDULE_*` audit actions written by the producer.
+**Audit code.** `TRANSACTION_OCCURRENCE_CREATED` lives in [`transaction-errors.ts`](../apps/api/src/transaction/constants/transaction-errors.ts:1) for symmetry with the existing `TRANSACTION_SCHEDULE_*` audit actions written by the producer.
 
 ---
 
@@ -1341,17 +1341,17 @@ Index: `payment_schedules_next_run_at_idx (next_run_at)` — unused in 6.17.2, s
 
 ### Extendability
 
-- **Future payment types** (e.g. `STANDING_ORDER`, `SUBSCRIPTION`) only require adding to the `PAYMENT_TYPES` array and wiring a branch in the form dialog.
+- **Future transaction types** (e.g. `STANDING_ORDER`, `SUBSCRIPTION`) only require adding to the `TRANSACTION_TYPES` array and wiring a branch in the form dialog.
 - **Future attribution scopes** (e.g. `team`, `subaccount`) — the `scope_type` column is already a string; add a new value and handle it in the access logic.
 - **Notifications** (Phase 8/11) can consume the BullMQ occurrence-generated event.
-- **Budgets** (Phase 8) can query `payments` by `categoryId` + date range.
+- **Budgets** (Phase 8) can query `transactions` by `categoryId` + date range.
 - **Analytics** (Phase 10) will add aggregation views over the same tables — no schema changes expected.
 
 ### Category visibility policy (added in iteration 6.16.5)
 
-Both the `<PaymentsFilters>` category dropdown (on `/payments`) and the
-`<PaymentCategoryPicker>` inside `<PaymentFormDialog>` consume
-`usePayments().listCategories()` as their **single source of truth**. There
+Both the `<TransactionsFilters>` category dropdown (on `/transactions`) and the
+`<TransactionCategoryPicker>` inside `<TransactionFormDialog>` consume
+`useTransactions().listCategories()` as their **single source of truth**. There
 is no client-side filtering, sorting, or hard-coded list anywhere — the API
 result is rendered as-is, grouped only by `ownerType` (System / Personal /
 per-Group).
@@ -1360,14 +1360,14 @@ per-Group).
 `OUT`), both consumers pass `{ direction }` to `listCategories()` and the
 API restricts results to categories whose `direction === requested ||
 direction === 'BOTH'`. When direction is undefined (the All filter on
-`/payments`), categories from both directions appear together — the
+`/transactions`), categories from both directions appear together — the
 defaults seed avoids visually-similar pairs across directions
 (e.g., `gifts` (OUT, "Gifts") vs `gift_in` (IN, "Gifts received")) so the
 combined list never reads as duplicate.
 
-**Per-scope visibility.** The All scope tab on `/payments` shows every
+**Per-scope visibility.** The All scope tab on `/transactions` shows every
 category the user can author against (System + Personal + every member
-group). On a specific scope tab (Personal or `/payments?scope=group:<id>`)
+group). On a specific scope tab (Personal or `/transactions?scope=group:<id>`)
 the API restricts to that scope, and the dialog inside the same page sees
 the same restriction. Both surfaces stay in sync because both call
 `listCategories()` with the same arguments.
@@ -1379,18 +1379,18 @@ enforced by [`packages/shared/src/__tests__/default-categories.test.ts`](../pack
 
 ### Out-of-scope for Phase 6 (deferred by design)
 
-- Receipt upload UI + OCR (Phase 9 adds upload to `PaymentDocument`).
+- Receipt upload UI + OCR (Phase 9 adds upload to `TransactionDocument`).
 - Member-on-whose-behalf field (lightweight addition in a later phase — add `on_behalf_of_user_id` column).
 - LLM insights (Phase 15).
 - Telegram bot entry points (Phases 11, 12, 13).
-- Notification scheduling for due payments / low balance (Phase 8 uses the schedules table).
+- Notification scheduling for due transactions / low balance (Phase 8 uses the schedules table).
 - Markdown / mentions / hashtags in comments (incremental upgrade later; current DB field already `TEXT`).
 
 ---
 
 ## Schedule lifecycle (iteration 6.17.4)
 
-The `PaymentSchedule` row carries two timestamp columns to model the full
+The `TransactionSchedule` row carries two timestamp columns to model the full
 state machine without leaking implementation details into the wire DTO:
 
 | Column        | Meaning                                                                |
@@ -1414,29 +1414,29 @@ stateDiagram-v2
 
 ### Endpoint contract
 
-All under `/api/v1/payments/:paymentId/schedule/*`.
+All under `/api/v1/transactions/:transactionId/schedule/*`.
 
-| Verb | Path      | Behavior                                                                                              | Idempotency 409                                                             |
-| ---- | --------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| POST | `/pause`  | `pausedAt = NOW()`, `Queue.removeJobScheduler(...)`. Audit `PAYMENT_SCHEDULE_PAUSED`.                 | `PAYMENT_SCHEDULE_ALREADY_PAUSED`, `PAYMENT_SCHEDULE_CANCELLED`             |
-| POST | `/resume` | `pausedAt = null`, `Queue.upsertJobScheduler(...)`. `nextRunAt` recomputed via `computeNextRunAt`.    | `PAYMENT_SCHEDULE_NOT_PAUSED`, `PAYMENT_SCHEDULE_CANCELLED`, `..._PAST_END` |
-| POST | `/cancel` | `cancelledAt = NOW()`, `Queue.removeJobScheduler(...)`. Terminal — preserves row. Audit `_CANCELLED`. | `PAYMENT_SCHEDULE_ALREADY_CANCELLED`                                        |
-| DEL  | `/`       | Hard-delete row + scheduler key (existing 6.17.2 endpoint).                                           | n/a                                                                         |
+| Verb | Path      | Behavior                                                                                              | Idempotency 409                                                                     |
+| ---- | --------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| POST | `/pause`  | `pausedAt = NOW()`, `Queue.removeJobScheduler(...)`. Audit `TRANSACTION_SCHEDULE_PAUSED`.             | `TRANSACTION_SCHEDULE_ALREADY_PAUSED`, `TRANSACTION_SCHEDULE_CANCELLED`             |
+| POST | `/resume` | `pausedAt = null`, `Queue.upsertJobScheduler(...)`. `nextRunAt` recomputed via `computeNextRunAt`.    | `TRANSACTION_SCHEDULE_NOT_PAUSED`, `TRANSACTION_SCHEDULE_CANCELLED`, `..._PAST_END` |
+| POST | `/cancel` | `cancelledAt = NOW()`, `Queue.removeJobScheduler(...)`. Terminal — preserves row. Audit `_CANCELLED`. | `TRANSACTION_SCHEDULE_ALREADY_CANCELLED`                                            |
+| DEL  | `/`       | Hard-delete row + scheduler key (existing 6.17.2 endpoint).                                           | n/a                                                                                 |
 
 The schedule-response DTO exposes `pausedAt` + `cancelledAt` (lit up in
 6.17.4) so clients can reconstruct the state without a separate call.
 
-### Cascade rules (parent-payment changes)
+### Cascade rules (parent-transaction changes)
 
 The producer side mirrors the worker's self-heal paths from 6.17.3. Every
 cascade routes through the single chokepoint
-[`removeScheduleForPayment()`](../apps/api/src/payment/utils/schedule-cascade.ts:1):
+[`removeScheduleForTransaction()`](../apps/api/src/transaction/utils/schedule-cascade.ts:1):
 
-| Trigger                                      | Behavior                                                                                                                          | Audit                                                                    |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Parent edited `RECURRING` → other type       | Schedule row + scheduler torn down silently. The edit succeeds (no 409). The DB write happens inside the parent-edit transaction. | `PAYMENT_SCHEDULE_DELETED` with `details.reason = 'parent_type_changed'` |
-| Parent edited `ONE_TIME` → `RECURRING`       | No automatic schedule creation. User must explicitly POST /schedule afterwards.                                                   | n/a (just `PAYMENT_UPDATED`)                                             |
-| Parent hard-deleted (final attribution gone) | Schedule row + scheduler torn down BEFORE the parent FK cascade fires. Already-fired child occurrences become orphaned-but-valid. | `PAYMENT_SCHEDULE_DELETED` with `details.reason = 'parent_deleted'`      |
+| Trigger                                      | Behavior                                                                                                                          | Audit                                                                        |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Parent edited `RECURRING` → other type       | Schedule row + scheduler torn down silently. The edit succeeds (no 409). The DB write happens inside the parent-edit transaction. | `TRANSACTION_SCHEDULE_DELETED` with `details.reason = 'parent_type_changed'` |
+| Parent edited `ONE_TIME` → `RECURRING`       | No automatic schedule creation. User must explicitly POST /schedule afterwards.                                                   | n/a (just `TRANSACTION_UPDATED`)                                             |
+| Parent hard-deleted (final attribution gone) | Schedule row + scheduler torn down BEFORE the parent FK cascade fires. Already-fired child occurrences become orphaned-but-valid. | `TRANSACTION_SCHEDULE_DELETED` with `details.reason = 'parent_deleted'`      |
 
 ### Decisions
 
@@ -1444,7 +1444,7 @@ cascade routes through the single chokepoint
   intent to change the type is unambiguous; rejecting the edit with "you
   still have a schedule" would force a redundant DELETE step.
 - **Child occurrences become orphaned-but-valid** on parent hard-delete.
-  `parentPaymentId` is still useful for history queries even after the
+  `parentTransactionId` is still useful for history queries even after the
   template is gone.
 - **Cancel preserves the row** (carries `parentScheduleId` provenance);
   DELETE is the hard-remove. Two distinct verbs because the data they
