@@ -5,7 +5,7 @@
 // `AbortSignal` so callers wired through `useAsyncOperation()` can cancel
 // in-flight requests on dialog close, retry, or component unmount. The
 // signal is forwarded to the underlying `fetch` call (mirror of the
-// payment-context wiring done in 6.16.2).
+// transaction-context wiring done in 6.16.2).
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {

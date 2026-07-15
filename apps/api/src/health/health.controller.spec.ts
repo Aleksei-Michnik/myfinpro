@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { DiskHealthIndicator, TerminusModule } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { PAYMENT_OCCURRENCES_QUEUE } from '../queue/queue.constants';
+import { TRANSACTION_OCCURRENCES_QUEUE } from '../queue/queue.constants';
 import { HealthController } from './health.controller';
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
 import { MemoryHealthIndicator } from './indicators/memory.indicator';
@@ -38,7 +38,7 @@ describe('HealthController', () => {
         DatabaseHealthIndicator,
         RedisHealthIndicator,
         {
-          provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE),
+          provide: getQueueToken(TRANSACTION_OCCURRENCES_QUEUE),
           useValue: mockQueue,
         },
         {

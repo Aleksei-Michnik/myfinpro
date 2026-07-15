@@ -1,6 +1,14 @@
-import { computeTotalsMismatch, type ReceiptSource, type ReceiptStatus } from '@myfinpro/shared';
+import {
+  computeTotalsMismatch,
+  RECEIPT_SOURCES,
+  RECEIPT_STATUSES,
+  type ProductMatchCandidate,
+  type ProductMatchStatus,
+  type ReceiptSource,
+  type ReceiptStatus,
+} from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { Merchant, Receipt, ReceiptItem } from '@prisma/client';
+import type { Merchant, Product, Receipt, ReceiptItem } from '@prisma/client';
 
 /**
  * Wire shape for one receipt line item (Phase 7.4). Money is integer
@@ -31,6 +39,26 @@ export class ReceiptItemResponseDto {
 
   @ApiPropertyOptional({ nullable: true, type: String })
   categoryId!: string | null;
+
+  // ── Phase 8: product matching ──
+
+  @ApiPropertyOptional({ nullable: true, type: String, description: 'Linked registry product.' })
+  productId!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String, description: 'Joined registry name.' })
+  productName!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
+  productBrand!: string | null;
+
+  @ApiProperty({ enum: ['PENDING', 'AUTO', 'CONFIRMED', 'SKIPPED'] })
+  matchStatus!: ProductMatchStatus;
+
+  @ApiProperty({
+    description: 'Staged-matcher proposals ranked by confidence (walkthrough input).',
+    isArray: true,
+  })
+  matchCandidates!: ProductMatchCandidate[];
 }
 
 /** Wire shape returned by every receipt endpoint. */
@@ -38,10 +66,10 @@ export class ReceiptResponseDto {
   @ApiProperty()
   id!: string;
 
-  @ApiProperty({ enum: ['UPLOADED', 'EXTRACTING', 'REVIEW', 'CONFIRMED', 'FAILED'] })
+  @ApiProperty({ enum: [...RECEIPT_STATUSES] })
   status!: ReceiptStatus;
 
-  @ApiProperty({ enum: ['upload', 'url'] })
+  @ApiProperty({ enum: [...RECEIPT_SOURCES] })
   source!: ReceiptSource;
 
   @ApiPropertyOptional({ nullable: true, type: String })
@@ -81,7 +109,7 @@ export class ReceiptResponseDto {
   failureReason!: string | null;
 
   @ApiPropertyOptional({ nullable: true, type: String, description: 'Set on confirm.' })
-  paymentId!: string | null;
+  transactionId!: string | null;
 
   @ApiProperty({ description: 'Σ item totals (advisory).' })
   itemsSumCents!: number;
@@ -104,12 +132,16 @@ export class ReceiptResponseDto {
   items!: ReceiptItemResponseDto[];
 }
 
+export type ReceiptItemWithProduct = ReceiptItem & {
+  product: Pick<Product, 'name' | 'brand'> | null;
+};
+
 export type ReceiptWithRelations = Receipt & {
-  items: ReceiptItem[];
+  items: ReceiptItemWithProduct[];
   merchant: Pick<Merchant, 'name'> | null;
 };
 
-export function mapReceiptItemToDto(item: ReceiptItem): ReceiptItemResponseDto {
+export function mapReceiptItemToDto(item: ReceiptItemWithProduct): ReceiptItemResponseDto {
   return {
     id: item.id,
     position: item.position,
@@ -119,6 +151,13 @@ export function mapReceiptItemToDto(item: ReceiptItem): ReceiptItemResponseDto {
     discountCents: item.discountCents,
     totalCents: item.totalCents,
     categoryId: item.categoryId,
+    productId: item.productId,
+    productName: item.product?.name ?? null,
+    productBrand: item.product?.brand ?? null,
+    matchStatus: item.matchStatus as ProductMatchStatus,
+    matchCandidates: Array.isArray(item.matchCandidates)
+      ? (item.matchCandidates as unknown as ProductMatchCandidate[])
+      : [],
   };
 }
 
@@ -145,7 +184,7 @@ export function mapReceiptToDto(row: ReceiptWithRelations): ReceiptResponseDto {
     totalCents: row.totalCents,
     discountCents: row.discountCents,
     failureReason: row.failureReason,
-    paymentId: row.paymentId,
+    transactionId: row.transactionId,
     itemsSumCents,
     totalsMismatchCents: mismatchCents,
     createdAt: row.createdAt.toISOString(),

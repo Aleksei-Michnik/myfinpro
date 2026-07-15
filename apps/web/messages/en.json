@@ -45,7 +45,8 @@
     "menu": "Menu",
     "closeMenu": "Close menu",
     "skipToContent": "Skip to main content",
-    "receipts": "Receipts"
+    "receipts": "Receipts",
+    "products": "Products"
   },
   "home": {
     "title": "Personal & Family Finance Management",
@@ -142,7 +143,7 @@
     "subtitle": "Your finances at a glance.",
     "welcome": "Welcome to MyFinPro! Your personal finance dashboard will appear here.",
     "actions": {
-      "add": "+ Add payment"
+      "add": "+ Add transaction"
     },
     "totals": {
       "title": "This month",
@@ -153,27 +154,27 @@
       "loading": "Loading totals…",
       "error": "Couldn't load totals. {message}",
       "retry": "Retry",
-      "partial": "Showing first {count} payments — totals are partial."
+      "partial": "Showing first {count} transactions — totals are partial."
     },
     "scopes": {
       "title": "Your scopes",
       "personal": "Personal",
-      "personalSubtitle": "Your individual payments",
+      "personalSubtitle": "Your individual transactions",
       "groupSubtitle": "{role}",
       "view": "View",
       "noActivity": "No activity yet",
-      "empty": "Join or create a group to share payments.",
+      "empty": "Join or create a group to share transactions.",
       "createGroup": "Create a group"
     },
     "recent": {
       "title": "Recent activity",
       "viewAll": "View all",
-      "empty": "No payments yet. Add one to get started."
+      "empty": "No transactions yet. Add one to get started."
     },
     "starred": {
       "title": "Starred",
       "viewAll": "All starred",
-      "empty": "Star a payment to find it here."
+      "empty": "Star a transaction to find it here."
     }
   },
   "groups": {
@@ -363,6 +364,32 @@
           "passwordNotSet": "You need to set a password first. Use the password reset flow.",
           "generic": "Failed to change password"
         }
+      },
+      "llm": {
+        "title": "AI model",
+        "description": "Choose which AI model reads your receipts. Add your own API key to unlock a provider and use it at your own cost.",
+        "loading": "Loading…",
+        "loadFailed": "Could not load AI settings",
+        "retry": "Retry",
+        "modelLabel": "Extraction model",
+        "defaultOption": "Server default",
+        "requiresKey": "requires API key",
+        "modelHint": "Models without a usable API key are disabled. Add a key below to unlock them.",
+        "saveModel": "Save model",
+        "modelSaved": "AI model updated",
+        "saveFailed": "Could not save",
+        "keysTitle": "API keys",
+        "keysDescription": "Keys are encrypted on the server and never shown again — only the last 4 characters stay visible. Your key is used only to process your receipts.",
+        "keyInputLabel": "{provider} API key",
+        "keySet": "Key ending in …{hint}",
+        "noKey": "No key stored",
+        "sharedAvailable": "Included with your account",
+        "saveKey": "Save key",
+        "replaceKey": "Replace key",
+        "deleteKey": "Remove",
+        "keySaved": "API key saved",
+        "keyDeleted": "API key removed",
+        "reauthRequired": "Please sign in again to manage API keys"
       }
     }
   },
@@ -538,17 +565,17 @@
     "help": "Help",
     "copyright": "© {year} MyFinPro. All rights reserved."
   },
-  "payments": {
+  "transactions": {
     "scope": {
       "personal": "Personal",
       "group": "Group"
     },
     "list": {
-      "empty": "No payments yet.",
+      "empty": "No transactions yet.",
       "loadMore": "Load more",
       "loadingMore": "Loading…",
       "retry": "Retry",
-      "errorLoading": "Could not load payments. {message}"
+      "errorLoading": "Could not load transactions. {message}"
     },
     "table": {
       "date": "Date",
@@ -588,7 +615,8 @@
     "controls": {
       "edit": "Edit",
       "delete": "Delete",
-      "open": "Open"
+      "open": "Open",
+      "attachReceipt": "Attach receipt"
     },
     "row": {
       "starAdd": "Add to starred",
@@ -596,43 +624,43 @@
       "moreScopes": "+{count} more"
     },
     "delete": {
-      "title": "Delete payment",
-      "description": "This payment is shared across multiple scopes. Choose what to remove.",
+      "title": "Delete transaction",
+      "description": "This transaction is shared across multiple scopes. Choose what to remove.",
       "scopeOnly": "Delete from this scope",
       "scopeAll": "Delete from all my accessible scopes ({count})",
       "pickScope": "Which scope?",
       "confirm": "Delete",
       "cancel": "Cancel",
-      "errorNoAccess": "You no longer have access to delete this payment.",
-      "deleted": "Payment removed.",
+      "errorNoAccess": "You no longer have access to delete this transaction.",
+      "deleted": "Transaction removed.",
       "deletedFromScope": "Removed from {scope}."
     },
     "propagate": {
       "title": "Apply changes to occurrences?",
-      "description": "This recurring payment has generated occurrences. Choose how far this change should reach.",
+      "description": "This recurring transaction has generated occurrences. Choose how far this change should reach.",
       "destructiveWarning": "This change rebuilds future occurrences and may discard their comments and attachments.",
       "mode": {
         "self": {
-          "label": "This payment only",
-          "description": "Update just this recurring payment. Occurrences stay as they are."
+          "label": "This transaction only",
+          "description": "Update just this recurring transaction. Occurrences stay as they are."
         },
         "future": {
           "label": "This and future occurrences",
-          "description": "Update this payment and every occurrence dated from now onward."
+          "description": "Update this transaction and every occurrence dated from now onward."
         },
         "all": {
           "label": "All occurrences",
-          "description": "Update this payment and every occurrence, past and future."
+          "description": "Update this transaction and every occurrence, past and future."
         }
       },
       "confirm": "Apply",
       "cancel": "Cancel",
-      "resultUpdated": "Updated payment and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
+      "resultUpdated": "Updated transaction and {count, plural, =0 {no occurrences} =1 {# occurrence} other {# occurrences}}.",
       "resultSkipped": "{count, plural, =1 {# occurrence in a group you don't manage was} other {# occurrences in groups you don't manage were}} left unchanged."
     },
     "form": {
-      "createTitle": "Add payment",
-      "editTitle": "Edit payment",
+      "createTitle": "Add transaction",
+      "editTitle": "Edit transaction",
       "direction": "Direction",
       "directionIn": "Income",
       "directionOut": "Expense",
@@ -648,12 +676,12 @@
       "cancel": "Cancel",
       "close": "Close",
       "saving": "Saving…",
-      "loading": "Loading payment…",
-      "loadError": "Could not refresh payment data. Showing the last known values.",
+      "loading": "Loading transaction…",
+      "loadError": "Could not refresh transaction data. Showing the last known values.",
       "discardChanges": "Discard changes?",
       "discard": "Discard",
       "keepEditing": "Keep editing",
-      "errorGeneric": "Could not save the payment. {message}",
+      "errorGeneric": "Could not save the transaction. {message}",
       "validation": {
         "amountRequired": "Amount must be greater than zero.",
         "currencyInvalid": "Pick a currency.",
@@ -664,10 +692,18 @@
         "scopesRequired": "Pick at least one scope.",
         "noteTooLong": "Note must be 2000 characters or fewer."
       },
-      "addAction": "+ Add payment",
+      "addAction": "+ Add transaction",
       "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
-      "othersPreserved": "Other users' attributions on this payment will not be touched.",
-      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved."
+      "othersPreserved": "Other users' attributions on this transaction will not be touched.",
+      "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved.",
+      "fromReceiptHint": "Have a receipt? Add it and we will fill the transaction in for you.",
+      "fromReceiptDevice": "Upload from this device",
+      "fromReceiptUrl": "Add from URL",
+      "fromReceiptBarcodes": "Scan product barcodes",
+      "fromReceiptUrlLabel": "Receipt URL",
+      "fromReceiptUrlPlaceholder": "https://…",
+      "fromReceiptUrlSubmit": "Add receipt",
+      "fromReceiptFailed": "Failed to add the receipt"
     },
     "types": {
       "label": "Type",
@@ -709,9 +745,9 @@
     },
     "detail": {
       "back": "Back",
-      "loading": "Loading payment…",
-      "notFound": "Payment not found or no longer accessible.",
-      "errorGeneric": "Could not load payment. {message}",
+      "loading": "Loading transaction…",
+      "notFound": "Transaction not found or no longer accessible.",
+      "errorGeneric": "Could not load transaction. {message}",
       "tryAgain": "Try again",
       "amountLabel": "Amount",
       "dateLabel": "Date",
@@ -723,19 +759,24 @@
       "starRemove": "Unstar",
       "edit": "Edit",
       "delete": "Delete",
-      "editDisabledNotCreator": "Only the creator can edit this payment.",
+      "editDisabledNotCreator": "Only the creator can edit this transaction.",
       "editDisabled": {
-        "generatedOccurrence": "This payment was generated by a recurring schedule. Edit the parent to change all occurrences.",
-        "unsupportedType": "Editing this payment type isn't supported yet."
+        "generatedOccurrence": "This transaction was generated by a recurring schedule. Edit the parent to change all occurrences.",
+        "unsupportedType": "Editing this transaction type isn't supported yet."
       },
       "edited": "edited",
-      "deletedToast": "Payment removed.",
+      "deletedToast": "Transaction removed.",
       "occurrences": {
         "title": "Occurrences",
         "countSingular": "1 occurrence",
         "countPlural": "{n} occurrences",
         "empty": "No occurrences yet — they will appear here as the schedule runs."
-      }
+      },
+      "purchaseTitle": "Purchase details",
+      "purchaseLoading": "Loading purchase details…",
+      "purchaseEmpty": "This receipt has no itemised products.",
+      "purchaseUnavailable": "Purchase details aren't available for this receipt.",
+      "receiptLink": "View the source receipt"
     },
     "comments": {
       "title": "Comments",
@@ -767,15 +808,18 @@
     },
     "documents": {
       "title": "Documents",
-      "comingSoon": "Receipts, photos, and PDFs are coming in Phase 9."
+      "loading": "Loading documents…",
+      "view": "View",
+      "none": "No document file for this receipt.",
+      "unavailable": "Documents aren't available for this receipt."
     },
     "schedulePlan": {
       "occurrenceTitle": "Schedule / Plan",
       "comingSoon": "Recurring and plan management ship in iterations 6.18 and 6.20."
     },
     "page": {
-      "title": "Payments",
-      "subtitle": "Manage all payments you can see.",
+      "title": "Transactions",
+      "subtitle": "Manage all transactions you can see.",
       "scopeTabs": {
         "all": "All",
         "personal": "Personal",
@@ -787,7 +831,7 @@
         "ariaPressed": "Show starred only"
       },
       "clearFilters": "Clear filters",
-      "groupTabTitle": "Payments"
+      "groupTabTitle": "Transactions"
     },
     "schedule": {
       "form": {
@@ -820,7 +864,7 @@
         "limit": {
           "label": "Run at most N times (optional)"
         },
-        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated payments stay.",
+        "typeChangeWarning": "Changing type will remove the schedule and stop generating new occurrences. Already-generated transactions stay.",
         "validation": {
           "everyCountInvalid": "Enter a positive whole number.",
           "everyMsTooSmall": "Interval must be at least 1 minute.",
@@ -846,7 +890,7 @@
         "lastRun": "Last run: {when}",
         "cancelledAt": "Cancelled {when}",
         "runsLimit": "Limit: {n} run(s)",
-        "fromRecurring": "← from recurring payment",
+        "fromRecurring": "← from recurring transaction",
         "pause": "Pause",
         "resume": "Resume",
         "cancelAction": "Cancel schedule",
@@ -867,12 +911,12 @@
       },
       "statusActive": "Active",
       "statusCancelled": "Cancelled",
-      "summary": "{principal} over {count} payments · {rate}% p.a. · {frequency} · {method}",
+      "summary": "{principal} over {count} transactions · {rate}% p.a. · {frequency} · {method}",
       "table": {
         "dueAt": "Due",
         "principal": "Principal",
         "interest": "Interest",
-        "total": "Payment",
+        "total": "Transaction",
         "remaining": "Remaining",
         "status": "Status"
       },
@@ -883,7 +927,7 @@
         "CANCELLED": "Cancelled"
       },
       "cancelAction": "Cancel plan",
-      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending payments will be marked cancelled; nothing is deleted.",
+      "cancelConfirmBody": "Cancel this plan permanently? Remaining pending transactions will be marked cancelled; nothing is deleted.",
       "cancelConfirmYes": "Yes, cancel",
       "cancelConfirmKeep": "Keep plan",
       "cancelledToast": "Plan cancelled",
@@ -891,11 +935,11 @@
       "form": {
         "legend": "Plan details",
         "rateLabel": "Annual interest rate (%)",
-        "countLabel": "Number of payments",
+        "countLabel": "Number of transactions",
         "frequencyLabel": "Frequency",
-        "firstDueLabel": "First payment due",
+        "firstDueLabel": "First transaction due",
         "methodLabel": "Amortisation method",
-        "principalHint": "The amount above is the plan's principal; each payment is derived from it.",
+        "principalHint": "The amount above is the plan's principal; each transaction is derived from it.",
         "frequency": {
           "DAILY": "Daily",
           "WEEKLY": "Weekly",
@@ -907,13 +951,13 @@
         "method": {
           "auto": "Automatic (by type)",
           "equal": "Equal (no interest)",
-          "french": "Annuity (fixed payment)"
+          "french": "Annuity (fixed transaction)"
         },
         "validation": {
           "rateInvalid": "Enter a rate of 0 or more",
           "rateTooHigh": "Rate cannot exceed 100%",
-          "countInvalid": "Enter a whole number of payments (at least 1)",
-          "countTooHigh": "At most 600 payments",
+          "countInvalid": "Enter a whole number of transactions (at least 1)",
+          "countTooHigh": "At most 600 transactions",
           "firstDueRequired": "Pick the first due date",
           "firstDueInvalid": "Invalid date",
           "equalRequiresZeroRate": "The equal method is interest-free — set the rate to 0 or pick the annuity method"
@@ -924,7 +968,7 @@
   "categories": {
     "page": {
       "title": "Categories",
-      "subtitle": "Manage your payment categories."
+      "subtitle": "Manage your transaction categories."
     },
     "scope": {
       "personal": "Personal",
@@ -977,7 +1021,7 @@
     "delete": {
       "title": "Delete category",
       "warning": "Are you sure you want to delete \"{name}\"? This can't be undone.",
-      "inUse": "{count} payment(s) still use this category. Choose a replacement category before deleting.",
+      "inUse": "{count} transaction(s) still use this category. Choose a replacement category before deleting.",
       "replaceLabel": "Replacement category",
       "cancel": "Cancel",
       "confirm": "Delete",
@@ -1008,6 +1052,57 @@
       "urlAddedToast": "Receipt URL added — extraction started",
       "failedToast": "Upload failed"
     },
+    "manual": {
+      "title": "Add products by barcode",
+      "hint": "Scan each product to build the receipt. Prices are remembered from your past purchases.",
+      "currency": "Currency",
+      "purchasedAt": "Purchase date",
+      "merchant": "Merchant (optional)",
+      "merchantPlaceholder": "Where you shopped",
+      "empty": "No products yet — scan a barcode or add a product to start.",
+      "quantity": "Qty",
+      "quantityFor": "Quantity for {name}",
+      "unitPrice": "Unit price",
+      "unitPriceFor": "Unit price for {name}",
+      "removeLine": "Remove {name}",
+      "scan": "Scan barcode",
+      "addProduct": "Add product",
+      "total": "Total:",
+      "cancel": "Cancel",
+      "submit": "Review receipt",
+      "close": "Close",
+      "announceAdded": "{name} added",
+      "announceIncremented": "{name} quantity increased",
+      "lookupFailed": "Barcode lookup failed",
+      "createFailed": "Could not create the receipt"
+    },
+    "attach": {
+      "title": "Attach a receipt",
+      "hint": "Add the receipt for this transaction. We'll read it and check it against what you entered.",
+      "device": "Upload from this device",
+      "urlLabel": "Or add from a URL",
+      "urlPlaceholder": "https://…",
+      "urlSubmit": "Add",
+      "close": "Close",
+      "failed": "Failed to attach the receipt"
+    },
+    "reconcile": {
+      "title": "Update the transaction?",
+      "hint": "The receipt differs from the transaction. Choose what to keep for each field.",
+      "totalLabel": "Total",
+      "categoryLabel": "Category",
+      "keep": "Keep",
+      "update": "Use receipt:",
+      "none": "None",
+      "noDifferences": "The receipt matches the transaction. Confirm to finish.",
+      "itemsNote": "Products and item details are saved either way.",
+      "loading": "Loading the transaction…",
+      "loadFailed": "Could not load the transaction.",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "close": "Close",
+      "failed": "Failed to reconcile the receipt"
+    },
     "list": {
       "title": "Your receipts",
       "empty": "No receipts yet — add your first one above.",
@@ -1022,12 +1117,24 @@
       "loadMore": "Load more",
       "actionFailed": "Action failed"
     },
+    "viewer": {
+      "zoomControls": "Zoom controls",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset",
+      "openInNewTab": "Open in a new tab",
+      "close": "Close",
+      "downloadPdf": "Download PDF",
+      "loadFailed": "Could not load the document file."
+    },
     "review": {
       "back": "Back to receipts",
+      "viewTransaction": "View transaction",
       "notFound": "Receipt not found",
       "loadFailed": "Could not load the receipt",
       "previewTitle": "Receipt preview",
       "previewLoading": "Loading preview…",
+      "viewDocument": "View document",
       "headerTitle": "Extracted details",
       "merchantLabel": "Merchant",
       "merchantLinked": "Linked to a known merchant",
@@ -1050,21 +1157,139 @@
       "retry": "Retry extraction",
       "retriedToast": "Extraction restarted",
       "confirm": "Confirm",
-      "confirmSaveFirst": "Save your changes before confirming"
+      "reconcile": "Reconcile with transaction",
+      "confirmSaveFirst": "Save your changes before confirming",
+      "matchProducts": "Match products ({count})",
+      "matchProductsDone": "Products matched",
+      "matchState": {
+        "pending": "Product match pending",
+        "auto": "Product auto-matched",
+        "confirmed": "Product match confirmed",
+        "skipped": "Product match skipped"
+      }
     },
     "confirm": {
       "title": "Confirm receipt",
-      "description": "This creates a payment from the reviewed receipt.",
+      "description": "This creates a transaction from the reviewed receipt.",
       "categoryLabel": "Primary category",
       "scopeLabel": "Attribute to",
       "noteLabel": "Note (optional)",
       "notePlaceholder": "Defaults to the merchant name",
-      "submit": "Confirm & create payment",
+      "submit": "Confirm & create transaction",
       "cancel": "Cancel",
       "missingCategory": "Choose a primary category",
       "missingScope": "Choose at least one scope",
       "confirmedToast": "Receipt confirmed",
       "confirmFailed": "Could not confirm the receipt"
+    }
+  },
+  "products": {
+    "title": "Products",
+    "list": {
+      "searchLabel": "Search products",
+      "searchPlaceholder": "Search by name in any language, or a barcode…",
+      "scan": "Scan barcode",
+      "create": "New product",
+      "loading": "Loading products…",
+      "empty": "You haven't purchased any products yet — confirm a receipt and match its items to build your catalog.",
+      "noResults": "No products match “{query}”.",
+      "resultCount": "{count, plural, =1 {1 product} other {# products}} shown",
+      "loadMore": "Load more",
+      "lookupFailed": "Barcode lookup failed"
+    },
+    "card": {
+      "timesPurchased": "{count, plural, =1 {bought once} other {bought # times}}"
+    },
+    "scanner": {
+      "title": "Scan a barcode",
+      "close": "Close scanner",
+      "starting": "Starting camera…",
+      "scanning": "Point the camera at the barcode",
+      "noCamera": "Camera is unavailable — type the barcode below instead.",
+      "manualLabel": "Enter the barcode manually",
+      "manualSubmit": "Use",
+      "manualInvalid": "Not a valid EAN/UPC barcode (check the digits)."
+    },
+    "form": {
+      "createTitle": "New product",
+      "editTitle": "Edit product",
+      "nameLabel": "Name",
+      "brandLabel": "Brand",
+      "barcodeLabel": "Barcode (EAN/UPC)",
+      "scan": "Scan",
+      "categoryLabel": "Default category",
+      "noCategory": "No default category",
+      "categoryHint": "Products are shared by everyone, so only common (system) categories apply.",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "create": "Create product",
+      "nameRequired": "The product needs a name",
+      "barcodeInvalid": "Not a valid EAN/UPC barcode (check the digits).",
+      "saveFailed": "Could not save the product",
+      "createdToast": "Product created",
+      "updatedToast": "Product updated",
+      "offChecking": "Looking up the barcode…",
+      "offFilled": "Details prefilled from Open Food Facts — please review.",
+      "barcodeExists": "This barcode already belongs to “{name}”."
+    },
+    "walkthrough": {
+      "title": "Match products",
+      "close": "Close walkthrough",
+      "progressLabel": "Items resolved",
+      "progress": "Item {current} of {total} · {resolved} resolved",
+      "status": {
+        "pending": "Needs a match",
+        "auto": "Auto-matched",
+        "confirmed": "Confirmed",
+        "skipped": "Skipped"
+      },
+      "linkedTo": "Linked to {name}",
+      "searchLabel": "Search the product registry",
+      "searchPlaceholder": "Search products…",
+      "noCandidates": "No matches proposed — search, scan, or create a new product.",
+      "candidatesLabel": "Match candidates",
+      "prev": "Previous item",
+      "next": "Next item",
+      "scan": "Scan",
+      "createNew": "New product",
+      "skip": "Skip",
+      "confirm": "Confirm match",
+      "keyboardHint": "↑↓ choose · Enter confirm · S skip · N new · ←→ navigate · Esc close",
+      "actionFailed": "Could not update the item"
+    },
+    "detail": {
+      "back": "Back to products",
+      "notFound": "Product not found",
+      "loadFailed": "Could not load the product",
+      "loading": "Loading product…",
+      "edit": "Edit",
+      "imageTitle": "Product image",
+      "uploadImage": "Upload image",
+      "imageQueuedToast": "Image uploaded — it will appear once processed",
+      "barcodeLabel": "Barcode",
+      "categoryLabel": "Default category",
+      "timesPurchasedLabel": "Times purchased",
+      "lastPurchasedLabel": "Last purchased",
+      "aliasesTitle": "Names & aliases",
+      "noAliases": "No aliases recorded yet.",
+      "aliasLabel": "New alias",
+      "aliasPlaceholder": "Add a name in any language…",
+      "aliasAdd": "Add",
+      "aliasAddedToast": "Alias recorded",
+      "aliasConfirmations": "{count, plural, =1 {confirmed once} other {confirmed # times}}",
+      "actionFailed": "Action failed",
+      "merchantsTitle": "Price by merchant (your purchases)",
+      "merchantCol": "Merchant",
+      "purchasesCol": "Purchases",
+      "lastPriceCol": "Last price",
+      "priceRangeCol": "Range",
+      "unknownMerchant": "Unknown merchant",
+      "purchasesTitle": "Your purchase history",
+      "dateCol": "Date",
+      "qtyCol": "Qty",
+      "unitPriceCol": "Unit price",
+      "totalCol": "Total",
+      "noPurchases": "No confirmed purchases of this product yet."
     }
   }
 }

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { GroupPaymentsTab } from '@/components/group/GroupPaymentsTab';
+import { GroupTransactionsTab } from '@/components/group/GroupTransactionsTab';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -261,9 +261,9 @@ function GroupDashboardInner() {
         </div>
       </section>
 
-      {/* Payments */}
+      {/* Transactions */}
       <div className="mb-6">
-        <GroupPaymentsTab groupId={group.id} />
+        <GroupTransactionsTab groupId={group.id} />
       </div>
 
       {/* Members */}

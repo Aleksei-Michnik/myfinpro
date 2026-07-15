@@ -13,7 +13,7 @@ export const RECEIPT_STATUSES = [
 ] as const;
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 
-export const RECEIPT_SOURCES = ['upload', 'url'] as const;
+export const RECEIPT_SOURCES = ['upload', 'url', 'manual'] as const;
 export type ReceiptSource = (typeof RECEIPT_SOURCES)[number];
 
 /**
@@ -50,6 +50,12 @@ export interface ExtractedItem {
    * provider in the extraction context, or null.
    */
   suggestedCategoryId: string | null;
+  /**
+   * Phase 8 — product match ranked by the extraction LLM. MUST be one of
+   * the product-candidate ids handed to the provider, or null. This is the
+   * cross-language stage of the matcher (design §1.2).
+   */
+  suggestedProductId: string | null;
 }
 
 /**
@@ -159,6 +165,9 @@ export function validateExtractionResult(value: unknown): {
       if (!isStringOrNull(it.suggestedCategoryId ?? null)) {
         fail(`${p}.suggestedCategoryId`, 'must be string or null');
       }
+      if (!isStringOrNull(it.suggestedProductId ?? null)) {
+        fail(`${p}.suggestedProductId`, 'must be string or null');
+      }
     });
   }
 
@@ -172,6 +181,7 @@ export function validateExtractionResult(value: unknown): {
       discountCents: (it.discountCents ?? 0) as number,
       totalCents: it.totalCents as number,
       suggestedCategoryId: (it.suggestedCategoryId ?? null) as string | null,
+      suggestedProductId: (it.suggestedProductId ?? null) as string | null,
     }),
   );
   return {
@@ -188,6 +198,36 @@ export function validateExtractionResult(value: unknown): {
       notes: (v.notes ?? null) as string | null,
     },
   };
+}
+
+/**
+ * The single category that best represents a receipt for transaction
+ * reconciliation (Phase 8.15) — the categorised line items' category with
+ * the largest summed spend. Ties break by first appearance. Returns null
+ * when no line carries a category. Used by both the reconcile endpoint
+ * (what `applyCategory` writes) and the web reconcile dialog (what it
+ * offers), so the two never disagree.
+ */
+export function dominantReceiptCategoryId(
+  items: Array<{ categoryId: string | null; totalCents: number }>,
+): string | null {
+  const spendByCategory = new Map<string, number>();
+  for (const item of items) {
+    if (!item.categoryId) continue;
+    spendByCategory.set(
+      item.categoryId,
+      (spendByCategory.get(item.categoryId) ?? 0) + item.totalCents,
+    );
+  }
+  let winner: string | null = null;
+  let best = -1;
+  for (const [categoryId, spend] of spendByCategory) {
+    if (spend > best) {
+      best = spend;
+      winner = categoryId;
+    }
+  }
+  return winner;
 }
 
 /**

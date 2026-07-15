@@ -17,6 +17,10 @@ describe('AccountDeletionService', () => {
     auditLog: {
       create: jest.fn(),
     },
+    // Phase 8.11 — LLM API keys are wiped at deletion-request time.
+    userLlmCredential: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const mockMailService = {
@@ -143,6 +147,20 @@ describe('AccountDeletionService', () => {
       await service.requestDeletion('user-1', 'user@example.com');
 
       expect(mockRefreshTokenService.revokeAllUserTokens).toHaveBeenCalledWith('user-1');
+    });
+
+    it('should wipe stored LLM credentials immediately (not after the grace period)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...activeUser });
+      mockPrisma.user.update.mockResolvedValue({});
+      mockRefreshTokenService.revokeAllUserTokens.mockResolvedValue(undefined);
+      mockMailService.sendAccountDeletionConfirmation.mockResolvedValue(undefined);
+      mockPrisma.auditLog.create.mockResolvedValue({});
+
+      await service.requestDeletion('user-1', 'user@example.com');
+
+      expect(mockPrisma.userLlmCredential.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
     });
 
     it('should send deletion confirmation email', async () => {

@@ -1,7 +1,8 @@
 // Phase 7 · Iteration 7.7 — web-side receipt wire types (mirror of the API's
 // ReceiptResponseDto; see apps/api/src/receipt/dto/receipt-response.dto.ts).
+// Phase 8 adds the product-match fields on items.
 
-import type { AttributionScope } from '@myfinpro/shared';
+import type { AttributionScope, ProductMatchCandidate, ProductMatchStatus } from '@myfinpro/shared';
 
 export const RECEIPT_STATUSES = [
   'UPLOADED',
@@ -12,7 +13,7 @@ export const RECEIPT_STATUSES = [
 ] as const;
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 
-export type ReceiptSource = 'upload' | 'url';
+export type ReceiptSource = 'upload' | 'url' | 'manual';
 
 export interface ReceiptItem {
   id: string;
@@ -23,6 +24,12 @@ export interface ReceiptItem {
   discountCents: number;
   totalCents: number;
   categoryId: string | null;
+  /** Phase 8 — registry link + walkthrough state. */
+  productId: string | null;
+  productName: string | null;
+  productBrand: string | null;
+  matchStatus: ProductMatchStatus;
+  matchCandidates: ProductMatchCandidate[];
 }
 
 export interface ReceiptSummary {
@@ -42,7 +49,7 @@ export interface ReceiptSummary {
   totalCents: number | null;
   discountCents: number | null;
   failureReason: string | null;
-  paymentId: string | null;
+  transactionId: string | null;
   itemsSumCents: number;
   /** Advisory Σitems-vs-total delta; non-zero renders a review warning. */
   totalsMismatchCents: number | null;
@@ -87,11 +94,20 @@ export interface MerchantSuggestion {
   name: string;
 }
 
-/** POST /receipts/:id/confirm body — turns a reviewed receipt into a payment. */
+/** POST /receipts/manual body — a receipt composed by scanning products (8.14). */
+export interface ManualReceiptInput {
+  currency: string;
+  merchantName?: string;
+  /** ISO 8601; the API defaults to now. */
+  purchasedAt?: string;
+  items: Array<{ productId: string; quantity: number; unitPriceCents: number }>;
+}
+
+/** POST /receipts/:id/confirm body — turns a reviewed receipt into a transaction. */
 export interface ConfirmReceiptInput {
-  /** Primary OUT category for the resulting payment. */
+  /** Primary OUT category for the resulting transaction. */
   categoryId: string;
-  /** Attribution scopes to remember (personal / group), mirrors POST /payments. */
+  /** Attribution scopes to remember (personal / group), mirrors POST /transactions. */
   attributions: AttributionScope[];
   note?: string;
 }

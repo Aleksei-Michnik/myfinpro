@@ -67,6 +67,11 @@ export class AccountDeletionService {
     // Revoke ALL refresh tokens
     await this.refreshTokenService.revokeAllUserTokens(userId);
 
+    // Wipe stored LLM API keys immediately — secrets don't wait out the
+    // grace period (runbook §9.4 layer 7). Re-adding after reactivation is
+    // cheap; a lingering encrypted third-party credential is not.
+    await this.prisma.userLlmCredential.deleteMany({ where: { userId } });
+
     // Send deletion confirmation email (fire-and-forget)
     const locale = user.locale || 'en';
     try {

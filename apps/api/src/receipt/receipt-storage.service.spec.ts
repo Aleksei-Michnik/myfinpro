@@ -5,6 +5,14 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ReceiptStorageService } from './receipt-storage.service';
 
+// The fixtures below carry magic bytes only — not decodable images — so the
+// WASM HEIC decoder is mocked; the conversion contract is what's under test.
+const heicConvertMock = jest.fn();
+jest.mock('heic-convert', () => ({
+  __esModule: true,
+  default: (options: unknown) => heicConvertMock(options) as Promise<Uint8Array>,
+}));
+
 // Minimal valid magic-byte fixtures (content past the header is irrelevant
 // to the sniffer).
 const FIXTURES = {
@@ -84,6 +92,36 @@ describe('ReceiptStorageService', () => {
       } catch (err) {
         expect((err as BadRequestException).getResponse() as { errorCode?: string }).toMatchObject({
           errorCode: 'RECEIPT_FILE_TOO_LARGE',
+        });
+      }
+    });
+
+    it('converts HEIC uploads to JPEG at storage time (7.11)', async () => {
+      const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 7)]);
+      heicConvertMock.mockResolvedValue(jpeg);
+
+      const saved = await service.save(FIXTURES.heic);
+
+      expect(heicConvertMock).toHaveBeenCalledWith({
+        buffer: FIXTURES.heic,
+        format: 'JPEG',
+        quality: 0.9,
+      });
+      expect(saved.mimeType).toBe('image/jpeg');
+      expect(saved.sizeBytes).toBe(jpeg.length);
+      expect(saved.fileRef).toMatch(/\.jpg$/);
+      const onDisk = await readFile(path.join(dir, saved.fileRef));
+      expect(onDisk.equals(jpeg)).toBe(true);
+    });
+
+    it('rejects an undecodable HEIC with RECEIPT_INVALID_FILE_TYPE', async () => {
+      heicConvertMock.mockRejectedValue(new Error('input buffer is not a HEIC image'));
+      try {
+        await service.save(FIXTURES.heic);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as BadRequestException).getResponse() as { errorCode?: string }).toMatchObject({
+          errorCode: 'RECEIPT_INVALID_FILE_TYPE',
         });
       }
     });

@@ -1,7 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { HealthCheckError } from '@nestjs/terminus';
 import { Test, TestingModule } from '@nestjs/testing';
-import { PAYMENT_OCCURRENCES_QUEUE } from '../../queue/queue.constants';
+import { TRANSACTION_OCCURRENCES_QUEUE } from '../../queue/queue.constants';
 import { RedisHealthIndicator } from './redis.indicator';
 
 describe('RedisHealthIndicator', () => {
@@ -13,7 +13,7 @@ describe('RedisHealthIndicator', () => {
       providers: [
         RedisHealthIndicator,
         {
-          provide: getQueueToken(PAYMENT_OCCURRENCES_QUEUE),
+          provide: getQueueToken(TRANSACTION_OCCURRENCES_QUEUE),
           useValue: { client: Promise.resolve(client) },
         },
       ],

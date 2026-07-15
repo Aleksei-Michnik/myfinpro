@@ -45,7 +45,8 @@
     "menu": "תפריט",
     "closeMenu": "סגירת תפריט",
     "skipToContent": "דילוג לתוכן הראשי",
-    "receipts": "קבלות"
+    "receipts": "קבלות",
+    "products": "מוצרים"
   },
   "home": {
     "title": "ניהול כספים אישי ומשפחתי",
@@ -142,7 +143,7 @@
     "subtitle": "המבט הכולל של הכספים שלך.",
     "welcome": "ברוכים הבאים ל-MyFinPro! לוח הבקרה הפיננסי שלך יופיע כאן.",
     "actions": {
-      "add": "+ הוסף תשלום"
+      "add": "+ הוסף תנועה"
     },
     "totals": {
       "title": "החודש",
@@ -153,27 +154,27 @@
       "loading": "טוען סיכומים…",
       "error": "טעינת הסיכומים נכשלה. {message}",
       "retry": "נסה שוב",
-      "partial": "מציג {count} תשלומים ראשונים — הסיכומים חלקיים."
+      "partial": "מציג {count} תנועות ראשונות — הסיכומים חלקיים."
     },
     "scopes": {
       "title": "ההקשרים שלך",
       "personal": "אישי",
-      "personalSubtitle": "התשלומים האישיים שלך",
+      "personalSubtitle": "התנועות האישיות שלך",
       "groupSubtitle": "{role}",
       "view": "פתח",
       "noActivity": "אין פעילות עדיין",
-      "empty": "הצטרף לקבוצה או צור אחת כדי לשתף תשלומים.",
+      "empty": "הצטרף לקבוצה או צור אחת כדי לשתף תנועות.",
       "createGroup": "צור קבוצה"
     },
     "recent": {
       "title": "פעילות אחרונה",
       "viewAll": "ראה הכל",
-      "empty": "אין תשלומים עדיין. הוסף אחד כדי להתחיל."
+      "empty": "אין תנועות עדיין. הוסף אחת כדי להתחיל."
     },
     "starred": {
       "title": "מסומנים בכוכב",
       "viewAll": "כל המסומנים",
-      "empty": "סמן תשלום בכוכב כדי לראות אותו כאן."
+      "empty": "סמן תנועה בכוכב כדי לראות אותה כאן."
     }
   },
   "groups": {
@@ -363,6 +364,32 @@
           "passwordNotSet": "עליך להגדיר סיסמה תחילה. השתמש בזרימת איפוס הסיסמה.",
           "generic": "שינוי הסיסמה נכשל"
         }
+      },
+      "llm": {
+        "title": "מודל בינה מלאכותית",
+        "description": "בחרו איזה מודל בינה מלאכותית יקרא את הקבלות שלכם. הוסיפו מפתח API משלכם כדי לפתוח ספק ולהשתמש בו על חשבונכם.",
+        "loading": "טוען…",
+        "loadFailed": "טעינת הגדרות הבינה המלאכותית נכשלה",
+        "retry": "נסו שוב",
+        "modelLabel": "מודל לחילוץ נתונים",
+        "defaultOption": "ברירת המחדל של השרת",
+        "requiresKey": "נדרש מפתח API",
+        "modelHint": "מודלים ללא מפתח API זמין מושבתים. הוסיפו מפתח למטה כדי לפתוח אותם.",
+        "saveModel": "שמירת מודל",
+        "modelSaved": "מודל הבינה המלאכותית עודכן",
+        "saveFailed": "השמירה נכשלה",
+        "keysTitle": "מפתחות API",
+        "keysDescription": "המפתחות מוצפנים בשרת ולא יוצגו שוב — רק 4 התווים האחרונים נשארים גלויים. המפתח שלכם משמש רק לעיבוד הקבלות שלכם.",
+        "keyInputLabel": "מפתח API של {provider}",
+        "keySet": "מפתח שמסתיים ב…{hint}",
+        "noKey": "לא נשמר מפתח",
+        "sharedAvailable": "כלול בחשבון שלכם",
+        "saveKey": "שמירת מפתח",
+        "replaceKey": "החלפת מפתח",
+        "deleteKey": "הסרה",
+        "keySaved": "מפתח ה-API נשמר",
+        "keyDeleted": "מפתח ה-API הוסר",
+        "reauthRequired": "יש להתחבר מחדש כדי לנהל מפתחות API"
       }
     }
   },
@@ -538,17 +565,17 @@
     "help": "עזרה",
     "copyright": "© {year} MyFinPro. כל הזכויות שמורות."
   },
-  "payments": {
+  "transactions": {
     "scope": {
       "personal": "אישי",
       "group": "קבוצה"
     },
     "list": {
-      "empty": "אין תשלומים עדיין.",
+      "empty": "אין תנועות עדיין.",
       "loadMore": "טען עוד",
       "loadingMore": "טוען…",
       "retry": "נסה שוב",
-      "errorLoading": "טעינת התשלומים נכשלה. {message}"
+      "errorLoading": "טעינת התנועות נכשלה. {message}"
     },
     "table": {
       "date": "תאריך",
@@ -588,7 +615,8 @@
     "controls": {
       "edit": "ערוך",
       "delete": "מחק",
-      "open": "פתח"
+      "open": "פתח",
+      "attachReceipt": "צירוף קבלה"
     },
     "row": {
       "starAdd": "הוסף למסומנים",
@@ -596,43 +624,43 @@
       "moreScopes": "+{count} נוספים"
     },
     "delete": {
-      "title": "מחיקת תשלום",
-      "description": "תשלום זה משויך למספר היקפים. בחר מה למחוק.",
+      "title": "מחיקת תנועה",
+      "description": "תנועה זו משויכת למספר היקפים. בחר מה למחוק.",
       "scopeOnly": "מחק מההיקף הזה",
       "scopeAll": "מחק מכל ההיקפים שלי ({count})",
       "pickScope": "מאיזה היקף?",
       "confirm": "מחק",
       "cancel": "ביטול",
-      "errorNoAccess": "אין לך עוד הרשאה למחוק תשלום זה.",
-      "deleted": "התשלום נמחק.",
+      "errorNoAccess": "אין לך עוד הרשאה למחוק תנועה זו.",
+      "deleted": "התנועה נמחקה.",
       "deletedFromScope": "נמחק מ-{scope}."
     },
     "propagate": {
       "title": "להחיל את השינויים על המופעים?",
-      "description": "לתשלום החוזר הזה נוצרו מופעים. בחר עד כמה השינוי הזה יחול.",
+      "description": "לתנועה החוזרת הזו נוצרו מופעים. בחר עד כמה השינוי הזה יחול.",
       "destructiveWarning": "שינוי זה בונה מחדש מופעים עתידיים ועלול למחוק את התגובות והקבצים המצורפים שלהם.",
       "mode": {
         "self": {
-          "label": "תשלום זה בלבד",
-          "description": "עדכן רק את התשלום החוזר הזה. המופעים יישארו כפי שהם."
+          "label": "תנועה זו בלבד",
+          "description": "עדכן רק את התנועה החוזרת הזו. המופעים יישארו כפי שהם."
         },
         "future": {
-          "label": "תשלום זה והמופעים העתידיים",
-          "description": "עדכן את התשלום הזה וכל מופע מהיום והלאה."
+          "label": "תנועה זו והמופעים העתידיים",
+          "description": "עדכן את התנועה הזו וכל מופע מהיום והלאה."
         },
         "all": {
           "label": "כל המופעים",
-          "description": "עדכן את התשלום הזה וכל מופע, בעבר ובעתיד."
+          "description": "עדכן את התנועה הזו וכל מופע, בעבר ובעתיד."
         }
       },
       "confirm": "החל",
       "cancel": "ביטול",
-      "resultUpdated": "עודכן התשלום ו{count, plural, =0 {ללא מופעים} =1 {מופע #} other {# מופעים}}.",
+      "resultUpdated": "עודכנה התנועה ו{count, plural, =0 {ללא מופעים} =1 {מופע #} other {# מופעים}}.",
       "resultSkipped": "{count, plural, =1 {מופע # בקבוצה שאינך מנהל נותר} other {# מופעים בקבוצות שאינך מנהל נותרו}} ללא שינוי."
     },
     "form": {
-      "createTitle": "הוסף תשלום",
-      "editTitle": "ערוך תשלום",
+      "createTitle": "הוסף תנועה",
+      "editTitle": "ערוך תנועה",
       "direction": "כיוון",
       "directionIn": "הכנסה",
       "directionOut": "הוצאה",
@@ -648,12 +676,12 @@
       "cancel": "ביטול",
       "close": "סגור",
       "saving": "שומר…",
-      "loading": "טוען תשלום…",
-      "loadError": "לא ניתן לרענן את נתוני התשלום. מציג את הערכים האחרונים שידועים.",
+      "loading": "טוען תנועה…",
+      "loadError": "לא ניתן לרענן את נתוני התנועה. מציג את הערכים האחרונים שידועים.",
       "discardChanges": "לבטל את השינויים?",
       "discard": "בטל",
       "keepEditing": "המשך עריכה",
-      "errorGeneric": "שמירת התשלום נכשלה. {message}",
+      "errorGeneric": "שמירת התנועה נכשלה. {message}",
       "validation": {
         "amountRequired": "הסכום חייב להיות גדול מאפס.",
         "currencyInvalid": "בחר מטבע.",
@@ -664,10 +692,18 @@
         "scopesRequired": "בחר לפחות היקף אחד.",
         "noteTooLong": "ההערה יכולה להכיל עד 2000 תווים."
       },
-      "addAction": "+ הוסף תשלום",
+      "addAction": "+ הוסף תנועה",
       "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
-      "othersPreserved": "השיוכים של משתמשים אחרים לתשלום זה לא ישונו.",
-      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו."
+      "othersPreserved": "השיוכים של משתמשים אחרים לתנועה זו לא ישונו.",
+      "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו.",
+      "fromReceiptHint": "יש קבלה? הוסיפו אותה ואנחנו נמלא את התנועה עבורכם.",
+      "fromReceiptDevice": "העלאה מהמכשיר הזה",
+      "fromReceiptUrl": "הוספה מכתובת URL",
+      "fromReceiptBarcodes": "סריקת ברקודים של מוצרים",
+      "fromReceiptUrlLabel": "כתובת הקבלה",
+      "fromReceiptUrlPlaceholder": "https://…",
+      "fromReceiptUrlSubmit": "הוספת קבלה",
+      "fromReceiptFailed": "הוספת הקבלה נכשלה"
     },
     "types": {
       "label": "סוג",
@@ -678,7 +714,7 @@
         "ONE_TIME": "חד-פעמי",
         "RECURRING": "חוזר",
         "LIMITED_PERIOD": "חוזר עם תאריך סיום",
-        "INSTALLMENT": "תכנית תשלומים",
+        "INSTALLMENT": "תכנית תנועות",
         "LOAN": "הלוואה",
         "MORTGAGE": "משכנתא"
       },
@@ -709,9 +745,9 @@
     },
     "detail": {
       "back": "חזרה",
-      "loading": "טוען תשלום…",
-      "notFound": "התשלום לא נמצא או שאינו זמין יותר.",
-      "errorGeneric": "טעינת התשלום נכשלה. {message}",
+      "loading": "טוען תנועה…",
+      "notFound": "התנועה לא נמצאה או שאינה זמינה יותר.",
+      "errorGeneric": "טעינת התנועה נכשלה. {message}",
       "tryAgain": "נסה שוב",
       "amountLabel": "סכום",
       "dateLabel": "תאריך",
@@ -723,19 +759,24 @@
       "starRemove": "הסר סימון",
       "edit": "ערוך",
       "delete": "מחק",
-      "editDisabledNotCreator": "רק היוצר יכול לערוך את התשלום.",
+      "editDisabledNotCreator": "רק היוצר יכול לערוך את התנועה.",
       "editDisabled": {
-        "generatedOccurrence": "תשלום זה נוצר אוטומטית מתבנית קבועה. ערוך את התשלום ההורה כדי לשנות את כל המופעים.",
-        "unsupportedType": "עריכת תשלום מסוג זה אינה נתמכת עדיין."
+        "generatedOccurrence": "תנועה זו נוצרה אוטומטית מתבנית קבועה. ערוך את התנועה ההורה כדי לשנות את כל המופעים.",
+        "unsupportedType": "עריכת תנועה מסוג זה אינה נתמכת עדיין."
       },
       "edited": "נערך",
-      "deletedToast": "התשלום נמחק.",
+      "deletedToast": "התנועה נמחקה.",
       "occurrences": {
         "title": "מופעים",
         "countSingular": "מופע אחד",
         "countPlural": "{n} מופעים",
         "empty": "עדיין אין מופעים — הם יופיעו כאן ככל שלוח הזמנים יפעל."
-      }
+      },
+      "purchaseTitle": "פרטי הרכישה",
+      "purchaseLoading": "טוען את פרטי הרכישה…",
+      "purchaseEmpty": "לקבלה זו אין פירוט מוצרים.",
+      "purchaseUnavailable": "פרטי הרכישה אינם זמינים עבור קבלה זו.",
+      "receiptLink": "צפייה בקבלת המקור"
     },
     "comments": {
       "title": "תגובות",
@@ -767,15 +808,18 @@
     },
     "documents": {
       "title": "מסמכים",
-      "comingSoon": "קבלות, תמונות ו-PDFs בדרך בשלב 9."
+      "loading": "טוען מסמכים…",
+      "view": "צפייה",
+      "none": "אין קובץ מסמך לקבלה זו.",
+      "unavailable": "המסמכים אינם זמינים עבור קבלה זו."
     },
     "schedulePlan": {
       "occurrenceTitle": "לוח זמנים / תכנית",
-      "comingSoon": "ניהול חוזר ותכניות תשלום יגיעו באיטרציות 6.18 ו-6.20."
+      "comingSoon": "ניהול חוזר ותכניות תנועה יגיעו באיטרציות 6.18 ו-6.20."
     },
     "page": {
-      "title": "תשלומים",
-      "subtitle": "נהל את כל התשלומים שאתה רואה.",
+      "title": "תנועות",
+      "subtitle": "נהל את כל התנועות שאתה רואה.",
       "scopeTabs": {
         "all": "הכל",
         "personal": "אישי",
@@ -787,7 +831,7 @@
         "ariaPressed": "הצג מסומנים בלבד"
       },
       "clearFilters": "נקה סינון",
-      "groupTabTitle": "תשלומים"
+      "groupTabTitle": "תנועות"
     },
     "schedule": {
       "form": {
@@ -820,7 +864,7 @@
         "limit": {
           "label": "מקסימום הפעלות (לא חובה)"
         },
-        "typeChangeWarning": "שינוי הסוג יסיר את לוח הזמנים ויפסיק יצירת מופעים חדשים. תשלומים שכבר נוצרו יישמרו.",
+        "typeChangeWarning": "שינוי הסוג יסיר את לוח הזמנים ויפסיק יצירת מופעים חדשים. תנועות שכבר נוצרו יישמרו.",
         "validation": {
           "everyCountInvalid": "הזן מספר שלם חיובי.",
           "everyMsTooSmall": "המרווח חייב להיות לפחות דקה אחת.",
@@ -846,7 +890,7 @@
         "lastRun": "הפעלה אחרונה: {when}",
         "cancelledAt": "בוטל ב-{when}",
         "runsLimit": "תקרה: {n} הפעלות",
-        "fromRecurring": "→ מתשלום חוזר",
+        "fromRecurring": "→ מתנועה חוזרת",
         "pause": "השהיה",
         "resume": "חידוש",
         "cancelAction": "ביטול תזמון",
@@ -861,18 +905,18 @@
     },
     "plan": {
       "kind": {
-        "INSTALLMENT": "תוכנית תשלומים",
+        "INSTALLMENT": "תוכנית תנועות",
         "LOAN": "הלוואה",
         "MORTGAGE": "משכנתא"
       },
       "statusActive": "פעילה",
       "statusCancelled": "בוטלה",
-      "summary": "{principal} על פני {count} תשלומים · {rate}% שנתי · {frequency} · {method}",
+      "summary": "{principal} על פני {count} תנועות · {rate}% שנתי · {frequency} · {method}",
       "table": {
         "dueAt": "מועד",
         "principal": "קרן",
         "interest": "ריבית",
-        "total": "תשלום",
+        "total": "תנועה",
         "remaining": "יתרה",
         "status": "סטטוס"
       },
@@ -883,7 +927,7 @@
         "CANCELLED": "בוטל"
       },
       "cancelAction": "ביטול תוכנית",
-      "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תשלומים עתידיים יסומנו כמבוטלים; דבר לא יימחק.",
+      "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תנועות עתידיות יסומנו כמבוטלות; דבר לא יימחק.",
       "cancelConfirmYes": "כן, לבטל",
       "cancelConfirmKeep": "להשאיר את התוכנית",
       "cancelledToast": "התוכנית בוטלה",
@@ -891,11 +935,11 @@
       "form": {
         "legend": "פרטי התוכנית",
         "rateLabel": "ריבית שנתית (%)",
-        "countLabel": "מספר תשלומים",
+        "countLabel": "מספר תנועות",
         "frequencyLabel": "תדירות",
-        "firstDueLabel": "מועד התשלום הראשון",
+        "firstDueLabel": "מועד התנועה הראשונה",
         "methodLabel": "שיטת סילוקין",
-        "principalHint": "הסכום שלמעלה הוא קרן התוכנית; כל תשלום נגזר ממנו.",
+        "principalHint": "הסכום שלמעלה הוא קרן התוכנית; כל תנועה נגזרת ממנו.",
         "frequency": {
           "DAILY": "יומי",
           "WEEKLY": "שבועי",
@@ -907,14 +951,14 @@
         "method": {
           "auto": "אוטומטי (לפי הסוג)",
           "equal": "שווה (ללא ריבית)",
-          "french": "שפיצר (תשלום קבוע)"
+          "french": "שפיצר (תנועה קבועה)"
         },
         "validation": {
           "rateInvalid": "יש להזין ריבית 0 או יותר",
           "rateTooHigh": "הריבית לא יכולה לעלות על 100%",
-          "countInvalid": "יש להזין מספר שלם של תשלומים (לפחות 1)",
-          "countTooHigh": "עד 600 תשלומים",
-          "firstDueRequired": "יש לבחור את מועד התשלום הראשון",
+          "countInvalid": "יש להזין מספר שלם של תנועות (לפחות 1)",
+          "countTooHigh": "עד 600 תנועות",
+          "firstDueRequired": "יש לבחור את מועד התנועה הראשונה",
           "firstDueInvalid": "תאריך לא תקין",
           "equalRequiresZeroRate": "השיטה השווה היא ללא ריבית — יש להגדיר ריבית 0 או לבחור בשיטת שפיצר"
         }
@@ -924,7 +968,7 @@
   "categories": {
     "page": {
       "title": "קטגוריות",
-      "subtitle": "נהל את קטגוריות התשלום שלך."
+      "subtitle": "נהל את קטגוריות התנועה שלך."
     },
     "scope": {
       "personal": "אישי",
@@ -977,7 +1021,7 @@
     "delete": {
       "title": "מחיקת קטגוריה",
       "warning": "האם אתה בטוח שברצונך למחוק את \"{name}\"? לא ניתן לבטל פעולה זו.",
-      "inUse": "{count} תשלומים עדיין משתמשים בקטגוריה זו. בחר קטגוריה חלופית לפני המחיקה.",
+      "inUse": "{count} תנועות עדיין משתמשות בקטגוריה זו. בחר קטגוריה חלופית לפני המחיקה.",
       "replaceLabel": "קטגוריה חלופית",
       "cancel": "ביטול",
       "confirm": "מחיקה",
@@ -1008,6 +1052,57 @@
       "urlAddedToast": "קישור הקבלה נוסף — החילוץ החל",
       "failedToast": "ההעלאה נכשלה"
     },
+    "manual": {
+      "title": "הוספת מוצרים לפי ברקוד",
+      "hint": "סרקו כל מוצר כדי להרכיב את הקבלה. המחירים נשמרים מהרכישות הקודמות שלכם.",
+      "currency": "מטבע",
+      "purchasedAt": "תאריך רכישה",
+      "merchant": "בית עסק (רשות)",
+      "merchantPlaceholder": "היכן קניתם",
+      "empty": "עדיין אין מוצרים — סרקו ברקוד או הוסיפו מוצר כדי להתחיל.",
+      "quantity": "כמות",
+      "quantityFor": "כמות עבור {name}",
+      "unitPrice": "מחיר ליחידה",
+      "unitPriceFor": "מחיר ליחידה עבור {name}",
+      "removeLine": "הסרת {name}",
+      "scan": "סריקת ברקוד",
+      "addProduct": "הוספת מוצר",
+      "total": "סה\"כ:",
+      "cancel": "ביטול",
+      "submit": "מעבר לבדיקה",
+      "close": "סגירה",
+      "announceAdded": "{name} נוסף",
+      "announceIncremented": "כמות {name} עודכנה",
+      "lookupFailed": "חיפוש הברקוד נכשל",
+      "createFailed": "יצירת הקבלה נכשלה"
+    },
+    "attach": {
+      "title": "צירוף קבלה",
+      "hint": "הוסיפו את הקבלה לתנועה הזו. נקרא אותה ונשווה למה שהזנתם.",
+      "device": "העלאה מהמכשיר הזה",
+      "urlLabel": "או הוספה מכתובת URL",
+      "urlPlaceholder": "https://…",
+      "urlSubmit": "הוספה",
+      "close": "סגירה",
+      "failed": "צירוף הקבלה נכשל"
+    },
+    "reconcile": {
+      "title": "לעדכן את התנועה?",
+      "hint": "הקבלה שונה מהתנועה. בחרו מה לשמור עבור כל שדה.",
+      "totalLabel": "סכום",
+      "categoryLabel": "קטגוריה",
+      "keep": "השאר",
+      "update": "לפי הקבלה:",
+      "none": "ללא",
+      "noDifferences": "הקבלה תואמת לתנועה. אשרו כדי לסיים.",
+      "itemsNote": "המוצרים ופרטי הפריטים נשמרים בכל מקרה.",
+      "loading": "טוען את התנועה…",
+      "loadFailed": "לא ניתן לטעון את התנועה.",
+      "cancel": "ביטול",
+      "confirm": "אישור",
+      "close": "סגירה",
+      "failed": "התאמת הקבלה נכשלה"
+    },
     "list": {
       "title": "הקבלות שלך",
       "empty": "אין קבלות עדיין — הוסיפו את הראשונה למעלה.",
@@ -1022,12 +1117,24 @@
       "loadMore": "טעינת עוד",
       "actionFailed": "הפעולה נכשלה"
     },
+    "viewer": {
+      "zoomControls": "בקרות זום",
+      "zoomIn": "הגדלה",
+      "zoomOut": "הקטנה",
+      "reset": "איפוס",
+      "openInNewTab": "פתיחה בלשונית חדשה",
+      "close": "סגירה",
+      "downloadPdf": "הורדת PDF",
+      "loadFailed": "טעינת קובץ המסמך נכשלה."
+    },
     "review": {
       "back": "חזרה לקבלות",
+      "viewTransaction": "צפייה בתנועה",
       "notFound": "הקבלה לא נמצאה",
       "loadFailed": "לא ניתן לטעון את הקבלה",
       "previewTitle": "תצוגה מקדימה של הקבלה",
       "previewLoading": "טוען תצוגה מקדימה…",
+      "viewDocument": "צפייה במסמך",
       "headerTitle": "פרטים שחולצו",
       "merchantLabel": "בית עסק",
       "merchantLinked": "מקושר לבית עסק מוכר",
@@ -1050,21 +1157,139 @@
       "retry": "ניסיון חילוץ חוזר",
       "retriedToast": "החילוץ הופעל מחדש",
       "confirm": "אישור",
-      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור"
+      "reconcile": "התאמה לתנועה",
+      "confirmSaveFirst": "יש לשמור את השינויים לפני האישור",
+      "matchProducts": "התאמת מוצרים ({count})",
+      "matchProductsDone": "המוצרים הותאמו",
+      "matchState": {
+        "pending": "ממתין להתאמת מוצר",
+        "auto": "המוצר הותאם אוטומטית",
+        "confirmed": "התאמת המוצר אושרה",
+        "skipped": "התאמת המוצר דולגה"
+      }
     },
     "confirm": {
       "title": "אישור קבלה",
-      "description": "פעולה זו יוצרת תשלום מהקבלה שנבדקה.",
+      "description": "פעולה זו יוצרת תנועה מהקבלה שנבדקה.",
       "categoryLabel": "קטגוריה ראשית",
       "scopeLabel": "שיוך אל",
       "noteLabel": "הערה (אופציונלי)",
       "notePlaceholder": "ברירת מחדל: שם העסק",
-      "submit": "אישור ויצירת תשלום",
+      "submit": "אישור ויצירת תנועה",
       "cancel": "ביטול",
       "missingCategory": "יש לבחור קטגוריה ראשית",
       "missingScope": "יש לבחור לפחות שיוך אחד",
       "confirmedToast": "הקבלה אושרה",
       "confirmFailed": "לא ניתן לאשר את הקבלה"
+    }
+  },
+  "products": {
+    "title": "מוצרים",
+    "list": {
+      "searchLabel": "חיפוש מוצרים",
+      "searchPlaceholder": "חיפוש לפי שם בכל שפה, או ברקוד…",
+      "scan": "סריקת ברקוד",
+      "create": "מוצר חדש",
+      "loading": "טוען מוצרים…",
+      "empty": "עדיין לא רכשתם מוצרים — אשרו קבלה והתאימו את הפריטים כדי לבנות את הקטלוג.",
+      "noResults": "אין מוצרים שמתאימים ל‏“{query}”.",
+      "resultCount": "{count, plural, =1 {מוצר אחד} other {# מוצרים}} מוצגים",
+      "loadMore": "טעינת עוד",
+      "lookupFailed": "חיפוש הברקוד נכשל"
+    },
+    "card": {
+      "timesPurchased": "{count, plural, =1 {נרכש פעם אחת} other {נרכש # פעמים}}"
+    },
+    "scanner": {
+      "title": "סריקת ברקוד",
+      "close": "סגירת הסורק",
+      "starting": "מפעיל את המצלמה…",
+      "scanning": "כוונו את המצלמה אל הברקוד",
+      "noCamera": "המצלמה אינה זמינה — הקלידו את הברקוד למטה.",
+      "manualLabel": "הזנת ברקוד ידנית",
+      "manualSubmit": "שימוש",
+      "manualInvalid": "ברקוד EAN/UPC לא תקין (בדקו את הספרות)."
+    },
+    "form": {
+      "createTitle": "מוצר חדש",
+      "editTitle": "עריכת מוצר",
+      "nameLabel": "שם",
+      "brandLabel": "מותג",
+      "barcodeLabel": "ברקוד (EAN/UPC)",
+      "scan": "סריקה",
+      "categoryLabel": "קטגוריית ברירת מחדל",
+      "noCategory": "ללא קטגוריית ברירת מחדל",
+      "categoryHint": "המוצרים משותפים לכולם, ולכן רק קטגוריות מערכת משותפות רלוונטיות.",
+      "cancel": "ביטול",
+      "save": "שמירת שינויים",
+      "create": "יצירת מוצר",
+      "nameRequired": "למוצר נדרש שם",
+      "barcodeInvalid": "ברקוד EAN/UPC לא תקין (בדקו את הספרות).",
+      "saveFailed": "לא ניתן לשמור את המוצר",
+      "createdToast": "המוצר נוצר",
+      "updatedToast": "המוצר עודכן",
+      "offChecking": "מחפש את הברקוד…",
+      "offFilled": "הפרטים מולאו מ‏Open Food Facts — נא לבדוק.",
+      "barcodeExists": "הברקוד הזה כבר שייך ל‏“{name}”."
+    },
+    "walkthrough": {
+      "title": "התאמת מוצרים",
+      "close": "סגירת ההתאמה",
+      "progressLabel": "פריטים שטופלו",
+      "progress": "פריט {current} מתוך {total} · {resolved} טופלו",
+      "status": {
+        "pending": "דורש התאמה",
+        "auto": "הותאם אוטומטית",
+        "confirmed": "אושר",
+        "skipped": "דולג"
+      },
+      "linkedTo": "מקושר ל‏{name}",
+      "searchLabel": "חיפוש במאגר המוצרים",
+      "searchPlaceholder": "חיפוש מוצרים…",
+      "noCandidates": "לא הוצעו התאמות — חפשו, סרקו או צרו מוצר חדש.",
+      "candidatesLabel": "הצעות התאמה",
+      "prev": "הפריט הקודם",
+      "next": "הפריט הבא",
+      "scan": "סריקה",
+      "createNew": "מוצר חדש",
+      "skip": "דילוג",
+      "confirm": "אישור התאמה",
+      "keyboardHint": "↑↓ בחירה · Enter אישור · S דילוג · N חדש · ←→ ניווט · Esc סגירה",
+      "actionFailed": "לא ניתן לעדכן את הפריט"
+    },
+    "detail": {
+      "back": "חזרה למוצרים",
+      "notFound": "המוצר לא נמצא",
+      "loadFailed": "לא ניתן לטעון את המוצר",
+      "loading": "טוען מוצר…",
+      "edit": "עריכה",
+      "imageTitle": "תמונת המוצר",
+      "uploadImage": "העלאת תמונה",
+      "imageQueuedToast": "התמונה הועלתה — היא תופיע לאחר העיבוד",
+      "barcodeLabel": "ברקוד",
+      "categoryLabel": "קטגוריית ברירת מחדל",
+      "timesPurchasedLabel": "מספר רכישות",
+      "lastPurchasedLabel": "נרכש לאחרונה",
+      "aliasesTitle": "שמות וכינויים",
+      "noAliases": "עדיין לא נרשמו כינויים.",
+      "aliasLabel": "כינוי חדש",
+      "aliasPlaceholder": "הוסיפו שם בכל שפה…",
+      "aliasAdd": "הוספה",
+      "aliasAddedToast": "הכינוי נרשם",
+      "aliasConfirmations": "{count, plural, =1 {אושר פעם אחת} other {אושר # פעמים}}",
+      "actionFailed": "הפעולה נכשלה",
+      "merchantsTitle": "מחיר לפי בית עסק (הרכישות שלך)",
+      "merchantCol": "בית עסק",
+      "purchasesCol": "רכישות",
+      "lastPriceCol": "מחיר אחרון",
+      "priceRangeCol": "טווח",
+      "unknownMerchant": "בית עסק לא ידוע",
+      "purchasesTitle": "היסטוריית הרכישות שלך",
+      "dateCol": "תאריך",
+      "qtyCol": "כמות",
+      "unitPriceCol": "מחיר ליחידה",
+      "totalCol": "סה״כ",
+      "noPurchases": "אין עדיין רכישות מאושרות של המוצר הזה."
     }
   }
 }

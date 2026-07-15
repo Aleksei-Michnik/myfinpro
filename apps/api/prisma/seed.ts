@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
-import { seedSystemCategories } from '../src/payment/seed-system-categories';
+import { seedSystemCategories } from '../src/transaction/seed-system-categories';
 
 const prisma = new PrismaClient();
 

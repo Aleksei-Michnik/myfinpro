@@ -3,7 +3,7 @@
 // Phase 6 · Iteration 6.15 — per-scope shortcut cards on the aggregated
 // dashboard. Personal tile is always rendered first; one tile per group the
 // caller is a member of. Quick totals are computed locally from the supplied
-// `payments` (or fetched once on mount when omitted).
+// `transactions` (or fetched once on mount when omitted).
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,13 +12,13 @@ import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import type { GroupSummary } from '@/lib/group/types';
-import { formatAmount } from '@/lib/payment/formatters';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { PaymentSummary } from '@/lib/payment/types';
+import { formatAmount } from '@/lib/transaction/formatters';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { TransactionSummary } from '@/lib/transaction/types';
 
 export interface ScopeEntryCardsProps {
-  /** Pre-fetched payments to derive per-scope totals from. */
-  payments?: PaymentSummary[];
+  /** Pre-fetched transactions to derive per-scope totals from. */
+  transactions?: TransactionSummary[];
   /** Override `useGroups()`. Mostly for testing. */
   groups?: Pick<GroupSummary, 'id' | 'name' | 'role'>[];
   fromIso?: string;
@@ -38,8 +38,8 @@ interface ScopeBucket {
 
 const FETCH_LIMIT = 100;
 
-function bucketsFromPayments(
-  rows: PaymentSummary[],
+function bucketsFromTransactions(
+  rows: TransactionSummary[],
   userId: string | null,
 ): Map<string, ScopeBucket> {
   const buckets = new Map<string, ScopeBucket>();
@@ -72,7 +72,7 @@ function bucketsFromPayments(
   return buckets;
 }
 
-export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntryCardsProps) {
+export function ScopeEntryCards({ transactions, groups, fromIso, toIso }: ScopeEntryCardsProps) {
   const t = useTranslations('dashboard.scopes');
   // Iteration 6.16.3 — reuse `dashboard.totals.in/out/net` for the per-card
   // amount labels (DRY: same labels as <TotalsCard>; no `dashboard.scopes.in`
@@ -82,7 +82,7 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
   const locale = useLocale();
   const { user } = useAuth();
   const groupCtx = useGroups();
-  const { fetchList } = usePayments();
+  const { fetchList } = useTransactions();
   const effectiveGroups = groups ?? groupCtx.groups;
 
   const range = useMemo(() => {
@@ -91,8 +91,8 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
     return { fromIso: fromIso ?? r.fromIso, toIso: toIso ?? r.toIso };
   }, [fromIso, toIso]);
 
-  const externallyProvided = payments !== undefined;
-  const [rows, setRows] = useState<PaymentSummary[]>(externallyProvided ? payments! : []);
+  const externallyProvided = transactions !== undefined;
+  const [rows, setRows] = useState<TransactionSummary[]>(externallyProvided ? transactions! : []);
   const [loading, setLoading] = useState(!externallyProvided);
 
   const load = useCallback(async () => {
@@ -115,13 +115,13 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
 
   useEffect(() => {
     if (externallyProvided) {
-      setRows(payments!);
+      setRows(transactions!);
       return;
     }
     void load();
-  }, [externallyProvided, payments, load]);
+  }, [externallyProvided, transactions, load]);
 
-  const buckets = useMemo(() => bucketsFromPayments(rows, user?.id ?? null), [rows, user?.id]);
+  const buckets = useMemo(() => bucketsFromTransactions(rows, user?.id ?? null), [rows, user?.id]);
 
   const personalBucket = buckets.get('personal');
   const fallbackCurrency = user?.defaultCurrency ?? 'USD';
@@ -139,7 +139,7 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
         <li>
           <ScopeCard
             testId="scope-card-personal"
-            href="/payments?scope=personal"
+            href="/transactions?scope=personal"
             title={t('personal')}
             subtitle={t('personalSubtitle')}
             bucket={personalBucket}
@@ -157,7 +157,7 @@ export function ScopeEntryCards({ payments, groups, fromIso, toIso }: ScopeEntry
             <li key={g.id}>
               <ScopeCard
                 testId={`scope-card-group-${g.id}`}
-                href={`/payments?scope=group:${g.id}`}
+                href={`/transactions?scope=group:${g.id}`}
                 title={g.name}
                 subtitle={role || t('personalSubtitle')}
                 roleBadge={role || null}

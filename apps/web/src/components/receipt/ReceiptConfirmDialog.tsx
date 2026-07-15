@@ -1,21 +1,21 @@
 'use client';
 
 // Phase 7 · Iteration 7.9 — confirm dialog for a reviewed receipt. Collects
-// the resulting payment's primary OUT category and its attribution scopes
-// (last-used remembered via remember.ts, mirroring the payment form), then
+// the resulting transaction's primary OUT category and its attribution scopes
+// (last-used remembered via remember.ts, mirroring the transaction form), then
 // POSTs /receipts/:id/confirm. On success the caller navigates to the new
-// payment. Portal-mounted, ESC + backdrop close.
+// transaction. Portal-mounted, ESC + backdrop close.
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PaymentCategoryPicker } from '@/components/payment/PaymentCategoryPicker';
-import { PaymentScopeSelector } from '@/components/payment/PaymentScopeSelector';
+import { TransactionCategoryPicker } from '@/components/transaction/TransactionCategoryPicker';
+import { TransactionScopeSelector } from '@/components/transaction/TransactionScopeSelector';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import { getLastUsedScopes, setLastUsedScopes } from '@/lib/payment/remember';
-import type { AttributionScope, CategoryDto } from '@/lib/payment/types';
 import { useReceipts } from '@/lib/receipt/receipt-context';
+import { getLastUsedScopes, setLastUsedScopes } from '@/lib/transaction/remember';
+import type { AttributionScope, CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 export interface ReceiptConfirmDialogProps {
@@ -26,8 +26,8 @@ export interface ReceiptConfirmDialogProps {
   /** Pre-selected primary category (e.g. the most common line-item category). */
   defaultCategoryId?: string | null;
   onCancel(): void;
-  /** Fired with the new payment id once confirmation succeeds. */
-  onConfirmed(paymentId: string): void;
+  /** Fired with the new transaction id once confirmation succeeds. */
+  onConfirmed(transactionId: string): void;
 }
 
 export function ReceiptConfirmDialog({
@@ -92,14 +92,14 @@ export function ReceiptConfirmDialog({
           { categoryId, attributions: scopes, note: note.trim() || undefined },
           signal,
         );
-        if (!fresh.paymentId) throw new Error('Confirmation returned no payment');
-        return fresh.paymentId;
+        if (!fresh.transactionId) throw new Error('Confirmation returned no transaction');
+        return fresh.transactionId;
       })
-      .then((paymentId) => {
-        if (paymentId !== undefined) {
+      .then((transactionId) => {
+        if (transactionId !== undefined) {
           setLastUsedScopes(scopes);
           addToast('success', t('confirmedToast'));
-          onConfirmed(paymentId);
+          onConfirmed(transactionId);
         }
       });
   };
@@ -137,7 +137,7 @@ export function ReceiptConfirmDialog({
           <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
             {t('categoryLabel')}
           </label>
-          <PaymentCategoryPicker
+          <TransactionCategoryPicker
             direction="OUT"
             value={categoryId}
             onChange={setCategoryId}
@@ -150,7 +150,7 @@ export function ReceiptConfirmDialog({
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
             {t('scopeLabel')}
           </span>
-          <PaymentScopeSelector value={scopes} onChange={setScopes} />
+          <TransactionScopeSelector value={scopes} onChange={setScopes} />
         </div>
 
         <div className="space-y-1">

@@ -55,14 +55,16 @@ describe('LoadingOverlay', () => {
   });
 
   it('renders the custom message visibly + as a visually-hidden duplicate for AT', () => {
-    render(<LoadingOverlay active={true} delayMs={0} message="Refreshing payments…" />);
+    render(<LoadingOverlay active={true} delayMs={0} message="Refreshing transactions…" />);
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByTestId('loading-overlay-message')).toHaveTextContent('Refreshing payments…');
+    expect(screen.getByTestId('loading-overlay-message')).toHaveTextContent(
+      'Refreshing transactions…',
+    );
     // Total occurrences (visible + sr-only) = 2.
     const overlay = screen.getByTestId('loading-overlay');
-    expect(overlay.textContent?.match(/Refreshing payments…/g)?.length).toBe(2);
+    expect(overlay.textContent?.match(/Refreshing transactions…/g)?.length).toBe(2);
   });
 
   it('swallows clicks so they do not reach the parent', () => {

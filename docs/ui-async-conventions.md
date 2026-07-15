@@ -5,17 +5,17 @@
 
 ## Why
 
-Until iteration 6.16.2, every async UI surface managed its own `useState<boolean>(loading)`, ad-hoc try/catch error handling, and inline spinners. Each surface drifted: timeouts were inconsistent (or absent), in-flight ops weren't aborted on unmount, error messages didn't follow a shared language, and — most visibly — the `/payments` filter buttons advanced ahead of the data, painting "Income" green while the rows were still expense rows.
+Until iteration 6.16.2, every async UI surface managed its own `useState<boolean>(loading)`, ad-hoc try/catch error handling, and inline spinners. Each surface drifted: timeouts were inconsistent (or absent), in-flight ops weren't aborted on unmount, error messages didn't follow a shared language, and — most visibly — the `/transactions` filter buttons advanced ahead of the data, painting "Income" green while the rows were still expense rows.
 
 We solved this once with a single primitive (`useAsyncOperation`) plus three visualizations chosen by scope.
 
 ## Three scopes — one primitive
 
-| Scope       | When                                                                        | Visualization                                                                                                                            | Default primary timeout | Default retry timeout |
-| ----------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------: | --------------------: |
-| `page`      | Route changes; full-page loads; failures requiring a route-level decision   | thin top progress bar (`<PageProgressBar>`) + `<RetryReturnDialog>` on failure                                                           |                     8 s |                  30 s |
-| `container` | A section of a page is updating (filter changes, list refresh, "Load more") | dimmed overlay + spinner over the section (`<LoadingOverlay>`); `disabled` cascades to controls inside; `<RetryReturnDialog>` on failure |                     5 s |                  30 s |
-| `control`   | A button-driven mutation (star, save, delete, send comment, create payment) | small spinner inside the button (`<ButtonSpinner>`); button is disabled and `aria-busy`                                                  |                    10 s |                  30 s |
+| Scope       | When                                                                            | Visualization                                                                                                                            | Default primary timeout | Default retry timeout |
+| ----------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------: | --------------------: |
+| `page`      | Route changes; full-page loads; failures requiring a route-level decision       | thin top progress bar (`<PageProgressBar>`) + `<RetryReturnDialog>` on failure                                                           |                     8 s |                  30 s |
+| `container` | A section of a page is updating (filter changes, list refresh, "Load more")     | dimmed overlay + spinner over the section (`<LoadingOverlay>`); `disabled` cascades to controls inside; `<RetryReturnDialog>` on failure |                     5 s |                  30 s |
+| `control`   | A button-driven mutation (star, save, delete, send comment, create transaction) | small spinner inside the button (`<ButtonSpinner>`); button is disabled and `aria-busy`                                                  |                    10 s |                  30 s |
 
 All three scopes share one primitive: [`useAsyncOperation<T>()`](../apps/web/src/lib/ui/use-async-operation.ts). The component decides which visualization to render.
 
@@ -51,7 +51,7 @@ op.reset(); // abort, clear data, return to idle
 
 ## URL handling — the bug fix
 
-The /payments orchestrator (`payments-list-client.tsx`) demonstrates the rule:
+The /transactions orchestrator (`transactions-list-client.tsx`) demonstrates the rule:
 
 > **Never write the URL before the data commits.**
 
@@ -183,18 +183,18 @@ The component renders `role="alert"` so AT announces the failure, plus a Retry b
 
 ### Iteration 6.16.2 — Initial migration
 
-- `/payments` filter loading — full state machine (URL deferred until commit, `<LoadingOverlay>`, `<RetryReturnDialog>`).
+- `/transactions` filter loading — full state machine (URL deferred until commit, `<LoadingOverlay>`, `<RetryReturnDialog>`).
 - Page navigation flash — `<UIStatusProvider>` registers a 250 ms page-scope op on `usePathname` changes; `<PageProgressBar>` reflects.
 - Star toggle — `useStarToggle` rebuilt on top of `useAsyncOperation({ scope: 'control' })`. The star button shows `<ButtonSpinner>` while in flight.
-- `<PaymentsList>` "Load more" pagination — `useAsyncOperation({ scope: 'container' })` with `<InlineLoader>` inside the button and inline retry on failure.
+- `<TransactionsList>` "Load more" pagination — `useAsyncOperation({ scope: 'container' })` with `<InlineLoader>` inside the button and inline retry on failure.
 
 ### Iteration 6.16.4 — Comments + form/delete dialogs + categories
 
-- `<PaymentCommentInput>` — submit uses `scope='control'` with `<ButtonSpinner>` + inline error banner on network failure.
-- `<PaymentCommentList>` — initial fetch + "Load earlier" use `scope='container'`. Per-comment edit save and soft-delete use `scope='control'` per row. `<RetryReturnDialog>` on initial-fetch failure. 410 Gone surfaces as a friendly "already removed" message + list refresh.
-- `<PaymentFormDialog>` — save uses `scope='control'` with `<ButtonSpinner>`, disabled inputs, `aria-busy` on the form. Cancel triggers `cancel()`. Per-field domain errors (`PAYMENT_INVALID_*`) preserved.
-- `<DeletePaymentDialog>` — delete uses `scope='control'`. Scope inputs disabled while in flight. Cancel aborts gracefully.
-- `<PaymentCategoryPicker>` — self-fetch migrated to `scope='container'`.
+- `<TransactionCommentInput>` — submit uses `scope='control'` with `<ButtonSpinner>` + inline error banner on network failure.
+- `<TransactionCommentList>` — initial fetch + "Load earlier" use `scope='container'`. Per-comment edit save and soft-delete use `scope='control'` per row. `<RetryReturnDialog>` on initial-fetch failure. 410 Gone surfaces as a friendly "already removed" message + list refresh.
+- `<TransactionFormDialog>` — save uses `scope='control'` with `<ButtonSpinner>`, disabled inputs, `aria-busy` on the form. Cancel triggers `cancel()`. Per-field domain errors (`TRANSACTION_INVALID_*`) preserved.
+- `<DeleteTransactionDialog>` — delete uses `scope='control'`. Scope inputs disabled while in flight. Cancel aborts gracefully.
+- `<TransactionCategoryPicker>` — self-fetch migrated to `scope='container'`.
 - `categories-client` (`/settings/categories`) — initial fetch uses `scope='page'` so the top progress bar continues past the route change. `<RetryReturnDialog>` on failure with Return = navigate back to settings.
 - `<CategoryListSection>` — controlled mode (data + loading from parent); renders `<LoadingOverlay>` during initial load.
 - `<CategoryFormDialog>` — save uses `scope='control'`. `CATEGORY_SLUG_CONFLICT` → field error; network failures → inline banner.
@@ -203,7 +203,7 @@ The component renders `role="alert"` so AT announces the failure, plus a Retry b
 
 **Deferred (still self-fetch — out of scope by design):**
 
-- Dashboard widgets (`<RecentActivity>`, `<StarredPayments>`, `<TotalsCard>`, `<ScopeEntryCards>`, `<GroupPaymentsTab>`) — read-only, low-priority.
+- Dashboard widgets (`<RecentActivity>`, `<StarredTransactions>`, `<TotalsCard>`, `<ScopeEntryCards>`, `<GroupTransactionsTab>`) — read-only, low-priority.
 - Auth flows (login, register, password change, email verification) — distinct surface, not requested.
 - Group management (members, invites, settings) — same reasoning.
 
@@ -221,7 +221,7 @@ surrounding ecosystem:
    primary timeout — in which case `reason='timeout'` is preserved.
 
    Rationale: the locale switcher (next-intl cookie + `router.refresh()`)
-   could race the in-flight `/payments` fetch and surface the AbortError
+   could race the in-flight `/transactions` fetch and surface the AbortError
    as a user-visible "no access" error banner. The hook must never bubble
    genuine cancellations to the UI.
 
@@ -238,8 +238,8 @@ surrounding ecosystem:
    any locale flip (does NOT fire on initial mount). Page-level
    orchestrators MUST use it to clear page-scoped errors and re-issue
    their fetch on en ↔ he switches:
-   - [`PaymentsListClient`](../apps/web/src/app/[locale]/payments/payments-list-client.tsx)
-   - [`PaymentDetailClient`](../apps/web/src/app/[locale]/payments/[paymentId]/payment-detail-client.tsx)
+   - [`TransactionsListClient`](../apps/web/src/app/[locale]/transactions/transactions-list-client.tsx)
+   - [`TransactionDetailClient`](../apps/web/src/app/[locale]/transactions/[transactionId]/transaction-detail-client.tsx)
    - [`DashboardClient`](../apps/web/src/app/[locale]/dashboard/dashboard-client.tsx)
    - [`CategoriesClient`](../apps/web/src/app/[locale]/settings/categories/categories-client.tsx)
    - [`GroupDashboardPage`](../apps/web/src/app/[locale]/groups/[groupId]/page.tsx)

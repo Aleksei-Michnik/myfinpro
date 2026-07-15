@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { bootstrapTestApp, registerUser } from './helpers';
 
 /**
@@ -59,7 +59,7 @@ describe('Categories API (integration)', () => {
 
   afterEach(async () => {
     // Remove user- and group-owned categories created during tests so cases stay isolated.
-    await prisma.payment.deleteMany({
+    await prisma.transaction.deleteMany({
       where: { createdById: { in: [admin.user.id, member.user.id, stranger.user.id] } },
     });
     await prisma.category.deleteMany({
@@ -208,7 +208,7 @@ describe('Categories API (integration)', () => {
   });
 
   describe('DELETE /categories/:id with reassignment', () => {
-    it('reassigns attached payments to replacement and deletes the source', async () => {
+    it('reassigns attached transactions to replacement and deletes the source', async () => {
       const source = await request(app.getHttpServer())
         .post('/api/v1/categories')
         .set('Authorization', `Bearer ${admin.accessToken}`)
@@ -221,8 +221,8 @@ describe('Categories API (integration)', () => {
         .send({ name: 'New Bucket', direction: 'OUT', scope: 'personal' })
         .expect(201);
 
-      // Seed a Payment pointing at source directly via Prisma (no PaymentController yet).
-      const payment = await prisma.payment.create({
+      // Seed a Transaction pointing at source directly via Prisma (no TransactionController yet).
+      const transaction = await prisma.transaction.create({
         data: {
           direction: 'OUT',
           type: 'ONE_TIME',
@@ -251,8 +251,8 @@ describe('Categories API (integration)', () => {
         .expect(200);
       expect(res.body).toEqual({ deleted: true, reassigned: 1 });
 
-      // Payment now points at target.
-      const updated = await prisma.payment.findUnique({ where: { id: payment.id } });
+      // Transaction now points at target.
+      const updated = await prisma.transaction.findUnique({ where: { id: transaction.id } });
       expect(updated?.categoryId).toBe(target.body.id);
 
       // Source gone.

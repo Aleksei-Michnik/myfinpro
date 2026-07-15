@@ -1,14 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { validateExtractionResult, type ExtractionResult } from '@myfinpro/shared';
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import {
   ExtractionFailedError,
   type ExtractionContext,
   type ExtractionInput,
+  type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
-import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extraction.schema';
+import {
+  buildExtractionPrompt,
+  EXTRACTION_MAX_OUTPUT_TOKENS,
+  EXTRACTION_RESULT_JSON_SCHEMA,
+} from './extraction.schema';
 
 /**
  * Phase 7, iteration 7.5 — Anthropic vision extraction.
@@ -19,19 +23,18 @@ import { buildExtractionPrompt, EXTRACTION_RESULT_JSON_SCHEMA } from './extracti
  * and re-validated with the shared validator before returning, so schema
  * drift becomes a permanent ExtractionFailedError instead of bad rows.
  *
- * Env: ANTHROPIC_API_KEY (required), RECEIPT_EXTRACTION_MODEL
- * (default claude-opus-4-8).
+ * Built by the module factory (env key/model) or the per-user resolver
+ * (Phase 8.11) — never injected directly.
  */
-@Injectable()
 export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
   readonly name = 'anthropic';
   private readonly logger = new Logger(AnthropicExtractionProvider.name);
   private readonly client: Anthropic;
   private readonly model: string;
 
-  constructor(configService: ConfigService) {
-    this.client = new Anthropic({ apiKey: configService.get<string>('ANTHROPIC_API_KEY') });
-    this.model = configService.get<string>('RECEIPT_EXTRACTION_MODEL') || 'claude-opus-4-8';
+  constructor(options: LlmClientOptions = {}) {
+    this.client = new Anthropic({ apiKey: options.apiKey });
+    this.model = options.model || 'claude-opus-4-8';
   }
 
   async extract(input: ExtractionInput, ctx: ExtractionContext): Promise<ExtractionResult> {
@@ -65,7 +68,7 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
     const started = Date.now();
     const response = await this.client.messages.create({
       model: this.model,
-      max_tokens: 8192,
+      max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
       thinking: { type: 'adaptive' },
       output_config: {
         format: {

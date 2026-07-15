@@ -8,6 +8,7 @@ import { ConnectedAccounts } from '@/components/auth/ConnectedAccounts';
 import { DeleteAccountDialog } from '@/components/auth/DeleteAccountDialog';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
@@ -192,6 +193,9 @@ export default function AccountSettingsPage() {
             </Button>
           </div>
         </div>
+
+        {/* AI model section (Phase 8.11 — per-user LLM selection + BYOK keys) */}
+        <LlmSettingsSection />
 
         {/* Connected Accounts section */}
         <div

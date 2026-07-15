@@ -17,7 +17,7 @@ describe('Phase 7 Prisma models', () => {
     // Field-shape smoke test via the generated scalar field enums — the
     // extraction worker relies on header fields being optional pre-REVIEW.
     expect(Prisma.ReceiptScalarFieldEnum.status).toBe('status');
-    expect(Prisma.ReceiptScalarFieldEnum.paymentId).toBe('paymentId');
+    expect(Prisma.ReceiptScalarFieldEnum.transactionId).toBe('transactionId');
     expect(Prisma.ReceiptScalarFieldEnum.rawExtraction).toBe('rawExtraction');
     expect(Prisma.ReceiptItemScalarFieldEnum.position).toBe('position');
     expect(Prisma.ReceiptItemScalarFieldEnum.totalCents).toBe('totalCents');

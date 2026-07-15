@@ -5,7 +5,7 @@
 // Renders a `⋮` trigger button + a portal-rendered popover anchored to it.
 // The popover is portalled to `document.body` with `position: fixed`, so no
 // ancestor's `overflow: hidden` / `overflow-x: auto` (e.g. the desktop
-// payments-table wrapper) can clip it. Coordinates are recomputed on
+// transactions-table wrapper) can clip it. Coordinates are recomputed on
 // `scroll` (capture phase, catches inner scrollers) and `resize`.
 //
 // Behaviour:

@@ -1,13 +1,14 @@
 'use client';
 
-// Phase 7 · Iteration 7.7 — ReceiptProvider (the payment-context conventions:
-// every method takes an optional AbortSignal, errors are rich PaymentApiError-
+// Phase 7 · Iteration 7.7 — ReceiptProvider (the transaction-context conventions:
+// every method takes an optional AbortSignal, errors are rich TransactionApiError-
 // shaped objects, run() maintains the transient loading/error state).
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type {
   ConfirmReceiptInput,
   ListReceiptsParams,
+  ManualReceiptInput,
   MerchantSuggestion,
   ReceiptItemInput,
   ReceiptListResponse,
@@ -15,6 +16,7 @@ import type {
   UpdateReceiptInput,
 } from './types';
 import { useAuth } from '@/lib/auth/auth-context';
+import type { MatchItemInput } from '@/lib/product/types';
 
 export interface ReceiptApiError extends Error {
   errorCode?: string;
@@ -26,6 +28,26 @@ interface ReceiptContextValue {
   uploadReceipt(file: File, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Ingest an online receipt by URL. */
   createFromUrl(url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Compose a receipt from scanned products — born in REVIEW (8.14). */
+  createManual(input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Attach a receipt file to an existing transaction — born linked (8.15). */
+  attachFileToTransaction(
+    transactionId: string,
+    file: File,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Attach an online receipt by URL to an existing transaction (8.15). */
+  attachUrlToTransaction(
+    transactionId: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Finish an attached receipt: REVIEW → CONFIRMED, apply chosen fields (8.15). */
+  reconcileReceipt(
+    id: string,
+    input: { applyTotal: boolean; applyCategory: boolean },
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
   fetchList(params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse>;
   getReceipt(id: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** FAILED → back through the extraction pipeline. */
@@ -46,7 +68,16 @@ interface ReceiptContextValue {
   ): Promise<ReceiptSummary>;
   /** Global merchant registry lookup (7.8). */
   searchMerchants(search: string, signal?: AbortSignal): Promise<MerchantSuggestion[]>;
-  /** REVIEW → CONFIRMED: create the payment from the reviewed receipt (7.9). */
+  /** Walkthrough confirm — link/create a registry product for one item (8.4). */
+  matchItem(
+    receiptId: string,
+    itemId: string,
+    input: MatchItemInput,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Walkthrough skip/unlink — always resumable (8.4). */
+  skipItemMatch(receiptId: string, itemId: string, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** REVIEW → CONFIRMED: create the transaction from the reviewed receipt (7.9). */
   confirmReceipt(
     id: string,
     input: ConfirmReceiptInput,
@@ -160,6 +191,73 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const createManual = useCallback(
+    (input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/manual`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to create receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const attachFileToTransaction = useCallback(
+    (transactionId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/receipt`,
+          {
+            method: 'POST',
+            headers: authHeaders(false),
+            body: form,
+            signal,
+          },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const attachUrlToTransaction = useCallback(
+    (transactionId: string, url: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/receipt-url`,
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify({ url }), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to attach receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const reconcileReceipt = useCallback(
+    (
+      id: string,
+      input: { applyTotal: boolean; applyCategory: boolean },
+      signal?: AbortSignal,
+    ): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/reconcile`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(input),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to reconcile receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
   const fetchList = useCallback(
     (params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse> =>
       run(async () => {
@@ -261,6 +359,37 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const matchItem = useCallback(
+    (
+      receiptId: string,
+      itemId: string,
+      input: MatchItemInput,
+      signal?: AbortSignal,
+    ): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/receipts/${encodeURIComponent(receiptId)}/items/${encodeURIComponent(itemId)}/match`,
+          { method: 'POST', headers: authHeaders(), body: JSON.stringify(input), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to match item');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const skipItemMatch = useCallback(
+    (receiptId: string, itemId: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(
+          `${API_BASE}/receipts/${encodeURIComponent(receiptId)}/items/${encodeURIComponent(itemId)}/skip-match`,
+          { method: 'POST', headers: authHeaders(), signal },
+        );
+        if (!res.ok) await throwApiError(res, 'Failed to skip item');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
   const fetchFileBlob = useCallback(
     (id: string, signal?: AbortSignal): Promise<Blob> =>
       run(async () => {
@@ -295,6 +424,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     () => ({
       uploadReceipt,
       createFromUrl,
+      createManual,
+      attachFileToTransaction,
+      attachUrlToTransaction,
+      reconcileReceipt,
       fetchList,
       getReceipt,
       retryReceipt,
@@ -302,6 +435,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       updateReceipt,
       replaceItems,
       searchMerchants,
+      matchItem,
+      skipItemMatch,
       fetchFileBlob,
       confirmReceipt,
       fileUrl,
@@ -312,6 +447,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [
       uploadReceipt,
       createFromUrl,
+      createManual,
+      attachFileToTransaction,
+      attachUrlToTransaction,
+      reconcileReceipt,
       fetchList,
       getReceipt,
       retryReceipt,
@@ -319,6 +458,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       updateReceipt,
       replaceItems,
       searchMerchants,
+      matchItem,
+      skipItemMatch,
       fetchFileBlob,
       confirmReceipt,
       fileUrl,

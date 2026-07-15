@@ -11,7 +11,7 @@ import type { ReceiptSummary } from '@/lib/receipt/types';
 // iteration. The `'ping'` heartbeat is client-only (the server emits it
 // but it never originates from a producer service).
 
-export interface PaymentSummary {
+export interface TransactionSummary {
   id: string;
   direction: 'IN' | 'OUT';
   type: string;
@@ -36,7 +36,7 @@ export interface PaymentSummary {
   commentCount: number;
   starredByMe: boolean;
   hasDocuments: boolean;
-  parentPaymentId: string | null;
+  parentTransactionId: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -44,7 +44,7 @@ export interface PaymentSummary {
 
 export interface CommentResponse {
   id: string;
-  paymentId: string;
+  transactionId: string;
   author: { id: string; name: string };
   content: string;
   createdAt: string;
@@ -55,7 +55,7 @@ export interface CommentResponse {
 
 export interface ScheduleResponse {
   id: string;
-  paymentId: string;
+  transactionId: string;
   cron: string | null;
   everyMs: number | null;
   startsAt: string;
@@ -72,33 +72,33 @@ export interface ScheduleResponse {
 export type AttributionScope = 'personal' | 'group';
 
 export type RealtimeEvent =
-  | { type: 'payment.created'; payment: PaymentSummary }
-  | { type: 'payment.updated'; payment: PaymentSummary }
-  | { type: 'payment.deleted'; paymentId: string }
+  | { type: 'transaction.created'; transaction: TransactionSummary }
+  | { type: 'transaction.updated'; transaction: TransactionSummary }
+  | { type: 'transaction.deleted'; transactionId: string }
   | {
-      type: 'payment_attribution.added';
-      paymentId: string;
+      type: 'transaction_attribution.added';
+      transactionId: string;
       scope: AttributionScope;
       userId?: string;
       groupId?: string;
     }
   | {
-      type: 'payment_attribution.removed';
-      paymentId: string;
+      type: 'transaction_attribution.removed';
+      transactionId: string;
       scope: AttributionScope;
       userId?: string;
       groupId?: string;
     }
-  | { type: 'comment.created'; paymentId: string; comment: CommentResponse }
-  | { type: 'comment.updated'; paymentId: string; comment: CommentResponse }
-  | { type: 'comment.deleted'; paymentId: string; commentId: string }
-  | { type: 'occurrence.created'; parentPaymentId: string; payment: PaymentSummary }
-  | { type: 'schedule.created'; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.updated'; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.paused'; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.resumed'; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.cancelled'; paymentId: string; schedule: ScheduleResponse }
-  | { type: 'schedule.deleted'; paymentId: string }
+  | { type: 'comment.created'; transactionId: string; comment: CommentResponse }
+  | { type: 'comment.updated'; transactionId: string; comment: CommentResponse }
+  | { type: 'comment.deleted'; transactionId: string; commentId: string }
+  | { type: 'occurrence.created'; parentTransactionId: string; transaction: TransactionSummary }
+  | { type: 'schedule.created'; transactionId: string; schedule: ScheduleResponse }
+  | { type: 'schedule.updated'; transactionId: string; schedule: ScheduleResponse }
+  | { type: 'schedule.paused'; transactionId: string; schedule: ScheduleResponse }
+  | { type: 'schedule.resumed'; transactionId: string; schedule: ScheduleResponse }
+  | { type: 'schedule.cancelled'; transactionId: string; schedule: ScheduleResponse }
+  | { type: 'schedule.deleted'; transactionId: string }
   // Phase 7.7 — receipt lifecycle (uploader-only fan-out on the server).
   | { type: 'receipt.updated'; receipt: ReceiptSummary }
   | { type: 'receipt.deleted'; receiptId: string }

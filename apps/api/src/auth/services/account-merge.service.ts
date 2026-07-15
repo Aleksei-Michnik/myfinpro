@@ -14,7 +14,7 @@ import { AUTH_ERRORS } from '../constants/auth-errors';
  * other), so we merge instead of rejecting with a conflict.
  *
  * Everything owned by the source account moves to the target account:
- * OAuth providers, group memberships, payments and their satellites,
+ * OAuth providers, group memberships, transactions and their satellites,
  * categories, receipts. Where the target lacks real credentials, they are
  * adopted from the source (real email, password hash). The source user row
  * is then deleted — refresh/verification/reset tokens cascade away, and
@@ -95,7 +95,7 @@ export class AccountMergeService {
           (c) => c.slug === sourceCategory.slug && c.direction === sourceCategory.direction,
         );
         if (duplicate) {
-          await tx.payment.updateMany({
+          await tx.transaction.updateMany({
             where: { categoryId: sourceCategory.id },
             data: { categoryId: duplicate.id },
           });
@@ -112,65 +112,67 @@ export class AccountMergeService {
         }
       }
 
-      // ── Payments and satellites ──
-      await tx.payment.updateMany({
+      // ── Transactions and satellites ──
+      await tx.transaction.updateMany({
         where: { createdById: sourceUserId },
         data: { createdById: targetUserId },
       });
 
-      // Attributions (unique on paymentId+scopeType+userId+groupId — drop duplicates)
+      // Attributions (unique on transactionId+scopeType+userId+groupId — drop duplicates)
       const [sourceAttributions, targetAttributions] = await Promise.all([
-        tx.paymentAttribution.findMany({
+        tx.transactionAttribution.findMany({
           where: { userId: sourceUserId },
-          select: { id: true, paymentId: true, scopeType: true },
+          select: { id: true, transactionId: true, scopeType: true },
         }),
-        tx.paymentAttribution.findMany({
+        tx.transactionAttribution.findMany({
           where: { userId: targetUserId },
-          select: { paymentId: true, scopeType: true },
+          select: { transactionId: true, scopeType: true },
         }),
       ]);
       const targetAttributionKeys = new Set(
-        targetAttributions.map((a) => `${a.paymentId}:${a.scopeType}`),
+        targetAttributions.map((a) => `${a.transactionId}:${a.scopeType}`),
       );
       const duplicateAttributionIds = sourceAttributions
-        .filter((a) => targetAttributionKeys.has(`${a.paymentId}:${a.scopeType}`))
+        .filter((a) => targetAttributionKeys.has(`${a.transactionId}:${a.scopeType}`))
         .map((a) => a.id);
       if (duplicateAttributionIds.length > 0) {
-        await tx.paymentAttribution.deleteMany({ where: { id: { in: duplicateAttributionIds } } });
+        await tx.transactionAttribution.deleteMany({
+          where: { id: { in: duplicateAttributionIds } },
+        });
       }
-      await tx.paymentAttribution.updateMany({
+      await tx.transactionAttribution.updateMany({
         where: { userId: sourceUserId },
         data: { userId: targetUserId },
       });
 
-      // Stars (unique on paymentId+userId — drop duplicates)
+      // Stars (unique on transactionId+userId — drop duplicates)
       const [sourceStars, targetStars] = await Promise.all([
-        tx.paymentStar.findMany({
+        tx.transactionStar.findMany({
           where: { userId: sourceUserId },
-          select: { id: true, paymentId: true },
+          select: { id: true, transactionId: true },
         }),
-        tx.paymentStar.findMany({
+        tx.transactionStar.findMany({
           where: { userId: targetUserId },
-          select: { paymentId: true },
+          select: { transactionId: true },
         }),
       ]);
-      const targetStarPaymentIds = new Set(targetStars.map((s) => s.paymentId));
+      const targetStarTransactionIds = new Set(targetStars.map((s) => s.transactionId));
       const duplicateStarIds = sourceStars
-        .filter((s) => targetStarPaymentIds.has(s.paymentId))
+        .filter((s) => targetStarTransactionIds.has(s.transactionId))
         .map((s) => s.id);
       if (duplicateStarIds.length > 0) {
-        await tx.paymentStar.deleteMany({ where: { id: { in: duplicateStarIds } } });
+        await tx.transactionStar.deleteMany({ where: { id: { in: duplicateStarIds } } });
       }
-      await tx.paymentStar.updateMany({
+      await tx.transactionStar.updateMany({
         where: { userId: sourceUserId },
         data: { userId: targetUserId },
       });
 
-      await tx.paymentComment.updateMany({
+      await tx.transactionComment.updateMany({
         where: { userId: sourceUserId },
         data: { userId: targetUserId },
       });
-      await tx.paymentDocument.updateMany({
+      await tx.transactionDocument.updateMany({
         where: { uploadedById: sourceUserId },
         data: { uploadedById: targetUserId },
       });

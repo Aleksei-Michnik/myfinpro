@@ -10,18 +10,18 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { AttributionDto } from '../../payment/dto/attribution.dto';
+import { AttributionDto } from '../../transaction/dto/attribution.dto';
 
 /**
  * Phase 7.9 — POST /receipts/:id/confirm body.
  *
  * The receipt already carries the money fields (total, currency, purchase
  * date), the merchant, and the line items from review; confirmation only
- * needs the primary OUT category for the resulting payment plus the
- * attribution scopes to remember (mirrors POST /payments).
+ * needs the primary OUT category for the resulting transaction plus the
+ * attribution scopes to remember (mirrors POST /transactions).
  */
 export class ConfirmReceiptDto {
-  @ApiProperty({ description: 'Primary OUT category for the resulting payment.' })
+  @ApiProperty({ description: 'Primary OUT category for the resulting transaction.' })
   @IsUUID()
   categoryId!: string;
 
@@ -33,7 +33,9 @@ export class ConfirmReceiptDto {
   @Type(() => AttributionDto)
   attributions!: AttributionDto[];
 
-  @ApiPropertyOptional({ description: 'Payment note; defaults to the merchant name when omitted.' })
+  @ApiPropertyOptional({
+    description: 'Transaction note; defaults to the merchant name when omitted.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)

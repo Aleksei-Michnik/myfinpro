@@ -2,6 +2,7 @@
 
 import {
   computeTotalsMismatch,
+  dominantReceiptCategoryId,
   EXTRACTION_CONFIDENCES,
   RECEIPT_ALLOWED_MIME_TYPES,
   RECEIPT_MAX_FILE_SIZE_BYTES,
@@ -24,6 +25,7 @@ const validResult = () => ({
       discountCents: 0,
       totalCents: 1380,
       suggestedCategoryId: 'cat-1',
+      suggestedProductId: 'prod-1',
     },
     {
       rawName: 'Tomatoes',
@@ -32,6 +34,7 @@ const validResult = () => ({
       discountCents: 120,
       totalCents: 880,
       suggestedCategoryId: null,
+      suggestedProductId: null,
     },
   ],
   confidence: 'high',
@@ -41,7 +44,7 @@ const validResult = () => ({
 describe('receipt shared types', () => {
   it('exposes the lifecycle statuses in order', () => {
     expect(RECEIPT_STATUSES).toEqual(['UPLOADED', 'EXTRACTING', 'REVIEW', 'CONFIRMED', 'FAILED']);
-    expect(RECEIPT_SOURCES).toEqual(['upload', 'url']);
+    expect(RECEIPT_SOURCES).toEqual(['upload', 'url', 'manual']);
     expect(EXTRACTION_CONFIDENCES).toEqual(['high', 'medium', 'low']);
   });
 
@@ -50,6 +53,38 @@ describe('receipt shared types', () => {
     expect(RECEIPT_ALLOWED_MIME_TYPES).toContain('application/pdf');
     expect(RECEIPT_ALLOWED_MIME_TYPES).not.toContain('image/gif');
     expect(RECEIPT_MAX_FILE_SIZE_BYTES).toBe(10 * 1024 * 1024);
+  });
+});
+
+describe('dominantReceiptCategoryId', () => {
+  it('picks the category with the largest summed spend', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: 'a', totalCents: 300 },
+        { categoryId: 'b', totalCents: 500 },
+        { categoryId: 'a', totalCents: 400 }, // a: 700 > b: 500
+      ]),
+    ).toBe('a');
+  });
+
+  it('ignores uncategorised lines and returns null when none carry a category', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: null, totalCents: 900 },
+        { categoryId: 'x', totalCents: 100 },
+      ]),
+    ).toBe('x');
+    expect(dominantReceiptCategoryId([{ categoryId: null, totalCents: 900 }])).toBeNull();
+    expect(dominantReceiptCategoryId([])).toBeNull();
+  });
+
+  it('breaks ties by first appearance', () => {
+    expect(
+      dominantReceiptCategoryId([
+        { categoryId: 'first', totalCents: 500 },
+        { categoryId: 'second', totalCents: 500 },
+      ]),
+    ).toBe('first');
   });
 });
 
@@ -71,12 +106,24 @@ describe('validateExtractionResult', () => {
     delete input.notes;
     delete (input.items as Record<string, unknown>[])[0].discountCents;
     delete (input.items as Record<string, unknown>[])[0].suggestedCategoryId;
+    // Pre-Phase-8 payloads have no suggestedProductId — must stay valid.
+    delete (input.items as Record<string, unknown>[])[0].suggestedProductId;
     const r = validateExtractionResult(input);
     expect(r.ok).toBe(true);
     expect(r.result!.confidence).toBe('low');
     expect(r.result!.notes).toBeNull();
     expect(r.result!.items[0].discountCents).toBe(0);
     expect(r.result!.items[0].suggestedCategoryId).toBeNull();
+    expect(r.result!.items[0].suggestedProductId).toBeNull();
+    expect(r.result!.items[1].suggestedProductId).toBeNull();
+  });
+
+  it('rejects a non-string suggestedProductId', () => {
+    const input = validResult() as Record<string, unknown>;
+    (input.items as Record<string, unknown>[])[0].suggestedProductId = 42;
+    const r = validateExtractionResult(input);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.path === 'items[0].suggestedProductId')).toBe(true);
   });
 
   it('accepts an all-null header (blurry photo with only items)', () => {

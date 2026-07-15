@@ -65,27 +65,27 @@ vi.mock('@/components/dashboard/RecentActivity', () => ({
   },
 }));
 
-vi.mock('@/components/dashboard/StarredPayments', () => ({
-  StarredPayments: () => {
+vi.mock('@/components/dashboard/StarredTransactions', () => ({
+  StarredTransactions: () => {
     starredMounts();
     return <div data-testid="mocked-starred" />;
   },
 }));
 
-vi.mock('@/components/dashboard/QuickAddPaymentButton', () => ({
-  QuickAddPaymentButton: ({
-    onPaymentCreated,
+vi.mock('@/components/dashboard/QuickAddTransactionButton', () => ({
+  QuickAddTransactionButton: ({
+    onTransactionCreated,
   }: {
-    onPaymentCreated?: (p: { id: string }) => void;
+    onTransactionCreated?: (p: { id: string }) => void;
   }) => {
-    savedHandler = onPaymentCreated ?? null;
+    savedHandler = onTransactionCreated ?? null;
     return (
       <button
         type="button"
         data-testid="mocked-quick-add"
-        onClick={() => onPaymentCreated?.({ id: 'created-1' })}
+        onClick={() => onTransactionCreated?.({ id: 'created-1' })}
       >
-        + Add payment
+        + Add transaction
       </button>
     );
   },
@@ -113,12 +113,12 @@ describe('DashboardPage', () => {
     expect(screen.getByTestId('mocked-starred')).toBeInTheDocument();
   });
 
-  it('renders the QuickAddPaymentButton at the top', () => {
+  it('renders the QuickAddTransactionButton at the top', () => {
     render(<DashboardPage />);
     expect(screen.getByTestId('mocked-quick-add')).toBeInTheDocument();
   });
 
-  it('successful payment creation re-mounts every section (refreshKey bump)', () => {
+  it('successful transaction creation re-mounts every section (refreshKey bump)', () => {
     totalsMounts.mockClear();
     scopesMounts.mockClear();
     recentMounts.mockClear();
@@ -153,7 +153,7 @@ describe('DashboardPage', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('quick-add button receives onPaymentCreated handler from the parent', () => {
+  it('quick-add button receives onTransactionCreated handler from the parent', () => {
     render(<DashboardPage />);
     expect(savedHandler).not.toBeNull();
   });
@@ -218,7 +218,7 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     vi.useRealTimers();
   });
 
-  it('debounces a burst of payment events into a single refresh after 500 ms', () => {
+  it('debounces a burst of transaction events into a single refresh after 500 ms', () => {
     const ctrl = makeController();
     render(
       <ProgrammableProvider controllerRef={ctrl}>
@@ -228,9 +228,9 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     expect(totalsMounts).toHaveBeenCalledTimes(1);
 
     act(() => {
-      ctrl.emit({ type: 'payment.updated', payment: { id: 'p1' } });
-      ctrl.emit({ type: 'payment_attribution.removed', paymentId: 'p1' });
-      ctrl.emit({ type: 'payment.created', payment: { id: 'p1' } });
+      ctrl.emit({ type: 'transaction.updated', transaction: { id: 'p1' } });
+      ctrl.emit({ type: 'transaction_attribution.removed', transactionId: 'p1' });
+      ctrl.emit({ type: 'transaction.created', transaction: { id: 'p1' } });
     });
     // Still no refresh until the debounce window elapses.
     expect(totalsMounts).toHaveBeenCalledTimes(1);
@@ -249,7 +249,7 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     expect(starredMounts).toHaveBeenCalledTimes(2);
   });
 
-  it('a single payment.created event refreshes after the debounce window', () => {
+  it('a single transaction.created event refreshes after the debounce window', () => {
     const ctrl = makeController();
     render(
       <ProgrammableProvider controllerRef={ctrl}>
@@ -259,7 +259,7 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     expect(totalsMounts).toHaveBeenCalledTimes(1);
 
     act(() => {
-      ctrl.emit({ type: 'payment.created', payment: { id: 'p1' } });
+      ctrl.emit({ type: 'transaction.created', transaction: { id: 'p1' } });
     });
     act(() => {
       vi.advanceTimersByTime(500);
@@ -279,8 +279,8 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     act(() => {
       ctrl.emit({
         type: 'occurrence.created',
-        parentPaymentId: 'p1',
-        payment: { id: 'p2' },
+        parentTransactionId: 'p1',
+        transaction: { id: 'p2' },
       });
     });
     act(() => {
@@ -299,7 +299,7 @@ describe('DashboardClient — realtime subscription (Phase 6 · 6.18.1.4-hotfix 
     expect(totalsMounts).toHaveBeenCalledTimes(1);
 
     act(() => {
-      ctrl.emit({ type: 'comment.created', paymentId: 'p1', comment: { id: 'c1' } });
+      ctrl.emit({ type: 'comment.created', transactionId: 'p1', comment: { id: 'c1' } });
     });
     act(() => {
       vi.advanceTimersByTime(500);

@@ -1,4 +1,4 @@
-import type { CategoryDirection } from '../types/payment.types';
+import type { CategoryDirection } from '../types/transaction.types';
 
 /**
  * System-owned category slugs seeded on deploy.

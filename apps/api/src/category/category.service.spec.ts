@@ -32,7 +32,7 @@ describe('CategoryService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
-    payment: {
+    transaction: {
       count: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -360,7 +360,7 @@ describe('CategoryService', () => {
 
     it('rejects direction change when category is in use', async () => {
       prismaMock.category.findUnique.mockResolvedValue(makeCat({ direction: 'OUT' }));
-      prismaMock.payment.count.mockResolvedValue(3);
+      prismaMock.transaction.count.mockResolvedValue(3);
 
       await expect(service.update('user-1', 'cat-1', { direction: 'IN' })).rejects.toThrow(
         ConflictException,
@@ -374,7 +374,7 @@ describe('CategoryService', () => {
 
     it('allows direction change when category is unused', async () => {
       prismaMock.category.findUnique.mockResolvedValue(makeCat({ direction: 'OUT' }));
-      prismaMock.payment.count.mockResolvedValue(0);
+      prismaMock.transaction.count.mockResolvedValue(0);
       prismaMock.category.update.mockResolvedValue(makeCat({ direction: 'IN' }));
 
       const r = await service.update('user-1', 'cat-1', { direction: 'IN' });
@@ -385,9 +385,9 @@ describe('CategoryService', () => {
   // ── remove() ──
 
   describe('remove()', () => {
-    it('deletes a category with no payments and reassigned=0', async () => {
+    it('deletes a category with no transactions and reassigned=0', async () => {
       prismaMock.category.findUnique.mockResolvedValue(makeCat());
-      prismaMock.payment.count.mockResolvedValue(0);
+      prismaMock.transaction.count.mockResolvedValue(0);
       prismaMock.category.delete.mockResolvedValue({});
 
       const r = await service.remove('user-1', 'cat-1', {});
@@ -395,9 +395,9 @@ describe('CategoryService', () => {
       expect(r).toEqual({ deleted: true, reassigned: 0 });
     });
 
-    it('throws CATEGORY_IN_USE (409) when payments exist without replacement', async () => {
+    it('throws CATEGORY_IN_USE (409) when transactions exist without replacement', async () => {
       prismaMock.category.findUnique.mockResolvedValue(makeCat());
-      prismaMock.payment.count.mockResolvedValue(5);
+      prismaMock.transaction.count.mockResolvedValue(5);
 
       await expect(service.remove('user-1', 'cat-1', {})).rejects.toThrow(ConflictException);
       try {
@@ -407,17 +407,17 @@ describe('CategoryService', () => {
       }
     });
 
-    it('reassigns payments and deletes when replacement is valid', async () => {
+    it('reassigns transactions and deletes when replacement is valid', async () => {
       const source = makeCat({ id: 'cat-1', direction: 'OUT' });
       const target = makeCat({ id: 'cat-2', direction: 'OUT' });
 
       prismaMock.category.findUnique
         .mockResolvedValueOnce(source) // initial lookup
         .mockResolvedValueOnce(target); // replacement lookup
-      prismaMock.payment.count.mockResolvedValue(4);
+      prismaMock.transaction.count.mockResolvedValue(4);
       prismaMock.$transaction.mockImplementation(async (cb) => {
         const tx = {
-          payment: { updateMany: jest.fn().mockResolvedValue({ count: 4 }) },
+          transaction: { updateMany: jest.fn().mockResolvedValue({ count: 4 }) },
           category: { delete: jest.fn().mockResolvedValue({}) },
         };
         return cb(tx);
@@ -433,7 +433,7 @@ describe('CategoryService', () => {
       const target = makeCat({ id: 'cat-2', direction: 'IN' });
 
       prismaMock.category.findUnique.mockResolvedValueOnce(source).mockResolvedValueOnce(target);
-      prismaMock.payment.count.mockResolvedValue(2);
+      prismaMock.transaction.count.mockResolvedValue(2);
 
       await expect(
         service.remove('user-1', 'cat-1', { replaceWithCategoryId: 'cat-2' }),
@@ -451,10 +451,10 @@ describe('CategoryService', () => {
       const target = makeCat({ id: 'cat-2', direction: 'BOTH' });
 
       prismaMock.category.findUnique.mockResolvedValueOnce(source).mockResolvedValueOnce(target);
-      prismaMock.payment.count.mockResolvedValue(1);
+      prismaMock.transaction.count.mockResolvedValue(1);
       prismaMock.$transaction.mockImplementation(async (cb) => {
         const tx = {
-          payment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          transaction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
           category: { delete: jest.fn().mockResolvedValue({}) },
         };
         return cb(tx);

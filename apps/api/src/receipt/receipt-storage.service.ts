@@ -9,7 +9,11 @@ import {
 } from '@myfinpro/shared';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import heicConvert from 'heic-convert';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
+
+/** JPEG quality for HEIC conversions — visually lossless for receipt text. */
+const HEIC_JPEG_QUALITY = 0.9;
 
 /**
  * Phase 7, iteration 7.3 — receipt file storage.
@@ -98,12 +102,37 @@ export class ReceiptStorageService {
         errorCode: RECEIPT_ERRORS.RECEIPT_FILE_TOO_LARGE,
       });
     }
-    const mimeType = ReceiptStorageService.detectMimeType(buffer);
+    let mimeType = ReceiptStorageService.detectMimeType(buffer);
     if (!mimeType || !(RECEIPT_ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {
       throw new BadRequestException({
         message: `Unsupported file type; allowed: ${RECEIPT_ALLOWED_MIME_TYPES.join(', ')}`,
         errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
       });
+    }
+
+    // HEIC (the iPhone camera default) is accepted at the door but stored as
+    // JPEG: vision LLM APIs reject `image/heic` and browsers can't render it
+    // in previews (Phase 7.11). Converting once here fixes extraction, the
+    // review preview, and the TransactionDocument in one place.
+    if (mimeType === 'image/heic') {
+      try {
+        const converted = await heicConvert({
+          buffer,
+          format: 'JPEG',
+          quality: HEIC_JPEG_QUALITY,
+        });
+        this.logger.log(
+          `Converted HEIC upload to JPEG (${buffer.length} → ${converted.byteLength} bytes)`,
+        );
+        buffer = Buffer.from(converted);
+        mimeType = 'image/jpeg';
+      } catch (err) {
+        this.logger.warn(`HEIC conversion failed: ${(err as Error).message}`);
+        throw new BadRequestException({
+          message: 'Could not read this HEIC image — please upload a JPEG, PNG, or PDF',
+          errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
+        });
+      }
     }
 
     const now = new Date();

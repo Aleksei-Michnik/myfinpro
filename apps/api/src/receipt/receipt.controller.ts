@@ -39,9 +39,12 @@ import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
+import { CreateManualReceiptDto } from './dto/create-manual-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
+import { MatchItemDto } from './dto/match-item.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
+import { ReconcileReceiptDto } from './dto/reconcile-receipt.dto';
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptService, type ReceiptListResponse } from './receipt.service';
@@ -128,6 +131,29 @@ export class ReceiptController {
     @Body() dto: CreateReceiptUrlDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.createFromUrl(user.sub, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post('manual')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Compose a receipt manually from scanned products',
+    description:
+      'No extraction runs — the receipt is created in REVIEW with every line pre-linked to ' +
+      'its registry product and the total summed server-side. Confirm creates the transaction ' +
+      'like any other receipt.',
+  })
+  @ApiOkResponse({ description: 'Receipt created in REVIEW', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Unknown product id' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async createManual(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateManualReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.createManual(user.sub, dto);
   }
 
   @CustomThrottle({ limit: 60, ttl: 60_000 })
@@ -232,15 +258,15 @@ export class ReceiptController {
   @Post(':id/confirm')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Confirm a reviewed receipt → create its payment',
+    summary: 'Confirm a reviewed receipt → create its transaction',
     description:
-      'Creates one OUT / ONE_TIME payment from the reviewed receipt (total, currency, date, ' +
+      'Creates one OUT / ONE_TIME transaction from the reviewed receipt (total, currency, date, ' +
       'items) with the given primary category and attribution scopes, attaches the file as a ' +
       'receipt document, and creates the merchant in the global registry when needed. REVIEW ' +
       'only; total + currency must be set.',
   })
   @ApiOkResponse({
-    description: 'Confirmed receipt (now linked to its payment)',
+    description: 'Confirmed receipt (now linked to its transaction)',
     type: ReceiptResponseDto,
   })
   @ApiNotFoundResponse({ description: 'Not found / not the uploader / unknown category' })
@@ -252,6 +278,74 @@ export class ReceiptController {
     @Body() dto: ConfirmReceiptDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.confirm(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/reconcile')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Reconcile an attached receipt with its transaction',
+    description:
+      'Confirm step for a receipt attached to an existing transaction: flips REVIEW → CONFIRMED ' +
+      'without creating a transaction, and per the flags overwrites the transaction total (and ' +
+      'currency) and/or category from the reviewed receipt. Item/product links are saved ' +
+      'regardless. REVIEW only; the receipt must be attached to a transaction.',
+  })
+  @ApiOkResponse({ description: 'Reconciled receipt (now CONFIRMED)', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async reconcile(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: ReconcileReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.reconcile(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items/:itemId/match')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirm a product match for one line item (walkthrough)',
+    description:
+      'Links the item to a registry product — exactly one of productId (existing) or ' +
+      'createProduct (publish + link). Records the raw spelling as an alias with the ' +
+      "caller's locale and optionally overrides the item category. REVIEW or CONFIRMED.",
+  })
+  @ApiOkResponse({ description: 'Updated receipt incl. items', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Receipt/item/product not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async matchItem(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+    @Body() dto: MatchItemDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.matchItem(user.sub, id, itemId, dto);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items/:itemId/skip-match')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Skip / unlink a line item in the walkthrough',
+    description: 'Marks the item SKIPPED and clears any product link. Always resumable.',
+  })
+  @ApiOkResponse({ description: 'Updated receipt incl. items', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Receipt/item not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async skipItemMatch(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('itemId', new ParseUUIDPipe()) itemId: string,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.skipItemMatch(user.sub, id, itemId);
   }
 
   @CustomThrottle({ limit: 20, ttl: 60_000 })
@@ -277,7 +371,7 @@ export class ReceiptController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Delete a non-confirmed receipt (file + rows)',
-    description: 'Confirmed receipts are managed through their payment (design §2.1).',
+    description: 'Confirmed receipts are managed through their transaction (design §2.1).',
   })
   @ApiNoContentResponse({ description: 'Deleted' })
   @ApiNotFoundResponse({ description: 'Not found / not the uploader' })

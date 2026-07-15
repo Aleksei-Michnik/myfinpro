@@ -1,7 +1,7 @@
 import { DEFAULT_CATEGORIES } from '@myfinpro/shared';
 import { PrismaClient } from '@prisma/client';
 import { StartedMySqlContainer } from '@testcontainers/mysql';
-import { seedSystemCategories } from '../../src/payment/seed-system-categories';
+import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
 import { setupTestDatabase, teardownTestDatabase } from '../helpers/testcontainers';
 
 describe('seedSystemCategories integration', () => {

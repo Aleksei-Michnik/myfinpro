@@ -20,7 +20,7 @@ describe('budget.types string-literal arrays', () => {
   });
 
   it('BUDGET_ALERT_KINDS matches the design §4 set in order', () => {
-    expect(BUDGET_ALERT_KINDS).toEqual(['BUDGET_THRESHOLD', 'BUDGET_OVERSPENT', 'PAYMENT_DUE']);
+    expect(BUDGET_ALERT_KINDS).toEqual(['BUDGET_THRESHOLD', 'BUDGET_OVERSPENT', 'TRANSACTION_DUE']);
   });
 
   it('BudgetProgress compiles with the design §4 shape', () => {

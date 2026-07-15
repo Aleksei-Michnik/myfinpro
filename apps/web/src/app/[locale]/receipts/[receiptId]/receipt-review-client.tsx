@@ -5,23 +5,26 @@
 // registry, date, currency, totals with a live mismatch warning) and an
 // editable line-items table with per-item category selects. Save = PATCH
 // header + PUT items. Only REVIEW receipts are editable; other statuses
-// render a read-only summary. Confirm (→ payment) lands in 7.9.
+// render a read-only summary. Confirm (→ transaction) lands in 7.9.
 
 import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
+import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
+import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
-import { usePayments } from '@/lib/payment/payment-context';
-import type { CategoryDto } from '@/lib/payment/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { MerchantSuggestion, ReceiptItemInput, ReceiptSummary } from '@/lib/receipt/types';
+import { useTransactions } from '@/lib/transaction/transaction-context';
+import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
 
 interface ItemRow {
@@ -64,15 +67,17 @@ const inputClass =
 export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const t = useTranslations('receipts.review');
   const tStatus = useTranslations('receipts.status');
+  const tViewer = useTranslations('receipts.viewer');
   const { getReceipt, updateReceipt, replaceItems, searchMerchants, fetchFileBlob, retryReceipt } =
     useReceipts();
-  const { listCategories } = usePayments();
+  const { listCategories } = useTransactions();
   const { addToast } = useToast();
   const router = useRouter();
 
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState(false);
 
   // Header form state.
   const [merchantText, setMerchantText] = useState('');
@@ -85,6 +90,12 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  // Attached receipts (Phase 8.15) finish via reconcile, not confirm. Auto-open
+  // the reconcile dialog the first time such a receipt reaches REVIEW.
+  const autoReconciledRef = useRef(false);
 
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const saveOp = useAsyncOperation<boolean>({ scope: 'control' });
@@ -115,6 +126,15 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     load();
   }, [load]);
 
+  // Attached receipt reaches REVIEW → pop the reconciliation dialog once, so
+  // the comparison surfaces the moment extraction lands (design §3).
+  useEffect(() => {
+    if (receipt?.transactionId && receipt.status === 'REVIEW' && !autoReconciledRef.current) {
+      autoReconciledRef.current = true;
+      setReconcileOpen(true);
+    }
+  }, [receipt?.transactionId, receipt?.status]);
+
   useRealtimeResync(() => {
     // Don't clobber in-progress edits on reconnect; refetch otherwise.
     if (!dirty) load();
@@ -130,9 +150,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     });
   });
 
-  // Authenticated file preview via a blob object-URL.
+  // Authenticated file preview via a blob object-URL. A failure surfaces as
+  // an inline error — a silent catch left the "loading" placeholder forever.
   useEffect(() => {
     if (!receipt || receipt.source !== 'upload') return;
+    setPreviewError(false);
     let revoked: string | null = null;
     let cancelled = false;
     void fetchFileBlob(receiptId)
@@ -142,7 +164,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         setPreviewUrl(revoked);
       })
       .catch(() => {
-        /* preview is best-effort */
+        if (!cancelled) setPreviewError(true);
       });
     return () => {
       cancelled = true;
@@ -213,7 +235,15 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     return total - (itemsSum - discount);
   }, [items, totalStr, discountStr]);
 
-  // Pre-select the payment's primary category from the most common line-item
+  // Walkthrough backlog — PENDING + SKIPPED are the resumable set (8.4).
+  const unresolvedCount = useMemo(
+    () =>
+      receipt?.items.filter((i) => i.matchStatus === 'PENDING' || i.matchStatus === 'SKIPPED')
+        .length ?? 0,
+    [receipt],
+  );
+
+  // Pre-select the transaction's primary category from the most common line-item
   // category (confirm dialog default).
   const defaultCategoryId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -345,13 +375,25 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   return (
     <main className="container mx-auto max-w-5xl space-y-4 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link
-          href="/receipts"
-          className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-          data-testid="receipt-review-back"
-        >
-          ← {t('back')}
-        </Link>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link
+            href="/receipts"
+            className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+            data-testid="receipt-review-back"
+          >
+            ← {t('back')}
+          </Link>
+          {/* 8.19 — this receipt proves a transaction; link back to it. */}
+          {receipt.transactionId && (
+            <Link
+              href={`/transactions/${receipt.transactionId}`}
+              className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+              data-testid="receipt-review-transaction-link"
+            >
+              {t('viewTransaction')} →
+            </Link>
+          )}
+        </div>
         <ReceiptStatusPill status={receipt.status} />
       </div>
 
@@ -394,22 +436,50 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
             </a>
           ) : previewUrl ? (
             receipt.mimeType === 'application/pdf' ? (
-              <object
-                data={previewUrl}
-                type="application/pdf"
-                className="h-[70vh] w-full rounded"
-                aria-label={t('previewTitle')}
-                data-testid="receipt-preview-pdf"
-              />
+              <div className="space-y-2">
+                <object
+                  data={previewUrl}
+                  type="application/pdf"
+                  className="h-[60vh] w-full rounded"
+                  aria-label={t('previewTitle')}
+                  data-testid="receipt-preview-pdf"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewerOpen(true)}
+                  data-testid="receipt-view-document"
+                >
+                  {t('viewDocument')}
+                </Button>
+              </div>
             ) : (
-              // Blob object-URL — next/image can't consume it.
-              <img
-                src={previewUrl}
-                alt={receipt.originalName ?? t('previewTitle')}
-                className="max-h-[70vh] w-full rounded object-contain"
-                data-testid="receipt-preview-image"
-              />
+              // Blob object-URL — next/image can't consume it. The image is a
+              // button: activating it opens the accessible zoom/pan viewer.
+              <button
+                type="button"
+                onClick={() => setViewerOpen(true)}
+                aria-label={t('viewDocument')}
+                data-testid="receipt-view-document"
+                className="block w-full cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <img
+                  src={previewUrl}
+                  alt={receipt.originalName ?? t('previewTitle')}
+                  className="max-h-[70vh] w-full rounded object-contain"
+                  data-testid="receipt-preview-image"
+                />
+              </button>
             )
+          ) : previewError ? (
+            <div
+              className="flex h-40 items-center justify-center text-sm text-red-600 dark:text-red-400"
+              role="alert"
+              data-testid="receipt-preview-error"
+            >
+              {tViewer('loadFailed')}
+            </div>
           ) : (
             <div className="flex h-40 items-center justify-center text-sm text-gray-400 dark:text-gray-500">
               {t('previewLoading')}
@@ -552,9 +622,35 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
 
           {/* ── Items ───────────────────────────────────────────────── */}
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {t('itemsTitle')}
-            </h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {t('itemsTitle')}
+              </h2>
+              {/* Walkthrough entry (Phase 8.4) — REVIEW and CONFIRMED; server
+                  state is the source of truth, so unsaved edits gate it. */}
+              {(receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED') &&
+                receipt.items.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {dirty && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {t('confirmSaveFirst')}
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant={unresolvedCount > 0 ? 'primary' : 'outline'}
+                      size="sm"
+                      onClick={() => setWalkthroughOpen(true)}
+                      disabled={dirty}
+                      data-testid="review-walkthrough"
+                    >
+                      {unresolvedCount > 0
+                        ? t('matchProducts', { count: unresolvedCount })
+                        : t('matchProductsDone')}
+                    </Button>
+                  </div>
+                )}
+            </div>
             <div className="space-y-2" data-testid="review-items">
               {items.map((row, index) => (
                 <div
@@ -562,15 +658,40 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                   className="grid grid-cols-12 items-center gap-1.5"
                   data-testid={`review-item-${index}`}
                 >
-                  <input
-                    type="text"
-                    value={row.rawName}
-                    onChange={(e) => setItem(index, { rawName: e.target.value })}
-                    placeholder={t('itemName')}
-                    disabled={!editable}
-                    data-testid={`item-name-${index}`}
-                    className={`${inputClass} col-span-4`}
-                  />
+                  <div className="col-span-4 flex items-center gap-1.5">
+                    {/* Product-match state dot (Phase 8) — server truth, so
+                        it hides while there are unsaved row edits. */}
+                    {!dirty && receipt.items[index] && (
+                      <span
+                        aria-label={t(
+                          `matchState.${receipt.items[index].matchStatus.toLowerCase()}`,
+                        )}
+                        title={
+                          receipt.items[index].productName ??
+                          t(`matchState.${receipt.items[index].matchStatus.toLowerCase()}`)
+                        }
+                        data-testid={`item-match-${index}`}
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          receipt.items[index].matchStatus === 'CONFIRMED'
+                            ? 'bg-green-500'
+                            : receipt.items[index].matchStatus === 'AUTO'
+                              ? 'bg-blue-500'
+                              : receipt.items[index].matchStatus === 'SKIPPED'
+                                ? 'bg-gray-300 dark:bg-gray-600'
+                                : 'bg-amber-400'
+                        }`}
+                      />
+                    )}
+                    <input
+                      type="text"
+                      value={row.rawName}
+                      onChange={(e) => setItem(index, { rawName: e.target.value })}
+                      placeholder={t('itemName')}
+                      disabled={!editable}
+                      data-testid={`item-name-${index}`}
+                      className={inputClass}
+                    />
+                  </div>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -659,16 +780,29 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               >
                 {t('save')}
               </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                onClick={() => setConfirmOpen(true)}
-                disabled={saveOp.isLoading || dirty}
-                data-testid="review-confirm"
-              >
-                {t('confirm')}
-              </Button>
+              {receipt.transactionId ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  onClick={() => setReconcileOpen(true)}
+                  disabled={saveOp.isLoading || dirty}
+                  data-testid="review-reconcile"
+                >
+                  {t('reconcile')}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={saveOp.isLoading || dirty}
+                  data-testid="review-confirm"
+                >
+                  {t('confirm')}
+                </Button>
+              )}
             </div>
           )}
         </section>
@@ -680,11 +814,58 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         categories={categories}
         defaultCategoryId={defaultCategoryId}
         onCancel={() => setConfirmOpen(false)}
-        onConfirmed={(paymentId) => {
+        onConfirmed={(transactionId) => {
           setConfirmOpen(false);
-          router.push(`/payments/${paymentId}`);
+          router.push(`/transactions/${transactionId}`);
         }}
       />
+
+      {/* Attached-receipt finish (Phase 8.15). Mounted only while open — its
+          transaction fetch shouldn't run for plain confirm flows. */}
+      {reconcileOpen && receipt.transactionId && (
+        <ReconcileReceiptDialog
+          open
+          receipt={receipt}
+          categories={categories}
+          onCancel={() => setReconcileOpen(false)}
+          onReconciled={(transactionId) => {
+            setReconcileOpen(false);
+            router.push(`/transactions/${transactionId}`);
+          }}
+        />
+      )}
+
+      {/* Mounted only while open — keeps the dialog (and its product-context
+          dependency) entirely off the tree for plain review flows. */}
+      {walkthroughOpen && (
+        <ItemWalkthroughDialog
+          open
+          receipt={receipt}
+          categories={categories}
+          onClose={() => setWalkthroughOpen(false)}
+          onReceiptUpdated={hydrate}
+        />
+      )}
+
+      {/* Popup document viewer (uploaded image/PDF) — zoom/pan for pictures,
+          native PDF viewer for slips. URL receipts open externally instead. */}
+      {receipt.source !== 'url' && (
+        <ReceiptDocumentViewer
+          open={viewerOpen}
+          url={previewUrl}
+          loadError={previewError}
+          mimeType={receipt.mimeType}
+          title={
+            // File name first — merchant names are receipt data in the
+            // receipt's own language and read as a localisation bug.
+            receipt.originalName ??
+            receipt.merchantName ??
+            receipt.extractedMerchantName ??
+            t('previewTitle')
+          }
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
     </main>
   );
 }

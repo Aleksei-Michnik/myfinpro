@@ -1,11 +1,11 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-04
-> **Current Phase:** Phase 7 — Receipt Ingestion & LLM Extraction (kickoff 2026-07-04)
+> **Last updated:** 2026-07-13
+> **Current Phase:** Phase 8 — Product Catalog, Matching & Barcode (kickoff 2026-07-11; 8.1–8.10 complete, 8.11 per-user LLM shipped 2026-07-12)
 > **Previous Phase:** Phase 6 — Payment Management ✅ Complete, **merged to main and live in production** (2026-07-04): merge `13ea4c6`, Deploy Production `28705417883` ✅ blue-green (green slot, post-switch health check passed).
 > **Previous Phase:** Phase 5 — Family/Group Management & Password Change ✅ Complete
 >
-> **Design doc**: [`docs/phase-6-payments-design.md`](phase-6-payments-design.md)
+> **Design doc**: [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md)
 >
 > **Scope change (2026-04-25)**: Original Phase 6 (Income, 10 iterations) and Phase 7 (Expense, 13 iterations) are merged into a single **Phase 6: Payment Management** (21 iterations). Incomes and expenses now share a single `Payment` entity with a `direction` field (`IN` / `OUT`) — dramatically reducing duplication. Phase 6 also introduces payment notes, a documents placeholder for Phase 9 receipts, per-user stars, and comments. Phase 7 is now empty / subsumed.
 
@@ -2584,7 +2584,7 @@ Additional requirements added during planning (per user direction):
 - **Comments** — any user with access to a payment can post comments; author can edit/delete their own.
 - **Star / favourite** — per-user, with a "Starred" filter/shortcut.
 
-### Design Decisions (see [`docs/phase-6-payments-design.md`](phase-6-payments-design.md))
+### Design Decisions (see [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md))
 
 | Area               | Decision                                                                                                                                                          |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2793,7 +2793,7 @@ All 22 rows present with `is_system=1`: `bonus`, `clothing`, `education`, `enter
 | PATCH  | `/categories/:id` | 20/min     | Edit name/icon/color/direction; direction change blocked when in use                             |
 | DELETE | `/categories/:id` | 20/min     | Delete, optionally reassigning payments via `?replaceWithCategoryId=<uuid>`                      |
 
-Rate limits match `docs/phase-6-payments-design.md` §5.8 exactly.
+Rate limits match `docs/phase-6-transactions-design.md` §5.8 exactly.
 
 **Error codes** — centralised in [`apps/api/src/category/constants/category-errors.ts`](../apps/api/src/category/constants/category-errors.ts:1):
 
@@ -3069,7 +3069,7 @@ count: 0
 - Introduced `PAYMENT_DETAIL_INCLUDE` + `buildDetailInclude(userId)` helper so list / get / update all feed the exact same relation shape into `mapPaymentToSummary()`. Include drift is now structurally impossible.
 - Split validation into `validateAmount()`, `parseAndValidateOccurredAt()`, `loadCategoryOrThrow()`, `ensureCategoryDirectionMatches()` helpers shared by `create()` and `update()`.
 
-**Error codes added** (docs/phase-6-payments-design.md §5.7)
+**Error codes added** (docs/phase-6-transactions-design.md §5.7)
 
 - `PAYMENT_NOT_FOUND`
 - `PAYMENT_NOT_OWNER`
@@ -3138,7 +3138,7 @@ Going with **`PaymentSummaryDto | 204`**, not a wrapped change-result. PATCH rem
 - `validateAttributions(userId, attrs, memberGroupsCache?, { allowEmpty? })` — parameterised. `create()` calls with defaults (non-empty); `update()` calls with `allowEmpty: true` and lets the validator do its own membership fetch (desired entries may reference groups not on the payment yet).
 - `buildVisibilityWhere()`, `PAYMENT_DETAIL_INCLUDE`, `mapPaymentToSummary()` — unchanged from 6.7, still the single source of truth.
 
-**Error codes added** (docs/phase-6-payments-design.md §5.7)
+**Error codes added** (docs/phase-6-transactions-design.md §5.7)
 
 - `PAYMENT_SCOPE_AMBIGUOUS` — implicit scope with >1 accessible attributions; error body includes `details.accessibleScopes: ["personal", "group:<id>", ...]`.
 - `PAYMENT_SCOPE_NOT_ATTRIBUTED` — explicit scope the caller has no accessible attribution for.
@@ -5225,7 +5225,7 @@ performs an in-place `UPDATE categories SET name='Gifts received'
 WHERE slug='gift_in' AND owner_type='system' AND name='Gift'` — fully
 idempotent. The architectural rule (filter dropdown and form dialog
 share `usePayments().listCategories()` as the single source of truth)
-is now documented in [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)
+is now documented in [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1)
 under "Category visibility policy" and asserted by a parity test.
 
 The `@myfinpro/shared` seed test was extended with two regression
@@ -5310,7 +5310,7 @@ on white text yields ≈ 4.83 : 1 — also AA-compliant.
   "Iteration 6.16.5" subsection codifying the AbortError silent
   no-op rule and the `useResetOnLocaleChange` requirement for
   page-level orchestrators.
-- [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1) —
+- [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1) —
   new "Category visibility policy" subsection.
 
 #### No new npm dependency.
@@ -5372,7 +5372,7 @@ asked for it as a top-level dep, so the workspace lockfile only gained
 | [`.env.example`](../.env.example:1)                                                                                     | Adds `REDIS_HOST/PORT/PASSWORD/TLS`.                                                         |
 | [`.env.staging.template`](../.env.staging.template:1) / [`.env.production.template`](../.env.production.template:1)     | Document the four typed vars + secret-name mapping.                                          |
 | [`apps/api/.env.example`](../apps/api/.env.example:1)                                                                   | Adds `REDIS_TLS`.                                                                            |
-| [`docs/phase-6-payments-design.md`](phase-6-payments-design.md:1)                                                       | New `§7 Job Queue Infrastructure` block inside section 11.                                   |
+| [`docs/phase-6-transactions-design.md`](phase-6-transactions-design.md:1)                                               | New `§7 Job Queue Infrastructure` block inside section 11.                                   |
 | [`docs/deployment.md`](deployment.md:1)                                                                                 | Application-secrets table swaps `*_REDIS_URL` → `*_REDIS_PASSWORD`; new "Redis" subsection.  |
 
 **GitHub-secrets diff.** New secret added on the staging environment;
@@ -5503,7 +5503,7 @@ singular path because of the 1:1 cardinality with the parent):
 | [`apps/api/src/health/indicators/redis.indicator.ts`](apps/api/src/health/indicators/redis.indicator.ts:1)                                                                                           | modified |
 | [`apps/api/src/health/indicators/redis.indicator.spec.ts`](apps/api/src/health/indicators/redis.indicator.spec.ts:1)                                                                                 | modified |
 | [`apps/api/test/integration/payment-schedule.integration.spec.ts`](apps/api/test/integration/payment-schedule.integration.spec.ts:1)                                                                 | new      |
-| [`docs/phase-6-payments-design.md`](docs/phase-6-payments-design.md:1)                                                                                                                               | modified |
+| [`docs/phase-6-transactions-design.md`](docs/phase-6-transactions-design.md:1)                                                                                                                       | modified |
 
 **Schema change.** The 6.2 `PaymentSchedule` columns
 (`frequency`/`interval`/`next_occurrence_at`/`max_occurrences`/
@@ -6376,7 +6376,7 @@ app.
 | `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
 | `apps/web/messages/en.json`                                                | modified |
 | `apps/web/messages/he.json`                                                | modified |
-| `docs/phase-6-payments-design.md`                                          | modified |
+| `docs/phase-6-transactions-design.md`                                      | modified |
 
 **Tests.** ~21 new cases:
 
@@ -6478,7 +6478,7 @@ app.
 | `apps/web/src/app/[locale]/payments/[paymentId]/payment-detail.spec.tsx`   | modified |
 | `apps/web/messages/en.json`                                                | modified |
 | `apps/web/messages/he.json`                                                | modified |
-| `docs/phase-6-payments-design.md`                                          | modified |
+| `docs/phase-6-transactions-design.md`                                      | modified |
 
 **Tests.** ~21 new cases:
 
@@ -7364,10 +7364,6 @@ CI-green with staging deploys.
 **Next** — 7.5 (extraction provider layer: mock + Anthropic + OpenAI
 implementations behind `RECEIPT_EXTRACTION_PROVIDER`), 7.6 (worker).
 
----
-
-## Phase 7 · Iterations 7.5–7.6 — Extraction providers + worker (2026-07-04)
-
 ### 7.5 — pluggable provider layer
 
 `ReceiptExtractionProvider` contract (image / pdf / html inputs; category
@@ -7458,9 +7454,7 @@ typecheck unaffected.**
 
 **Next** — 10.2 (`BudgetModule` CRUD + guards + `budget.updated` SSE).
 
----
-
-## Phase 7 · Iteration 7.7 — Receipts upload UI (2026-07-04)
+### 7.7 — Receipts upload UI (2026-07-04)
 
 **`/receipts`** (new sidebar entry): intake via drag-and-drop, file browse,
 mobile camera capture (`capture="environment"`), and a URL form; the
@@ -7487,9 +7481,7 @@ tree in parallel — receipt commits stage files explicitly and leave
 **Next** — 7.8 (review page: header + items editing, merchant
 autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
 
----
-
-## Phase 7 · Iteration 7.8 — Receipt review & edit (2026-07-05)
+### 7.8 — Receipt review & edit
 
 **API.** Three REVIEW-only editing endpoints on the receipt resource:
 
@@ -7537,7 +7529,7 @@ autocomplete), 7.9 (confirm → payment), 7.10 (closing pass).
   `MerchantSuggestion`; list rows now link to the review page.
   `receipts.review` i18n namespace added (EN/HE parity verified).
 
-### Tests
+#### Tests
 
 API: 65 receipt-suite tests green (adds `update` / `replaceItems` /
 `searchMerchants` / normalization coverage). Web: review-client spec (17)
@@ -7553,9 +7545,7 @@ the list-row Link. **Web receipt specs 31 green; typecheck + lint clean.**
 **Next** — 7.9 (confirm → Payment OUT + PaymentDocument), 7.10 (closing
 pass: integration + E2E, i18n sweep).
 
----
-
-## Phase 7 · Iteration 7.9 — Confirm receipt → payment (2026-07-09)
+### 7.9 — Confirm receipt → payment
 
 **API.** `POST /receipts/:id/confirm` turns a reviewed receipt into money.
 REVIEW-only; the receipt must already carry a total + currency (the review
@@ -7592,7 +7582,7 @@ server's stored values), with the primary category pre-selected from the most
 common line-item category. `confirmReceipt` context method + `ConfirmReceiptInput`
 wire type; `receipts.confirm` i18n namespace (EN/HE parity verified).
 
-### Tests
+#### Tests
 
 API: +5 `PaymentService` (validate / create-within-tx / publishCreated), +5
 receipt-service confirm (payment+document+merchant+link+audits, merchant
@@ -7613,9 +7603,7 @@ stayed untouched.
 **Next** — 7.10 (URL ingestion polish, audit-log matrix, Playwright E2E for
 upload → extract → review → confirm, i18n sweep).
 
----
-
-## Phase 7 · Iteration 7.10 — Closing pass: SSRF guard, E2E, audit matrix (2026-07-09)
+### 7.10 — Closing pass: SSRF guard, E2E, audit matrix (2026-07-09)
 
 **URL-ingestion SSRF guard.** A receipt URL is user-supplied and fetched
 server-side, so `assertPublicReceiptUrl` now gates it: reject non-http(s)
@@ -7649,7 +7637,7 @@ review page (asserts the mock "Mock Grocery" / $16.60) → Confirm with a
 primary category → lands on `/payments/:id` showing $16.60. Runs against
 staging like the Phase 6 payments E2E.
 
-### Tests
+#### Tests
 
 +19 URL-guard unit cases (accepts public v4/v6; rejects every private /
 loopback / metadata / scheme / credential vector) + 1 `createFromUrl` SSRF
@@ -7661,3 +7649,543 @@ edit → confirm → payment, with private-by-uploader receipts, a global
 merchant registry, per-item categories, realtime lifecycle, and an
 SSRF-guarded URL path. **Next: Phase 8** (product catalog & staged matching
 over the `receipt_items` this phase persists).
+
+### 7.11–7.13 — recognition fixes + payment-first intake
+
+Follow-ups from staging verification (documented as a re-plan block in
+IMPLEMENTATION-PLAN.md before implementation):
+
+- **7.11 HEIC → JPEG at storage.** `image/heic` (the iPhone camera default)
+  passed the upload whitelist but failed everywhere downstream — vision LLM
+  APIs reject HEIC and browsers can't preview it. `ReceiptStorageService`
+  now decodes HEIC via `heic-convert` (WASM, no native image libs in the
+  container) and stores a JPEG (quality 0.9), fixing extraction, the review
+  preview, and the confirm-time `PaymentDocument` in one place. Undecodable
+  HEIC → structured `RECEIPT_INVALID_FILE_TYPE` 400.
+- **7.12 Readable URL snapshots.** The fetcher handed raw HTML to the
+  extraction model. New dependency-free `htmlToReceiptText()` drops
+  invisible subtrees, turns block boundaries into newlines and table cells
+  into tabs, decodes entities (incl. numeric Hebrew + ₪), collapses
+  whitespace, caps at 100k chars; applied when the response is HTML by
+  header or body sniff. Plain text passes through.
+- **7.13 Payment-first intake.** A receipt is an **attribute of a payment**
+  (the document that proves it), not a parallel object. The Add-payment
+  dialog now offers **From receipt** (create mode): picking a file uploads
+  it and hands off to extract → review → confirm, which ends in the payment.
+  The payment detail endpoint exposes the `receiptId` back-link (detail
+  include only) and the detail page renders a Receipt section linking to the
+  source receipt — the connection is visible in both directions. `/receipts`
+  remains the pipeline view. i18n EN+HE, parity clean.
+
+Tests: storage spec 15 (HEIC convert + reject), html-to-text 7, processor
+reduction assertion, payment-service back-link, dialog from-receipt ×3,
+detail receipt-link ×2. **api 1031 green; web 1131 green; lint 0 errors.**
+
+Runbook troubleshooting updated (HEIC + URL rows now describe the fixed
+behaviour).
+
+---
+
+## Phase 8 · Iterations 8.1–8.10 — Product Catalog, Matching & Barcode (2026-07-12)
+
+Full phase in one pass (design doc at `docs/phase-8-products-design.md`,
+written at kickoff per the plan). Implements the **two-layer product DB**:
+a global registry (barcode-keyed `products` + multi-language
+`product_aliases`) shared by all users, and private purchase data derived
+from each user's confirmed `receipt_items` — the registry never records who
+bought what.
+
+### 8.1 - Schema
+
+**(`20260711100000_phase8_81_products`, expand-only)**:
+`products` (unique nullable GTIN barcode, canonical + normalized name,
+brand, image ref, system-only default category), `product_aliases`
+(normalized spelling unique per product, locale, source, confirmation
+count), `receipt_items` gains `product_id` (SetNull), `match_status`
+(`PENDING|AUTO|CONFIRMED|SKIPPED`), `match_candidates` JSON, and a
+**denormalized `purchased_at`** (backfilled in the migration; kept in sync
+by extraction/PATCH/PUT and frozen to the payment date on confirm) so the
+Phase 9 price queries hit `(product_id, purchased_at)` without joining
+receipts. Shared package: `product.types.ts` (match enums/candidate shape,
+`PRODUCT_AUTO_MATCH_THRESHOLD`, GTIN mod-10 validation) and
+`normalizeLookupName` — the one normalization rule for both registries;
+`merchant-name.util` deleted, receipt service now uses the shared fn.
+
+### 8.2 - Product API `ProductModule` (imported by `ReceiptModule` — the
+
+worker and walkthrough are its consumers): list = ranked global search
+(`?search`, any recorded language or barcode) / caller's purchased products
+(groupBy on the new index, keyset-paginated, per-product stats via two
+batched queries — no N+1); get w/ aliases + caller stats; create/update
+(GTIN checksum + uniqueness, **system-OUT-only default category** — a
+global row must never reference a private category); alias add (upsert →
+count bump); `GET /products/barcode/:code`; purchases endpoint with
+per-merchant price aggregates, always scoped `uploadedById` + CONFIRMED.
+Registry writes audited (`PRODUCT_CREATED/UPDATED`,
+`PRODUCT_ALIAS_RECORDED`, `RECEIPT_ITEM_MATCHED`).
+
+### 8.3 - Staged matcher
+
+`ProductMatchingService`: barcode(1.0) →
+confirmed-alias (0.95 + per-confirmation bonus) → normalized-exact (0.9) →
+trigram fuzzy (dependency-free Dice over token-prefiltered pools,
+0.35–0.85). Batch-first: one alias + one product + one capped LIKE pool
+query per receipt, scoring in-process. The extraction call now carries the
+uploader's ~150 most recent products and the schema gains
+`suggestedProductId` (validated against the injected list — the
+**cross-language stage**: `חלב 3%` ↔ "Milk 3%"). Worker merges all stages
+into per-item candidates; deterministic top ≥ 0.9 **auto-links**
+(`AUTO`) and backfills the product's default category when the item came
+back uncategorized.
+
+### 8.4 - Walkthrough UI
+
+`ItemWalkthroughDialog` on the review page (REVIEW CONFIRMED):
+steps through items with ranked candidates + confidence
+meters, registry search, scan-to-find, create-new, skip. Keyboard-first
+(↑↓/1-9 choose, Enter confirm, S skip, N new, ←→ navigate, Esc close);
+every action is one per-item POST so progress is server-persisted and
+SKIPPED stays resumable. Focus-trapped dialog, `aria-live` progress,
+reduced-motion-safe. Item rows show match-state dots; PUT /items carries
+match state over for unchanged names (an edited name invalidates its
+match).
+
+### 8.5 - Registry auto-update
+
+Confirm records the raw spelling as an alias
+(uploader's locale, `confirmation` source) via upsert-increment inside the
+link transaction; creating publishes globally + seeds the canonical alias.
+Verified live: second upload of the same receipt **auto-matched** the item
+confirmed the first time (alias stage, 0.955).
+
+### 8.6 - Barcode scanning
+
+`BarcodeScannerDialog`: `getUserMedia` +
+native `BarcodeDetector` where present, `@zxing/browser` dynamic-imported
+fallback (never in the main bundle), GTIN-validated accepts only. Camera
+denial degrades to an always-present manual-entry input (also the AT/
+keyboard path). Scan-to-find in walkthrough + catalog; scan-to-attach in
+the product form.
+
+### 8.7 - Open Food Facts
+
+`OpenFoodFactsService` behind a circuit breaker
+(3 failures → 60s open) + min-interval rate limit; unknown barcodes
+prefill name/brand/image in the create form; outage/disabled degrade to
+`unavailable`/`disabled` — manual entry, never an error. Live-verified
+(Nutella barcode → prefill).
+
+### 8.8 - Product images
+
+One image per product. Uploads magic-byte-checked
+and staged, then a `product-images` BullMQ worker re-encodes via sharp
+(auto-rotate, ≤512px, WebP — EXIF/GPS stripped by construction); OFF
+prefill images ride the same queue as https fetch jobs. Served with strong
+ETag → verified 304 revalidation; `?v=` cache-busting on re-upload.
+
+### 8.9 - Catalog UI\*\* `/products` (sidebar entry)
+
+Debounced registry search vs. "my products" grid (lazy images, purchase stats,
+skeletons with the
+same cell geometry — no CLS), barcode scan-to-find, create dialog.
+`/products/:id`: image upload, aliases with locale tags, barcode, default
+category, per-merchant price table + purchase history linking back to
+receipts.
+
+### 8.10 - Tests + polish
+
+Shared 151 (GTIN/normalize/validator), api **1057** unit green
+(matcher stages, trigram, OFF breaker, service rules,
+worker auto-link) + new `products.integration.spec.ts` (6 green:
+registry CRUD/search/cross-language alias/barcode, walkthrough
+confirm/skip/guards, privacy boundary) + receipts-confirm integration
+re-green; web **1143** green incl. walkthrough + scanner specs; EN/HE
+parity for the full `products` namespace; typecheck/lint/Next build clean.
+Live E2E against the dev stack: upload → extract → walkthrough
+create-and-link → second-upload auto-match → confirm → catalog/purchases →
+image pipeline → OFF prefill.
+
+**Also:** `docs/runbook-llm-extraction.md` gains §9 — accepted direction
+(2026-07-12) to move LLM access to a **per-user setting**: curated
+Anthropic/OpenAI model catalog (Gemini and others later), per-provider
+connection methods with **OAuth (PKCE) preferred** over pasted API keys,
+optional BYOK, deployment env demoted to default/fallback. §9.4 fixes the
+**mandatory security model for user-held LLM secrets** (dedicated
+encrypted table — AES-256-GCM under a versioned master key, write-only API
+with hint-only reads, single decrypt boundary, log/audit redaction,
+save-time validation, re-auth + throttling, deletion-request wipe,
+master-key + OAuth-token rotation/revocation). Implementation is the next
+LLM-track iteration.
+
+**Phase 8 complete** — receipt items now resolve into a shared product
+registry with staged + LLM matching, barcode/OFF enrichment, images, and a
+private purchase catalog. **Next: Phase 9** (purchase analytics over
+`(product_id, purchased_at)`).
+
+### 8.11 - Follow-up: LLM selection + BYOK (runbook §9 implemented)
+
+**Shipped the §9 design end-to-end.** Every LLM call now resolves the
+model per uploader at call time: `user selection (own key → shared env
+key)` → `deployment default (RECEIPT_EXTRACTION_PROVIDER)` → mock.
+
+**8.11 Schema.** Expand-only migration
+`20260712100000_phase8_11_user_llm_settings`: nullable
+`users.llm_provider/llm_model` + new `user_llm_credentials` (one row per
+user × provider, `credential_kind` ready for OAuth later, unique
+`(user_id, provider)`, `onDelete: Cascade`).
+
+**8.11 Shared.** `llm.types.ts` — the one catalog constant
+(`LLM_MODEL_CATALOG`, verified against provider lineups 2026-07-12:
+claude-fable-5 / claude-sonnet-5 / claude-opus-4-8 / claude-haiku-4-5 +
+the OpenAI GPT-5.6 family gpt-5.6 (=sol) / gpt-5.6-terra / gpt-5.6-luna /
+gpt-5.2), `findLlmModel`, `isLlmProvider`, and per-provider key shape
+gates (`LLM_API_KEY_PATTERNS`, OpenAI pattern excludes `sk-ant-` so
+cross-provider pastes fail fast).
+
+**8.11 API (`src/llm/`).** `llm-crypto.util` (AES-256-GCM,
+`v1:<iv>:<tag>:<cipher>` envelope, 32-byte base64 master key from
+`LLM_SECRETS_ENCRYPTION_KEY` — production boot fails without it);
+`LlmCredentialsService` as the **single decrypt boundary** (shape gate +
+save-time live probe where only a definite 401/403 rejects, hint-only
+reads/audit, `resolveApiKey` internal-only, decrypt failures degrade to
+the shared key); `LlmSettingsService` (catalog availability = shared env
+key ∪ user key; selection validated against catalog **and** availability);
+`LlmController` — `GET /llm/catalog`, `PUT /llm/selection`,
+`GET /llm/credentials`, `PUT|DELETE /llm/credentials/:provider` with
+`FreshAuthGuard` (token ≤10 min old) + 5/10 min throttle on writes; pino
+`redact` gains `req.body.apiKey`; account-deletion request wipes
+credentials immediately (not after the grace period).
+
+**8.11 Extraction.** Anthropic/OpenAI providers now take explicit
+`{apiKey, model}` (built by the factory for the deployment default or by
+the new `ExtractionResolverService` per user); resolver caches resilient
+instances per `(provider, model, key-digest)` so breaker state stays
+coherent, and fails **permanently** with settings-facing messages when the
+selected model left the catalog or no key exists. Worker logs/audits
+`provider/model/keySource` — never key material.
+
+**8.11 Web.** Settings → Account gains the **AI model** card
+(`LlmSettingsSection`): catalog picker with unavailable models disabled
+until a key unlocks them, per-provider key rows (masked input, last-4
+hint, replace/remove, shared-key notice), 401 on credential writes mapped
+to a "sign in again" message; EN/HE parity (`settings.account.llm.*`).
+
+**8.11 Tests.** Shared 157 green (catalog + patterns); api **1089** unit
+green (crypto roundtrip/tamper/rotation-version, credentials service
+incl. probe verdicts + unconfigured/production boot, settings
+availability/selection, resolver precedence/cache/permanent failures,
+fresh-auth guard, deletion wipe) + new `llm-settings.integration.spec.ts`
+(6 green: encrypted-at-rest row assertions, hint-only reads, availability
+gating, isolation, clear/delete); web **1150** green incl.
+`LlmSettingsSection` spec; typecheck clean everywhere.
+
+**Runbook** §9 updated to shipped status with the real endpoints; §9.2b
+OAuth connectors remain the next LLM-track step. Ops: set
+`LLM_SECRETS_ENCRYPTION_KEY` on staging/production **before** deploying.
+
+### 8.12 - URL receipts routed by actual content
+
+URL intake (Phase 7: paste an e-receipt link on the Receipts page →
+`POST /receipts/url` → SSRF-guarded server fetch → LLM) previously treated
+every response as text. Real e-receipt links from text messages often
+serve a **PDF or an image directly** — those bytes were mangled through
+`res.text()` into mojibake before reaching the model.
+
+**Fix.** The worker now fetches bytes and routes by ACTUAL content
+(`receipt-content-sniff.util`: magic bytes first, Content-Type header only
+as a fallback — receipt hosts frequently mislabel): PDF → native document
+input, JPEG/PNG/GIF/WebP → native vision input (same path as direct
+uploads), HTML/text → the Phase 7.12 readable-text snapshot. Unknown
+binary fails permanently with a clear reason instead of feeding garbage to
+the model; downloads are capped at the same 10 MB as direct uploads.
+
+**HTML (the dominant online-receipt shape) also got more robust**: the
+full page is reduced to readable text FIRST and only the text is capped —
+previously the raw HTML was sliced at 500 K chars before reduction, so
+receipt lines sitting after large inline script/CSS blobs were silently
+cut off.
+
+**Tests.** New sniffer spec + 4 processor cases (PDF URL via magic bytes,
+image URL mislabelled as HTML, oversized/unsupported binary → permanent
+failure with reason, receipt lines after a 600 KB script blob survive);
+api suite **1097** green. Live E2E on the dev stack: real HTML page, PDF
+and PNG URLs all fetched, extracted and reached REVIEW.
+
+### 8.13 - Add Payment: receipt intake chooser (device upload + URL)
+
+The "From receipt" strip in the Add Payment dialog used to jump straight
+into the file picker — e-receipt links from text messages had no path from
+here (design: `docs/phase-8-receipt-intake-design.md` §1; 8.14 adds the
+barcode option next).
+
+**Web.** The strip is now a chooser: **Upload from this device** (the
+existing file input) and **Add from URL** — a toggle
+(`aria-expanded`/`aria-controls`) that reveals a labelled URL field;
+Enter adds the receipt and never submits the payment form. Both paths
+share one `useAsyncOperation` handoff: create the receipt
+(`uploadReceipt` / `createFromUrl`), route to `/receipts/<id>` review,
+close the dialog; failures toast and keep the dialog open. Dark-mode
+variants on every new element; EN+HE strings added (unused legacy
+`fromReceipt` key removed).
+
+**Tests.** 4 new dialog cases (toggle reveals the row, URL submit routes
+to review and closes, Enter is contained to the intake, failure toasts and
+keeps the dialog); web suite **1154** green.
+
+### 8.14 - Manual receipt via barcode scanning
+
+The third intake path (design §2): for purchases with no scannable or
+linkable slip, compose the receipt by scanning the products themselves. No
+LLM — the user is the extractor, so the receipt is born straight in REVIEW.
+
+**API.** `POST /receipts/manual` `{ currency, merchantName?, purchasedAt?,
+items: [{ productId, quantity, unitPriceCents }] }` (≥1 item). Resolves
+every product (404 on any unknown id), then creates a `source: 'manual'`
+receipt in **REVIEW** with each line pre-linked (`matchStatus` CONFIRMED,
+stage `barcode`, confidence 1.0, `rawName` = product name, `categoryId`
+from the product default), `totalCents` = Σ. No extraction job is
+enqueued, and retry-extraction is rejected for manual receipts. Confirm
+creates the payment through the unchanged path. Shared `RECEIPT_SOURCES`
+gains `'manual'`; the response DTO's `source`/`status` enums now derive
+from the shared arrays (DRY).
+
+**Web.** New `ManualReceiptDialog` (opened by the "Scan product barcodes"
+chooser button) reuses `BarcodeScannerDialog` (camera + manual-GTIN AT
+path) and `ProductFormDialog` (unknown barcode → create). Each scan adds a
+line = product × quantity × unit price; **price memory** — re-scanning a
+product bumps its quantity, and a new line's price prefills from the
+product's most recent purchase (`GET /products/:id/purchases`,
+`merchants[].lastUnitPriceCents`). Submit posts the receipt and hands off
+to review. The datetime-local helpers were extracted to `@/lib/datetime`
+and shared with the payment form (DRY). Dialog semantics, focus management,
+Esc/backdrop close, `aria-live` scan feedback, dark-mode variants; EN+HE
+strings.
+
+**Tests.** Service (pre-linked items + summed total, 404 on unknown
+product, retry rejected), controller, and 5 integration cases (REVIEW with
+CONFIRMED items + no queued job, 404, empty-list 400, retry 400, confirm →
+payment). Web: 7 `ManualReceiptDialog` cases (scan adds + price prefill,
+re-scan increments, unknown-barcode create, submit payload + handoff,
+price-required gating, remove) + chooser-opens-dialog. api unit **1101**
+(+5 manual-receipt integration) / web **1162** green.
+
+### 8.15 - Attach receipts to existing payments + LLM reconciliation
+
+Closes the loop the user asked for: existing payments can have a receipt
+attached, it's analysed by the LLM, and if the extracted total/category
+differ from the payment a confirmation dialog lets the user keep or update
+each — products update regardless (design §3).
+
+**API.** `POST /payments/:id/receipt` (file) and `/receipt-url` create the
+receipt with `paymentId` set **at creation** — a `PaymentReceiptController`
+in the receipt module (routed under `/payments` to dodge a circular import
+into PaymentModule). Guards: expense payments the caller created only
+(404-not-403), one receipt per payment (unique `payment_id`). Extraction
+runs unchanged; `confirm` now rejects attached receipts (they finish via
+reconcile). `POST /receipts/:id/reconcile` `{ applyTotal, applyCategory }`
+flips REVIEW → CONFIRMED **without creating a payment** and, per the flags,
+overwrites the payment's amount (+currency) and/or category — the payment
+mutation reuses `PaymentService.update` for validation/audit/realtime.
+The receipt's category is its **dominant item category by spend**, a new
+shared `dominantReceiptCategoryId` used by both the endpoint and the web
+dialog so they never disagree. Item `purchasedAt` is frozen to the
+payment date; audit `RECEIPT_RECONCILED`.
+
+**Web.** `AttachReceiptDialog` (device + URL — the LLM-analysed paths)
+opens from a new expense-only "Attach receipt" row-menu action and hands
+off to the receipt review page. `ReconcileReceiptDialog` fetches the
+payment, compares total + category, and offers keep/update per differing
+field (defaulting to the receipt); it auto-opens the moment an attached
+receipt reaches REVIEW, and the review page swaps Confirm → Reconcile for
+any receipt carrying a `paymentId`. The datetime helpers extracted in 8.14
+are reused. Full a11y (dialog semantics, radio groups, focus, Esc) + dark
+mode; EN+HE strings.
+
+**Tests.** Service (attach guards: ownership 404, duplicate, non-expense;
+reconcile applies total+currency+dominant category then CONFIRMS, no-op
+when both false, not-attached rejected; confirm rejects attached),
+`PaymentReceiptController`, and 6 integration cases (attach, foreign-404,
+duplicate-400, reconcile applies, reconcile no-op, attached-can't-confirm).
+Web: `AttachReceiptDialog` (3), `ReconcileReceiptDialog` (4), PaymentRow
+attach-item visibility (3), review-page reconcile branch (2). api unit
+**1113** (+6 integration) / web **1174** green.
+
+### 8.17 - Online-receipt URL intake: provider adapters + empty-result guard
+
+Bug fix (design §5). A real online receipt — a Pairzon e-receipt link —
+imported **blank**: the review opened with nothing extracted. Root cause:
+the page is a **client-side-rendered SPA**. The short link 302s to an HTML
+shell with no receipt data; the browser then loads it over XHR from a JSON
+endpoint (`/v1.0/documents/<docId>?p=<prefix>`). Our server fetch only saw
+the shell (reduced to a few hundred chars of chrome ending "Loading…"), so
+the model read nothing and the receipt landed in REVIEW empty. Automated
+tests and a green deploy missed it — none exercised a real SPA receipt.
+
+**API.** URL resolution moved out of the worker into a new
+`ReceiptUrlIntakeService` fronted by a **provider registry**. An adapter
+`matches(host)` and `resolveDataUrl(url, fetchSafe)` points the fetcher at
+the real data endpoint (returns `null` to defer to the generic path). The
+**Pairzon** adapter follows the short-link redirect to learn `docId` +
+`prefix` then reads the JSON document — exactly what the browser does, **no
+headless browser**. The generic path (PDF/image → native inputs, HTML →
+readable text, all from 8.12) is unchanged but now wrapped by an
+**empty-result guard**: an all-empty extraction (no merchant/total/items)
+fails fast with guidance ("open the link and upload a screenshot or PDF
+instead") instead of a silent empty REVIEW — the net for any un-adapted SPA
+or junk link. Abuse guards: per-host egress rate-limit across ALL users
+(DB-counted window → **transient** back-off, not failure, so a provider's
+own defences can't get our IP blocked for everyone); SSRF guard still runs
+per redirect hop; 10 MB cap unchanged. Every attempt logs one anonymized,
+**user-unlinked** `receipt_url_intakes` row (host + path masked to its
+shape `/:token/:token` + provider + outcome) to spot providers worth
+adapting, without hoarding live bearer-links. Migration
+`20260713190000_phase8_17_receipt_url_intake`.
+
+**Deferred.** Headless-render fallback for unknown SPA hosts — the provider
+interface is the seam; the anonymized log will tell us which hosts justify
+it. Until then those hit the empty-result guard.
+
+**Tests.** URL fetch/route tests moved from the processor spec into a new
+`receipt-url-intake.service.spec.ts` (HTML reduce, PDF/image by magic
+bytes, unsupported/oversized/4xx permanent vs 5xx transient, redirect +
+per-hop SSRF, loopback reject, host-politeness back-off, path-shape
+logging, Pairzon dispatch incl. the reported short-link case) +
+`pairzon.provider.spec.ts` (host match, id-in-query, redirect discovery,
+drift → null, JSON reduction) + `maskPath` + processor delegation/empty-guard
+cases. api unit **1138** green.
+
+**Staging verification found a second bug (fixed).** With the adapter live,
+the reported URL stopped landing blank but now **failed** with "Provider
+returned non-JSON output". Cause (from staging logs): the adapter handed the
+model the **raw** ~30 KB Pairzon JSON (~21 K input tokens of hashes, ids,
+loyalty and per-item category trees); the model thought over the noise and
+hit the output ceiling, truncating the structured JSON mid-array
+(`stop=max_tokens`). Fix: the adapter now **reduces** the document to a
+compact receipt text (merchant/date/currency/total + one line per item with
+barcode/qty/price/discount, ~1.4 K tokens for a 39-line receipt), dropping
+the shopper's loyalty name and masked card/voucher `notes` so that PII never
+reaches the model; and the shared extraction output cap was raised
+(8192 → 16384, `EXTRACTION_MAX_OUTPUT_TOKENS`, DRY across both providers) for
+large grocery receipts. The provider interface became `resolveContent` (the
+adapter owns both the endpoint and the reduction). Verified the reducer
+against the real captured document (30495 → 4101 chars, no PII leak).
+Staging verification **passed** — the reported receipt now extracts merchant,
+total and all 39 line items into REVIEW.
+
+### 8.18 - Accessible receipt document viewer + payment-view purchase details
+
+Follow-up UX from the same review (the receipt page's inline preview was hard
+to read, and a payment gave no at-a-glance list of what was bought).
+
+**Receipt page — popup document viewer.** New `ReceiptDocumentViewer`: a
+portal-mounted, focus-trapped dialog (the app's standard modal pattern —
+ESC/backdrop close, focus snapshot+restore, Tab trap). Images support zoom
+(buttons, wheel, `+`/`-`/`0` keys) and drag-to-pan; PDFs render in the
+browser's native viewer with a download fallback. The review page's inline
+image is now a button that opens it; PDFs get a "view document" button. URL
+receipts keep their external link (nothing to embed). Uploaded blob is reused
+from the existing preview fetch.
+
+**Payment view — foldable purchase details.** New `PaymentPurchaseDetails`
+replaces the bare "view receipt" link with an accessible disclosure
+(`aria-expanded`/`aria-controls`) that **lazy-loads** the linked receipt on
+first expand and lists its products/services (name + brand, quantity × unit,
+line total in the payment currency), plus the full-receipt link. A receipt is
+private to its uploader, so a co-viewer of a shared payment who can't read it
+gets a soft "unavailable" note (404/403) rather than an error; other failures
+show the retry banner.
+
+**Tests.** `ReceiptDocumentViewer` (image zoom controls, PDF branch, loading,
+ESC/backdrop/close) + `PaymentPurchaseDetails` (collapsed-by-default, lazy
+load + list + currency, fetch-once across toggles, empty, 404-unavailable) +
+updated `payment-detail` spec for the fold. EN+HE strings; orphaned
+`receiptTitle` removed. web **1184** green; typecheck clean.
+
+### 8.19 - Payment Documents panel, cross-member receipt access, navigation
+
+_Status: shipped._ Receipt↔payment cohesion fixes raised on staging
+(design §7):
+
+- **Cross-member receipt access** (API): a receipt linked to a payment should
+  be viewable by anyone who can see the payment (e.g. group members), not just
+  the uploader. Receipt reads (`GET /receipts/:id`, `/file`) move to a
+  `loadViewableOrThrow` guard (uploader OR `PaymentService.assertVisible` on
+  the linked payment); mutations stay uploader-only.
+- **Documents panel** (web): replace the stale "coming in Phase 9"
+  placeholder with a real `PaymentDocuments` list of the payment's receipt
+  file(s), opened in the 8.18 viewer.
+- **Payments nav** (web): surface the existing `/payments` list (6.16) in the
+  sidebar.
+- **Receipt → payment backlink** (web): link the receipt review page to its
+  attributed payment when `paymentId` is set.
+
+API: `loadViewableOrThrow` (owner OR `assertVisible` on the linked payment)
+for `getOne`/`openFile`; mutations unchanged. Web: `PaymentDocuments` (file
+row + shared viewer, URL link-out, unavailable/none states) replacing the
+deleted placeholder; sidebar **Transactions** item (the stale unused
+`nav.transactions` key repurposed — the label is "Transactions", the umbrella
+term for income/expense/transfers, not "Payments"); receipt→transaction
+backlink. api unit **1141** / web **1188** green; both typechecks clean.
+Follow-up: a full **Payment → Transaction** rename (API routes + entity + DB
+table, per user decision) lands next as its own change.
+
+**Hotfix (staging verification):** the Documents viewer spun forever. Staging
+logs showed `GET /receipts/:id/file` → 404 "Receipt file not found" — the DB
+row exists but the FILE is gone. Root cause: the api service had **no volume**
+for `RECEIPT_STORAGE_DIR`, so uploaded receipt files lived in the container's
+writable layer and were destroyed on every blue/green swap (files uploaded
+before the last deploy are unrecoverable; DB rows remain). Fix: fixed-name
+`…-receipts` volume mounted at `/data/receipts` + `RECEIPT_STORAGE_DIR` env in
+BOTH staging and production compose (fixed `name:` because each slot runs
+under its own compose project). Web: the silent `catch` that turned that 404
+into an endless spinner now surfaces a `loadFailed` error in the viewer
+(`loadError` prop) and an inline error on the review-page preview; close +
+reopen retries. Also: the viewer is now titled by the **file name** — leading
+with the merchant name (receipt data in the receipt's own language, e.g.
+"קסטרו") read as a localisation bug for an EN user.
+
+### 8.20 - Rename Payment → Transaction end-to-end
+
+Per user decision: "Payment" was the wrong umbrella term for an entity that
+also models incomes and (future) user-to-user transfers; the product term is
+**Transaction** (HE: תנועה, plural תנועות). ~6,000 occurrences across ~200
+files renamed in one sweep (design §8).
+
+**DB.** Hand-written migration `20260715120000_rename_payments_to_transactions`:
+7 tables, all `payment_id`/`parent_payment_id`/`payments_count` columns, every
+index and FK constraint name — FKs dropped → renamed → re-added with identical
+referential actions; pure renames, zero data touched. Two uniques whose new
+default names exceed MySQL's 64-char limit pinned via `map:`. Validated with
+`prisma migrate diff` against the applied DB: **no drift** (the check caught
+one missed column, `payments_count`, before anything shipped).
+
+**API.** `src/payment` → `src/transaction`; routes `/api/v1/transactions`;
+`TRANSACTION_*` error codes/audit actions; realtime events
+`transaction.*`; queue `transaction-occurrences` + scheduler ids. BullMQ job
+schedulers live only in Redis keyed by queue name, so the rename added an
+`onApplicationBootstrap` **scheduler reconciliation** (re-upserts every live
+schedule from the DB) — this also permanently self-heals Redis loss, which
+previously would have silently killed all recurring schedules. Old
+`bull:payment-occurrences:*` Redis keys are orphaned and cleaned manually on
+the servers.
+
+**Web.** Route `/payments` → `/transactions` (segment `[transactionId]`),
+`lib/transaction` + `components/transaction`, testids, i18n keys and values in
+BOTH locales. The Hebrew pass rewrote gender agreement (תשלום m. → תנועה f.:
+נמחק→נמחקה, זה→זו, חוזר→חוזרת, …). Kept real-world payment senses:
+"repayment" (loan DTOs), "payment cards" (pairzon reducer), and the DUE status
+label לתשלום (the act of paying, not the entity). localStorage last-used keys
+renamed (users lose remembered form defaults once).
+
+**Docs.** Living docs renamed (`phase-6-payments-design.md` →
+`phase-6-transactions-design.md`, receipt/products/budgets design docs,
+UI conventions, IMPLEMENTATION-PLAN); the progress journal and RCA
+post-mortems stay historical — only link paths updated.
+
+**Tests.** api unit **1143** green; web **1190** green; both typechecks +
+lints clean. Full API integration suite run: all transaction/receipt/product
+suites pass; one stale expectation fixed (INSTALLMENT now correctly demands a
+plan body — plans shipped in 6.20); remaining failures are pre-existing
+environmental issues in legacy auth-era suites (they boot AppModule against
+the shared dev DB with hard-coded emails and no cleanup — rerun-hostile) plus
+testcontainer start flakes; none touch the renamed surface.

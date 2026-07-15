@@ -1,34 +1,31 @@
-import type { ExtractionResult } from '@myfinpro/shared';
+import { type ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Job } from 'bullmq';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductMatchingService, type MatchProposal } from '../product/product-matching.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { mapReceiptToDto, type ReceiptWithRelations } from './dto/receipt-response.dto';
 import {
   ExtractionFailedError,
-  RECEIPT_EXTRACTION_PROVIDER,
   type ExtractionInput,
-  type ReceiptExtractionProvider,
 } from './extraction/extraction-provider.interface';
+import {
+  ExtractionResolverService,
+  type ResolvedExtraction,
+} from './extraction/extraction-resolver.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { RECEIPT_INCLUDE } from './receipt.service';
-import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
+import { ReceiptUrlIntakeService } from './url-intake/receipt-url-intake.service';
 
 type ExtractionJobData = { receiptId: string };
 
 type ProcessOutcome =
   | { extracted: true; receiptId: string; items: number }
   | { extracted: false; reason: string };
-
-/** Cap for fetched URL snapshots handed to the provider. */
-const URL_SNAPSHOT_MAX_CHARS = 500_000;
-const URL_FETCH_TIMEOUT_MS = 20_000;
-/** Redirect hops the fetcher will follow (each re-validated by the SSRF guard). */
-const URL_MAX_REDIRECTS = 5;
 
 /**
  * Phase 7, iteration 7.6 — the extraction worker (design §6.2).
@@ -51,8 +48,10 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly storage: ReceiptStorageService,
     private readonly categoryService: CategoryService,
+    private readonly productMatcher: ProductMatchingService,
     private readonly eventBus: EventBus,
-    @Inject(RECEIPT_EXTRACTION_PROVIDER) private readonly provider: ReceiptExtractionProvider,
+    private readonly extractionResolver: ExtractionResolverService,
+    private readonly urlIntake: ReceiptUrlIntakeService,
   ) {
     super();
   }
@@ -86,7 +85,11 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     }
 
     const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+    // Phase 8.11 — resolved inside the try so a permanent resolver failure
+    // (selected model retired, no API key) rides the normal FAILED path.
+    let resolved: ResolvedExtraction | null = null;
     try {
+      resolved = await this.extractionResolver.resolveForUser(receipt.uploadedById);
       const input = await this.buildInput(receipt);
 
       // Candidate categories: the uploader's visible OUT set (BOTH matches).
@@ -96,20 +99,62 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       const candidates = categories.map((c) => ({ id: c.id, name: c.name }));
       const candidateIds = new Set(candidates.map((c) => c.id));
 
-      const result = await this.provider.extract(input, {
+      // Product candidates for LLM ranking — the cross-language matching
+      // stage (Phase 8.3, design §1.2).
+      const productCandidates = await this.productMatcher.getUserProductCandidates(
+        receipt.uploadedById,
+      );
+      const productCandidateIds = new Set(productCandidates.map((p) => p.id));
+
+      const result = await resolved.provider.extract(input, {
         categories: candidates,
+        products: productCandidates,
         locale: receipt.uploadedBy?.locale ?? undefined,
       });
 
-      const itemCount = await this.persistResult(receiptId, result, candidateIds);
+      // Phase 8.17 — never land a receipt in REVIEW with nothing in it. A
+      // JS-rendered page we can't read, or an unrelated link, yields an
+      // all-empty result; fail it with actionable guidance instead of a
+      // silent empty review. (For URL receipts, also record the empty
+      // outcome in the anonymized log so we can spot providers to adapt.)
+      if (isEmptyExtraction(result)) {
+        if (receipt.source === 'url' && receipt.sourceUrl) {
+          void this.urlIntake.recordUrlOutcome(receipt.sourceUrl, null, 'empty_result');
+        }
+        throw new ExtractionFailedError(
+          receipt.source === 'url'
+            ? 'Could not read this receipt from the link (it may load its content in the browser). ' +
+                'Open the link and upload a screenshot or PDF instead.'
+            : 'Could not read any receipt details from this file.',
+        );
+      }
+
+      // Providers must pick product ids from the injected list; drop drift,
+      // then run the deterministic stages and merge (Phase 8.3).
+      const proposals = await this.productMatcher.matchItems(
+        result.items.map((item) => ({
+          rawName: item.rawName,
+          suggestedProductId:
+            item.suggestedProductId && productCandidateIds.has(item.suggestedProductId)
+              ? item.suggestedProductId
+              : null,
+        })),
+        result.confidence,
+      );
+
+      const itemCount = await this.persistResult(receiptId, result, candidateIds, proposals);
       void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTED', {
-        provider: this.provider.name,
+        provider: resolved.providerName,
+        model: resolved.model,
+        keySource: resolved.keySource,
         items: itemCount,
         confidence: result.confidence,
       });
       await this.publishUpdated(receipt.uploadedById, receiptId);
       this.logger.log(
-        `Receipt ${receiptId} extracted via '${this.provider.name}' (${itemCount} items) → REVIEW`,
+        `Receipt ${receiptId} extracted via '${resolved.providerName}' ` +
+          `(model=${resolved.model ?? 'default'} keySource=${resolved.keySource}, ` +
+          `${itemCount} items) → REVIEW`,
       );
       return { extracted: true, receiptId, items: itemCount };
     } catch (err) {
@@ -121,7 +166,9 @@ export class ReceiptExtractionProcessor extends WorkerHost {
           data: { status: 'FAILED', failureReason: reason },
         });
         void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTION_FAILED', {
-          provider: this.provider.name,
+          provider: resolved?.providerName ?? 'unresolved',
+          model: resolved?.model ?? null,
+          keySource: resolved?.keySource ?? null,
           permanent,
           reason,
         });
@@ -151,8 +198,10 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       if (!receipt.sourceUrl) {
         throw new ExtractionFailedError('URL receipt has no sourceUrl');
       }
-      const snapshot = await this.fetchUrlSnapshot(receipt.sourceUrl);
-      return { kind: 'html', data: snapshot, sourceUrl: receipt.sourceUrl };
+      // Phase 8.17 — provider adapters (client-rendered SPAs → their JSON
+      // data endpoint), generic PDF/image/HTML routing, egress politeness and
+      // anonymized analysis logging all live in the intake service.
+      return this.urlIntake.resolve(receipt.sourceUrl);
     }
     if (!receipt.fileRef) {
       throw new ExtractionFailedError('Receipt has no stored file');
@@ -164,70 +213,37 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     return { kind: 'image', data: buffer, mimeType: receipt.mimeType ?? 'image/jpeg' };
   }
 
-  /**
-   * Fetch the online receipt. Redirects are followed manually so the SSRF
-   * guard runs on every hop (a `redirect: 'follow'` would let a public URL
-   * bounce to an internal address unchecked). Transient network / 5xx errors
-   * ride the BullMQ retry path; unsafe targets and 4xx are permanent.
-   */
-  private async fetchUrlSnapshot(url: string): Promise<string> {
-    let current: URL;
-    try {
-      current = assertPublicReceiptUrl(url);
-    } catch (err) {
-      throw new ExtractionFailedError(
-        err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid receipt URL',
-      );
-    }
-
-    for (let hop = 0; hop <= URL_MAX_REDIRECTS; hop++) {
-      const res = await fetch(current, {
-        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
-        redirect: 'manual',
-        headers: { 'User-Agent': 'myfinpro-receipt-fetcher/1.0' },
-      });
-
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location');
-        if (!location) throw new ExtractionFailedError('Redirect without a Location header');
-        if (hop === URL_MAX_REDIRECTS) throw new ExtractionFailedError('Too many redirects');
-        try {
-          current = assertPublicReceiptUrl(new URL(location, current).toString());
-        } catch (err) {
-          throw new ExtractionFailedError(
-            err instanceof UnsafeReceiptUrlError ? err.message : 'Invalid redirect target',
-          );
-        }
-        continue;
-      }
-
-      if (!res.ok) {
-        // Permanent for client errors (dead link), transient for 5xx.
-        if (res.status >= 400 && res.status < 500) {
-          throw new ExtractionFailedError(`Receipt URL returned ${res.status}`);
-        }
-        throw new Error(`Receipt URL fetch failed (${res.status})`);
-      }
-      const text = await res.text();
-      return text.slice(0, URL_SNAPSHOT_MAX_CHARS);
-    }
-    // Unreachable — the loop returns or throws — but satisfies the type checker.
-    throw new ExtractionFailedError('Too many redirects');
-  }
-
   /** Persist header + items and flip to REVIEW in one transaction. */
   private async persistResult(
     receiptId: string,
     result: ExtractionResult,
     candidateIds: Set<string>,
+    proposals: MatchProposal[],
   ): Promise<number> {
+    // Default categories for auto-linked products backfill lines the
+    // extraction left uncategorized (only ids visible to the uploader).
+    const autoIds = [
+      ...new Set(proposals.map((p) => p.autoProductId).filter((id): id is string => !!id)),
+    ];
+    const autoDefaults = new Map(
+      autoIds.length > 0
+        ? (
+            await this.prisma.product.findMany({
+              where: { id: { in: autoIds } },
+              select: { id: true, defaultCategoryId: true },
+            })
+          ).map((p) => [p.id, p.defaultCategoryId])
+        : [],
+    );
+
+    const purchasedAt = result.purchasedAt ? new Date(result.purchasedAt) : null;
     await this.prisma.$transaction(async (tx) => {
       await tx.receipt.update({
         where: { id: receiptId },
         data: {
           status: 'REVIEW',
           extractedMerchantName: result.merchantName,
-          purchasedAt: result.purchasedAt ? new Date(result.purchasedAt) : null,
+          purchasedAt,
           currency: result.currency,
           totalCents: result.totalCents,
           discountCents: result.discountCents,
@@ -238,20 +254,36 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       await tx.receiptItem.deleteMany({ where: { receiptId } });
       if (result.items.length > 0) {
         await tx.receiptItem.createMany({
-          data: result.items.map((item, index) => ({
-            receiptId,
-            position: index + 1,
-            rawName: item.rawName.slice(0, 300),
-            quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
-            unitPriceCents: item.unitPriceCents,
-            discountCents: item.discountCents,
-            totalCents: item.totalCents,
+          data: result.items.map((item, index) => {
+            const proposal = proposals[index];
+            const autoProductId = proposal?.autoProductId ?? null;
             // Providers must pick from the candidate list; drop anything else.
-            categoryId:
+            let categoryId =
               item.suggestedCategoryId && candidateIds.has(item.suggestedCategoryId)
                 ? item.suggestedCategoryId
-                : null,
-          })),
+                : null;
+            if (!categoryId && autoProductId) {
+              const fallback = autoDefaults.get(autoProductId);
+              if (fallback && candidateIds.has(fallback)) categoryId = fallback;
+            }
+            return {
+              receiptId,
+              position: index + 1,
+              rawName: item.rawName.slice(0, 300),
+              quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
+              unitPriceCents: item.unitPriceCents,
+              discountCents: item.discountCents,
+              totalCents: item.totalCents,
+              categoryId,
+              productId: autoProductId,
+              matchStatus: autoProductId ? 'AUTO' : 'PENDING',
+              matchCandidates:
+                proposal && proposal.candidates.length > 0
+                  ? (proposal.candidates as unknown as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
+              purchasedAt,
+            };
+          }),
         });
       }
     });
@@ -301,4 +333,17 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       );
     }
   }
+}
+
+/**
+ * True when extraction yielded nothing usable — no merchant, no positive
+ * total, and no line items. Such a result is worthless as a review (it can't
+ * become a transaction) and usually means the content was never actually read
+ * (a JS-rendered page, an unrelated link). Phase 8.17.
+ */
+export function isEmptyExtraction(result: ExtractionResult): boolean {
+  const noMerchant = !result.merchantName || result.merchantName.trim().length === 0;
+  const noTotal = result.totalCents === null || result.totalCents <= 0;
+  const noItems = result.items.length === 0;
+  return noMerchant && noTotal && noItems;
 }

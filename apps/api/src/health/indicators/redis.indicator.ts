@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
 import type { Queue } from 'bullmq';
-import { PAYMENT_OCCURRENCES_QUEUE } from '../../queue/queue.constants';
+import { TRANSACTION_OCCURRENCES_QUEUE } from '../../queue/queue.constants';
 
 /**
  * Hard cap for the Redis ping. ioredis's reconnect loop can otherwise hold
@@ -30,7 +30,7 @@ export const REDIS_PING_TIMEOUT_MS = 2000;
 @Injectable()
 export class RedisHealthIndicator extends HealthIndicator {
   constructor(
-    @InjectQueue(PAYMENT_OCCURRENCES_QUEUE)
+    @InjectQueue(TRANSACTION_OCCURRENCES_QUEUE)
     private readonly queue: Queue,
   ) {
     super();

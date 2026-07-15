@@ -35,14 +35,18 @@ describe('EventsController', () => {
     const obs = controller.stream({ sub: 'u1', email: 'a', name: 'A' }, req);
     const collected = firstValueFrom(obs.pipe(take(1)));
 
-    const event: RealtimeEvent = { type: 'payment.deleted', userIds: ['u1'], paymentId: 'p1' };
+    const event: RealtimeEvent = {
+      type: 'transaction.deleted',
+      userIds: ['u1'],
+      transactionId: 'p1',
+    };
     // Allow the inner subscribe to wire up before publishing.
     await new Promise((r) => setTimeout(r, 0));
     bus.publish(event);
 
     const msg = await collected;
     expect(msg.id).toBeDefined();
-    expect(msg.data).toMatchObject({ type: 'payment.deleted', paymentId: 'p1' });
+    expect(msg.data).toMatchObject({ type: 'transaction.deleted', transactionId: 'p1' });
   });
 
   it('does not stream events targeted at other users', async () => {
@@ -51,11 +55,11 @@ describe('EventsController', () => {
     const collected = firstValueFrom(obs.pipe(take(1)));
 
     await new Promise((r) => setTimeout(r, 0));
-    bus.publish({ type: 'payment.deleted', userIds: ['u2'], paymentId: 'p1' });
-    bus.publish({ type: 'payment.deleted', userIds: ['u1'], paymentId: 'p2' });
+    bus.publish({ type: 'transaction.deleted', userIds: ['u2'], transactionId: 'p1' });
+    bus.publish({ type: 'transaction.deleted', userIds: ['u1'], transactionId: 'p2' });
 
     const msg = await collected;
-    expect((msg.data as { paymentId: string }).paymentId).toBe('p2');
+    expect((msg.data as { transactionId: string }).transactionId).toBe('p2');
   });
 
   it('terminates the stream when the client disconnects', async () => {
