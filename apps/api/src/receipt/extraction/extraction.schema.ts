@@ -7,11 +7,14 @@
  */
 /**
  * Output-token ceiling for the extraction call, shared by both providers.
- * A real grocery receipt runs to dozens of line items (plus the provider's
- * adaptive thinking); the earlier 8192 truncated large receipts mid-JSON,
- * surfacing as a "non-JSON output" parse failure (Phase 8.17).
+ * A real grocery receipt runs to dozens of line items, and on Anthropic the
+ * model's adaptive thinking spends from the SAME budget — 8192 (Phase 8.17)
+ * and then 16384 (8.21, a ~50-line receipt on Sonnet 5's denser tokenizer)
+ * both truncated mid-JSON, surfacing as a "non-JSON output" parse failure.
+ * 64K forces streaming on the Anthropic SDK (HTTP-timeout guidance >16K);
+ * providers must also surface truncation as its own error, not a parse one.
  */
-export const EXTRACTION_MAX_OUTPUT_TOKENS = 16384;
+export const EXTRACTION_MAX_OUTPUT_TOKENS = 64_000;
 
 export const EXTRACTION_RESULT_JSON_SCHEMA = {
   type: 'object',
