@@ -58,6 +58,7 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
         additionalProperties: false,
         required: [
           'rawName',
+          'barcode',
           'quantity',
           'unitPriceCents',
           'discountCents',
@@ -69,6 +70,12 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
           rawName: {
             type: 'string',
             description: 'Item name exactly as printed (keep original language).',
+          },
+          barcode: {
+            type: ['string', 'null'],
+            description:
+              'Product barcode digits printed on/near the line (EAN/UPC, 8–14 digits, e.g. ' +
+              '7290119381043), or null. Short internal store codes (1–7 digits) are NOT barcodes.',
           },
           quantity: {
             type: 'number',
@@ -133,6 +140,8 @@ export function buildExtractionPrompt(ctx: {
     'Rules:',
     '- All money values are INTEGER cents (45.90 → 4590). Never use floats for money.',
     '- Keep item names exactly as printed, in their original language.',
+    '- Many receipts print a product barcode (EAN/UPC, 8–14 digits) next to each line — return',
+    '  it in barcode. Short internal store codes (1–7 digits) are not barcodes; use null.',
     '- Line totals are AFTER line-level discounts; receipt-level discounts go in discountCents.',
     '- Dates: prefer an explicit printed date/time; return ISO 8601. When the day/month order is' +
       ` ambiguous, assume the ${ctx.locale ?? 'en'} locale convention.`,

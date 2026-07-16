@@ -25,6 +25,13 @@ export class ReceiptItemResponseDto {
   @ApiProperty()
   rawName!: string;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'Product code read off the printed line (normalized GTIN), 8.21.',
+  })
+  barcode!: string | null;
+
   @ApiProperty({ description: 'Decimal quantities allowed (e.g. 0.732 kg).' })
   quantity!: number;
 
@@ -146,6 +153,7 @@ export function mapReceiptItemToDto(item: ReceiptItemWithProduct): ReceiptItemRe
     id: item.id,
     position: item.position,
     rawName: item.rawName,
+    barcode: item.barcode,
     quantity: Number(item.quantity),
     unitPriceCents: item.unitPriceCents,
     discountCents: item.discountCents,

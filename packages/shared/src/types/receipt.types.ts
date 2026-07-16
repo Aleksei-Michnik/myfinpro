@@ -38,6 +38,12 @@ export type ExtractionConfidence = (typeof EXTRACTION_CONFIDENCES)[number];
 /** One extracted line item. All money values are integer cents. */
 export interface ExtractedItem {
   rawName: string;
+  /**
+   * Phase 8.21 — product code printed on the line (EAN/UPC digits), or
+   * null. Feeds the barcode stage of the matcher exactly like a manually
+   * scanned code; short internal store codes are not barcodes.
+   */
+  barcode: string | null;
   /** Decimal quantities are legit (e.g. 0.732 kg). */
   quantity: number;
   unitPriceCents: number | null;
@@ -149,6 +155,9 @@ export function validateExtractionResult(value: unknown): {
       if (typeof it.rawName !== 'string' || it.rawName.trim().length === 0) {
         fail(`${p}.rawName`, 'must be a non-empty string');
       }
+      if (!isStringOrNull(it.barcode ?? null)) {
+        fail(`${p}.barcode`, 'must be string or null');
+      }
       if (!isFiniteNumber(it.quantity) || (it.quantity as number) <= 0) {
         fail(`${p}.quantity`, 'must be a positive number');
       }
@@ -176,6 +185,7 @@ export function validateExtractionResult(value: unknown): {
   const items = (v.items as Record<string, unknown>[]).map(
     (it): ExtractedItem => ({
       rawName: (it.rawName as string).trim(),
+      barcode: ((it.barcode as string | null) ?? null)?.trim() || null,
       quantity: it.quantity as number,
       unitPriceCents: (it.unitPriceCents ?? null) as number | null,
       discountCents: (it.discountCents ?? 0) as number,

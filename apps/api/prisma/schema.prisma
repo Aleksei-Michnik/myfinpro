@@ -468,6 +468,10 @@ model ReceiptItem {
   position  Int
 
   rawName        String  @map("raw_name") @db.VarChar(300)
+  // Product code extracted from the printed line (8.21) — normalized GTIN,
+  // only stored when it passes the shared validity gate. Drives barcode
+  // auto-matching and, on a confirmed link, backfills Product.barcode.
+  barcode        String? @db.VarChar(14)
   quantity       Decimal @default(1) @db.Decimal(10, 3)
   unitPriceCents Int?    @map("unit_price_cents")
   discountCents  Int     @default(0) @map("discount_cents")

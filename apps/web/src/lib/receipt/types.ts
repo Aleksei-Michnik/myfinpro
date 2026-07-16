@@ -19,6 +19,8 @@ export interface ReceiptItem {
   id: string;
   position: number;
   rawName: string;
+  /** Product code read off the printed line (normalized GTIN), 8.21. */
+  barcode: string | null;
   quantity: number;
   unitPriceCents: number | null;
   discountCents: number;

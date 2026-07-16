@@ -112,6 +112,31 @@ describe('ProductMatchingService', () => {
     expect(prismaMock.productAlias.findMany).not.toHaveBeenCalled();
   });
 
+  it('barcode stage (8.21): extracted product codes auto-link at confidence 1.0', async () => {
+    prismaMock.product.findMany.mockImplementation(
+      ({ where }: { where: { barcode?: unknown; id?: unknown } }) => {
+        if (where.barcode) return Promise.resolve([{ id: 'p-9', barcode: '7290000066318' }]);
+        if (where.id) return Promise.resolve(heads([{ id: 'p-9', name: 'Snack Bar' }]));
+        return Promise.resolve([]);
+      },
+    );
+
+    const [withCode, internalCode] = await service.matchItems([
+      // Hyphenated OCR form normalizes to the stored GTIN.
+      { rawName: 'חטיף תפוציפס', barcode: '729-0000066318' },
+      // Short internal store code — gated out by the GTIN checksum.
+      { rawName: 'לחם', barcode: '169' },
+    ]);
+    expect(withCode.autoProductId).toBe('p-9');
+    expect(withCode.candidates[0]).toMatchObject({
+      productId: 'p-9',
+      stage: 'barcode',
+      confidence: 1,
+    });
+    expect(internalCode.autoProductId).toBeNull();
+    expect(internalCode.candidates).toEqual([]);
+  });
+
   it('searchRegistry resolves barcodes directly', async () => {
     prismaMock.product.findUnique.mockResolvedValue({
       id: 'p-7',

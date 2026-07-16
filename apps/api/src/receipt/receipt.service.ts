@@ -444,7 +444,7 @@ export class ReceiptService {
     // win; leftover same-name rows cover reordered lines.
     type MatchCarry = Pick<
       (typeof row.items)[number],
-      'productId' | 'matchStatus' | 'matchCandidates'
+      'productId' | 'matchStatus' | 'matchCandidates' | 'barcode'
     >;
     const byPositionAndName = new Map<string, MatchCarry>();
     const byName = new Map<string, MatchCarry[]>();
@@ -481,6 +481,7 @@ export class ReceiptService {
               receiptId: row.id,
               position: index + 1,
               rawName,
+              barcode: carry?.barcode ?? null,
               quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
               unitPriceCents: item.unitPriceCents ?? null,
               discountCents: item.discountCents ?? 0,
@@ -829,6 +830,21 @@ export class ReceiptService {
         user?.locale ?? null,
         'confirmation',
       );
+      // 8.21 — a confirmed link teaches the registry the printed barcode,
+      // exactly like a manual scan would: only onto a product that has none,
+      // and only when no other product owns the code (barcode is unique).
+      if (item.barcode) {
+        const [owner, target] = await Promise.all([
+          tx.product.findUnique({ where: { barcode: item.barcode }, select: { id: true } }),
+          tx.product.findUnique({ where: { id: productId }, select: { barcode: true } }),
+        ]);
+        if (!owner && target && !target.barcode) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { barcode: item.barcode },
+          });
+        }
+      }
     });
     void this.writeAudit(userId, row.id, 'RECEIPT_ITEM_MATCHED', {
       itemId: item.id,

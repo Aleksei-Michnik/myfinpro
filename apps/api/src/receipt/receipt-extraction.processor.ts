@@ -1,4 +1,4 @@
-import { type ExtractionResult } from '@myfinpro/shared';
+import { isValidGtin, normalizeGtin, type ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -134,6 +134,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       const proposals = await this.productMatcher.matchItems(
         result.items.map((item) => ({
           rawName: item.rawName,
+          barcode: item.barcode,
           suggestedProductId:
             item.suggestedProductId && productCandidateIds.has(item.suggestedProductId)
               ? item.suggestedProductId
@@ -266,10 +267,14 @@ export class ReceiptExtractionProcessor extends WorkerHost {
               const fallback = autoDefaults.get(autoProductId);
               if (fallback && candidateIds.has(fallback)) categoryId = fallback;
             }
+            const gtin = item.barcode ? normalizeGtin(item.barcode) : null;
             return {
               receiptId,
               position: index + 1,
               rawName: item.rawName.slice(0, 300),
+              // Only checksum-valid codes are worth keeping (8.21) — they
+              // drive re-matching and Product.barcode backfill on confirm.
+              barcode: gtin && isValidGtin(gtin) ? gtin : null,
               quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
               unitPriceCents: item.unitPriceCents,
               discountCents: item.discountCents,

@@ -1,4 +1,5 @@
 import {
+  isValidGtin,
   normalizeGtin,
   normalizeLookupName,
   PRODUCT_AUTO_MATCH_THRESHOLD,
@@ -82,12 +83,12 @@ export class ProductMatchingService {
   }
 
   /**
-   * Stage-match a batch of raw item names (+ optional per-item LLM
-   * suggestions validated by the caller against the injected candidate
-   * list). Returns one proposal per input, index-aligned.
+   * Stage-match a batch of raw item names (+ optional per-item extracted
+   * barcodes and LLM suggestions validated by the caller against the
+   * injected candidate list). Returns one proposal per input, index-aligned.
    */
   async matchItems(
-    items: { rawName: string; suggestedProductId?: string | null }[],
+    items: { rawName: string; barcode?: string | null; suggestedProductId?: string | null }[],
     extractionConfidence: 'high' | 'medium' | 'low' = 'medium',
   ): Promise<MatchProposal[]> {
     if (items.length === 0) return [];
@@ -96,6 +97,22 @@ export class ProductMatchingService {
       normalizeLookupName(item.rawName, PRODUCT_NAME_MAX_LENGTH),
     );
     const distinctNames = [...new Set(normalizedNames)].filter((n) => n.length > 0);
+
+    // ── Stage 1 pool (8.21): printed product codes, exact GTIN hits.
+    // The GS1 checksum gate also drops most OCR misreads — and only
+    // checksum-valid codes exist on Product.barcode anyway. ──
+    const normalizedBarcodes = items.map((item) =>
+      item.barcode ? normalizeGtin(item.barcode) : '',
+    );
+    const distinctBarcodes = [...new Set(normalizedBarcodes)].filter((b) => isValidGtin(b));
+    const barcodeRows =
+      distinctBarcodes.length > 0
+        ? await this.prisma.product.findMany({
+            where: { barcode: { in: distinctBarcodes } },
+            select: { id: true, barcode: true },
+          })
+        : [];
+    const byBarcode = new Map(barcodeRows.map((row) => [row.barcode!, row.id]));
 
     // ── Stage 2 pool: confirmed aliases, exact normalized hits ──
     const aliasRows =
@@ -137,6 +154,7 @@ export class ProductMatchingService {
 
     // One head fetch for every product any stage produced.
     const headIds = new Set<string>(llmIds);
+    for (const id of byBarcode.values()) headIds.add(id);
     for (const row of aliasByName.values()) headIds.add(row.productId);
     for (const id of exactByName.values()) headIds.add(id);
     for (const row of fuzzyPool) headIds.add(row.productId);
@@ -167,6 +185,9 @@ export class ProductMatchingService {
           confidence: Math.round(conf * 1000) / 1000,
         });
       };
+
+      const barcodeId = byBarcode.get(normalizedBarcodes[index]);
+      if (barcodeId) offer(barcodeId, 'barcode', BARCODE_CONFIDENCE);
 
       const alias = aliasByName.get(normalized);
       if (alias) {

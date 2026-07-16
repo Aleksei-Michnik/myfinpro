@@ -44,6 +44,7 @@ const makeItem = (over: Partial<ReceiptItem> = {}): ReceiptItem => ({
   id: 'i-1',
   position: 1,
   rawName: 'Milk 3%',
+  barcode: null,
   quantity: 2,
   unitPriceCents: 440,
   discountCents: 0,
