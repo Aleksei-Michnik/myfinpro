@@ -30,6 +30,10 @@ export interface ReceiptItem {
   productId: string | null;
   productName: string | null;
   productBrand: string | null;
+  /** Linked product has a processed image (thumbnail available), 8.23. */
+  productHasImage: boolean;
+  /** Cache-busting token for the product image endpoint. */
+  productImageVersion: string | null;
   matchStatus: ProductMatchStatus;
   matchCandidates: ProductMatchCandidate[];
 }

@@ -8,10 +8,17 @@
 // (per-item POST — no full-receipt churn), so closing mid-way is always
 // safe and SKIPPED items stay resumable.
 //
+// 8.23 — printed-code first: an item that carries an extracted barcode is
+// looked up automatically (registry → Open Food Facts). A registry owner
+// becomes the leading 100% candidate; an OFF hit becomes a one-click
+// "create & link" offer (edit-first optional). Saving splits into
+// stay / close / next so the dialog doubles as a per-row match editor
+// (opened via `initialItemId`).
+//
 // Keyboard-first (the 8.4 acceptance): ↑/↓ or 1–9 choose a candidate,
-// Enter confirms, S skips, N creates, ←/→ navigate, Esc closes. Focus is
-// trapped in the dialog; step changes are announced via aria-live;
-// transitions are instant (reduced-motion safe by construction).
+// Enter saves & advances, S skips, N creates, ←/→ navigate, Esc closes.
+// Focus is trapped in the dialog; step changes are announced via
+// aria-live; transitions are instant (reduced-motion safe by construction).
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,7 +28,11 @@ import { ProductFormDialog } from './ProductFormDialog';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useProducts } from '@/lib/product/product-context';
-import type { ProductMatchCandidate, ProductSummary } from '@/lib/product/types';
+import type {
+  BarcodeLookupResponse,
+  ProductMatchCandidate,
+  ProductSummary,
+} from '@/lib/product/types';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptItem, ReceiptSummary } from '@/lib/receipt/types';
 import type { CategoryDto } from '@/lib/transaction/types';
@@ -33,10 +44,15 @@ export interface ItemWalkthroughDialogProps {
   open: boolean;
   receipt: ReceiptSummary;
   categories: CategoryDto[];
+  /** Open focused on this item (row-click edit, 8.23) instead of the first pending one. */
+  initialItemId?: string;
   onClose(): void;
   /** Every per-item mutation returns the fresh receipt — parent stays in sync. */
   onReceiptUpdated(fresh: ReceiptSummary): void;
 }
+
+/** Where to land after a successful save (8.23 controls). */
+type AfterSave = 'stay' | 'close' | 'next';
 
 function formatMoney(cents: number | null, currency: string | null, locale: string): string {
   if (cents === null) return '—';
@@ -63,6 +79,7 @@ export function ItemWalkthroughDialog({
   open,
   receipt,
   categories,
+  initialItemId,
   onClose,
   onReceiptUpdated,
 }: ItemWalkthroughDialogProps) {
@@ -79,7 +96,15 @@ export function ItemWalkthroughDialog({
   const [searchResults, setSearchResults] = useState<Option[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState<string | undefined>(undefined);
   const [createBarcode, setCreateBarcode] = useState<string | undefined>(undefined);
+  // Printed-code lookup for the current item (8.23); cached per code so
+  // stepping back and forth doesn't refetch.
+  const [barcodeLookup, setBarcodeLookup] = useState<{
+    code: string;
+    res: BarcodeLookupResponse;
+  } | null>(null);
+  const lookupCache = useRef(new Map<string, BarcodeLookupResponse>());
 
   const actOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -93,10 +118,13 @@ export function ItemWalkthroughDialog({
     [items],
   );
 
-  // Start at the first unresolved item each time the dialog opens.
+  // Start at the requested item (row-click edit) or the first unresolved
+  // one each time the dialog opens.
   useEffect(() => {
     if (!open) return;
-    const first = items.findIndex((i) => i.matchStatus === 'PENDING');
+    const requested = initialItemId ? items.findIndex((i) => i.id === initialItemId) : -1;
+    const first =
+      requested !== -1 ? requested : items.findIndex((i) => i.matchStatus === 'PENDING');
     setIndex(first === -1 ? 0 : first);
     setSelected(0);
     setSearchText('');
@@ -119,6 +147,28 @@ export function ItemWalkthroughDialog({
     }
   }, [actOp.error, addToast, t]);
 
+  // Look up the item's printed code (registry → OFF) the moment it shows.
+  useEffect(() => {
+    setBarcodeLookup(null);
+    const code = item?.barcode;
+    if (!open || !code) return;
+    const cached = lookupCache.current.get(code);
+    if (cached) {
+      setBarcodeLookup({ code, res: cached });
+      return;
+    }
+    let cancelled = false;
+    void lookupBarcode(code)
+      .then((res) => {
+        lookupCache.current.set(code, res);
+        if (!cancelled) setBarcodeLookup({ code, res });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, item?.id, item?.barcode, lookupBarcode]);
+
   const options: Option[] = useMemo(() => {
     if (!item) return [];
     const proposals: Option[] = item.matchCandidates.map((c) => ({
@@ -128,6 +178,20 @@ export function ItemWalkthroughDialog({
       stage: c.stage,
       confidence: c.confidence,
     }));
+    // The printed code's registry owner is the strongest proposal (8.23).
+    const codeOwner =
+      barcodeLookup?.code === item.barcode && barcodeLookup.res.found
+        ? barcodeLookup.res.product
+        : undefined;
+    if (codeOwner && !proposals.some((p) => p.productId === codeOwner.id)) {
+      proposals.unshift({
+        productId: codeOwner.id,
+        name: codeOwner.name,
+        brand: codeOwner.brand,
+        stage: 'barcode',
+        confidence: 1,
+      });
+    }
     // A confirmed/auto link not present in the proposals leads the list.
     if (item.productId && !proposals.some((p) => p.productId === item.productId)) {
       proposals.unshift({
@@ -138,7 +202,7 @@ export function ItemWalkthroughDialog({
     }
     const seen = new Set(proposals.map((p) => p.productId));
     return [...proposals, ...searchResults.filter((r) => !seen.has(r.productId))];
-  }, [item, searchResults]);
+  }, [item, searchResults, barcodeLookup]);
 
   const goto = useCallback(
     (nextIndex: number) => {
@@ -147,10 +211,21 @@ export function ItemWalkthroughDialog({
     [items.length],
   );
 
-  /** After a mutation: jump to the next PENDING item, or stay on the last. */
-  const advance = useCallback(
-    (fresh: ReceiptSummary) => {
+  /**
+   * After a mutation: land where the save button said (8.23). 'next' jumps
+   * to the next PENDING item (wrapping to any earlier one), else stays.
+   * A confirmed link may have taught the registry the printed code, so the
+   * per-code lookup cache is dropped wholesale.
+   */
+  const applyResult = useCallback(
+    (fresh: ReceiptSummary, after: AfterSave) => {
+      lookupCache.current.clear();
       onReceiptUpdated(fresh);
+      if (after === 'close') {
+        onClose();
+        return;
+      }
+      if (after === 'stay') return;
       const next = fresh.items.findIndex(
         (i, position) => position > index && i.matchStatus === 'PENDING',
       );
@@ -161,29 +236,55 @@ export function ItemWalkthroughDialog({
       const anyPending = fresh.items.findIndex((i) => i.matchStatus === 'PENDING');
       if (anyPending !== -1) setIndex(anyPending);
     },
-    [index, onReceiptUpdated],
+    [index, onReceiptUpdated, onClose],
   );
 
   const confirmProduct = useCallback(
-    (productId: string) => {
+    (productId: string, after: AfterSave = 'next') => {
       if (!item || actOp.isLoading) return;
       void actOp
         .run((signal) => matchItem(receipt.id, item.id, { productId }, signal))
         .then((fresh) => {
-          if (fresh !== undefined) advance(fresh);
+          if (fresh !== undefined) applyResult(fresh, after);
         });
     },
-    [item, actOp, matchItem, receipt.id, advance],
+    [item, actOp, matchItem, receipt.id, applyResult],
   );
+
+  /** One-click "create & link" from the printed code's OFF prefill (8.23). */
+  const confirmCreateFromCode = useCallback(() => {
+    const prefill = barcodeLookup?.res.prefill;
+    if (!item || !prefill || actOp.isLoading) return;
+    void actOp
+      .run((signal) =>
+        matchItem(
+          receipt.id,
+          item.id,
+          {
+            createProduct: {
+              name: prefill.name ?? item.rawName,
+              brand: prefill.brand,
+              barcode: barcodeLookup.code,
+              aliasLocale: locale,
+              imageUrl: prefill.imageUrl ?? undefined,
+            },
+          },
+          signal,
+        ),
+      )
+      .then((fresh) => {
+        if (fresh !== undefined) applyResult(fresh, 'next');
+      });
+  }, [item, barcodeLookup, actOp, matchItem, receipt.id, locale, applyResult]);
 
   const skip = useCallback(() => {
     if (!item || actOp.isLoading) return;
     void actOp
       .run((signal) => skipItemMatch(receipt.id, item.id, signal))
       .then((fresh) => {
-        if (fresh !== undefined) advance(fresh);
+        if (fresh !== undefined) applyResult(fresh, 'next');
       });
-  }, [item, actOp, skipItemMatch, receipt.id, advance]);
+  }, [item, actOp, skipItemMatch, receipt.id, applyResult]);
 
   // Debounced registry search with AbortSignal reuse (design §6).
   const onSearch = (value: string) => {
@@ -216,6 +317,7 @@ export function ItemWalkthroughDialog({
         }
         // Unknown barcode → straight into create, code attached, OFF prefill
         // (or manual entry) handled inside the form.
+        setCreateName(undefined);
         setCreateBarcode(code);
         setCreateOpen(true);
       })
@@ -261,7 +363,8 @@ export function ItemWalkthroughDialog({
       case 'n':
       case 'N':
         e.preventDefault();
-        setCreateBarcode(undefined);
+        setCreateName(undefined);
+        setCreateBarcode(item.barcode ?? undefined);
         setCreateOpen(true);
         break;
       default: {
@@ -369,6 +472,14 @@ export function ItemWalkthroughDialog({
             {item.quantity} × {formatMoney(item.unitPriceCents, receipt.currency, locale)} ={' '}
             {formatMoney(item.totalCents, receipt.currency, locale)}
           </p>
+          {item.barcode && (
+            <p
+              className="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400"
+              data-testid="walkthrough-barcode"
+            >
+              {t('printedCode', { code: item.barcode })}
+            </p>
+          )}
           {item.productName && (
             <p
               className="mt-1 text-sm text-green-700 dark:text-green-400"
@@ -378,6 +489,46 @@ export function ItemWalkthroughDialog({
             </p>
           )}
         </div>
+
+        {/* Printed code known to Open Food Facts but not the registry yet —
+            matching is one click (create & link) or an edit-first (8.23). */}
+        {!item.productId &&
+          barcodeLookup?.code === item.barcode &&
+          !barcodeLookup.res.found &&
+          barcodeLookup.res.prefill?.name && (
+            <div
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm dark:border-primary-800 dark:bg-primary-900/30"
+              data-testid="walkthrough-code-offer"
+            >
+              <span className="min-w-0 flex-1 text-gray-800 dark:text-gray-200">
+                {t('codeRecognized', { name: barcodeLookup.res.prefill.name })}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCreateName(barcodeLookup.res.prefill?.name ?? undefined);
+                  setCreateBarcode(barcodeLookup.code);
+                  setCreateOpen(true);
+                }}
+                disabled={actOp.isLoading}
+                data-testid="walkthrough-code-edit"
+              >
+                {t('codeEditFirst')}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={confirmCreateFromCode}
+                disabled={actOp.isLoading}
+                data-testid="walkthrough-code-create"
+              >
+                {t('codeCreateLink')}
+              </Button>
+            </div>
+          )}
 
         {/* Candidates + search */}
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
@@ -513,7 +664,8 @@ export function ItemWalkthroughDialog({
             variant="outline"
             size="sm"
             onClick={() => {
-              setCreateBarcode(undefined);
+              setCreateName(undefined);
+              setCreateBarcode(item.barcode ?? undefined);
               setCreateOpen(true);
             }}
             disabled={actOp.isLoading}
@@ -533,13 +685,35 @@ export function ItemWalkthroughDialog({
           </Button>
           <Button
             type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => options[selected] && confirmProduct(options[selected].productId, 'stay')}
+            disabled={actOp.isLoading || !options[selected]}
+            data-testid="walkthrough-save-stay"
+          >
+            {t('saveStay')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              options[selected] && confirmProduct(options[selected].productId, 'close')
+            }
+            disabled={actOp.isLoading || !options[selected]}
+            data-testid="walkthrough-save-close"
+          >
+            {t('saveClose')}
+          </Button>
+          <Button
+            type="button"
             variant="primary"
             size="sm"
-            onClick={() => options[selected] && confirmProduct(options[selected].productId)}
+            onClick={() => options[selected] && confirmProduct(options[selected].productId, 'next')}
             disabled={actOp.isLoading || !options[selected]}
             data-testid="walkthrough-confirm"
           >
-            {t('confirm')}
+            {t('saveNext')}
           </Button>
         </div>
         <p className="text-center text-xs text-gray-400 dark:text-gray-500">{t('keyboardHint')}</p>
@@ -552,7 +726,7 @@ export function ItemWalkthroughDialog({
       />
       <ProductFormDialog
         open={createOpen}
-        initialName={item.rawName}
+        initialName={createName ?? item.rawName}
         initialBarcode={createBarcode}
         categories={categories}
         onCancel={() => setCreateOpen(false)}

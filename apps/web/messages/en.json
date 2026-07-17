@@ -1175,6 +1175,8 @@
       "confirmSaveFirst": "Save your changes before confirming",
       "matchProducts": "Match products ({count})",
       "matchProductsDone": "Products matched",
+      "itemMatchAction": "Match product…",
+      "itemEditMatch": "Edit match — {name}",
       "matchState": {
         "pending": "Product match pending",
         "auto": "Product auto-matched",
@@ -1258,6 +1260,10 @@
         "skipped": "Skipped"
       },
       "linkedTo": "Linked to {name}",
+      "printedCode": "Printed code {code}",
+      "codeRecognized": "Code recognized: {name}",
+      "codeCreateLink": "Create & link",
+      "codeEditFirst": "Edit first…",
       "searchLabel": "Search the product registry",
       "searchPlaceholder": "Search products…",
       "noCandidates": "No matches proposed — search, scan, or create a new product.",
@@ -1267,8 +1273,10 @@
       "scan": "Scan",
       "createNew": "New product",
       "skip": "Skip",
-      "confirm": "Confirm match",
-      "keyboardHint": "↑↓ choose · Enter confirm · S skip · N new · ←→ navigate · Esc close",
+      "saveStay": "Save & stay",
+      "saveClose": "Save & close",
+      "saveNext": "Save & next",
+      "keyboardHint": "↑↓ choose · Enter save & next · S skip · N new · ←→ navigate · Esc close",
       "actionFailed": "Could not update the item"
     },
     "detail": {
