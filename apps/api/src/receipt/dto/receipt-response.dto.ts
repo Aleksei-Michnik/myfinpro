@@ -9,6 +9,7 @@ import {
 } from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { Merchant, Product, Receipt, ReceiptFile, ReceiptItem } from '@prisma/client';
+import { productImageVersion } from '../../product/dto/product-response.dto';
 
 /**
  * Wire shape for one receipt line item (Phase 7.4). Money is integer
@@ -57,6 +58,16 @@ export class ReceiptItemResponseDto {
 
   @ApiPropertyOptional({ nullable: true, type: String })
   productBrand!: string | null;
+
+  @ApiProperty({ description: 'Linked product has a processed image (thumbnail available).' })
+  productHasImage!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'Cache-busting token for the product image endpoint.',
+  })
+  productImageVersion!: string | null;
 
   @ApiProperty({ enum: ['PENDING', 'AUTO', 'CONFIRMED', 'SKIPPED'] })
   matchStatus!: ProductMatchStatus;
@@ -152,7 +163,7 @@ export class ReceiptResponseDto {
 }
 
 export type ReceiptItemWithProduct = ReceiptItem & {
-  product: Pick<Product, 'name' | 'brand'> | null;
+  product: Pick<Product, 'name' | 'brand' | 'imageRef'> | null;
 };
 
 export type ReceiptWithRelations = Receipt & {
@@ -175,6 +186,8 @@ export function mapReceiptItemToDto(item: ReceiptItemWithProduct): ReceiptItemRe
     productId: item.productId,
     productName: item.product?.name ?? null,
     productBrand: item.product?.brand ?? null,
+    productHasImage: (item.product?.imageRef ?? null) !== null,
+    productImageVersion: productImageVersion(item.product?.imageRef ?? null),
     matchStatus: item.matchStatus as ProductMatchStatus,
     matchCandidates: Array.isArray(item.matchCandidates)
       ? (item.matchCandidates as unknown as ProductMatchCandidate[])

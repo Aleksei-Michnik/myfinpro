@@ -89,7 +89,10 @@ export class ProductController {
     return this.service.list(user.sub, query);
   }
 
-  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  // 60/min matches the list endpoint — the walkthrough auto-resolves each
+  // item's printed code (8.23), so a fast pass over a long receipt fires
+  // one lookup per distinct code.
+  @CustomThrottle({ limit: 60, ttl: 60_000 })
   @UseGuards(JwtAuthGuard)
   @Get('barcode/:code')
   @ApiBearerAuth()

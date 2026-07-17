@@ -43,6 +43,20 @@ vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: addToastMock }),
 }));
 
+// The walkthrough dialog has its own spec — the stub surfaces which item it
+// was opened on (row-click match editing, 8.23).
+vi.mock('@/components/product/ItemWalkthroughDialog', () => ({
+  ItemWalkthroughDialog: ({ open, initialItemId }: { open: boolean; initialItemId?: string }) =>
+    open ? <div data-testid="walkthrough-stub" data-initial-item={initialItemId ?? ''} /> : null,
+}));
+
+vi.mock('@/lib/product/product-context', () => ({
+  useProducts: () => ({
+    imageUrl: (p: { id: string; imageVersion: string | null }) =>
+      `/api/v1/products/${p.id}/image${p.imageVersion ? `?v=${p.imageVersion}` : ''}`,
+  }),
+}));
+
 // Confirm dialog is exercised in its own spec — here we stub it to a marker
 // that surfaces its props and lets us fire onConfirmed.
 vi.mock('@/components/receipt/ReceiptConfirmDialog', () => ({
@@ -158,6 +172,8 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
         productId: null,
         productName: null,
         productBrand: null,
+        productHasImage: false,
+        productImageVersion: null,
         matchStatus: 'PENDING' as const,
         matchCandidates: [],
       },
@@ -174,6 +190,8 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
         productId: null,
         productName: null,
         productBrand: null,
+        productHasImage: false,
+        productImageVersion: null,
         matchStatus: 'PENDING' as const,
         matchCandidates: [],
       },
@@ -375,6 +393,43 @@ describe('ReceiptReviewClient', () => {
     fireEvent.click(screen.getByTestId('item-remove-0'));
     expect(screen.getByTestId('item-name-0')).toHaveValue('Bread');
     expect(screen.queryByTestId('review-item-2')).toBeNull();
+  });
+
+  // ── 8.23: registry identity on the rows ───────────────────────────────────
+
+  it('a matched row shows the official product name with its thumbnail', async () => {
+    const receipt = makeReceipt();
+    receipt.items[0] = {
+      ...receipt.items[0],
+      productId: 'p-1',
+      productName: 'Milk 3% 1L',
+      productHasImage: true,
+      productImageVersion: 'v42',
+      matchStatus: 'CONFIRMED',
+    };
+    await renderLoaded(receipt);
+
+    const chip = screen.getByTestId('item-product-0');
+    expect(chip).toHaveTextContent('Milk 3% 1L');
+    expect(chip.querySelector('img')?.getAttribute('src')).toBe('/api/v1/products/p-1/image?v=v42');
+  });
+
+  it('an unmatched row chip shows the printed code and opens the match dialog on that item', async () => {
+    const receipt = makeReceipt();
+    receipt.items[1] = { ...receipt.items[1], barcode: '7290119381043' };
+    await renderLoaded(receipt);
+
+    const chip = screen.getByTestId('item-product-1');
+    expect(chip).toHaveTextContent('itemMatchAction');
+    expect(chip).toHaveTextContent('7290119381043');
+    fireEvent.click(chip);
+    expect(screen.getByTestId('walkthrough-stub')).toHaveAttribute('data-initial-item', 'i-2');
+  });
+
+  it('the header walkthrough button opens the dialog without an initial item', async () => {
+    await renderLoaded(makeReceipt());
+    fireEvent.click(screen.getByTestId('review-walkthrough'));
+    expect(screen.getByTestId('walkthrough-stub')).toHaveAttribute('data-initial-item', '');
   });
 
   it('shows the authenticated blob preview for uploaded images', async () => {

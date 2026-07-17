@@ -43,6 +43,8 @@ function item(over: Partial<ReceiptItem>): ReceiptItem {
     productId: null,
     productName: null,
     productBrand: null,
+    productHasImage: false,
+    productImageVersion: null,
     matchStatus: 'PENDING',
     matchCandidates: [],
   };

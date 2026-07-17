@@ -1,6 +1,7 @@
 import { validateExtractionResult } from '@myfinpro/shared';
 import { ConfigService } from '@nestjs/config';
 import { AnthropicExtractionProvider } from './anthropic-extraction.provider';
+import { mergeContinuationItems, salvageCompleteItems } from './extraction-continuation.util';
 import {
   extractionProviderFactory,
   SUPPORTED_EXTRACTION_PROVIDERS,
@@ -10,7 +11,6 @@ import {
   type ExtractionInput,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
-import { mergeContinuationItems, salvageCompleteItems } from './extraction-continuation.util';
 import { buildExtractionPrompt } from './extraction.schema';
 import { MockExtractionProvider } from './mock-extraction.provider';
 import { ResilientExtractionProvider } from './resilient-extraction.provider';

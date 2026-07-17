@@ -53,6 +53,8 @@ const makeItem = (over: Partial<ReceiptItem> = {}): ReceiptItem => ({
   productId: null,
   productName: null,
   productBrand: null,
+  productHasImage: false,
+  productImageVersion: null,
   matchStatus: 'PENDING',
   matchCandidates: [
     { productId: 'p-1', name: 'Milk 3% 1L', brand: 'Tnuva', stage: 'alias', confidence: 0.95 },
@@ -69,7 +71,7 @@ const makeReceipt = (items: ReceiptItem[]): ReceiptSummary =>
     items,
   }) as ReceiptSummary;
 
-function renderDialog(receipt: ReceiptSummary) {
+function renderDialog(receipt: ReceiptSummary, initialItemId?: string) {
   const onClose = vi.fn();
   const onReceiptUpdated = vi.fn();
   render(
@@ -77,6 +79,7 @@ function renderDialog(receipt: ReceiptSummary) {
       open
       receipt={receipt}
       categories={[]}
+      initialItemId={initialItemId}
       onClose={onClose}
       onReceiptUpdated={onReceiptUpdated}
     />,
@@ -198,5 +201,108 @@ describe('ItemWalkthroughDialog', () => {
 
     fireEvent.click(screen.getByTestId('walkthrough-scan'));
     expect(screen.getByTestId('scanner-stub')).toBeInTheDocument();
+  });
+
+  // ── 8.23: printed-code first ──────────────────────────────────────────────
+
+  it('opens on the requested item when initialItemId is given (row-click edit)', () => {
+    renderDialog(
+      makeReceipt([
+        makeItem({ id: 'i-0', position: 1, rawName: 'First pending' }),
+        makeItem({ id: 'i-1', position: 2, rawName: 'Clicked row', matchStatus: 'CONFIRMED' }),
+      ]),
+      'i-1',
+    );
+    expect(screen.getByTestId('walkthrough-item')).toHaveTextContent('Clicked row');
+  });
+
+  it('shows the printed code and leads with its registry owner at 100%', async () => {
+    lookupBarcodeMock.mockResolvedValue({
+      found: true,
+      product: { id: 'p-owner', name: 'Registry Owner', brand: null },
+      offStatus: 'registry',
+    });
+    renderDialog(makeReceipt([makeItem({ barcode: '7290119381043' })]));
+
+    expect(screen.getByTestId('walkthrough-barcode')).toHaveTextContent('7290119381043');
+    await waitFor(() => expect(lookupBarcodeMock).toHaveBeenCalledWith('7290119381043'));
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(3));
+    expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('Registry Owner');
+    expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('100%');
+  });
+
+  it('offers one-click create & link when the code is only known to OFF', async () => {
+    lookupBarcodeMock.mockResolvedValue({
+      found: false,
+      prefill: { name: 'Tapuchips Salt', brand: 'Elite', imageUrl: 'https://img.example/x.jpg' },
+      offStatus: 'off',
+    });
+    const fresh = makeReceipt([
+      makeItem({ barcode: '7290119381043', matchStatus: 'CONFIRMED', productId: 'p-new' }),
+    ]);
+    matchItemMock.mockResolvedValue(fresh);
+    const { onReceiptUpdated } = renderDialog(
+      makeReceipt([makeItem({ barcode: '7290119381043' })]),
+    );
+
+    await waitFor(() => expect(screen.getByTestId('walkthrough-code-offer')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('walkthrough-code-create'));
+
+    await waitFor(() =>
+      expect(matchItemMock).toHaveBeenCalledWith(
+        'r-1',
+        'i-1',
+        {
+          createProduct: {
+            name: 'Tapuchips Salt',
+            brand: 'Elite',
+            barcode: '7290119381043',
+            aliasLocale: 'en',
+            imageUrl: 'https://img.example/x.jpg',
+          },
+        },
+        expect.anything(),
+      ),
+    );
+    await waitFor(() => expect(onReceiptUpdated).toHaveBeenCalledWith(fresh));
+  });
+
+  it('the OFF offer can open the create form for edits first', async () => {
+    lookupBarcodeMock.mockResolvedValue({
+      found: false,
+      prefill: { name: 'Tapuchips Salt', brand: null, imageUrl: null },
+      offStatus: 'off',
+    });
+    renderDialog(makeReceipt([makeItem({ barcode: '7290119381043' })]));
+
+    await waitFor(() => expect(screen.getByTestId('walkthrough-code-edit')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('walkthrough-code-edit'));
+    expect(screen.getByTestId('form-stub')).toBeInTheDocument();
+  });
+
+  it('save & stay persists the match and keeps the current item on screen', async () => {
+    const fresh = makeReceipt([
+      makeItem({ matchStatus: 'CONFIRMED', productId: 'p-1', productName: 'Milk 3% 1L' }),
+      makeItem({ id: 'i-2', position: 2, rawName: 'Next pending' }),
+    ]);
+    matchItemMock.mockResolvedValue(fresh);
+    const { onClose, onReceiptUpdated } = renderDialog(
+      makeReceipt([makeItem(), makeItem({ id: 'i-2', position: 2, rawName: 'Next pending' })]),
+    );
+
+    fireEvent.click(screen.getByTestId('walkthrough-save-stay'));
+    await waitFor(() => expect(onReceiptUpdated).toHaveBeenCalledWith(fresh));
+    expect(screen.getByTestId('walkthrough-item')).toHaveTextContent('Milk 3%');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('save & close persists the match and closes the dialog', async () => {
+    matchItemMock.mockResolvedValue(
+      makeReceipt([makeItem({ matchStatus: 'CONFIRMED', productId: 'p-1' })]),
+    );
+    const { onClose } = renderDialog(makeReceipt([makeItem()]));
+
+    fireEvent.click(screen.getByTestId('walkthrough-save-close'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });

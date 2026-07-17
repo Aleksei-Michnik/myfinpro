@@ -1175,6 +1175,8 @@
       "confirmSaveFirst": "יש לשמור את השינויים לפני האישור",
       "matchProducts": "התאמת מוצרים ({count})",
       "matchProductsDone": "המוצרים הותאמו",
+      "itemMatchAction": "התאמת מוצר…",
+      "itemEditMatch": "עריכת התאמה — {name}",
       "matchState": {
         "pending": "ממתין להתאמת מוצר",
         "auto": "המוצר הותאם אוטומטית",
@@ -1258,6 +1260,10 @@
         "skipped": "דולג"
       },
       "linkedTo": "מקושר ל‏{name}",
+      "printedCode": "קוד מודפס {code}",
+      "codeRecognized": "הקוד זוהה: {name}",
+      "codeCreateLink": "יצירה וקישור",
+      "codeEditFirst": "עריכה תחילה…",
       "searchLabel": "חיפוש במאגר המוצרים",
       "searchPlaceholder": "חיפוש מוצרים…",
       "noCandidates": "לא הוצעו התאמות — חפשו, סרקו או צרו מוצר חדש.",
@@ -1267,8 +1273,10 @@
       "scan": "סריקה",
       "createNew": "מוצר חדש",
       "skip": "דילוג",
-      "confirm": "אישור התאמה",
-      "keyboardHint": "↑↓ בחירה · Enter אישור · S דילוג · N חדש · ←→ ניווט · Esc סגירה",
+      "saveStay": "שמור והישאר",
+      "saveClose": "שמור וסגור",
+      "saveNext": "שמור והמשך",
+      "keyboardHint": "↑↓ בחירה · Enter שמירה והמשך · S דילוג · N חדש · ←→ ניווט · Esc סגירה",
       "actionFailed": "לא ניתן לעדכן את הפריט"
     },
     "detail": {

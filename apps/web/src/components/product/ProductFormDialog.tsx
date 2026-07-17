@@ -77,6 +77,10 @@ export function ProductFormDialog({
     setOffHint(null);
     setOffImageUrl(null);
     setExisting(null);
+    // A create opened with a code (scan / printed receipt code, 8.23)
+    // resolves it immediately — brand/image prefill shouldn't wait for a
+    // manual field blur.
+    if (!product && initialBarcode) resolveBarcode(initialBarcode);
     // Focus the first field once mounted.
     setTimeout(() => nameRef.current?.focus(), 0);
   }, [open, product, initialName, initialBarcode]);

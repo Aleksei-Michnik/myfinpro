@@ -37,7 +37,7 @@ import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-u
 
 /** Include set every read path uses — items (+ product join), merchant, pages. */
 export const RECEIPT_INCLUDE = {
-  items: { include: { product: { select: { name: true, brand: true } } } },
+  items: { include: { product: { select: { name: true, brand: true, imageRef: true } } } },
   merchant: { select: { name: true } },
   files: { orderBy: { position: 'asc' } },
 } satisfies Prisma.ReceiptInclude;

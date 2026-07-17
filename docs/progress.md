@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
 > **Last updated:** 2026-07-17
-> **Current work:** Phase 8 — Product Catalog, Matching & Barcode (8.1–8.22 shipped, incl. the Payment → Transaction rename, chunked extraction and multi-photo receipts) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
+> **Current work:** Phase 8 — Product Catalog, Matching & Barcode (8.1–8.23 shipped, incl. the Payment → Transaction rename, chunked extraction, multi-photo receipts and printed-code-first matching) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
 
 This document is an **index**: per-phase status and a short summary, with a link to each phase's detailed progress document (`phase-<number>-progress.md`). Formatting rules for progress documentation live in [`.kilocode/rules/docs.md`](../.kilocode/rules/docs.md).
 
@@ -100,7 +100,7 @@ Receipt intake (photo/PDF/URL) with file storage, ingestion API and BullMQ extra
 
 ### Phase 8 — Product Catalog, Matching & Barcode (in progress)
 
-Two-layer product DB: a global barcode-keyed registry with multi-language aliases plus private per-user purchase data. Shipped so far (8.1–8.20): staged matcher, walkthrough UI, registry auto-update, camera barcode scanning, Open Food Facts enrichment, product images, catalog UI, per-user LLM selection with BYOK, receipt-intake improvements (content-based URL routing, intake chooser, manual barcode receipts, attach-to-existing transactions with LLM reconciliation, online-receipt provider adapters), accessible receipt document viewer, the transaction Documents panel with cross-member receipt access, and the end-to-end Payment → Transaction rename (DB, API, web, docs). Details: [phase-8-progress.md](phase-8-progress.md).
+Two-layer product DB: a global barcode-keyed registry with multi-language aliases plus private per-user purchase data. Shipped so far (8.1–8.23): staged matcher, walkthrough UI, registry auto-update, camera barcode scanning, Open Food Facts enrichment, product images, catalog UI, per-user LLM selection with BYOK, receipt-intake improvements (content-based URL routing, intake chooser, manual barcode receipts, attach-to-existing transactions with LLM reconciliation, online-receipt provider adapters), accessible receipt document viewer, the transaction Documents panel with cross-member receipt access, the end-to-end Payment → Transaction rename (DB, API, web, docs), extraction hardening with chunked continuation, printed product-code extraction with code-first matching UX, and multi-photo receipts. Details: [phase-8-progress.md](phase-8-progress.md).
 
 ### Phase 10 — Budgets & Spending Targets (in progress)
 

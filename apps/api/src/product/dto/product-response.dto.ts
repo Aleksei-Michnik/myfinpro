@@ -170,6 +170,12 @@ export function mapAliasToDto(row: ProductAlias): ProductAliasResponseDto {
   };
 }
 
+// The fileRef is server-internal; its basename is stable per version and
+// safe to expose as a cache key.
+export function productImageVersion(imageRef: string | null): string | null {
+  return imageRef ? imageRef.split('/').pop()!.split('.')[0] : null;
+}
+
 export function mapProductToDto(
   row: Product,
   extras?: { stats?: ProductStatsDto; aliases?: ProductAlias[] },
@@ -180,9 +186,7 @@ export function mapProductToDto(
     name: row.name,
     brand: row.brand,
     hasImage: row.imageRef !== null,
-    // The fileRef is server-internal; its basename is stable per version and
-    // safe to expose as a cache key.
-    imageVersion: row.imageRef ? row.imageRef.split('/').pop()!.split('.')[0] : null,
+    imageVersion: productImageVersion(row.imageRef),
     defaultCategoryId: row.defaultCategoryId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

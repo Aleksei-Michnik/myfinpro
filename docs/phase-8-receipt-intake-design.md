@@ -1,4 +1,4 @@
-# Phase 8.13–8.22 — Receipt Intake & Transaction Integration
+# Phase 8.13–8.23 — Receipt Intake & Transaction Integration
 
 > **Principle**: a receipt is a transaction's proving document. The target model
 > is **every receipt belongs to a transaction** — a receipt without a transaction has
@@ -20,6 +20,7 @@ Increments ship in this order (8.14 immediately after 8.13 by request):
 | 8.20 | Rename Payment → Transaction end-to-end (DB, API, web, docs)                 | shipped |
 | 8.21 | Extraction hardening: model catalog, chunked continuation, printed barcodes  | shipped |
 | 8.22 | Multi-photo receipts: one long slip photographed in ordered pages            | shipped |
+| 8.23 | Printed-code-first matching UX + registry identity on review rows            | shipped |
 
 8.17 jumped ahead of the still-planned 8.16: a user-reported bug (a real
 online receipt imported blank) made the URL path a correctness fix, not a
@@ -326,3 +327,26 @@ and drops the receipts single-file columns):
   instantly as before. The document viewer gains an accessible page
   navigator (zoom/pan resets per page); attach-to-transaction accepts
   several photos.
+
+## 11. 8.23 — Printed-code-first matching + registry identity on rows
+
+8.21 taught the pipeline to extract printed codes, but the review UI never
+showed them: the walkthrough proposed nothing for a code the registry didn't
+own yet, and rows gave no hint a code was read. Matching an item whose code
+is printed on the paper should be a confirmation, not a search:
+
+- **Walkthrough, code-first.** The current item's printed code is shown and
+  auto-looked-up (registry → Open Food Facts). A registry owner leads the
+  candidate list at 100%; an OFF-only hit renders a one-click **Create &
+  link** offer (name/brand/barcode/image from OFF, raw spelling recorded as
+  alias) with an **Edit first…** escape into the create form. "New product"
+  and the form itself now prefill and auto-resolve the code (the scan path
+  previously discarded the OFF prefill until a manual field blur).
+- **Save controls.** The single Confirm becomes **Save & stay / Save &
+  close / Save & next** (Enter = save & next), so the dialog doubles as a
+  one-item match editor.
+- **Registry identity on rows.** `GET /receipts` items expose
+  `productHasImage`/`productImageVersion`; each review row shows a clickable
+  chip — official product name + thumbnail once matched, "Match product… ·
+  code" until then — that opens the walkthrough dialog focused on that exact
+  item (`initialItemId`).
