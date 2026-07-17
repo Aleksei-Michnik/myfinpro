@@ -1313,5 +1313,61 @@
       "totalCol": "סה״כ",
       "noPurchases": "אין עדיין רכישות מאושרות של המוצר הזה."
     }
+  },
+  "budgets": {
+    "list": {
+      "title": "תקציבים",
+      "newBudget": "תקציב חדש",
+      "loading": "טוען תקציבים…",
+      "empty": "אין תקציבים עדיין. צרו יעד הוצאות ראשון."
+    },
+    "form": {
+      "createTitle": "תקציב חדש",
+      "editTitle": "עריכת תקציב",
+      "name": "שם",
+      "namePlaceholder": "למשל: קניות בסופר",
+      "amount": "סכום יעד",
+      "amountPlaceholder": "0.00",
+      "currency": "מטבע",
+      "scope": "תקציב עבור",
+      "scopeImmutable": "לא ניתן לשנות את ההיקף לאחר היצירה — צרו תקציב חדש כדי להעביר אותו.",
+      "category": "קטגוריה",
+      "categoryAll": "כל ההוצאות",
+      "period": "תקופה",
+      "periods": {
+        "WEEKLY": "שבועי",
+        "MONTHLY": "חודשי",
+        "QUARTERLY": "רבעוני",
+        "YEARLY": "שנתי",
+        "CUSTOM": "טווח מותאם אישית"
+      },
+      "customStart": "מתחיל בתאריך",
+      "customEnd": "מסתיים לפני",
+      "customRangeHint": "תקציב מותאם אישית פועל מתאריך ההתחלה ועד תאריך הסיום (לא כולל) ואינו חוזר על עצמו.",
+      "alertThreshold": "התראה בהגעה ל-(% מהתקציב)",
+      "alertThresholdPlaceholder": "למשל: 80",
+      "alertThresholdHint": "השאירו ריק כדי לבטל את התראת הסף.",
+      "alertOverspend": "התראה על חריגה מהתקציב",
+      "save": "שמור",
+      "cancel": "ביטול",
+      "close": "סגור",
+      "saving": "שומר…",
+      "discardChanges": "לבטל את השינויים?",
+      "discard": "בטל",
+      "keepEditing": "המשך עריכה",
+      "errorGeneric": "שמירת התקציב נכשלה. {message}",
+      "validation": {
+        "nameRequired": "הזן שם.",
+        "nameTooLong": "השם יכול להכיל עד 100 תווים.",
+        "amountRequired": "הסכום חייב להיות גדול מאפס.",
+        "currencyInvalid": "בחר מטבע.",
+        "scopeRequired": "בחר היקף.",
+        "categoryInvalid": "הקטגוריה הזו אינה זמינה בהיקף שנבחר.",
+        "customStartRequired": "הזן תאריך התחלה.",
+        "customEndRequired": "הזן תאריך סיום.",
+        "customRangeInvalid": "תאריך הסיום חייב להיות אחרי תאריך ההתחלה.",
+        "thresholdInvalid": "הסף חייב להיות מספר שלם בין 1 ל-100."
+      }
+    }
   }
 }

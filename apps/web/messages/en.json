@@ -1313,5 +1313,61 @@
       "totalCol": "Total",
       "noPurchases": "No confirmed purchases of this product yet."
     }
+  },
+  "budgets": {
+    "list": {
+      "title": "Budgets",
+      "newBudget": "New budget",
+      "loading": "Loading budgets…",
+      "empty": "No budgets yet. Create your first spending target."
+    },
+    "form": {
+      "createTitle": "New budget",
+      "editTitle": "Edit budget",
+      "name": "Name",
+      "namePlaceholder": "e.g. Groceries",
+      "amount": "Target amount",
+      "amountPlaceholder": "0.00",
+      "currency": "Currency",
+      "scope": "Budget for",
+      "scopeImmutable": "The scope can't be changed after creation — create a new budget to move it.",
+      "category": "Category",
+      "categoryAll": "All spending",
+      "period": "Period",
+      "periods": {
+        "WEEKLY": "Weekly",
+        "MONTHLY": "Monthly",
+        "QUARTERLY": "Quarterly",
+        "YEARLY": "Yearly",
+        "CUSTOM": "Custom range"
+      },
+      "customStart": "Starts on",
+      "customEnd": "Ends before",
+      "customRangeHint": "A custom budget runs from the start date up to (not including) the end date and doesn't repeat.",
+      "alertThreshold": "Alert at (% spent)",
+      "alertThresholdPlaceholder": "e.g. 80",
+      "alertThresholdHint": "Leave empty to disable the threshold alert.",
+      "alertOverspend": "Alert when the budget is overspent",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "saving": "Saving…",
+      "discardChanges": "Discard your changes?",
+      "discard": "Discard",
+      "keepEditing": "Keep editing",
+      "errorGeneric": "Saving the budget failed. {message}",
+      "validation": {
+        "nameRequired": "Enter a name.",
+        "nameTooLong": "Name must be 100 characters or fewer.",
+        "amountRequired": "Amount must be greater than zero.",
+        "currencyInvalid": "Pick a currency.",
+        "scopeRequired": "Pick a scope.",
+        "categoryInvalid": "This category isn't available for the selected scope.",
+        "customStartRequired": "Enter a start date.",
+        "customEndRequired": "Enter an end date.",
+        "customRangeInvalid": "The end date must be after the start date.",
+        "thresholdInvalid": "Threshold must be a whole number between 1 and 100."
+      }
+    }
   }
 }
