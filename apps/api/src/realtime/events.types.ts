@@ -9,6 +9,7 @@
 // authenticated user; the wire payload sent to the browser does NOT include
 // `userIds` (see [`apps/web/src/lib/realtime/realtime-types.ts`](../../../web/src/lib/realtime/realtime-types.ts)).
 
+import type { ReceiptExtractionProgress } from '@myfinpro/shared';
 import type { ReceiptResponseDto } from '../receipt/dto/receipt-response.dto';
 import type { CommentResponseDto } from '../transaction/dto/comment-response.dto';
 import type { ScheduleResponseDto } from '../transaction/dto/schedule-response.dto';
@@ -86,6 +87,14 @@ export type RealtimeEvent =
   // are private until confirmed; confirm reuses transaction.created fan-out).
   | { type: 'receipt.updated'; userIds: string[]; receipt: ReceiptResponse }
   | { type: 'receipt.deleted'; userIds: string[]; receiptId: string }
+  // Phase 8.26 — transient extraction progress (uploader only). Never
+  // persisted: in-memory bus, no DTO, no DB column, no audit row.
+  | {
+      type: 'receipt.extraction.progress';
+      userIds: string[];
+      receiptId: string;
+      progress: ReceiptExtractionProgress;
+    }
   // Phase 10.2 — budget lifecycle. Advisory (design §2.6): fired on every
   // budget mutation (create / edit / delete / archive / unarchive); clients
   // refetch budget lists on receipt. Recipients: the owner (personal) or

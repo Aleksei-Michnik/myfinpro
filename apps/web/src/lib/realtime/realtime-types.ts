@@ -1,4 +1,5 @@
 // Phase 6 · Iteration 6.18.1.4 — wire-level types for SSE events.
+import type { ReceiptExtractionProgress } from '@myfinpro/shared';
 import type { ReceiptSummary } from '@/lib/receipt/types';
 //
 // Mirror of the backend discriminated union (see
@@ -102,6 +103,8 @@ export type RealtimeEvent =
   // Phase 7.7 — receipt lifecycle (uploader-only fan-out on the server).
   | { type: 'receipt.updated'; receipt: ReceiptSummary }
   | { type: 'receipt.deleted'; receiptId: string }
+  // Phase 8.26 — transient extraction progress (never persisted server-side).
+  | { type: 'receipt.extraction.progress'; receiptId: string; progress: ReceiptExtractionProgress }
   | { type: 'ping' };
 
 export type RealtimeEventType = RealtimeEvent['type'];

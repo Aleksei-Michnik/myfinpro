@@ -7,10 +7,12 @@ import {
   mergeContinuationItems,
   salvageCompleteItems,
 } from './extraction-continuation.util';
+import { RawNameCounter } from './extraction-progress.util';
 import {
   ExtractionFailedError,
   type ExtractionContext,
   type ExtractionInput,
+  type ExtractionProgressUpdate,
   type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
@@ -19,11 +21,7 @@ import {
   EXTRACTION_MAX_OUTPUT_TOKENS,
   EXTRACTION_RESULT_JSON_SCHEMA,
 } from './extraction.schema';
-
-interface ChatCompletionPayload {
-  choices?: { message?: { content?: string; refusal?: string }; finish_reason?: string }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
-}
+import { consumeChatCompletionsStream } from './openai-sse.util';
 
 /**
  * Phase 7, iteration 7.5 — OpenAI vision extraction (raw HTTP on purpose:
@@ -38,6 +36,10 @@ interface ChatCompletionPayload {
  * 8.21: a pass that stops at the output ceiling (`finish_reason: length`)
  * salvages its complete items and CONTINUES in a fresh call — chunked
  * extraction, same protocol as the anthropic provider.
+ *
+ * 8.26: the call streams (SSE) so content deltas can drive live progress.
+ * No 'thinking' stage — reasoning summaries are not exposed on the
+ * chat-completions surface; the UI degrades to generic animated states.
  *
  * Built by the module factory (env key/model) or the per-user resolver
  * (Phase 8.11) — never injected directly.
@@ -82,19 +84,22 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
     const salvaged: Record<string, unknown>[] = [];
     let prompt = basePrompt;
     for (let pass = 0; pass <= MAX_EXTRACTION_CONTINUATIONS; pass++) {
-      const choice = await this.callModel([...docContent, { type: 'text', text: prompt }]);
-      const message = choice?.message;
-      if (message?.refusal) {
+      const outcome = await this.callModel(
+        [...docContent, { type: 'text', text: prompt }],
+        ctx.onProgress,
+        salvaged.length,
+      );
+      if (outcome.refusal) {
         throw new ExtractionFailedError('Provider declined to process this document');
       }
-      if (!message?.content) {
+      if (!outcome.content) {
         throw new ExtractionFailedError('Provider returned no content');
       }
 
-      if (choice?.finish_reason === 'length') {
+      if (outcome.finishReason === 'length') {
         // Chunk boundary: keep this pass's complete items, continue after them.
         const before = salvaged.length;
-        salvaged.push(...salvageCompleteItems(message.content));
+        salvaged.push(...salvageCompleteItems(outcome.content));
         if (salvaged.length === before) {
           throw new ExtractionFailedError(
             'Provider output was cut off and no line items could be salvaged — ' +
@@ -105,13 +110,15 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
           `openai extraction truncated (pass ${pass + 1}) — ` +
             `continuing from item ${salvaged.length}`,
         );
+        // 8.26 — surface the chunk boundary (1-based continuation pass).
+        ctx.onProgress?.({ stage: 'continuing', pass: pass + 1, itemsSoFar: salvaged.length });
         prompt = buildContinuationPrompt(basePrompt, salvaged.length, lastSalvagedName(salvaged));
         continue;
       }
 
       let parsed: unknown;
       try {
-        parsed = JSON.parse(message.content);
+        parsed = JSON.parse(outcome.content);
       } catch (err) {
         throw new ExtractionFailedError('Provider returned non-JSON output', err);
       }
@@ -131,10 +138,12 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
     );
   }
 
-  /** One chat-completions call; 4xx (except 429) fails permanently. */
+  /** One streamed chat-completions call; 4xx (except 429) fails permanently. */
   private async callModel(
     userContent: unknown[],
-  ): Promise<NonNullable<ChatCompletionPayload['choices']>[number] | undefined> {
+    onProgress: ((update: ExtractionProgressUpdate) => void) | undefined,
+    itemsBase: number,
+  ): Promise<Awaited<ReturnType<typeof consumeChatCompletionsStream>>> {
     const started = Date.now();
     const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -145,6 +154,8 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
+        stream: true,
+        stream_options: { include_usage: true },
         messages: [{ role: 'user', content: userContent }],
         response_format: {
           type: 'json_schema',
@@ -167,13 +178,22 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
       }
       throw new Error(`OpenAI request failed (${res.status})`);
     }
+    if (!res.body) {
+      throw new Error('OpenAI response had no body stream');
+    }
 
-    const payload = (await res.json()) as ChatCompletionPayload;
+    onProgress?.({ stage: 'processing' });
+    const itemCounter = new RawNameCounter();
+    const outcome = await consumeChatCompletionsStream(
+      res.body as unknown as AsyncIterable<Uint8Array>,
+      (delta) =>
+        onProgress?.({ stage: 'generating', itemsSoFar: itemsBase + itemCounter.add(delta) }),
+    );
     this.logger.log(
       `openai extraction: model=${this.model} durationMs=${Date.now() - started} ` +
-        `input=${payload.usage?.prompt_tokens ?? '?'}tok output=${payload.usage?.completion_tokens ?? '?'}tok ` +
-        `finish=${payload.choices?.[0]?.finish_reason ?? '?'}`,
+        `input=${outcome.usage?.prompt_tokens ?? '?'}tok output=${outcome.usage?.completion_tokens ?? '?'}tok ` +
+        `finish=${outcome.finishReason ?? '?'}`,
     );
-    return payload.choices?.[0];
+    return outcome;
   }
 }

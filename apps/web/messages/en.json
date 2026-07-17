@@ -1041,6 +1041,41 @@
       "CONFIRMED": "Confirmed",
       "FAILED": "Failed"
     },
+    "extraction": {
+      "genericModel": "the AI model",
+      "sendingTo": "Sending to {model}…",
+      "continuing": "Continuing — pass {pass}…",
+      "itemsSoFar": "Reading line items… {count, plural, one {# so far} other {# so far}}",
+      "showThoughts": "Show the model's reasoning",
+      "hideThoughts": "Hide the model's reasoning",
+      "verbs": {
+        "waiting": {
+          "0": "Getting ready…",
+          "1": "Warming up…",
+          "2": "Still working…"
+        },
+        "preparing": {
+          "0": "Reading your receipt…",
+          "1": "Preparing the pages…",
+          "2": "Lining up the pixels…"
+        },
+        "processing": {
+          "0": "Waiting for the model…",
+          "1": "The model is looking at it…",
+          "2": "Crunching the numbers…"
+        },
+        "thinking": {
+          "0": "The model is thinking…",
+          "1": "Reasoning about the lines…",
+          "2": "Working out the details…"
+        },
+        "generating": {
+          "0": "Writing out the items…",
+          "1": "Extracting line items…",
+          "2": "Almost there…"
+        }
+      }
+    },
     "upload": {
       "title": "Add a receipt",
       "dropLabel": "Drop receipt photos here or click to browse",

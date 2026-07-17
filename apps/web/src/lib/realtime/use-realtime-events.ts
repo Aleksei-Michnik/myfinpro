@@ -24,6 +24,8 @@ export interface RealtimeFilter<T extends RealtimeEventType> {
   parentTransactionId?: string;
   /** Match events that carry this `commentId`. */
   commentId?: string;
+  /** Match events that carry this `receiptId` (extraction progress, 8.26). */
+  receiptId?: string;
 }
 
 function eventMatches<T extends RealtimeEventType>(
@@ -42,6 +44,7 @@ function eventMatches<T extends RealtimeEventType>(
     return false;
   }
   if (filter.commentId !== undefined && e.commentId !== filter.commentId) return false;
+  if (filter.receiptId !== undefined && e.receiptId !== filter.receiptId) return false;
   return true;
 }
 
@@ -60,16 +63,16 @@ export function useRealtimeEvents<T extends RealtimeEventType>(
 
   // Stable filter object: only re-subscribe when the meaningful fields
   // change.
-  const { type, transactionId, parentTransactionId, commentId } = filter;
+  const { type, transactionId, parentTransactionId, commentId, receiptId } = filter;
 
   useEffect(() => {
     if (!subscribe) return;
-    const f: RealtimeFilter<T> = { type, transactionId, parentTransactionId, commentId };
+    const f: RealtimeFilter<T> = { type, transactionId, parentTransactionId, commentId, receiptId };
     const unsub = subscribe((event) => {
       if (eventMatches(event, f)) {
         handlerRef.current(event);
       }
     });
     return unsub;
-  }, [subscribe, type, transactionId, parentTransactionId, commentId]);
+  }, [subscribe, type, transactionId, parentTransactionId, commentId, receiptId]);
 }

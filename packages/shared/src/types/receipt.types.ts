@@ -261,3 +261,32 @@ export function computeTotalsMismatch(result: {
   const expected = itemsSumCents - (result.discountCents ?? 0);
   return { itemsSumCents, mismatchCents: result.totalCents - expected };
 }
+
+/**
+ * Phase 8.26 — live extraction progress stages (design §4.1). Ephemeral by
+ * construction: events ride the in-memory SSE bus, feed no DTO and no DB
+ * column, and thought text is never logged or persisted.
+ */
+export const RECEIPT_EXTRACTION_STAGES = [
+  'preparing', // worker: reading pages / resolving the URL
+  'sending', // provider resolved; request about to open
+  'processing', // request open, no tokens yet
+  'thinking', // reasoning-summary deltas arriving (capability-gated)
+  'generating', // output tokens arriving
+  'continuing', // chunked continuation pass (8.21)
+] as const;
+export type ReceiptExtractionStage = (typeof RECEIPT_EXTRACTION_STAGES)[number];
+
+/** One transient `receipt.extraction.progress` payload (Phase 8.26). */
+export interface ReceiptExtractionProgress {
+  stage: ReceiptExtractionStage;
+  /** Resolved provider/model — null on the deployment-default binding. */
+  provider: string | null;
+  model: string | null;
+  /** New reasoning-summary text since the last event (throttled, capped). */
+  thought?: string;
+  /** Line items observed in the output stream so far. */
+  itemsSoFar?: number;
+  /** 1-based continuation pass (stage 'continuing'). */
+  pass?: number;
+}
