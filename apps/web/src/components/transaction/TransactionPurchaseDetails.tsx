@@ -8,6 +8,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useId, useRef, useState } from 'react';
+import { ProductThumb } from '@/components/product/ProductThumb';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Link } from '@/i18n/navigation';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -130,7 +131,9 @@ export function TransactionPurchaseDetails({
                     className="flex items-start justify-between gap-3 py-2"
                     data-testid="purchase-details-item"
                   >
-                    <div className="min-w-0">
+                    {/* 8.24 — registry thumbnail (placeholder when unmatched). */}
+                    <ProductThumb item={item} />
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-gray-900 dark:text-gray-100">
                         {item.productName ?? item.rawName}
                         {item.productBrand && (

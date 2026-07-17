@@ -25,7 +25,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog';
 import { ProductFormDialog } from './ProductFormDialog';
+import { ProductThumb } from './ProductThumb';
 import { Button } from '@/components/ui/Button';
+import { inputClass } from '@/components/ui/input-styles';
 import { useToast } from '@/components/ui/Toast';
 import { useProducts } from '@/lib/product/product-context';
 import type {
@@ -482,10 +484,11 @@ export function ItemWalkthroughDialog({
           )}
           {item.productName && (
             <p
-              className="mt-1 text-sm text-green-700 dark:text-green-400"
+              className="mt-1 flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400"
               data-testid="walkthrough-linked"
             >
-              {t('linkedTo', { name: item.productName })}
+              <ProductThumb item={item} />
+              <span className="min-w-0 truncate">{t('linkedTo', { name: item.productName })}</span>
             </p>
           )}
         </div>
@@ -544,7 +547,7 @@ export function ItemWalkthroughDialog({
             placeholder={t('searchPlaceholder')}
             autoComplete="off"
             data-testid="walkthrough-search"
-            className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            className={inputClass}
           />
 
           {options.length === 0 ? (

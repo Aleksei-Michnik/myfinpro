@@ -227,6 +227,10 @@ describe('ReceiptReviewClient', () => {
     expect(screen.getByTestId('review-total')).toHaveValue(45.9);
     expect(screen.getByTestId('item-name-0')).toHaveValue('Milk');
     expect(screen.getByTestId('item-qty-1')).toHaveValue(1);
+    // 8.24 — unit price and discount are rendered on the card.
+    expect(screen.getByTestId('item-unit-0')).toHaveValue(10);
+    expect(screen.getByTestId('item-unit-1')).toHaveValue(null);
+    expect(screen.getByTestId('item-discount-0')).toHaveValue(null);
     await waitFor(() => expect(screen.getByTestId('item-category-1')).toHaveValue('cat-1'));
     // No mismatch: 2000 + 2590 = 4590 = total.
     expect(screen.queryByTestId('review-mismatch-warning')).toBeNull();
@@ -384,7 +388,7 @@ describe('ReceiptReviewClient', () => {
     await waitFor(() => expect(screen.queryByTestId('receipt-review-failed')).toBeNull());
   });
 
-  it('adding and removing item rows works', async () => {
+  it('adding and removing item cards works', async () => {
     await renderLoaded(makeReceipt());
 
     fireEvent.click(screen.getByTestId('review-add-item'));
@@ -392,12 +396,33 @@ describe('ReceiptReviewClient', () => {
 
     fireEvent.click(screen.getByTestId('item-remove-0'));
     expect(screen.getByTestId('item-name-0')).toHaveValue('Bread');
-    expect(screen.queryByTestId('review-item-2')).toBeNull();
+    expect(screen.queryByTestId('receipt-item-card-2')).toBeNull();
+  });
+
+  it('edited unit price and discount round-trip on save (8.24)', async () => {
+    await renderLoaded(makeReceipt());
+    updateReceiptMock.mockResolvedValue(makeReceipt());
+    replaceItemsMock.mockResolvedValue(makeReceipt());
+
+    fireEvent.change(screen.getByTestId('item-unit-1'), { target: { value: '25.90' } });
+    fireEvent.change(screen.getByTestId('item-discount-0'), { target: { value: '1.00' } });
+    fireEvent.click(screen.getByTestId('review-save'));
+
+    await waitFor(() =>
+      expect(replaceItemsMock).toHaveBeenCalledWith(
+        'r-1',
+        [
+          expect.objectContaining({ rawName: 'Milk', discountCents: 100 }),
+          expect.objectContaining({ rawName: 'Bread', unitPriceCents: 2590 }),
+        ],
+        expect.anything(),
+      ),
+    );
   });
 
   // ── 8.23: registry identity on the rows ───────────────────────────────────
 
-  it('a matched row shows the official product name with its thumbnail', async () => {
+  it('a matched item card shows the official product name with its thumbnail', async () => {
     const receipt = makeReceipt();
     receipt.items[0] = {
       ...receipt.items[0],
@@ -409,9 +434,10 @@ describe('ReceiptReviewClient', () => {
     };
     await renderLoaded(receipt);
 
-    const chip = screen.getByTestId('item-product-0');
-    expect(chip).toHaveTextContent('Milk 3% 1L');
-    expect(chip.querySelector('img')?.getAttribute('src')).toBe('/api/v1/products/p-1/image?v=v42');
+    expect(screen.getByTestId('item-product-0')).toHaveTextContent('Milk 3% 1L');
+    // 8.24 — the thumbnail lives in the card header, beside the name.
+    const card = screen.getByTestId('receipt-item-card-0');
+    expect(card.querySelector('img')?.getAttribute('src')).toBe('/api/v1/products/p-1/image?v=v42');
   });
 
   it('an unmatched row chip shows the printed code and opens the match dialog on that item', async () => {

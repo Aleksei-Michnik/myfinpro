@@ -22,6 +22,14 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
   useReceipts: () => ({ getReceipt: mockGetReceipt }),
 }));
 
+// ProductThumb (8.24) resolves image URLs through the product context.
+vi.mock('@/lib/product/product-context', () => ({
+  useProducts: () => ({
+    imageUrl: (p: { id: string; imageVersion: string | null }) =>
+      `/api/v1/products/${p.id}/image${p.imageVersion ? `?v=${p.imageVersion}` : ''}`,
+  }),
+}));
+
 function item(over: Partial<ReceiptItem>): ReceiptItem {
   return {
     id: over.id ?? 'i',

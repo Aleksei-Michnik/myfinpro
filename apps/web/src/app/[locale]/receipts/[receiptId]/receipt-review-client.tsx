@@ -2,8 +2,8 @@
 
 // Phase 7 · Iteration 7.8 — receipt review page: file preview beside an
 // editable extracted header (merchant autocomplete against the global
-// registry, date, currency, totals with a live mismatch warning) and an
-// editable line-items table with per-item category selects. Save = PATCH
+// registry, date, currency, totals with a live mismatch warning) and one
+// editable card per line item (8.24, `ReceiptItemCard`). Save = PATCH
 // header + PUT items. Only REVIEW receipts are editable; other statuses
 // render a read-only summary. Confirm (→ transaction) lands in 7.9.
 
@@ -13,34 +13,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
+import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemCard';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { inputClass } from '@/components/ui/input-styles';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
-import { useProducts } from '@/lib/product/product-context';
 import { useReceipts } from '@/lib/receipt/receipt-context';
-import type {
-  MerchantSuggestion,
-  ReceiptItem,
-  ReceiptItemInput,
-  ReceiptSummary,
-} from '@/lib/receipt/types';
+import type { MerchantSuggestion, ReceiptItemInput, ReceiptSummary } from '@/lib/receipt/types';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
-
-interface ItemRow {
-  rawName: string;
-  quantityStr: string;
-  unitPriceStr: string;
-  discountStr: string;
-  totalStr: string;
-  categoryId: string | null;
-}
 
 /** "45.90" → 4590; empty → null; invalid → NaN sentinel via null+flag. */
 function parseMoney(value: string): number | null {
@@ -63,45 +50,6 @@ function receiptToItemRows(receipt: ReceiptSummary): ItemRow[] {
     totalStr: centsToStr(item.totalCents),
     categoryId: item.categoryId,
   }));
-}
-
-const inputClass =
-  'w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 ' +
-  'focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 ' +
-  'dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
-
-/** 8.23 — tiny registry thumbnail on a matched row; hides itself on a load error. */
-function ProductThumb({ item }: { item: ReceiptItem & { productId: string } }) {
-  const { imageUrl } = useProducts();
-  const [failed, setFailed] = useState(false);
-  if (!item.productHasImage || failed) {
-    return (
-      <svg
-        className="h-5 w-5 shrink-0 text-gray-300 dark:text-gray-600"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-        />
-      </svg>
-    );
-  }
-  return (
-    <img
-      src={imageUrl({ id: item.productId, imageVersion: item.productImageVersion })}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
-      className="h-5 w-5 shrink-0 rounded object-cover"
-    />
-  );
 }
 
 export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
@@ -711,141 +659,26 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                 )}
             </div>
             <div className="space-y-2" data-testid="review-items">
-              {items.map((row, index) => {
-                // Server-truth match state — hidden while rows have unsaved
-                // edits (indices may no longer line up).
-                const serverItem = !dirty ? receipt.items[index] : undefined;
-                const matchable = receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED';
-                return (
-                  <div
-                    key={index}
-                    className="grid grid-cols-12 items-center gap-1.5"
-                    data-testid={`review-item-${index}`}
-                  >
-                    <div className="col-span-4 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {serverItem && (
-                          <span
-                            aria-label={t(`matchState.${serverItem.matchStatus.toLowerCase()}`)}
-                            title={
-                              serverItem.productName ??
-                              t(`matchState.${serverItem.matchStatus.toLowerCase()}`)
-                            }
-                            data-testid={`item-match-${index}`}
-                            className={`h-2 w-2 shrink-0 rounded-full ${
-                              serverItem.matchStatus === 'CONFIRMED'
-                                ? 'bg-green-500'
-                                : serverItem.matchStatus === 'AUTO'
-                                  ? 'bg-blue-500'
-                                  : serverItem.matchStatus === 'SKIPPED'
-                                    ? 'bg-gray-300 dark:bg-gray-600'
-                                    : 'bg-amber-400'
-                            }`}
-                          />
-                        )}
-                        <input
-                          type="text"
-                          value={row.rawName}
-                          onChange={(e) => setItem(index, { rawName: e.target.value })}
-                          placeholder={t('itemName')}
-                          disabled={!editable}
-                          data-testid={`item-name-${index}`}
-                          className={inputClass}
-                        />
-                      </div>
-                      {/* 8.23 — the registry identity of the row: official
-                          name + thumbnail once matched, the printed code /
-                          match affordance until then. Opens the match dialog
-                          on this exact item. */}
-                      {serverItem && matchable && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWalkthroughItemId(serverItem.id);
-                            setWalkthroughOpen(true);
-                          }}
-                          aria-label={
-                            serverItem.productName
-                              ? t('itemEditMatch', { name: serverItem.productName })
-                              : t('itemMatchAction')
-                          }
-                          data-testid={`item-product-${index}`}
-                          className="mt-0.5 flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-start text-xs hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-600 dark:hover:bg-gray-700/50"
-                        >
-                          {serverItem.productId ? (
-                            <>
-                              <ProductThumb
-                                item={serverItem as ReceiptItem & { productId: string }}
-                              />
-                              <span className="truncate text-gray-700 dark:text-gray-300">
-                                {serverItem.productName}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="truncate text-gray-400 dark:text-gray-500">
-                              {t('itemMatchAction')}
-                              {serverItem.barcode && (
-                                <span className="font-mono"> · {serverItem.barcode}</span>
-                              )}
-                            </span>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="0.001"
-                      value={row.quantityStr}
-                      onChange={(e) => setItem(index, { quantityStr: e.target.value })}
-                      placeholder={t('itemQty')}
-                      title={t('itemQty')}
-                      disabled={!editable}
-                      data-testid={`item-qty-${index}`}
-                      className={`${inputClass} col-span-1`}
-                    />
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="0.01"
-                      value={row.totalStr}
-                      onChange={(e) => setItem(index, { totalStr: e.target.value })}
-                      placeholder={t('itemTotal')}
-                      title={t('itemTotal')}
-                      disabled={!editable}
-                      data-testid={`item-total-${index}`}
-                      className={`${inputClass} col-span-2`}
-                    />
-                    <select
-                      value={row.categoryId ?? ''}
-                      onChange={(e) => setItem(index, { categoryId: e.target.value || null })}
-                      disabled={!editable}
-                      data-testid={`item-category-${index}`}
-                      className={`${inputClass} col-span-4`}
-                    >
-                      <option value="">{t('itemNoCategory')}</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    {editable && (
-                      <button
-                        type="button"
-                        onClick={() => removeItem(index)}
-                        aria-label={t('itemRemove')}
-                        data-testid={`item-remove-${index}`}
-                        className="col-span-1 text-sm text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+              {items.map((row, index) => (
+                <ReceiptItemCard
+                  key={index}
+                  index={index}
+                  row={row}
+                  // Server-truth match state — hidden while rows have unsaved
+                  // edits (indices may no longer line up).
+                  serverItem={!dirty ? receipt.items[index] : undefined}
+                  editable={editable}
+                  matchable={receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED'}
+                  categories={categories}
+                  currency={currency || null}
+                  onChange={(patch) => setItem(index, patch)}
+                  onRemove={() => removeItem(index)}
+                  onOpenMatch={(itemId) => {
+                    setWalkthroughItemId(itemId);
+                    setWalkthroughOpen(true);
+                  }}
+                />
+              ))}
             </div>
             {editable && (
               <Button
