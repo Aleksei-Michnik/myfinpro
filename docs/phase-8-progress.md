@@ -567,3 +567,35 @@ attach-to-transaction accepts several photos. EN+HE strings added.
 multi-page extraction order, per-page serving); web 1194 green (staging
 tray one-vs-separate, pager, per-page blob fetch); typecheck+lint clean;
 `prisma migrate diff`: no drift.
+
+## 8.23 — Printed-code-first matching + registry identity on review rows (2026-07-17)
+
+User report from staging verification of 8.21: "product codes are not
+extracted" — they were (23/30 items on the test receipt carried GTINs in
+`receipt_items.barcode`), but the UI never surfaced them, and a code the
+registry didn't own yet produced an empty "no matches proposed" dialog.
+Matching a printed-code item is now a confirmation, not a search.
+
+**API.** Receipt items expose `productHasImage` + `productImageVersion`
+(RECEIPT_INCLUDE joins `imageRef`; version derivation shared with the
+product DTO via `productImageVersion()`).
+
+**Walkthrough dialog.** Shows the item's printed code and auto-looks it up
+(registry → OFF, per-code cache): a registry owner leads the candidates at
+100%; an OFF hit renders a one-click **Create & link** (matchItem
+`createProduct` with OFF name/brand/image + the code; server backfill from
+8.21 then auto-matches every later receipt) plus **Edit first…** into the
+prefilled create form. The create form auto-resolves an initial barcode on
+open — the scan path previously discarded the OFF prefill until a manual
+blur. Confirm split into **Save & stay / Save & close / Save & next**
+(Enter = save & next); `initialItemId` opens the dialog focused on one item.
+
+**Review rows.** Each item row gets a clickable registry-identity chip:
+official name + thumbnail (authenticated product image endpoint, graceful
+fallback) once matched; "Match product… · code" until then. Click opens the
+walkthrough on that exact item. Server-truth gated (hidden while rows have
+unsaved edits), REVIEW/CONFIRMED only. EN+HE strings added.
+
+**Tests.** api 1155 green; web 1206 green (walkthrough code-first flows,
+save controls, chips, form auto-resolve — ProductFormDialog gains its first
+spec); typecheck + lint clean.
