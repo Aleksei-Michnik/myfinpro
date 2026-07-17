@@ -163,7 +163,7 @@ export class ReceiptResponseDto {
 }
 
 export type ReceiptItemWithProduct = ReceiptItem & {
-  product: Pick<Product, 'name' | 'brand' | 'imageRef'> | null;
+  product: (Pick<Product, 'name' | 'brand'> & { images: { baseRef: string }[] }) | null;
 };
 
 export type ReceiptWithRelations = Receipt & {
@@ -186,8 +186,8 @@ export function mapReceiptItemToDto(item: ReceiptItemWithProduct): ReceiptItemRe
     productId: item.productId,
     productName: item.product?.name ?? null,
     productBrand: item.product?.brand ?? null,
-    productHasImage: (item.product?.imageRef ?? null) !== null,
-    productImageVersion: productImageVersion(item.product?.imageRef ?? null),
+    productHasImage: (item.product?.images[0]?.baseRef ?? null) !== null,
+    productImageVersion: productImageVersion(item.product?.images[0]?.baseRef ?? null),
     matchStatus: item.matchStatus as ProductMatchStatus,
     matchCandidates: Array.isArray(item.matchCandidates)
       ? (item.matchCandidates as unknown as ProductMatchCandidate[])

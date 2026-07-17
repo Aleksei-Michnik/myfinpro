@@ -5,8 +5,8 @@ import type { ReceiptItem } from '@/lib/receipt/types';
 
 vi.mock('@/lib/product/product-context', () => ({
   useProducts: () => ({
-    imageUrl: (p: { id: string; imageVersion: string | null }) =>
-      `/api/v1/products/${p.id}/image${p.imageVersion ? `?v=${p.imageVersion}` : ''}`,
+    imageUrl: (p: { id: string; imageVersion: string | null }, size?: string) =>
+      `/api/v1/products/${p.id}/image?size=${size ?? 'full'}${p.imageVersion ? `&v=${p.imageVersion}` : ''}`,
   }),
 }));
 
@@ -19,7 +19,7 @@ describe('ProductThumb (8.24)', () => {
     const { container } = render(<ProductThumb item={matched} />);
     expect(container.querySelector('img')).toHaveAttribute(
       'src',
-      '/api/v1/products/p-1/image?v=v42',
+      '/api/v1/products/p-1/image?size=thumb&v=v42',
     );
     expect(screen.queryByTestId('product-thumb-placeholder')).toBeNull();
   });

@@ -39,6 +39,20 @@ export const PRODUCT_AUTO_MATCH_THRESHOLD = 0.9;
 /** Max photo size for product images — mirrors the receipt upload cap. */
 export const PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+/** Pictures per product (Phase 8.25) — enforced by the API and the dialog. */
+export const PRODUCT_IMAGE_MAX_COUNT = 5;
+
+/** Rendition selector for product-image URLs (Phase 8.25). */
+export type ProductImageSize = 'full' | 'thumb';
+
+/** One picture of a product (Phase 8.25); position 1 = primary. */
+export interface ProductImageInfo {
+  id: string;
+  position: number;
+  /** Cache-busting token, stable per stored file. */
+  version: string;
+}
+
 /**
  * Registry lookup-key normalization: lowercased, whitespace-collapsed,
  * diacritics-stripped (NFD + combining-mark removal keeps Hebrew/Arabic

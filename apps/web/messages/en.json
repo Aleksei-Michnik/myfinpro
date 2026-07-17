@@ -1089,7 +1089,6 @@
     "attach": {
       "title": "Attach a receipt",
       "hint": "Add the receipt for this transaction. We'll read it and check it against what you entered.",
-      "device": "Upload from this device",
       "urlLabel": "Or add from a URL",
       "urlPlaceholder": "https://…",
       "urlSubmit": "Add",
@@ -1249,7 +1248,13 @@
       "updatedToast": "Product updated",
       "offChecking": "Looking up the barcode…",
       "offFilled": "Details prefilled from Open Food Facts — please review.",
-      "barcodeExists": "This barcode already belongs to “{name}”."
+      "barcodeExists": "This barcode already belongs to “{name}”.",
+      "picturesLabel": "Pictures",
+      "addPicture": "Add picture",
+      "removePicture": "Remove picture",
+      "makePrimary": "Make primary",
+      "picturesHint": "Up to {max} pictures. The highlighted one is shown on cards and receipt items.",
+      "pictureUploadFailed": "Some pictures could not be uploaded"
     },
     "walkthrough": {
       "title": "Match products",

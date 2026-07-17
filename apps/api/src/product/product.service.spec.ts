@@ -19,7 +19,7 @@ describe('ProductService', () => {
   };
   const matcherMock = { searchRegistry: jest.fn() };
   const offMock = { lookup: jest.fn() };
-  const imagesMock = { enqueueUrlFetch: jest.fn().mockResolvedValue(undefined) };
+  const imagesMock = { addFromUrl: jest.fn().mockResolvedValue(undefined) };
 
   let service: ProductService;
 
@@ -29,7 +29,7 @@ describe('ProductService', () => {
     name: 'Milk 3%',
     normalizedName: 'milk 3%',
     brand: null,
-    imageRef: null,
+    images: [],
     defaultCategoryId: null,
     createdAt: new Date('2026-07-10T10:00:00.000Z'),
     updatedAt: new Date('2026-07-10T10:00:00.000Z'),

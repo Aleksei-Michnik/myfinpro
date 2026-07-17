@@ -3,6 +3,7 @@
 // Phase 8 — ProductProvider (the receipt-context conventions: every method
 // takes an optional AbortSignal, errors are rich ApiError-shaped objects).
 
+import type { ProductImageInfo, ProductImageSize } from '@myfinpro/shared';
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 import type {
   BarcodeLookupResponse,
@@ -39,10 +40,25 @@ interface ProductContextValue {
   ): Promise<ProductSummary>;
   /** Local registry → Open Food Facts prefill → manual entry. */
   lookupBarcode(code: string, signal?: AbortSignal): Promise<BarcodeLookupResponse>;
-  /** Multipart upload; processing happens in the background. */
-  uploadImage(id: string, file: File, signal?: AbortSignal): Promise<void>;
-  /** Authenticated-endpoint URL of the processed image. */
-  imageUrl(product: Pick<ProductSummary, 'id' | 'imageVersion'>): string;
+  /** Multipart upload; renditions land in the background (≤5 per product). */
+  uploadImage(id: string, file: File, signal?: AbortSignal): Promise<ProductImageInfo>;
+  /** Remove one picture; the survivors renumber contiguously. */
+  removeImage(id: string, imageId: string, signal?: AbortSignal): Promise<void>;
+  /** Move a picture to a position (1 = primary); returns the new order. */
+  reorderImage(
+    id: string,
+    imageId: string,
+    position: number,
+    signal?: AbortSignal,
+  ): Promise<ProductImageInfo[]>;
+  /** Authenticated-endpoint URL of the primary image (`thumb` = 96px rendition). */
+  imageUrl(product: Pick<ProductSummary, 'id' | 'imageVersion'>, size?: ProductImageSize): string;
+  /** URL of one specific picture (the dialog strip / detail gallery). */
+  productImageUrl(
+    productId: string,
+    image: Pick<ProductImageInfo, 'id' | 'version'>,
+    size?: ProductImageSize,
+  ): string;
 }
 
 const ProductContext = createContext<ProductContextValue | null>(null);
@@ -185,10 +201,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   );
 
   const uploadImage = useCallback(
-    async (id: string, file: File, signal?: AbortSignal): Promise<void> => {
+    async (id: string, file: File, signal?: AbortSignal): Promise<ProductImageInfo> => {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(`${API_BASE}/products/${encodeURIComponent(id)}/image`, {
+      const res = await fetch(`${API_BASE}/products/${encodeURIComponent(id)}/images`, {
         method: 'POST',
         // No Content-Type — the browser sets the multipart boundary.
         headers: authHeaders(false),
@@ -196,14 +212,71 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         signal,
       });
       if (!res.ok) await throwApiError(res, 'Failed to upload image');
+      return (await res.json()) as ProductImageInfo;
+    },
+    [authHeaders],
+  );
+
+  const removeImage = useCallback(
+    async (id: string, imageId: string, signal?: AbortSignal): Promise<void> => {
+      const res = await fetch(
+        `${API_BASE}/products/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+        { method: 'DELETE', headers: authHeaders(), signal },
+      );
+      if (!res.ok) await throwApiError(res, 'Failed to remove image');
+    },
+    [authHeaders],
+  );
+
+  const reorderImage = useCallback(
+    async (
+      id: string,
+      imageId: string,
+      position: number,
+      signal?: AbortSignal,
+    ): Promise<ProductImageInfo[]> => {
+      const res = await fetch(
+        `${API_BASE}/products/${encodeURIComponent(id)}/images/${encodeURIComponent(imageId)}`,
+        {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({ position }),
+          signal,
+        },
+      );
+      if (!res.ok) await throwApiError(res, 'Failed to reorder image');
+      return (await res.json()) as ProductImageInfo[];
     },
     [authHeaders],
   );
 
   const imageUrl = useCallback(
-    (product: Pick<ProductSummary, 'id' | 'imageVersion'>): string =>
-      `${API_BASE}/products/${encodeURIComponent(product.id)}/image` +
-      (product.imageVersion ? `?v=${encodeURIComponent(product.imageVersion)}` : ''),
+    (product: Pick<ProductSummary, 'id' | 'imageVersion'>, size?: ProductImageSize): string => {
+      const params = new URLSearchParams();
+      if (size && size !== 'full') params.set('size', size);
+      if (product.imageVersion) params.set('v', product.imageVersion);
+      const query = params.toString();
+      return (
+        `${API_BASE}/products/${encodeURIComponent(product.id)}/image` + (query ? `?${query}` : '')
+      );
+    },
+    [],
+  );
+
+  const productImageUrl = useCallback(
+    (
+      productId: string,
+      image: Pick<ProductImageInfo, 'id' | 'version'>,
+      size?: ProductImageSize,
+    ): string => {
+      const params = new URLSearchParams();
+      if (size && size !== 'full') params.set('size', size);
+      params.set('v', image.version);
+      return (
+        `${API_BASE}/products/${encodeURIComponent(productId)}/images/` +
+        `${encodeURIComponent(image.id)}?${params.toString()}`
+      );
+    },
     [],
   );
 
@@ -217,7 +290,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       addAlias,
       lookupBarcode,
       uploadImage,
+      removeImage,
+      reorderImage,
       imageUrl,
+      productImageUrl,
     }),
     [
       fetchProducts,
@@ -228,7 +304,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       addAlias,
       lookupBarcode,
       uploadImage,
+      removeImage,
+      reorderImage,
       imageUrl,
+      productImageUrl,
     ],
   );
 

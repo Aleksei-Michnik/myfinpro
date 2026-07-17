@@ -8,6 +8,10 @@
 import { useTranslations } from 'next-intl';
 import { useRef, useState, type DragEvent } from 'react';
 import { Button } from '@/components/ui/Button';
+import {
+  FileCaptureButtons,
+  type FileCaptureButtonsHandle,
+} from '@/components/ui/FileCaptureButtons';
 
 export interface ReceiptUploadZoneProps {
   /** Camera shots stage as pages of one receipt (8.22); picker/drop may batch. */
@@ -20,8 +24,7 @@ const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
 
 export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUploadZoneProps) {
   const t = useTranslations('receipts.upload');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const captureRef = useRef<FileCaptureButtonsHandle>(null);
   const [dragOver, setDragOver] = useState(false);
   const [url, setUrl] = useState('');
 
@@ -58,11 +61,11 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => !pending && fileInputRef.current?.click()}
+        onClick={() => !pending && captureRef.current?.openPicker()}
         onKeyDown={(e) => {
           if ((e.key === 'Enter' || e.key === ' ') && !pending) {
             e.preventDefault();
-            fileInputRef.current?.click();
+            captureRef.current?.openPicker();
           }
         }}
         className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-8 text-center transition-colors ${
@@ -90,56 +93,17 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
+        <FileCaptureButtons
+          ref={captureRef}
+          accept={ACCEPT}
+          multiple
           disabled={pending}
-          onClick={() => fileInputRef.current?.click()}
-          data-testid="receipt-browse-button"
-        >
-          {t('browse')}
-        </Button>
-        {/* Mobile camera capture — the capture attribute opens the camera
-            directly on phones; desktop browsers fall back to a file picker. */}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={pending}
-          onClick={() => cameraInputRef.current?.click()}
-          data-testid="receipt-camera-button"
-        >
-          {t('camera')}
-        </Button>
+          onFiles={onFiles}
+          browseLabel={t('browse')}
+          cameraLabel={t('camera')}
+          testIdPrefix="receipt"
+        />
       </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={ACCEPT}
-        multiple
-        className="hidden"
-        data-testid="receipt-file-input"
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) onFiles(files, 'picker');
-          e.target.value = '';
-        }}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        data-testid="receipt-camera-input"
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) onFiles(files, 'camera');
-          e.target.value = '';
-        }}
-      />
 
       {/* URL ingestion */}
       <form

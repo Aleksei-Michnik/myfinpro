@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { FileCaptureButtons } from '@/components/ui/FileCaptureButtons';
 import { useToast } from '@/components/ui/Toast';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
@@ -41,10 +42,11 @@ export function AttachReceiptDialog({
   onAttached,
 }: AttachReceiptDialogProps) {
   const t = useTranslations('receipts.attach');
+  // Browse/camera labels ride the intake-zone keys — same wording everywhere.
+  const uploadT = useTranslations('receipts.upload');
   const { attachFileToTransaction, attachUrlToTransaction } = useReceipts();
   const { addToast } = useToast();
 
-  const fileRef = useRef<HTMLInputElement | null>(null);
   const urlRef = useRef<HTMLInputElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [url, setUrl] = useState('');
@@ -139,29 +141,21 @@ export function AttachReceiptDialog({
 
         <p className="text-xs text-gray-500 dark:text-gray-400">{t('hint')}</p>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            onFiles(Array.from(e.target.files ?? []));
-            e.target.value = '';
-          }}
-          data-testid="attach-receipt-file"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="md"
-          disabled={op.isLoading}
-          onClick={() => fileRef.current?.click()}
-          data-testid="attach-receipt-device"
-        >
+        {/* 8.25 — shared capture control; this dialog gains the camera path. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <FileCaptureButtons
+            accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+            multiple
+            disabled={op.isLoading}
+            onFiles={(files) => onFiles(files)}
+            browseLabel={uploadT('browse')}
+            cameraLabel={uploadT('camera')}
+            testIdPrefix="attach-receipt"
+            variant="outline"
+            size="md"
+          />
           {op.isLoading ? <ButtonSpinner /> : null}
-          {t('device')}
-        </Button>
+        </div>
 
         <div className="flex flex-col gap-1">
           <label htmlFor="attach-receipt-url" className="text-xs text-gray-500 dark:text-gray-400">

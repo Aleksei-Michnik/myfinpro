@@ -536,8 +536,6 @@ model Product {
   // normalizeLookupName(name) — the exact-stage matching key (design §1.2).
   normalizedName String  @map("normalized_name") @db.VarChar(300)
   brand          String? @db.VarChar(200)
-  // Processed WebP under PRODUCT_IMAGE_STORAGE_DIR; immutable per version.
-  imageRef String? @map("image_ref") @db.VarChar(500)
 
   // Default OUT category proposed for matched items. SetNull on delete.
   defaultCategoryId String?   @map("default_category_id") @db.VarChar(36)
@@ -548,9 +546,30 @@ model Product {
 
   aliases      ProductAlias[]
   receiptItems ReceiptItem[]
+  images       ProductImage[]
 
   @@index([normalizedName])
   @@map("products")
+}
+
+// Phase 8.25 — up to PRODUCT_IMAGE_MAX_COUNT pictures per product;
+// position 1 = the primary image (catalog cards, receipt-item thumbnails).
+// Rendition files derive from base_ref: `<base>.webp`, `<base>.avif`,
+// `<base>.thumb.webp`, `<base>.thumb.avif` under PRODUCT_IMAGE_STORAGE_DIR;
+// rows are immutable except position.
+model ProductImage {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  productId String  @map("product_id") @db.VarChar(36)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // 1-based display order; reorder renumbers contiguously in one tx.
+  position  Int
+  // Server-minted path stem (yyyy/mm/uuid) — never user input.
+  baseRef   String  @map("base_ref") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([productId, position])
+  @@map("product_images")
 }
 
 // Multi-language alias — one row per distinct normalized spelling. Each

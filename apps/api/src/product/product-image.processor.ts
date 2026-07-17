@@ -6,10 +6,10 @@ import { PRODUCT_IMAGES_QUEUE } from '../queue/queue.constants';
 import { ProductImageService, type ProductImageJob } from './product-image.service';
 
 /**
- * Phase 8, iteration 8.8 — the product-image worker. Re-encodes the staged
- * upload (or OFF prefill URL), swaps `products.image_ref` and cleans up the
- * staged original + the replaced image. A vanished product makes the job a
- * no-op (registry rows can be deleted while a job waits).
+ * Phase 8.25 (evolved from 8.8) — the product-image worker. Writes the
+ * four renditions (WebP + AVIF × detail + thumb) at the row's immutable
+ * `baseRef` and cleans up the staged original. A vanished row makes the
+ * job a no-op (pictures can be removed while a job waits).
  */
 @Processor(PRODUCT_IMAGES_QUEUE)
 export class ProductImageProcessor extends WorkerHost {
@@ -24,24 +24,19 @@ export class ProductImageProcessor extends WorkerHost {
 
   async process(job: Job<ProductImageJob>): Promise<{ processed: boolean }> {
     const data = job.data;
-    const product = await this.prisma.product.findUnique({
-      where: { id: data.productId },
-      select: { id: true, imageRef: true },
+    const row = await this.prisma.productImage.findUnique({
+      where: { id: data.productImageId },
+      select: { id: true, baseRef: true },
     });
-    if (!product) {
-      this.logger.warn(`[orphan] product ${data.productId} not found — skipping image job`);
+    if (!row) {
+      this.logger.warn(`[orphan] product image ${data.productImageId} not found — skipping job`);
       if (data.kind === 'staged') await this.images.delete(data.stagedRef);
       return { processed: false };
     }
 
     let succeeded = false;
     try {
-      const imageRef = await this.images.process(data);
-      await this.prisma.product.update({
-        where: { id: product.id },
-        data: { imageRef },
-      });
-      if (product.imageRef) await this.images.delete(product.imageRef);
+      await this.images.process(data, row.baseRef);
       succeeded = true;
       return { processed: true };
     } finally {

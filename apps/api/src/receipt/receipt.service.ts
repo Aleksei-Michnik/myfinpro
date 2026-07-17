@@ -32,12 +32,23 @@ import {
 import { ReconcileReceiptDto } from './dto/reconcile-receipt.dto';
 import { ReplaceItemsDto } from './dto/replace-items.dto';
 import { UpdateReceiptDto } from './dto/update-receipt.dto';
+import { ReceiptOptimizationService } from './receipt-optimization.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
 /** Include set every read path uses — items (+ product join), merchant, pages. */
 export const RECEIPT_INCLUDE = {
-  items: { include: { product: { select: { name: true, brand: true, imageRef: true } } } },
+  items: {
+    include: {
+      product: {
+        select: {
+          name: true,
+          brand: true,
+          images: { orderBy: { position: 'asc' as const }, take: 1, select: { baseRef: true } },
+        },
+      },
+    },
+  },
   merchant: { select: { name: true } },
   files: { orderBy: { position: 'asc' } },
 } satisfies Prisma.ReceiptInclude;
@@ -72,6 +83,7 @@ export class ReceiptService {
     private readonly categoryService: CategoryService,
     private readonly transactionService: TransactionService,
     private readonly productService: ProductService,
+    private readonly optimizations: ReceiptOptimizationService,
     @InjectQueue(RECEIPT_EXTRACTIONS_QUEUE) private readonly queue: Queue,
   ) {}
 
@@ -691,6 +703,14 @@ export class ReceiptService {
       );
     }
 
+    // Storage compaction (8.25) — safe from CONFIRMED on; failure to enqueue
+    // never blocks the confirm.
+    void this.optimizations
+      .enqueue(row.id)
+      .catch((err: Error) =>
+        this.logger.warn(`Failed to enqueue optimization for ${row.id}: ${err.message}`),
+      );
+
     // Fan out the new transaction (all recipients) and the now-CONFIRMED receipt
     // (the uploader) — both post-commit.
     await this.transactionService.publishCreated(transaction);
@@ -770,6 +790,13 @@ export class ReceiptService {
         data: { purchasedAt: occurredAt },
       });
     });
+
+    // Storage compaction (8.25) — same post-CONFIRM hook as confirm().
+    void this.optimizations
+      .enqueue(row.id)
+      .catch((err: Error) =>
+        this.logger.warn(`Failed to enqueue optimization for ${row.id}: ${err.message}`),
+      );
 
     void this.writeAudit(userId, row.id, 'RECEIPT_RECONCILED', {
       transactionId: row.transactionId,

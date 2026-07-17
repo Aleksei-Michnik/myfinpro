@@ -30,3 +30,11 @@ export const RECEIPT_EXTRACTIONS_QUEUE = 'receipt-extractions';
  * Consumer: product-image processor (sharp resize + metadata strip).
  */
 export const PRODUCT_IMAGES_QUEUE = 'product-images';
+
+/**
+ * Receipt storage compaction queue (Phase 8.25).
+ *
+ * Producer: receipt service (confirm / reconcile) + bootstrap backfill sweep.
+ * Consumer: receipt-optimization processor (re-encode CONFIRMED pages to WebP).
+ */
+export const RECEIPT_OPTIMIZATIONS_QUEUE = 'receipt-optimizations';

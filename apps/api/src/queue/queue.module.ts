@@ -6,6 +6,7 @@ import {
   TRANSACTION_OCCURRENCES_QUEUE,
   PRODUCT_IMAGES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
+  RECEIPT_OPTIMIZATIONS_QUEUE,
 } from './queue.constants';
 
 /**
@@ -38,6 +39,7 @@ import {
     BullModule.registerQueue({ name: TRANSACTION_OCCURRENCES_QUEUE }),
     BullModule.registerQueue({ name: RECEIPT_EXTRACTIONS_QUEUE }),
     BullModule.registerQueue({ name: PRODUCT_IMAGES_QUEUE }),
+    BullModule.registerQueue({ name: RECEIPT_OPTIMIZATIONS_QUEUE }),
   ],
   exports: [BullModule],
 })

@@ -39,7 +39,7 @@ export function ProductThumb({ item, sizeClass = 'h-5 w-5' }: ProductThumbProps)
   }
   return (
     <img
-      src={imageUrl({ id: item.productId, imageVersion: item.productImageVersion })}
+      src={imageUrl({ id: item.productId, imageVersion: item.productImageVersion }, 'thumb')}
       alt=""
       loading="lazy"
       decoding="async"

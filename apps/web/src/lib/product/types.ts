@@ -1,7 +1,7 @@
 // Phase 8 — web-side product wire types (mirror of the API's
 // ProductResponseDto family; see apps/api/src/product/dto/product-response.dto.ts).
 
-import type { ProductAliasSource, ProductMatchCandidate } from '@myfinpro/shared';
+import type { ProductAliasSource, ProductImageInfo, ProductMatchCandidate } from '@myfinpro/shared';
 
 export interface ProductAlias {
   id: string;
@@ -32,6 +32,8 @@ export interface ProductSummary {
   updatedAt: string;
   stats?: ProductStats;
   aliases?: ProductAlias[];
+  /** All pictures in display order (position 1 = primary). Detail reads only. */
+  images?: ProductImageInfo[];
 }
 
 export interface ProductListResponse {

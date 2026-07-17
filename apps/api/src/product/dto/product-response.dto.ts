@@ -1,6 +1,6 @@
-import type { ProductAliasSource, ProductMatchCandidate } from '@myfinpro/shared';
+import type { ProductAliasSource, ProductImageInfo, ProductMatchCandidate } from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { Product, ProductAlias } from '@prisma/client';
+import type { Product, ProductAlias, ProductImage } from '@prisma/client';
 
 /** One registry alias (Phase 8.2). */
 export class ProductAliasResponseDto {
@@ -76,6 +76,11 @@ export class ProductResponseDto {
 
   @ApiPropertyOptional({ type: [ProductAliasResponseDto], description: 'Detail reads only.' })
   aliases?: ProductAliasResponseDto[];
+
+  @ApiPropertyOptional({
+    description: 'All pictures in display order (position 1 = primary). Detail reads only.',
+  })
+  images?: ProductImageInfo[];
 }
 
 /** List envelope (Phase 6 pagination conventions). */
@@ -170,28 +175,50 @@ export function mapAliasToDto(row: ProductAlias): ProductAliasResponseDto {
   };
 }
 
-// The fileRef is server-internal; its basename is stable per version and
-// safe to expose as a cache key.
-export function productImageVersion(imageRef: string | null): string | null {
-  return imageRef ? imageRef.split('/').pop()!.split('.')[0] : null;
+// The baseRef is server-internal; its basename is stable per stored file
+// and safe to expose as a cache key.
+export function productImageVersion(baseRef: string | null): string | null {
+  return baseRef ? baseRef.split('/').pop()!.split('.')[0] : null;
 }
 
+/**
+ * The primary-image slice every product read includes (position-1 row
+ * only — full galleries are detail reads).
+ */
+export const PRODUCT_PRIMARY_IMAGE_INCLUDE = {
+  images: { orderBy: { position: 'asc' }, take: 1, select: { baseRef: true } },
+} as const;
+
+type ProductWithImages = Product & {
+  images: Pick<ProductImage, 'baseRef'>[];
+};
+
 export function mapProductToDto(
-  row: Product,
-  extras?: { stats?: ProductStatsDto; aliases?: ProductAlias[] },
+  row: ProductWithImages,
+  extras?: { stats?: ProductStatsDto; aliases?: ProductAlias[]; images?: ProductImage[] },
 ): ProductResponseDto {
+  const primaryBaseRef = row.images[0]?.baseRef ?? null;
   return {
     id: row.id,
     barcode: row.barcode,
     name: row.name,
     brand: row.brand,
-    hasImage: row.imageRef !== null,
-    imageVersion: productImageVersion(row.imageRef),
+    hasImage: primaryBaseRef !== null,
+    imageVersion: productImageVersion(primaryBaseRef),
     defaultCategoryId: row.defaultCategoryId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     ...(extras?.stats ? { stats: extras.stats } : {}),
     ...(extras?.aliases ? { aliases: extras.aliases.map(mapAliasToDto) } : {}),
+    ...(extras?.images
+      ? {
+          images: extras.images.map((img) => ({
+            id: img.id,
+            position: img.position,
+            version: productImageVersion(img.baseRef)!,
+          })),
+        }
+      : {}),
   };
 }
 

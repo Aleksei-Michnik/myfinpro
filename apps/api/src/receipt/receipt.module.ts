@@ -10,6 +10,8 @@ import { ExtractionResolverService } from './extraction/extraction-resolver.serv
 import { MockExtractionProvider } from './extraction/mock-extraction.provider';
 import { MerchantController } from './merchant.controller';
 import { ReceiptExtractionProcessor } from './receipt-extraction.processor';
+import { ReceiptOptimizationProcessor } from './receipt-optimization.processor';
+import { ReceiptOptimizationService } from './receipt-optimization.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptController } from './receipt.controller';
 import { ReceiptService } from './receipt.service';
@@ -45,6 +47,9 @@ import { RECEIPT_URL_PROVIDERS } from './url-intake/receipt-url-provider.interfa
   providers: [
     ReceiptService,
     ReceiptStorageService,
+    // Phase 8.25 — post-CONFIRM storage compaction (design §3.6).
+    ReceiptOptimizationService,
+    ReceiptOptimizationProcessor,
     MockExtractionProvider,
     extractionProviderFactory,
     ExtractionResolverService,
