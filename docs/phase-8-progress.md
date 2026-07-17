@@ -599,3 +599,100 @@ unsaved edits), REVIEW/CONFIRMED only. EN+HE strings added.
 **Tests.** api 1155 green; web 1206 green (walkthrough code-first flows,
 save controls, chips, form auto-resolve — ProductFormDialog gains its first
 spec); typecheck + lint clean.
+
+## 8.24 — Receipt items as cards (2026-07-17)
+
+User report with a phone screenshot: the review page's item grid didn't
+fit a mobile viewport — fields truncated, horizontal scrolling. Design:
+`docs/phase-8-ux-followups-design.md` §2.
+
+**Web.** `ReceiptItemCard` replaces the grid rows at every width: one card
+per item with labelled name / qty / unit price / discount / line total /
+category fields (unit price + discount now editable), the 8.23 registry
+chip, and a product thumbnail. `ProductThumb` extracted as the shared
+thumbnail primitive (card, walkthrough, purchase-details fold) with a cube
+placeholder fallback; shared `input-styles.ts` keeps field styling in one
+place. i18n EN+HE.
+
+**Tests.** Card spec (fields, editability gates, chip callback); purchase
+details spec re-mocked the product context. api 1155 / web 1244 green.
+
+## 8.25 — Product pictures + image optimization pipeline (2026-07-17)
+
+Design §3. Products carry up to 5 user pictures; all product/receipt
+imagery is stored as compact renditions instead of original uploads.
+
+**Data.** `product_images` (≤5/product, `position` 1 = primary) via
+expand→contract: expand migration creates the table and backfills legacy
+`products.image_ref`; contract migration drops the column after cutover.
+`prisma migrate diff` verified against a shadow DB (Prisma 7 dropped the
+CLI flag — `shadowDatabaseUrl` now lives in `prisma.config.ts`).
+
+**API.** `ProductImageService` renditions per image: detail ≤512px (WebP
+q82 + AVIF q50) and thumb ≤96px (WebP q75 + AVIF q45), encoded async by the
+existing product-image queue. Serving negotiates `Accept` (AVIF → WebP)
+with `Vary: Accept`; `?size=thumb|full` picks the rendition. New
+`POST/DELETE/PATCH /products/:id/images` (add from upload/URL, remove,
+reorder). Post-CONFIRM receipt compaction: a worker re-encodes receipt
+image pages to ≤2048px WebP q80 with a keep-original guard (skips when
+re-encode isn't smaller), updating `receipt_files` +
+`transaction_documents` atomically; bootstrap backfills legacy rows.
+
+**Web.** `FileCaptureButtons` extracted as the single browse+camera
+capture control (receipt intake refactored onto it); `ProductFormDialog`
+gains an "Add picture" strip — staged uploads in create mode, direct
+add/remove/reorder in edit mode; `imageUrl(product, size)` in the product
+context; 8.24 thumbnails consume the thumb rendition. i18n EN+HE.
+
+**Tests.** api 1189 / web 1257 green (rendition service incl. the
+keep-original guard with a random-noise fixture, controller negotiation,
+capture control, dialog strip); integration suite green; migrate diff: no
+drift.
+
+## 8.26 — Extraction transparency (2026-07-18)
+
+Design §4. While a receipt extracts, the user now sees what is actually
+happening — staged progress with the resolved model's name and, where the
+provider yields one, a live reasoning stream. Ephemeral by construction:
+events ride the in-memory SSE bus, feed no DTO/DB column/audit row, and
+thought text is never logged or persisted.
+
+**Contract.** Shared `RECEIPT_EXTRACTION_STAGES` (preparing → sending →
+processing → thinking → generating → continuing) +
+`ReceiptExtractionProgress`; `receipt.extraction.progress` added to both
+realtime unions (uploader-only fan-out); `RealtimeFilter` gains a
+`receiptId` criterion.
+
+**API.** `ExtractionContext.onProgress` flows worker → resilient wrapper →
+provider. The worker decorates updates with receiptId/userIds and the
+resolved provider/model, throttles to ≤1 event/300 ms (leading +
+trailing-edge coalescing, thoughts concatenated, 400-char cap) and stops
+the emitter at terminal states so nothing trails REVIEW/FAILED. Anthropic:
+thinking becomes `{ type: 'adaptive', display: 'summarized' }` (visibility
+opt-in — catalog models default to omitted) and the existing stream now
+feeds `thinking_delta`/`text_delta` into progress, with `itemsSoFar`
+counted boundary-safely over the JSON output and `continuing` emitted per
+8.21 chunk pass. OpenAI: the chat-completions call moves to `stream: true`
+(+usage chunk) with a transport-agnostic SSE consumer — content deltas
+drive `generating`; no thinking stage (not exposed on this surface). Mock
+provider plays a scripted sequence when subscribed (dev/E2E), untouched
+otherwise.
+
+**Web.** `ExtractionActivity` — panel variant replaces the review page's
+empty items area during UPLOADED/EXTRACTING; inline variant sits next to
+the status pill on EXTRACTING list rows. Animated pulse dot, per-stage verb
+rotation (~2.5 s) whenever no fresh event arrives, model label resolved via
+the shared `findLlmModel` catalog, one-line thought ticker + accessible
+disclosure (`aria-expanded`) over the accumulated reasoning (component
+state only — reload forgets). `role="status"`/`aria-live="polite"` on the
+stage line; `motion-reduce` disables ping/pulse/fade while texts keep
+updating. i18n EN+HE.
+
+**Tests.** Emitter throttle/coalesce/cap/stop, RawNameCounter boundary
+cases, SSE consumer fixtures (split frames, CRLF, multi-byte UTF-8,
+refusal, usage), Anthropic delta wiring + continuing pass, OpenAI streamed
+end-to-end with request-shape assertions, processor emission ordering
+(preparing before resolution, decorated after, nothing past terminal), web
+component spec (subscription filter, catalog label fallback chain, ticker +
+disclosure accumulation, inline variant, reduced-motion markup). api 1212 /
+web 1265 green; typecheck + lint clean.
