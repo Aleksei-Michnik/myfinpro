@@ -435,13 +435,14 @@ export class TransactionService {
       categoryId: string;
       note: string | null;
       attributions: AttributionDto[];
-      document?: {
+      /** One entry per stored receipt page (8.22); empty for url receipts. */
+      documents?: {
         kind: string;
         fileRef: string;
         originalName: string | null;
         mimeType: string | null;
         sizeBytes: number | null;
-      } | null;
+      }[];
     },
   ): Promise<TransactionWithRelations> {
     const transaction = await tx.transaction.create({
@@ -462,17 +463,17 @@ export class TransactionService {
             groupId: a.scope === 'group' ? (a.groupId ?? null) : null,
           })),
         },
-        ...(input.document
+        ...(input.documents && input.documents.length > 0
           ? {
               documents: {
-                create: {
-                  kind: input.document.kind,
-                  fileRef: input.document.fileRef,
-                  originalName: input.document.originalName,
-                  mimeType: input.document.mimeType,
-                  sizeBytes: input.document.sizeBytes,
+                create: input.documents.map((doc) => ({
+                  kind: doc.kind,
+                  fileRef: doc.fileRef,
+                  originalName: doc.originalName,
+                  mimeType: doc.mimeType,
+                  sizeBytes: doc.sizeBytes,
                   uploadedById: userId,
-                },
+                })),
               },
             }
           : {}),

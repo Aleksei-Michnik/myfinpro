@@ -24,16 +24,16 @@ export interface ReceiptApiError extends Error {
 }
 
 interface ReceiptContextValue {
-  /** Multipart upload of a receipt photo/PDF. */
-  uploadReceipt(file: File, signal?: AbortSignal): Promise<ReceiptSummary>;
+  /** Multipart upload — several images are the pages of ONE receipt (8.22). */
+  uploadReceipt(files: File[], signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Ingest an online receipt by URL. */
   createFromUrl(url: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** Compose a receipt from scanned products — born in REVIEW (8.14). */
   createManual(input: ManualReceiptInput, signal?: AbortSignal): Promise<ReceiptSummary>;
-  /** Attach a receipt file to an existing transaction — born linked (8.15). */
+  /** Attach a receipt (photo pages) to an existing transaction — born linked (8.15). */
   attachFileToTransaction(
     transactionId: string,
-    file: File,
+    files: File[],
     signal?: AbortSignal,
   ): Promise<ReceiptSummary>;
   /** Attach an online receipt by URL to an existing transaction (8.15). */
@@ -84,9 +84,9 @@ interface ReceiptContextValue {
     signal?: AbortSignal,
   ): Promise<ReceiptSummary>;
   /** Authenticated fetch of the stored file as a Blob (for previews). */
-  fetchFileBlob(id: string, signal?: AbortSignal): Promise<Blob>;
+  fetchFileBlob(id: string, fileId: string, signal?: AbortSignal): Promise<Blob>;
   /** Authenticated-endpoint URL of the stored file (for <img>/<object>). */
-  fileUrl(id: string): string;
+  fileUrl(id: string, fileId: string): string;
 
   isLoading: boolean;
   error: string | null;
@@ -159,10 +159,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const uploadReceipt = useCallback(
-    (file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
+    (files: File[], signal?: AbortSignal): Promise<ReceiptSummary> =>
       run(async () => {
         const form = new FormData();
-        form.append('file', file);
+        for (const file of files) form.append('files', file);
         const res = await fetch(`${API_BASE}/receipts`, {
           method: 'POST',
           // No Content-Type — the browser sets the multipart boundary.
@@ -207,10 +207,10 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
   );
 
   const attachFileToTransaction = useCallback(
-    (transactionId: string, file: File, signal?: AbortSignal): Promise<ReceiptSummary> =>
+    (transactionId: string, files: File[], signal?: AbortSignal): Promise<ReceiptSummary> =>
       run(async () => {
         const form = new FormData();
-        form.append('file', file);
+        for (const file of files) form.append('files', file);
         const res = await fetch(
           `${API_BASE}/transactions/${encodeURIComponent(transactionId)}/receipt`,
           {
@@ -312,7 +312,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
   );
 
   const fileUrl = useCallback(
-    (id: string): string => `${API_BASE}/receipts/${encodeURIComponent(id)}/file`,
+    (id: string, fileId: string): string =>
+      `${API_BASE}/receipts/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`,
     [],
   );
 
@@ -391,12 +392,12 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
   );
 
   const fetchFileBlob = useCallback(
-    (id: string, signal?: AbortSignal): Promise<Blob> =>
+    (id: string, fileId: string, signal?: AbortSignal): Promise<Blob> =>
       run(async () => {
-        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(id)}/file`, {
-          headers: authHeaders(false),
-          signal,
-        });
+        const res = await fetch(
+          `${API_BASE}/receipts/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`,
+          { headers: authHeaders(false), signal },
+        );
         if (!res.ok) await throwApiError(res, 'Failed to load receipt file');
         return res.blob();
       }),

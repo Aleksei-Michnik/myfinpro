@@ -80,9 +80,10 @@ export function AttachReceiptDialog({
     });
   };
 
-  const onFile = (file: File | undefined) => {
-    if (!file) return;
-    attach((signal) => attachFileToTransaction(transactionId, file, signal));
+  // Several selected images attach as the pages of ONE receipt (8.22).
+  const onFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    attach((signal) => attachFileToTransaction(transactionId, files, signal));
   };
   const onUrl = () => {
     const trimmed = url.trim();
@@ -142,9 +143,10 @@ export function AttachReceiptDialog({
           ref={fileRef}
           type="file"
           accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+          multiple
           className="hidden"
           onChange={(e) => {
-            onFile(e.target.files?.[0]);
+            onFiles(Array.from(e.target.files ?? []));
             e.target.value = '';
           }}
           data-testid="attach-receipt-file"

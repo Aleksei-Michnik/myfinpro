@@ -32,12 +32,24 @@ export type ReceiptMimeType = (typeof RECEIPT_ALLOWED_MIME_TYPES)[number];
 /** 10 MB — mirrors the Phase 0 file-upload security baseline. */
 export const RECEIPT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Phase 8.22 — one receipt may span several photos (a long slip shot in
+ * overlapping segments). Pages are images only; PDFs stay single-file.
+ */
+export const RECEIPT_MAX_FILES = 8;
+
 export const EXTRACTION_CONFIDENCES = ['high', 'medium', 'low'] as const;
 export type ExtractionConfidence = (typeof EXTRACTION_CONFIDENCES)[number];
 
 /** One extracted line item. All money values are integer cents. */
 export interface ExtractedItem {
   rawName: string;
+  /**
+   * Phase 8.21 — product code printed on the line (EAN/UPC digits), or
+   * null. Feeds the barcode stage of the matcher exactly like a manually
+   * scanned code; short internal store codes are not barcodes.
+   */
+  barcode: string | null;
   /** Decimal quantities are legit (e.g. 0.732 kg). */
   quantity: number;
   unitPriceCents: number | null;
@@ -149,6 +161,9 @@ export function validateExtractionResult(value: unknown): {
       if (typeof it.rawName !== 'string' || it.rawName.trim().length === 0) {
         fail(`${p}.rawName`, 'must be a non-empty string');
       }
+      if (!isStringOrNull(it.barcode ?? null)) {
+        fail(`${p}.barcode`, 'must be string or null');
+      }
       if (!isFiniteNumber(it.quantity) || (it.quantity as number) <= 0) {
         fail(`${p}.quantity`, 'must be a positive number');
       }
@@ -176,6 +191,7 @@ export function validateExtractionResult(value: unknown): {
   const items = (v.items as Record<string, unknown>[]).map(
     (it): ExtractedItem => ({
       rawName: (it.rawName as string).trim(),
+      barcode: ((it.barcode as string | null) ?? null)?.trim() || null,
       quantity: it.quantity as number,
       unitPriceCents: (it.unitPriceCents ?? null) as number | null,
       discountCents: (it.discountCents ?? 0) as number,

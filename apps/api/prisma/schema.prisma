@@ -426,11 +426,8 @@ model Receipt {
   status String @default("UPLOADED") @db.VarChar(20)
   source String @default("upload") @db.VarChar(20)
 
-  // File — nullable for source=url until the fetcher stores a snapshot.
-  fileRef      String? @map("file_ref") @db.VarChar(500)
+  // Files live in ReceiptFile pages (8.22) — none for source=url/manual.
   originalName String? @map("original_name") @db.VarChar(255)
-  mimeType     String? @map("mime_type") @db.VarChar(100)
-  sizeBytes    Int?    @map("size_bytes")
   sourceUrl    String? @map("source_url") @db.VarChar(2000)
 
   // Extracted header — nullable until the worker reaches REVIEW.
@@ -454,10 +451,31 @@ model Receipt {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   items ReceiptItem[]
+  files ReceiptFile[]
 
   @@index([uploadedById, status])
   @@index([merchantId])
   @@map("receipts")
+}
+
+// Phase 8.22 — one stored page of a receipt. A long paper slip can be
+// photographed in several (possibly overlapping) shots; extraction reads
+// them in position order as ONE document. PDFs are always a single page.
+model ReceiptFile {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  receiptId String  @map("receipt_id") @db.VarChar(36)
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  // 1-based page order as uploaded.
+  position  Int
+
+  fileRef   String @map("file_ref") @db.VarChar(500)
+  mimeType  String @map("mime_type") @db.VarChar(100)
+  sizeBytes Int    @map("size_bytes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([receiptId, position])
+  @@map("receipt_files")
 }
 
 model ReceiptItem {
@@ -468,6 +486,10 @@ model ReceiptItem {
   position  Int
 
   rawName        String  @map("raw_name") @db.VarChar(300)
+  // Product code extracted from the printed line (8.21) — normalized GTIN,
+  // only stored when it passes the shared validity gate. Drives barcode
+  // auto-matching and, on a confirmed link, backfills Product.barcode.
+  barcode        String? @db.VarChar(14)
   quantity       Decimal @default(1) @db.Decimal(10, 3)
   unitPriceCents Int?    @map("unit_price_cents")
   discountCents  Int     @default(0) @map("discount_cents")

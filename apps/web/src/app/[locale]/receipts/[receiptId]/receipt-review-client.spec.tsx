@@ -129,8 +129,6 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     status: 'REVIEW',
     source: 'upload',
     originalName: 'receipt.jpg',
-    mimeType: 'image/jpeg',
-    sizeBytes: 1234,
     sourceUrl: null,
     merchantId: null,
     merchantName: null,
@@ -145,11 +143,13 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     totalsMismatchCents: null,
     createdAt: '2026-07-04T10:00:00.000Z',
     updatedAt: '2026-07-04T10:00:00.000Z',
+    files: [{ id: 'f-1', position: 1, mimeType: 'image/jpeg' }],
     items: [
       {
         id: 'i-1',
         position: 1,
         rawName: 'Milk',
+        barcode: null,
         quantity: 2,
         unitPriceCents: 1000,
         discountCents: 0,
@@ -165,6 +165,7 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
         id: 'i-2',
         position: 2,
         rawName: 'Bread',
+        barcode: null,
         quantity: 1,
         unitPriceCents: null,
         discountCents: 0,
@@ -382,13 +383,11 @@ describe('ReceiptReviewClient', () => {
     await waitFor(() =>
       expect(screen.getByTestId('receipt-preview-image')).toHaveAttribute('src', 'blob:preview'),
     );
-    expect(fetchFileBlobMock).toHaveBeenCalledWith('r-1');
+    expect(fetchFileBlobMock).toHaveBeenCalledWith('r-1', 'f-1');
   });
 
   it('URL-sourced receipts link out instead of fetching the blob', async () => {
-    await renderLoaded(
-      makeReceipt({ source: 'url', sourceUrl: 'https://r.example/x', mimeType: null }),
-    );
+    await renderLoaded(makeReceipt({ source: 'url', sourceUrl: 'https://r.example/x', files: [] }));
 
     expect(screen.getByTestId('receipt-preview-url')).toHaveAttribute(
       'href',

@@ -1,4 +1,4 @@
-import { type ExtractionResult } from '@myfinpro/shared';
+import { isValidGtin, normalizeGtin, type ExtractionResult } from '@myfinpro/shared';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -134,6 +134,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       const proposals = await this.productMatcher.matchItems(
         result.items.map((item) => ({
           rawName: item.rawName,
+          barcode: item.barcode,
           suggestedProductId:
             item.suggestedProductId && productCandidateIds.has(item.suggestedProductId)
               ? item.suggestedProductId
@@ -190,8 +191,6 @@ export class ReceiptExtractionProcessor extends WorkerHost {
   private async buildInput(receipt: {
     id: string;
     source: string;
-    fileRef: string | null;
-    mimeType: string | null;
     sourceUrl: string | null;
   }): Promise<ExtractionInput> {
     if (receipt.source === 'url') {
@@ -203,14 +202,26 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       // anonymized analysis logging all live in the intake service.
       return this.urlIntake.resolve(receipt.sourceUrl);
     }
-    if (!receipt.fileRef) {
+    // 8.22 — a receipt may span several photographed pages; PDFs are
+    // guaranteed single-page by the upload validator.
+    const files = await this.prisma.receiptFile.findMany({
+      where: { receiptId: receipt.id },
+      orderBy: { position: 'asc' },
+      select: { fileRef: true, mimeType: true },
+    });
+    if (files.length === 0) {
       throw new ExtractionFailedError('Receipt has no stored file');
     }
-    const buffer = await this.storage.read(receipt.fileRef);
-    if (receipt.mimeType === 'application/pdf') {
-      return { kind: 'pdf', data: buffer };
+    if (files[0].mimeType === 'application/pdf') {
+      return { kind: 'pdf', data: await this.storage.read(files[0].fileRef) };
     }
-    return { kind: 'image', data: buffer, mimeType: receipt.mimeType ?? 'image/jpeg' };
+    const pages = await Promise.all(
+      files.map(async (file) => ({
+        data: await this.storage.read(file.fileRef),
+        mimeType: file.mimeType,
+      })),
+    );
+    return { kind: 'image', pages };
   }
 
   /** Persist header + items and flip to REVIEW in one transaction. */
@@ -266,10 +277,14 @@ export class ReceiptExtractionProcessor extends WorkerHost {
               const fallback = autoDefaults.get(autoProductId);
               if (fallback && candidateIds.has(fallback)) categoryId = fallback;
             }
+            const gtin = item.barcode ? normalizeGtin(item.barcode) : null;
             return {
               receiptId,
               position: index + 1,
               rawName: item.rawName.slice(0, 300),
+              // Only checksum-valid codes are worth keeping (8.21) — they
+              // drive re-matching and Product.barcode backfill on confirm.
+              barcode: gtin && isValidGtin(gtin) ? gtin : null,
               quantity: new Prisma.Decimal(item.quantity.toFixed(3)),
               unitPriceCents: item.unitPriceCents,
               discountCents: item.discountCents,

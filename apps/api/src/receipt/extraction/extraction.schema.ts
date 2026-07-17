@@ -7,11 +7,14 @@
  */
 /**
  * Output-token ceiling for the extraction call, shared by both providers.
- * A real grocery receipt runs to dozens of line items (plus the provider's
- * adaptive thinking); the earlier 8192 truncated large receipts mid-JSON,
- * surfacing as a "non-JSON output" parse failure (Phase 8.17).
+ * A real grocery receipt runs to dozens of line items, and on Anthropic the
+ * model's adaptive thinking spends from the SAME budget — 8192 (Phase 8.17)
+ * and then 16384 (8.21, a ~50-line receipt on Sonnet 5's denser tokenizer)
+ * both truncated mid-JSON, surfacing as a "non-JSON output" parse failure.
+ * 64K forces streaming on the Anthropic SDK (HTTP-timeout guidance >16K);
+ * providers must also surface truncation as its own error, not a parse one.
  */
-export const EXTRACTION_MAX_OUTPUT_TOKENS = 16384;
+export const EXTRACTION_MAX_OUTPUT_TOKENS = 64_000;
 
 export const EXTRACTION_RESULT_JSON_SCHEMA = {
   type: 'object',
@@ -55,6 +58,7 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
         additionalProperties: false,
         required: [
           'rawName',
+          'barcode',
           'quantity',
           'unitPriceCents',
           'discountCents',
@@ -66,6 +70,12 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
           rawName: {
             type: 'string',
             description: 'Item name exactly as printed (keep original language).',
+          },
+          barcode: {
+            type: ['string', 'null'],
+            description:
+              'Product barcode digits printed on/near the line (EAN/UPC, 8–14 digits, e.g. ' +
+              '7290119381043), or null. Short internal store codes (1–7 digits) are NOT barcodes.',
           },
           quantity: {
             type: 'number',
@@ -128,8 +138,12 @@ export function buildExtractionPrompt(ctx: {
     'Extract the receipt data from the attached document.',
     '',
     'Rules:',
+    '- Several attached photos are consecutive segments of ONE long receipt, in order,',
+    '  possibly overlapping at the seams — extract each line item exactly once.',
     '- All money values are INTEGER cents (45.90 → 4590). Never use floats for money.',
     '- Keep item names exactly as printed, in their original language.',
+    '- Many receipts print a product barcode (EAN/UPC, 8–14 digits) next to each line — return',
+    '  it in barcode. Short internal store codes (1–7 digits) are not barcodes; use null.',
     '- Line totals are AFTER line-level discounts; receipt-level discounts go in discountCents.',
     '- Dates: prefer an explicit printed date/time; return ISO 8601. When the day/month order is' +
       ` ambiguous, assume the ${ctx.locale ?? 'en'} locale convention.`,

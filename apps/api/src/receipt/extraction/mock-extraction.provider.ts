@@ -34,6 +34,7 @@ export class MockExtractionProvider implements ReceiptExtractionProvider {
       items: [
         {
           rawName: 'Milk 3%',
+          barcode: '7290000066318',
           quantity: 2,
           unitPriceCents: 440,
           discountCents: 0,
@@ -43,6 +44,7 @@ export class MockExtractionProvider implements ReceiptExtractionProvider {
         },
         {
           rawName: 'Tomatoes',
+          barcode: null,
           quantity: 0.8,
           unitPriceCents: 1100,
           discountCents: 0,

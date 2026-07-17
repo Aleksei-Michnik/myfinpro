@@ -10,7 +10,8 @@ import { useRef, useState, type DragEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 
 export interface ReceiptUploadZoneProps {
-  onFiles(files: File[]): void;
+  /** Camera shots stage as pages of one receipt (8.22); picker/drop may batch. */
+  onFiles(files: File[], source: 'picker' | 'camera'): void;
   onUrl(url: string): void;
   pending?: boolean;
 }
@@ -29,7 +30,7 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
     setDragOver(false);
     if (pending) return;
     const files = Array.from(event.dataTransfer.files ?? []);
-    if (files.length > 0) onFiles(files);
+    if (files.length > 0) onFiles(files, 'picker');
   };
 
   const submitUrl = () => {
@@ -122,7 +123,7 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
         data-testid="receipt-file-input"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) onFiles(files);
+          if (files.length > 0) onFiles(files, 'picker');
           e.target.value = '';
         }}
       />
@@ -135,7 +136,7 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
         data-testid="receipt-camera-input"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) onFiles(files);
+          if (files.length > 0) onFiles(files, 'camera');
           e.target.value = '';
         }}
       />

@@ -57,10 +57,7 @@ describe('ReceiptService', () => {
     id: 'r-1',
     status: 'UPLOADED',
     source: 'upload',
-    fileRef: '2026/07/abc.jpg',
     originalName: 'receipt.jpg',
-    mimeType: 'image/jpeg',
-    sizeBytes: 1234,
     sourceUrl: null,
     merchantId: null,
     merchant: null,
@@ -76,6 +73,17 @@ describe('ReceiptService', () => {
     createdAt: new Date('2026-07-04T10:00:00.000Z'),
     updatedAt: new Date('2026-07-04T10:00:00.000Z'),
     items: [],
+    files: [
+      {
+        id: 'f-1',
+        receiptId: 'r-1',
+        position: 1,
+        fileRef: '2026/07/abc.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1234,
+        createdAt: new Date('2026-07-04T10:00:00.000Z'),
+      },
+    ],
     ...over,
   });
 
@@ -105,7 +113,9 @@ describe('ReceiptService', () => {
       });
       prismaMock.receipt.create.mockResolvedValue(makeRow());
 
-      const dto = await service.createFromUpload('u-1', Buffer.from('x'), 'receipt.jpg');
+      const dto = await service.createFromUpload('u-1', [
+        { buffer: Buffer.from('x'), originalName: 'receipt.jpg' },
+      ]);
 
       expect(storageMock.save).toHaveBeenCalled();
       const createArg = prismaMock.receipt.create.mock.calls[0][0].data;
@@ -113,9 +123,17 @@ describe('ReceiptService', () => {
         expect.objectContaining({
           status: 'UPLOADED',
           source: 'upload',
-          fileRef: '2026/07/abc.jpg',
-          mimeType: 'image/jpeg',
+          originalName: 'receipt.jpg',
           uploadedById: 'u-1',
+          files: {
+            create: [
+              expect.objectContaining({
+                position: 1,
+                fileRef: '2026/07/abc.jpg',
+                mimeType: 'image/jpeg',
+              }),
+            ],
+          },
         }),
       );
       // Job: named 'extract', receipt payload, 3 attempts + backoff.
@@ -138,9 +156,55 @@ describe('ReceiptService', () => {
 
     it('a storage rejection propagates and nothing is persisted or enqueued', async () => {
       storageMock.save.mockRejectedValue(new BadRequestException());
-      await expect(service.createFromUpload('u-1', Buffer.from('x'), null)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.createFromUpload('u-1', [{ buffer: Buffer.from('x'), originalName: null }]),
+      ).rejects.toThrow(BadRequestException);
+      expect(prismaMock.receipt.create).not.toHaveBeenCalled();
+      expect(queueMock.add).not.toHaveBeenCalled();
+    });
+
+    it('several images become ordered pages of ONE receipt (8.22)', async () => {
+      storageMock.save
+        .mockResolvedValueOnce({ fileRef: '2026/07/p1.jpg', mimeType: 'image/jpeg', sizeBytes: 10 })
+        .mockResolvedValueOnce({ fileRef: '2026/07/p2.jpg', mimeType: 'image/png', sizeBytes: 20 });
+      prismaMock.receipt.create.mockResolvedValue(makeRow());
+
+      await service.createFromUpload('u-1', [
+        { buffer: Buffer.from('a'), originalName: 'top.jpg' },
+        { buffer: Buffer.from('b'), originalName: 'bottom.png' },
+      ]);
+
+      const createArg = prismaMock.receipt.create.mock.calls[0][0].data;
+      expect(createArg.originalName).toBe('top.jpg');
+      expect(createArg.files.create).toEqual([
+        expect.objectContaining({ position: 1, fileRef: '2026/07/p1.jpg' }),
+        expect.objectContaining({ position: 2, fileRef: '2026/07/p2.jpg' }),
+      ]);
+      // ONE receipt, ONE extraction job.
+      expect(prismaMock.receipt.create).toHaveBeenCalledTimes(1);
+      expect(queueMock.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a PDF in a multi-file batch and removes the stored pages (8.22)', async () => {
+      storageMock.save
+        .mockResolvedValueOnce({ fileRef: '2026/07/p1.jpg', mimeType: 'image/jpeg', sizeBytes: 10 })
+        .mockResolvedValueOnce({
+          fileRef: '2026/07/p2.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 20,
+        });
+
+      try {
+        await service.createFromUpload('u-1', [
+          { buffer: Buffer.from('a'), originalName: 'a.jpg' },
+          { buffer: Buffer.from('b'), originalName: 'b.pdf' },
+        ]);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_FILE_TYPE');
+      }
+      expect(storageMock.delete).toHaveBeenCalledWith('2026/07/p1.jpg');
+      expect(storageMock.delete).toHaveBeenCalledWith('2026/07/p2.pdf');
       expect(prismaMock.receipt.create).not.toHaveBeenCalled();
       expect(queueMock.add).not.toHaveBeenCalled();
     });
@@ -149,7 +213,7 @@ describe('ReceiptService', () => {
   describe('createFromUrl', () => {
     it('creates a url-source row without touching storage', async () => {
       prismaMock.receipt.create.mockResolvedValue(
-        makeRow({ source: 'url', fileRef: null, sourceUrl: 'https://r.example/x' }),
+        makeRow({ source: 'url', files: [], sourceUrl: 'https://r.example/x' }),
       );
       const dto = await service.createFromUrl('u-1', { url: 'https://r.example/x' });
       expect(storageMock.save).not.toHaveBeenCalled();
@@ -338,7 +402,7 @@ describe('ReceiptService', () => {
       expect(dto.id).toBe('r-1');
       expect(transactionServiceMock.assertVisible).toHaveBeenCalledWith('group-member', 'pay-1');
 
-      const file = await service.openFile('group-member', 'r-1');
+      const file = await service.openFile('group-member', 'r-1', 'f-1');
       expect(file.mimeType).toBe('image/jpeg');
     });
 
@@ -360,15 +424,15 @@ describe('ReceiptService', () => {
     it('streams the stored file with its mime type', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(makeRow());
       storageMock.openStream.mockResolvedValue({ stream: 'STREAM', sizeBytes: 1234 });
-      const out = await service.openFile('u-1', 'r-1');
+      const out = await service.openFile('u-1', 'r-1', 'f-1');
       expect(storageMock.openStream).toHaveBeenCalledWith('2026/07/abc.jpg');
       expect(out.mimeType).toBe('image/jpeg');
       expect(out.sizeBytes).toBe(1234);
     });
 
-    it('404s when a url-source receipt has no stored file yet', async () => {
-      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ fileRef: null }));
-      await expect(service.openFile('u-1', 'r-1')).rejects.toThrow(NotFoundException);
+    it('404s when the requested page does not belong to the receipt', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ files: [] }));
+      await expect(service.openFile('u-1', 'r-1', 'f-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -596,7 +660,7 @@ describe('ReceiptService', () => {
           currency: 'ILS',
           note: 'Shufersal',
           categoryId: 'cat-1',
-          document: expect.objectContaining({ kind: 'receipt', fileRef: '2026/07/abc.jpg' }),
+          documents: [expect.objectContaining({ kind: 'receipt', fileRef: '2026/07/abc.jpg' })],
         }),
       );
       // Receipt linked to the transaction + merchant, marked CONFIRMED.
@@ -636,10 +700,10 @@ describe('ReceiptService', () => {
 
     it('omits the document for a URL receipt with no stored file', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(
-        reviewRow({ source: 'url', fileRef: null, extractedMerchantName: null }),
+        reviewRow({ source: 'url', files: [], extractedMerchantName: null }),
       );
       prismaMock.receipt.findUnique.mockResolvedValue(
-        reviewRow({ source: 'url', fileRef: null, status: 'CONFIRMED', transactionId: 'p-1' }),
+        reviewRow({ source: 'url', files: [], status: 'CONFIRMED', transactionId: 'p-1' }),
       );
 
       await service.confirm('u-1', 'r-1', {
@@ -650,7 +714,7 @@ describe('ReceiptService', () => {
       expect(transactionServiceMock.createExpenseWithinTx).toHaveBeenCalledWith(
         expect.anything(),
         'u-1',
-        expect.objectContaining({ document: null }),
+        expect.objectContaining({ documents: [] }),
       );
       expect(txMerchant.create).not.toHaveBeenCalled(); // no name to register
     });
@@ -719,11 +783,16 @@ describe('ReceiptService', () => {
         mimeType: 'image/jpeg',
         sizeBytes: 10,
       });
-      prismaMock.receipt.create.mockImplementation(({ data }: { data: never }) =>
-        Promise.resolve(makeRow({ ...(data as object), id: 'r-att' })),
+      prismaMock.receipt.create.mockImplementation(
+        ({ data }: { data: { transactionId?: string } }) =>
+          Promise.resolve(makeRow({ id: 'r-att', transactionId: data.transactionId ?? null })),
       );
 
-      const dto = await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
+      const dto = await service.createFromUpload(
+        'u-1',
+        [{ buffer: Buffer.from('x'), originalName: 'r.jpg' }],
+        'pay-1',
+      );
 
       expect(prismaMock.transaction.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'pay-1', createdById: 'u-1' } }),
@@ -758,7 +827,11 @@ describe('ReceiptService', () => {
     it('rejects attaching to a non-expense (IN) transaction', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'IN' });
       try {
-        await service.createFromUpload('u-1', Buffer.from('x'), 'r.jpg', 'pay-1');
+        await service.createFromUpload(
+          'u-1',
+          [{ buffer: Buffer.from('x'), originalName: 'r.jpg' }],
+          'pay-1',
+        );
         throw new Error('should have thrown');
       } catch (err) {
         expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
@@ -842,7 +915,9 @@ describe('ReceiptService', () => {
     eventBusMock.publish.mockImplementation(() => {
       throw new Error('redis blip');
     });
-    await expect(service.createFromUpload('u-1', Buffer.from('x'), null)).resolves.toMatchObject({
+    await expect(
+      service.createFromUpload('u-1', [{ buffer: Buffer.from('x'), originalName: null }]),
+    ).resolves.toMatchObject({
       id: 'r-1',
     });
   });

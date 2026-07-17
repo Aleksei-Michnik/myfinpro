@@ -19,6 +19,8 @@ export interface ReceiptItem {
   id: string;
   position: number;
   rawName: string;
+  /** Product code read off the printed line (normalized GTIN), 8.21. */
+  barcode: string | null;
   quantity: number;
   unitPriceCents: number | null;
   discountCents: number;
@@ -32,13 +34,19 @@ export interface ReceiptItem {
   matchCandidates: ProductMatchCandidate[];
 }
 
+/** One stored page of a receipt (8.22) — streamed via /files/:fileId. */
+export interface ReceiptFilePage {
+  id: string;
+  /** 1-based page order as uploaded. */
+  position: number;
+  mimeType: string;
+}
+
 export interface ReceiptSummary {
   id: string;
   status: ReceiptStatus;
   source: ReceiptSource;
   originalName: string | null;
-  mimeType: string | null;
-  sizeBytes: number | null;
   sourceUrl: string | null;
   merchantId: string | null;
   merchantName: string | null;
@@ -56,6 +64,8 @@ export interface ReceiptSummary {
   createdAt: string;
   updatedAt: string;
   items: ReceiptItem[];
+  /** Stored pages in shot order (8.22); empty for url/manual receipts. */
+  files: ReceiptFilePage[];
 }
 
 export interface ReceiptListResponse {

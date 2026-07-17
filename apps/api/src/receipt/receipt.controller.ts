@@ -1,4 +1,4 @@
-import { RECEIPT_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
+import { RECEIPT_MAX_FILE_SIZE_BYTES, RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import {
   BadRequestException,
   Body,
@@ -14,11 +14,11 @@ import {
   Put,
   Query,
   Res,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -77,23 +77,28 @@ export class ReceiptController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: RECEIPT_MAX_FILE_SIZE_BYTES + 1024 * 1024 } }),
+    FilesInterceptor('files', RECEIPT_MAX_FILES, {
+      limits: { fileSize: RECEIPT_MAX_FILE_SIZE_BYTES + 1024 * 1024 },
+    }),
   )
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
-      properties: { file: { type: 'string', format: 'binary' } },
-      required: ['file'],
+      properties: {
+        files: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
+      required: ['files'],
     },
   })
   @ApiOperation({
-    summary: 'Upload a receipt file',
+    summary: 'Upload a receipt (one or several photo pages)',
     description:
-      'JPEG / PNG / WebP / HEIC / PDF up to 10MB (validated from magic bytes). Creates the ' +
-      'receipt in UPLOADED and enqueues async extraction; watch status via GET or the ' +
-      'receipt.updated realtime event.',
+      'JPEG / PNG / WebP / HEIC / PDF, each up to 10MB (validated from magic bytes). Several ' +
+      `images (max ${RECEIPT_MAX_FILES}) are the ordered pages of ONE long receipt; a PDF must ` +
+      'be uploaded alone. Creates the receipt in UPLOADED and enqueues async extraction; watch ' +
+      'status via GET or the receipt.updated realtime event.',
   })
   @ApiOkResponse({ description: 'Receipt created', type: ReceiptResponseDto })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds the hard multipart cap' })
@@ -101,15 +106,18 @@ export class ReceiptController {
   @ApiTooManyRequestsResponse({ description: 'Rate limited' })
   async upload(
     @CurrentUser() user: JwtPayload,
-    @UploadedFile() file: UploadedReceiptFile | undefined,
+    @UploadedFiles() files: UploadedReceiptFile[] | undefined,
   ): Promise<ReceiptResponseDto> {
-    if (!file || !file.buffer) {
+    if (!files || files.length === 0 || files.some((f) => !f.buffer)) {
       throw new BadRequestException({
-        message: "Multipart field 'file' is required",
+        message: "Multipart field 'files' is required",
         errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
       });
     }
-    return this.service.createFromUpload(user.sub, file.buffer, file.originalname ?? null);
+    return this.service.createFromUpload(
+      user.sub,
+      files.map((f) => ({ buffer: f.buffer, originalName: f.originalname ?? null })),
+    );
   }
 
   @CustomThrottle({ limit: 20, ttl: 60_000 })
@@ -189,19 +197,20 @@ export class ReceiptController {
 
   @CustomThrottle({ limit: 60, ttl: 60_000 })
   @UseGuards(JwtAuthGuard)
-  @Get(':id/file')
+  @Get(':id/files/:fileId')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Stream the stored receipt file (uploader only)' })
+  @ApiOperation({ summary: 'Stream one stored receipt page (uploader or co-viewer)' })
   @ApiOkResponse({ description: 'File stream' })
-  @ApiNotFoundResponse({ description: 'Not found / no file stored' })
+  @ApiNotFoundResponse({ description: 'Not found / no such file' })
   @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
   @ApiTooManyRequestsResponse({ description: 'Rate limited' })
   async downloadFile(
     @CurrentUser() user: JwtPayload,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('fileId', new ParseUUIDPipe()) fileId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const { stream, mimeType, sizeBytes } = await this.service.openFile(user.sub, id);
+    const { stream, mimeType, sizeBytes } = await this.service.openFile(user.sub, id, fileId);
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Length', String(sizeBytes));
     res.setHeader('Content-Disposition', 'inline');

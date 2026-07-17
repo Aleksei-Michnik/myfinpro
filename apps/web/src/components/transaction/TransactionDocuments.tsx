@@ -23,7 +23,8 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // One object-URL per stored page (8.22), aligned with receipt.files.
+  const [blobUrls, setBlobUrls] = useState<(string | null)[]>([]);
   const [blobError, setBlobError] = useState(false);
 
   const load = useCallback(() => {
@@ -37,27 +38,28 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
 
   useEffect(() => load(), [load]);
 
-  // Fetch the file blob only once the viewer is opened (uploaded receipts).
+  // Fetch the page blobs only once the viewer is opened (uploaded receipts).
   // Failure surfaces IN the viewer — a silent catch here left it spinning
   // forever. Close + reopen retries.
   useEffect(() => {
-    if (!viewerOpen || !receipt || receipt.source === 'url') return;
+    if (!viewerOpen || !receipt || receipt.source === 'url' || receipt.files.length === 0) return;
     setBlobError(false);
-    let objectUrl: string | null = null;
+    const objectUrls: string[] = [];
     let cancelled = false;
-    void fetchFileBlob(receipt.id)
-      .then((blob) => {
+    void Promise.all(receipt.files.map((file) => fetchFileBlob(receipt.id, file.id)))
+      .then((blobs) => {
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
+        const urls = blobs.map((blob) => URL.createObjectURL(blob));
+        objectUrls.push(...urls);
+        setBlobUrls(urls);
       })
       .catch(() => {
         if (!cancelled) setBlobError(true);
       });
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      setBlobUrl(null);
+      for (const url of objectUrls) URL.revokeObjectURL(url);
+      setBlobUrls([]);
     };
   }, [viewerOpen, receipt, fetchFileBlob]);
 
@@ -115,7 +117,7 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
         >
           {receipt.sourceUrl} ↗
         </a>
-      ) : receipt && receipt.mimeType ? (
+      ) : receipt && receipt.files.length > 0 ? (
         <div
           className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-700"
           data-testid="transaction-document-file"
@@ -124,7 +126,10 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
             <p className="truncate text-sm text-gray-900 dark:text-gray-100">
               {receipt.originalName ?? t('title')}
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{receipt.mimeType}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {receipt.files[0].mimeType}
+              {receipt.files.length > 1 ? ` · ${t('pages', { count: receipt.files.length })}` : ''}
+            </p>
           </div>
           <button
             type="button"
@@ -147,9 +152,11 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
       {receipt && receipt.source !== 'url' && (
         <ReceiptDocumentViewer
           open={viewerOpen}
-          url={blobUrl}
+          pages={receipt.files.map((file, index) => ({
+            url: blobUrls[index] ?? null,
+            mimeType: file.mimeType,
+          }))}
           loadError={blobError}
-          mimeType={receipt.mimeType}
           title={title}
           onClose={() => setViewerOpen(false)}
         />

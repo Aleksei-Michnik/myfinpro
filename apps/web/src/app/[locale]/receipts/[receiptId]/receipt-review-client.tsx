@@ -76,7 +76,8 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
 
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // One object-URL per stored page (8.22), aligned with receipt.files.
+  const [previewUrls, setPreviewUrls] = useState<(string | null)[]>([]);
   const [previewError, setPreviewError] = useState(false);
 
   // Header form state.
@@ -150,28 +151,33 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     });
   });
 
-  // Authenticated file preview via a blob object-URL. A failure surfaces as
-  // an inline error — a silent catch left the "loading" placeholder forever.
+  // Authenticated per-page previews via blob object-URLs (8.22). A failure
+  // surfaces as an inline error — a silent catch left the "loading"
+  // placeholder forever. Pages are immutable after upload, so the id list
+  // is a stable re-fetch key.
+  const fileIdsKey = receipt?.files.map((f) => f.id).join(',') ?? '';
   useEffect(() => {
-    if (!receipt || receipt.source !== 'upload') return;
+    if (!receipt || receipt.source !== 'upload' || receipt.files.length === 0) return;
     setPreviewError(false);
-    let revoked: string | null = null;
+    const revoked: string[] = [];
     let cancelled = false;
-    void fetchFileBlob(receiptId)
-      .then((blob) => {
+    void Promise.all(receipt.files.map((file) => fetchFileBlob(receiptId, file.id)))
+      .then((blobs) => {
         if (cancelled) return;
-        revoked = URL.createObjectURL(blob);
-        setPreviewUrl(revoked);
+        const urls = blobs.map((blob) => URL.createObjectURL(blob));
+        revoked.push(...urls);
+        setPreviewUrls(urls);
       })
       .catch(() => {
         if (!cancelled) setPreviewError(true);
       });
     return () => {
       cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
+      for (const url of revoked) URL.revokeObjectURL(url);
+      setPreviewUrls([]);
     };
-    // Re-fetch only when the receipt identity changes, not on every patch.
-  }, [receiptId, receipt?.source, fetchFileBlob]);
+    // Re-fetch only when the receipt identity/pages change, not on every patch.
+  }, [receiptId, receipt?.source, fileIdsKey, fetchFileBlob]);
 
   useEffect(() => {
     void listCategories({ direction: 'OUT' })
@@ -434,11 +440,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
             >
               {receipt.sourceUrl}
             </a>
-          ) : previewUrl ? (
-            receipt.mimeType === 'application/pdf' ? (
+          ) : previewUrls[0] ? (
+            receipt.files[0]?.mimeType === 'application/pdf' ? (
               <div className="space-y-2">
                 <object
-                  data={previewUrl}
+                  data={previewUrls[0]}
                   type="application/pdf"
                   className="h-[60vh] w-full rounded"
                   aria-label={t('previewTitle')}
@@ -465,11 +471,19 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                 className="block w-full cursor-zoom-in rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <img
-                  src={previewUrl}
+                  src={previewUrls[0]}
                   alt={receipt.originalName ?? t('previewTitle')}
                   className="max-h-[70vh] w-full rounded object-contain"
                   data-testid="receipt-preview-image"
                 />
+                {receipt.files.length > 1 && (
+                  <span
+                    className="mt-1 block text-center text-xs text-gray-500 dark:text-gray-400"
+                    data-testid="receipt-preview-pages"
+                  >
+                    {tViewer('pageOf', { current: 1, total: receipt.files.length })}
+                  </span>
+                )}
               </button>
             )
           ) : previewError ? (
@@ -852,9 +866,11 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
       {receipt.source !== 'url' && (
         <ReceiptDocumentViewer
           open={viewerOpen}
-          url={previewUrl}
+          pages={receipt.files.map((file, index) => ({
+            url: previewUrls[index] ?? null,
+            mimeType: file.mimeType,
+          }))}
           loadError={previewError}
-          mimeType={receipt.mimeType}
           title={
             // File name first — merchant names are receipt data in the
             // receipt's own language and read as a localisation bug.

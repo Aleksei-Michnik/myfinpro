@@ -10,23 +10,36 @@ import {
   type ExtractionInput,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
+import { mergeContinuationItems, salvageCompleteItems } from './extraction-continuation.util';
 import { buildExtractionPrompt } from './extraction.schema';
 import { MockExtractionProvider } from './mock-extraction.provider';
 import { ResilientExtractionProvider } from './resilient-extraction.provider';
 
 // The Anthropic SDK is mocked at module level — the provider spec asserts
-// the request shape without any network.
+// the request shape without any network. The provider streams and awaits
+// `finalMessage()` (8.21), so the mock resolves/rejects through that path;
+// `APIError` mirrors the SDK's static error class for instanceof checks.
 const anthropicCreateMock = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => {
-  return jest.fn().mockImplementation(() => ({
-    messages: { create: anthropicCreateMock },
+  class APIError extends Error {
+    constructor(
+      public status: number,
+      message: string,
+    ) {
+      super(message);
+    }
+  }
+  const ctor = jest.fn().mockImplementation(() => ({
+    messages: {
+      stream: (req: unknown) => ({ finalMessage: () => anthropicCreateMock(req) }),
+    },
   }));
+  return Object.assign(ctor, { APIError });
 });
 
 const IMAGE_INPUT: ExtractionInput = {
   kind: 'image',
-  data: Buffer.from('fake-image'),
-  mimeType: 'image/jpeg',
+  pages: [{ data: Buffer.from('fake-image'), mimeType: 'image/jpeg' }],
 };
 const CTX = {
   categories: [{ id: 'cat-1', name: 'Groceries' }],
@@ -254,8 +267,103 @@ describe('AnthropicExtractionProvider', () => {
     await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(/failed validation/);
   });
 
+  it('fails truncation with nothing salvageable as its own permanent error', async () => {
+    anthropicCreateMock.mockResolvedValueOnce({
+      stop_reason: 'max_tokens',
+      usage: { input_tokens: 1000, output_tokens: 64000 },
+      content: [{ type: 'text', text: '{"merchantName": "Shufe' }],
+    });
+    await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(/salvaged/);
+  });
+
+  it('chunks a truncated pass: salvages complete items and continues after them', async () => {
+    const item = (rawName: string) => ({
+      rawName,
+      quantity: 1,
+      unitPriceCents: 440,
+      discountCents: 0,
+      totalCents: 440,
+      suggestedCategoryId: null,
+      suggestedProductId: null,
+    });
+    // Pass 1 hits the ceiling mid-item: one complete item + one cut off.
+    const truncated =
+      `{"merchantName":"Shufersal","purchasedAt":null,"currency":"ILS",` +
+      `"totalCents":880,"discountCents":0,"items":[${JSON.stringify(item('לחם'))},{"rawName":"חצ`;
+    anthropicCreateMock
+      .mockResolvedValueOnce({
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 1000, output_tokens: 64000 },
+        content: [{ type: 'text', text: truncated }],
+      })
+      .mockResolvedValueOnce(validPayload());
+
+    const result = await makeProvider().extract(IMAGE_INPUT, CTX);
+    // Salvaged chunk-1 item precedes the continuation pass's items.
+    expect(result.items.map((i) => i.rawName)).toEqual(['לחם', 'חלב 3%']);
+
+    // The second call's prompt carries the continuation anchor.
+    const secondReq = anthropicCreateMock.mock.calls[1][0] as {
+      messages: { content: { type: string; text?: string }[] }[];
+    };
+    const promptBlock = secondReq.messages[0].content.at(-1);
+    expect(promptBlock?.text).toContain('CONTINUATION');
+    expect(promptBlock?.text).toContain('"לחם"');
+  });
+
+  it('maps 4xx API rejections (e.g. unsupported thinking mode) to permanent failures', async () => {
+    const Anthropic = jest.requireMock('@anthropic-ai/sdk') as {
+      APIError: new (status: number, message: string) => Error;
+    };
+    anthropicCreateMock.mockRejectedValueOnce(
+      new Anthropic.APIError(400, 'adaptive thinking is not supported on this model'),
+    );
+    await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(ExtractionFailedError);
+
+    // 429 stays retryable — it rides the resilience layer's backoff.
+    anthropicCreateMock.mockRejectedValueOnce(new Anthropic.APIError(429, 'rate limited'));
+    const err: unknown = await makeProvider()
+      .extract(IMAGE_INPUT, CTX)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(ExtractionFailedError);
+    expect((err as Error).message).toBe('rate limited');
+  });
+
   it('lets transport errors bubble for the resilience layer to retry', async () => {
     anthropicCreateMock.mockRejectedValue(new Error('overloaded_error'));
     await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow('overloaded_error');
+  });
+});
+
+describe('extraction continuation utils (8.21)', () => {
+  it('salvages only complete item objects from truncated JSON', () => {
+    const truncated =
+      '{"merchantName":"S","items":[{"rawName":"a","totalCents":100},' +
+      '{"rawName":"b","nested":{"x":1}},{"rawName":"cut-off","total';
+    const items = salvageCompleteItems(truncated);
+    expect(items.map((i) => i.rawName)).toEqual(['a', 'b']);
+  });
+
+  it('handles braces and escaped quotes inside item strings', () => {
+    const truncated = '{"items":[{"rawName":"weird {\\" name"},{"rawName":"tail';
+    expect(salvageCompleteItems(truncated).map((i) => i.rawName)).toEqual(['weird {" name']);
+  });
+
+  it('returns nothing when the items array never started', () => {
+    expect(salvageCompleteItems('{"merchantName":"Shufe')).toEqual([]);
+  });
+
+  it('stops at the closed items array (no salvage from complete payloads)', () => {
+    const complete = '{"items":[{"rawName":"a"}],"confidence":"high"}';
+    expect(salvageCompleteItems(complete).map((i) => i.rawName)).toEqual(['a']);
+  });
+
+  it('merges salvaged items in front of the final pass items', () => {
+    const merged = mergeContinuationItems({ merchantName: 'S', items: [{ rawName: 'c' }] }, [
+      { rawName: 'a' },
+      { rawName: 'b' },
+    ]) as { items: { rawName: string }[] };
+    expect(merged.items.map((i) => i.rawName)).toEqual(['a', 'b', 'c']);
   });
 });

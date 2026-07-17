@@ -7,9 +7,16 @@ import type { ExtractionResult } from '@myfinpro/shared';
  * touches the database, so drift fails the extraction, not the process.
  */
 
+/** One photographed page of a receipt (8.22 — long slips span several). */
+export interface ExtractionImagePage {
+  data: Buffer;
+  mimeType: string;
+}
+
 /** What the worker hands the provider. */
 export type ExtractionInput =
-  | { kind: 'image'; data: Buffer; mimeType: string }
+  /** Photo page(s) of ONE receipt, in shot order, possibly overlapping. */
+  | { kind: 'image'; pages: ExtractionImagePage[] }
   | { kind: 'pdf'; data: Buffer }
   /** Text/HTML snapshot of an online receipt (source=url). */
   | { kind: 'html'; data: string; sourceUrl: string };

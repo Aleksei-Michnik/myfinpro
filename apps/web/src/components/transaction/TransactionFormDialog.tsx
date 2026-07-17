@@ -280,7 +280,7 @@ export function TransactionFormDialog({
   };
   const handleReceiptFile = (file: File | undefined) => {
     if (!file) return;
-    handoffToReview((signal) => uploadReceipt(file, signal));
+    handoffToReview((signal) => uploadReceipt([file], signal));
   };
   const handleReceiptUrl = () => {
     const url = receiptUrl.trim();

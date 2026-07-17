@@ -38,20 +38,24 @@ describe('ReceiptController', () => {
 
   const user = { sub: 'u1' } as { sub: string };
 
-  it('POST → service.createFromUpload with the multipart buffer', async () => {
+  it('POST → service.createFromUpload with the multipart buffers, in order (8.22)', async () => {
     service.createFromUpload.mockResolvedValue({ id: 'r1' });
-    const buffer = Buffer.from('x');
-    const res = await controller.upload(user as never, {
-      buffer,
-      originalname: 'receipt.jpg',
-      size: 1,
-    });
-    expect(service.createFromUpload).toHaveBeenCalledWith('u1', buffer, 'receipt.jpg');
+    const top = Buffer.from('a');
+    const bottom = Buffer.from('b');
+    const res = await controller.upload(user as never, [
+      { buffer: top, originalname: 'top.jpg', size: 1 },
+      { buffer: bottom, originalname: 'bottom.jpg', size: 1 },
+    ]);
+    expect(service.createFromUpload).toHaveBeenCalledWith('u1', [
+      { buffer: top, originalName: 'top.jpg' },
+      { buffer: bottom, originalName: 'bottom.jpg' },
+    ]);
     expect(res).toEqual({ id: 'r1' });
   });
 
-  it('POST without a file → structured 400 before the service is touched', async () => {
+  it('POST without files → structured 400 before the service is touched', async () => {
     await expect(controller.upload(user as never, undefined)).rejects.toThrow(BadRequestException);
+    await expect(controller.upload(user as never, [])).rejects.toThrow(BadRequestException);
     expect(service.createFromUpload).not.toHaveBeenCalled();
   });
 
@@ -96,7 +100,7 @@ describe('ReceiptController', () => {
     expect(service.remove).toHaveBeenCalledWith('u1', 'r1');
   });
 
-  it('GET /:id/file pipes the stream with content headers', async () => {
+  it('GET /:id/files/:fileId pipes the page stream with content headers', async () => {
     const pipe = jest.fn();
     service.openFile.mockResolvedValue({
       stream: { pipe },
@@ -104,8 +108,8 @@ describe('ReceiptController', () => {
       sizeBytes: 42,
     });
     const res = { setHeader: jest.fn() } as never;
-    await controller.downloadFile(user as never, 'r1', res);
-    expect(service.openFile).toHaveBeenCalledWith('u1', 'r1');
+    await controller.downloadFile(user as never, 'r1', 'f1', res);
+    expect(service.openFile).toHaveBeenCalledWith('u1', 'r1', 'f1');
     const headers = (res as { setHeader: jest.Mock }).setHeader.mock.calls;
     expect(headers).toEqual(
       expect.arrayContaining([

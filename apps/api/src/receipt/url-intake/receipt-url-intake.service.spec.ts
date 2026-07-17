@@ -101,7 +101,7 @@ describe('ReceiptUrlIntakeService', () => {
 
     const input = await makeService().resolve('https://r.example/pic');
 
-    expect(input).toMatchObject({ kind: 'image', mimeType: 'image/png' });
+    expect(input).toMatchObject({ kind: 'image', pages: [{ mimeType: 'image/png' }] });
     expect(lastIntake().outcome).toBe('binary_image');
   });
 

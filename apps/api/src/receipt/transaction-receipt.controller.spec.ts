@@ -21,15 +21,17 @@ describe('TransactionReceiptController (8.15)', () => {
   it('POST /transactions/:id/receipt → createFromUpload with the transactionId', async () => {
     service.createFromUpload.mockResolvedValue({ id: 'r1' });
     const buffer = Buffer.from('x');
-    await controller.attachFile(user as never, 'pay-1', {
-      buffer,
-      originalname: 'r.jpg',
-      size: 1,
-    });
-    expect(service.createFromUpload).toHaveBeenCalledWith('u1', buffer, 'r.jpg', 'pay-1');
+    await controller.attachFile(user as never, 'pay-1', [
+      { buffer, originalname: 'r.jpg', size: 1 },
+    ]);
+    expect(service.createFromUpload).toHaveBeenCalledWith(
+      'u1',
+      [{ buffer, originalName: 'r.jpg' }],
+      'pay-1',
+    );
   });
 
-  it('POST /transactions/:id/receipt without a file → 400 before the service', async () => {
+  it('POST /transactions/:id/receipt without files → 400 before the service', async () => {
     await expect(controller.attachFile(user as never, 'pay-1', undefined)).rejects.toThrow(
       BadRequestException,
     );

@@ -34,6 +34,7 @@ function item(over: Partial<ReceiptItem>): ReceiptItem {
     id: over.id ?? 'i',
     position: 1,
     rawName: 'x',
+    barcode: null,
     quantity: 1,
     unitPriceCents: null,
     discountCents: 0,
