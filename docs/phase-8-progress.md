@@ -503,3 +503,67 @@ plan body — plans shipped in 6.20); remaining failures are pre-existing
 environmental issues in legacy auth-era suites (they boot AppModule against
 the shared dev DB with hard-coded emails and no cleanup — rerun-hostile) plus
 testcontainer start flakes; none touch the renamed surface.
+
+## 8.21 - Extraction hardening: curated models, chunked continuation, printed barcodes
+
+Production incident: Claude Haiku 4.5 rejected `thinking: adaptive` with a
+400 (each attempt burned three paid retries), and a ~50-line receipt on
+Claude Sonnet 5 hit the 16384-token output ceiling mid-JSON — surfacing as
+the misleading "Provider returned non-JSON output" (same failure mode as
+8.17, one ceiling higher).
+
+**Models.** Haiku 4.5 removed from `LLM_MODEL_CATALOG`; the catalog comment
+now states the compatibility bar (adaptive thinking + structured outputs /
+strict json_schema — exactly what the extraction call sends). The resolver's
+existing "model no longer available — choose another in Settings" failure
+covers stored selections.
+
+**Chunked continuation (both providers).** Output ceiling → 64K (the
+Anthropic call now streams per SDK guidance >16K). A pass stopping at the
+ceiling salvages its complete line items from the truncated JSON
+(string-aware brace scanner) and CONTINUES in a fresh call anchored on the
+last captured line; header comes from the final completed pass; bounded at 4
+continuations; a truncated pass that salvages nothing fails permanently with
+its own message (never a parse error). 4xx rejections (except 429) are
+permanent — no more resilience-layer retries on request/model
+incompatibilities.
+
+**Printed product codes.** `ExtractedItem.barcode` in the shared contract +
+provider schema + prompt; matcher stage 1 = exact GTIN hit at confidence 1.0
+(auto-links, same as manual scans; GS1 checksum gates OCR misreads);
+`receipt_items.barcode` persists the normalized code (migration
+`20260716120000`); a confirmed manual link backfills `Product.barcode` when
+the product has none and the code is unowned — so the registry learns and
+the NEXT receipt auto-matches.
+
+**Tests.** api unit 1155 green (chunking, salvage edge cases, barcode stage,
+4xx mapping); shared 160; `prisma migrate diff`: no drift.
+
+## 8.22 - Multi-photo receipts: one long slip photographed in ordered pages
+
+Per user request: very long slips don't fit one photo. `receipt_files` now
+owns a receipt's ordered pages (migration `20260716130000` creates the
+table, moves existing files to page 1, drops the receipts single-file
+columns — no legacy readers remain).
+
+**API.** Upload accepts 1–8 multipart `files`: all images = pages of ONE
+receipt in the given order; a PDF must be alone (mixed batches 400 and the
+already-stored pages of the aborted batch are deleted). Serving is
+`GET /receipts/:id/files/:fileId` (8.19 co-viewer authz unchanged); delete
+destroys every page; confirm writes one transaction-document row per page.
+The extraction worker loads all pages in position order and each provider
+sends one image block per page, with a prompt rule to treat overlapping
+seams as one receipt and extract each line exactly once.
+
+**Web.** Camera shots always stage; multi-image picks stage too; a single
+picked image uploads instantly (unchanged). The staging tray shows numbered
+thumbnails with per-page remove and an explicit **Upload as one receipt** /
+**Upload as separate receipts** choice — batch upload of distinct receipts
+stays a first-class flow. The shared document viewer gains an accessible
+page navigator (Page X of Y, zoom/pan resets per page; PDFs unchanged);
+attach-to-transaction accepts several photos. EN+HE strings added.
+
+**Tests.** api unit 1155 green (upload matrix incl. PDF-mix cleanup,
+multi-page extraction order, per-page serving); web 1194 green (staging
+tray one-vs-separate, pager, per-page blob fetch); typecheck+lint clean;
+`prisma migrate diff`: no drift.

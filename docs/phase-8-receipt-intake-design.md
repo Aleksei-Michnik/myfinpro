@@ -1,4 +1,4 @@
-# Phase 8.13–8.20 — Receipt Intake & Transaction Integration
+# Phase 8.13–8.22 — Receipt Intake & Transaction Integration
 
 > **Principle**: a receipt is a transaction's proving document. The target model
 > is **every receipt belongs to a transaction** — a receipt without a transaction has
@@ -18,6 +18,8 @@ Increments ship in this order (8.14 immediately after 8.13 by request):
 | 8.18 | Receipt document viewer (image zoom/pan + PDF) + purchase-details fold       | shipped |
 | 8.19 | Transaction Documents panel + cross-member receipt access + Transactions nav | shipped |
 | 8.20 | Rename Payment → Transaction end-to-end (DB, API, web, docs)                 | shipped |
+| 8.21 | Extraction hardening: model catalog, chunked continuation, printed barcodes  | shipped |
+| 8.22 | Multi-photo receipts: one long slip photographed in ordered pages            | shipped |
 
 8.17 jumped ahead of the still-planned 8.16: a user-reported bug (a real
 online receipt imported blank) made the URL path a correctness fix, not a
@@ -275,3 +277,52 @@ of both worlds:
   `phase-6-payments-design.md` → `phase-6-transactions-design.md`; the
   progress journal and RCA post-mortems stay as historical records (only
   link paths to the renamed file updated).
+
+## 9. 8.21 — Extraction hardening + printed product codes
+
+A production incident exposed two model-compatibility gaps and a missing
+signal on receipt lines:
+
+- **Curated model catalog.** The extraction call requires adaptive thinking +
+  structured outputs (Anthropic) / strict `json_schema` (OpenAI); the shared
+  `LLM_MODEL_CATALOG` now documents that bar and drops Claude Haiku 4.5,
+  which 400s on adaptive thinking. Stored selections of removed models keep
+  failing with the existing actionable settings message.
+- **Chunked continuation.** A ~50-line receipt exceeded the output-token
+  ceiling mid-JSON, surfacing as a misleading "non-JSON output". The ceiling
+  moved to 64K (Anthropic streams — SDK guidance above 16K), and BOTH
+  providers now treat a truncated pass as a chunk boundary: complete items
+  are salvaged from the cut-off JSON with a string-aware brace scanner, and
+  the model CONTINUES after the last captured line in a fresh call (bounded
+  at 4 continuations; a no-progress pass fails permanently). No generated
+  tokens are thrown away. 4xx provider rejections (except 429) map to
+  permanent failures instead of burning resilience-layer retries.
+- **Printed product codes.** Receipts print EAN/UPC digits next to lines;
+  extraction returns them (`ExtractedItem.barcode`), the matcher gets a
+  stage-1 exact-GTIN lookup (confidence 1.0, auto-links — same as manual
+  scans), the GS1 checksum gates OCR misreads, `receipt_items.barcode`
+  persists the normalized code, and a confirmed manual link backfills
+  `Product.barcode` when the product has none and the code is unowned — the
+  registry learns, and the next receipt auto-matches.
+
+## 10. 8.22 — Multi-photo receipts
+
+A very long paper slip cannot fit one photo. A receipt now owns ordered
+pages in `receipt_files` (migration moves existing single files to page 1
+and drops the receipts single-file columns):
+
+- **Upload** takes 1–8 files: several images are the pages of ONE receipt in
+  the given order; a PDF is always a single file (mixed batches 400 and
+  clean up already-stored pages). Per-file validation (magic bytes,
+  HEIC→JPEG, 10MB) is unchanged.
+- **Extraction** reads all pages as one document — one image block per page,
+  in order, with a prompt rule to treat overlapping seams as one receipt and
+  extract each line exactly once.
+- **Serving** moves to `GET /receipts/:id/files/:fileId` (same co-viewer
+  authz as 8.19); confirm writes one transaction-document row per page.
+- **Web.** Camera shots and multi-image picks stage as pages in a tray
+  (thumbnails in shot order, per-page remove) with an explicit **one
+  receipt** vs **separate receipts** choice; a single picked image uploads
+  instantly as before. The document viewer gains an accessible page
+  navigator (zoom/pan resets per page); attach-to-transaction accepts
+  several photos.

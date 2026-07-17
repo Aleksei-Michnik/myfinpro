@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-15
-> **Current work:** Phase 8 — Product Catalog, Matching & Barcode (8.1–8.20 shipped, incl. the Payment → Transaction rename) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
+> **Last updated:** 2026-07-17
+> **Current work:** Phase 8 — Product Catalog, Matching & Barcode (8.1–8.22 shipped, incl. the Payment → Transaction rename, chunked extraction and multi-photo receipts) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
 
 This document is an **index**: per-phase status and a short summary, with a link to each phase's detailed progress document (`phase-<number>-progress.md`). Formatting rules for progress documentation live in [`.kilocode/rules/docs.md`](../.kilocode/rules/docs.md).
 
