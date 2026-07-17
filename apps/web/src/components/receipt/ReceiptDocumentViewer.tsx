@@ -1,22 +1,28 @@
 'use client';
 
-// Phase 8.18 — accessible popup document viewer for a receipt's stored file.
-// Images support zoom (buttons / wheel / +-0 keys) and drag-to-pan; PDFs
-// render in the browser's native viewer. Portal-mounted, focus-trapped,
-// focus-restored, ESC + backdrop close — the dialog pattern used across the
-// app (cf. RetryReturnDialog).
+// Phase 8.18 — accessible popup document viewer for a receipt's stored
+// file(s). Images support zoom (buttons / wheel / +-0 keys) and drag-to-pan;
+// PDFs render in the browser's native viewer; multi-photo receipts (8.22)
+// get a page navigator. Portal-mounted, focus-trapped, focus-restored,
+// ESC + backdrop close — the dialog pattern used across the app (cf.
+// RetryReturnDialog).
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+/** One page to display — object URL is null while its blob still loads. */
+export interface ViewerPage {
+  url: string | null;
+  mimeType: string | null;
+}
+
 interface ReceiptDocumentViewerProps {
   open: boolean;
-  /** Object URL for the file blob, or null while it's still loading. */
-  url: string | null;
-  /** True when the file failed to load — renders an error instead of the spinner. */
+  /** Pages in shot order (8.22); a single-file document is one page. */
+  pages: ViewerPage[];
+  /** True when the file(s) failed to load — renders an error instead of the spinner. */
   loadError?: boolean;
-  mimeType: string | null;
   /** Accessible title (e.g. the file name). */
   title: string;
   onClose(): void;
@@ -28,9 +34,8 @@ const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
 export function ReceiptDocumentViewer({
   open,
-  url,
+  pages,
   loadError = false,
-  mimeType,
   title,
   onClose,
 }: ReceiptDocumentViewerProps) {
@@ -42,9 +47,12 @@ export function ReceiptDocumentViewer({
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [pageIndex, setPageIndex] = useState(0);
 
-  const isImage = (mimeType ?? '').startsWith('image/');
-  const isPdf = mimeType === 'application/pdf';
+  const page = pages[Math.min(pageIndex, Math.max(0, pages.length - 1))] ?? null;
+  const url = page?.url ?? null;
+  const isImage = (page?.mimeType ?? '').startsWith('image/');
+  const isPdf = page?.mimeType === 'application/pdf';
 
   const reset = useCallback(() => {
     setScale(1);
@@ -59,10 +67,14 @@ export function ReceiptDocumentViewer({
     });
   }, []);
 
-  // Reset the transform whenever the dialog opens or the document changes.
+  // Reset the transform whenever the dialog opens or the page changes;
+  // reopening always starts back at page 1.
   useEffect(() => {
     if (open) reset();
   }, [open, url, reset]);
+  useEffect(() => {
+    if (open) setPageIndex(0);
+  }, [open]);
 
   // Snapshot the previously-focused element on open; restore on close.
   useEffect(() => {
@@ -190,6 +202,34 @@ export function ReceiptDocumentViewer({
     </div>
   );
 
+  const pager = pages.length > 1 && (
+    <div className="flex items-center gap-1" role="group" aria-label={t('pageControls')}>
+      <button
+        type="button"
+        onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
+        disabled={pageIndex === 0}
+        aria-label={t('prevPage')}
+        data-testid="viewer-prev-page"
+        className="rounded-md px-2 py-1 text-lg leading-none text-white/90 hover:bg-white/10 disabled:opacity-40"
+      >
+        ‹
+      </button>
+      <span className="text-xs tabular-nums text-white/80" data-testid="viewer-page-indicator">
+        {t('pageOf', { current: pageIndex + 1, total: pages.length })}
+      </span>
+      <button
+        type="button"
+        onClick={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
+        disabled={pageIndex >= pages.length - 1}
+        aria-label={t('nextPage')}
+        data-testid="viewer-next-page"
+        className="rounded-md px-2 py-1 text-lg leading-none text-white/90 hover:bg-white/10 disabled:opacity-40"
+      >
+        ›
+      </button>
+    </div>
+  );
+
   const node = (
     <div
       data-testid="receipt-viewer-backdrop"
@@ -211,6 +251,7 @@ export function ReceiptDocumentViewer({
             {title}
           </h2>
           <div className="flex items-center gap-2">
+            {pager}
             {zoomControls}
             {url && (
               <a

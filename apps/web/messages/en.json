@@ -811,7 +811,8 @@
       "loading": "Loading documents…",
       "view": "View",
       "none": "No document file for this receipt.",
-      "unavailable": "Documents aren't available for this receipt."
+      "unavailable": "Documents aren't available for this receipt.",
+      "pages": "{count} pages"
     },
     "schedulePlan": {
       "occurrenceTitle": "Schedule / Plan",
@@ -1042,7 +1043,7 @@
     },
     "upload": {
       "title": "Add a receipt",
-      "dropLabel": "Drop a receipt here or click to browse",
+      "dropLabel": "Drop receipt photos here or click to browse",
       "formats": "JPEG, PNG, WebP, HEIC or PDF — up to 10MB",
       "browse": "Browse files",
       "camera": "Take a photo",
@@ -1050,7 +1051,16 @@
       "urlSubmit": "Add URL",
       "uploadedToast": "{count, plural, =1 {Receipt uploaded} other {# receipts uploaded}} — extraction started",
       "urlAddedToast": "Receipt URL added — extraction started",
-      "failedToast": "Upload failed"
+      "failedToast": "Upload failed",
+      "tooManyPages": "A receipt can have up to {max} photos",
+      "stagedTitle": "Photos of one receipt",
+      "stagedCount": "{count, plural, =1 {# photo} other {# photos}}",
+      "stagedHint": "A long receipt? Add its photos in order, top to bottom — they will be read as one receipt.",
+      "pageAlt": "Photo {page}",
+      "removePage": "Remove photo {page}",
+      "uploadAsOne": "{count, plural, =1 {Upload receipt} other {Upload as one receipt}}",
+      "uploadSeparately": "Upload as separate receipts",
+      "stagedClear": "Clear"
     },
     "manual": {
       "title": "Add products by barcode",
@@ -1125,7 +1135,11 @@
       "openInNewTab": "Open in a new tab",
       "close": "Close",
       "downloadPdf": "Download PDF",
-      "loadFailed": "Could not load the document file."
+      "loadFailed": "Could not load the document file.",
+      "pageControls": "Page navigation",
+      "pageOf": "Page {current} of {total}",
+      "prevPage": "Previous page",
+      "nextPage": "Next page"
     },
     "review": {
       "back": "Back to receipts",

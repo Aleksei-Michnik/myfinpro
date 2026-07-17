@@ -39,8 +39,7 @@ jest.mock('@anthropic-ai/sdk', () => {
 
 const IMAGE_INPUT: ExtractionInput = {
   kind: 'image',
-  data: Buffer.from('fake-image'),
-  mimeType: 'image/jpeg',
+  pages: [{ data: Buffer.from('fake-image'), mimeType: 'image/jpeg' }],
 };
 const CTX = {
   categories: [{ id: 'cat-1', name: 'Groceries' }],

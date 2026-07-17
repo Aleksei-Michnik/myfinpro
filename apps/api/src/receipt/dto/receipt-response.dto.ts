@@ -8,7 +8,7 @@ import {
   type ReceiptStatus,
 } from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { Merchant, Product, Receipt, ReceiptItem } from '@prisma/client';
+import type { Merchant, Product, Receipt, ReceiptFile, ReceiptItem } from '@prisma/client';
 
 /**
  * Wire shape for one receipt line item (Phase 7.4). Money is integer
@@ -68,6 +68,18 @@ export class ReceiptItemResponseDto {
   matchCandidates!: ProductMatchCandidate[];
 }
 
+/** One stored page of the receipt (8.22) — streamed via /files/:fileId. */
+export class ReceiptFileResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty({ description: '1-based page order as uploaded.' })
+  position!: number;
+
+  @ApiProperty()
+  mimeType!: string;
+}
+
 /** Wire shape returned by every receipt endpoint. */
 export class ReceiptResponseDto {
   @ApiProperty()
@@ -81,12 +93,6 @@ export class ReceiptResponseDto {
 
   @ApiPropertyOptional({ nullable: true, type: String })
   originalName!: string | null;
-
-  @ApiPropertyOptional({ nullable: true, type: String })
-  mimeType!: string | null;
-
-  @ApiPropertyOptional({ nullable: true, type: Number })
-  sizeBytes!: number | null;
 
   @ApiPropertyOptional({ nullable: true, type: String })
   sourceUrl!: string | null;
@@ -137,6 +143,12 @@ export class ReceiptResponseDto {
 
   @ApiProperty({ type: [ReceiptItemResponseDto] })
   items!: ReceiptItemResponseDto[];
+
+  @ApiProperty({
+    type: [ReceiptFileResponseDto],
+    description: 'Stored pages in shot order (8.22); empty for url/manual receipts.',
+  })
+  files!: ReceiptFileResponseDto[];
 }
 
 export type ReceiptItemWithProduct = ReceiptItem & {
@@ -146,6 +158,7 @@ export type ReceiptItemWithProduct = ReceiptItem & {
 export type ReceiptWithRelations = Receipt & {
   items: ReceiptItemWithProduct[];
   merchant: Pick<Merchant, 'name'> | null;
+  files: ReceiptFile[];
 };
 
 export function mapReceiptItemToDto(item: ReceiptItemWithProduct): ReceiptItemResponseDto {
@@ -181,8 +194,6 @@ export function mapReceiptToDto(row: ReceiptWithRelations): ReceiptResponseDto {
     status: row.status as ReceiptStatus,
     source: row.source as ReceiptSource,
     originalName: row.originalName,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
     sourceUrl: row.sourceUrl,
     merchantId: row.merchantId,
     merchantName: row.merchant?.name ?? null,
@@ -198,5 +209,8 @@ export function mapReceiptToDto(row: ReceiptWithRelations): ReceiptResponseDto {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     items,
+    files: [...row.files]
+      .sort((a, b) => a.position - b.position)
+      .map((f) => ({ id: f.id, position: f.position, mimeType: f.mimeType })),
   };
 }

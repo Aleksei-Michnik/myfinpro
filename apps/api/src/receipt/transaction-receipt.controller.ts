@@ -1,4 +1,4 @@
-import { RECEIPT_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
+import { RECEIPT_MAX_FILE_SIZE_BYTES, RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import {
   BadRequestException,
   Body,
@@ -8,11 +8,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -61,19 +61,23 @@ export class TransactionReceiptController {
   @Post(':id/receipt')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: RECEIPT_MAX_FILE_SIZE_BYTES + 1024 * 1024 } }),
+    FilesInterceptor('files', RECEIPT_MAX_FILES, {
+      limits: { fileSize: RECEIPT_MAX_FILE_SIZE_BYTES + 1024 * 1024 },
+    }),
   )
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
-      properties: { file: { type: 'string', format: 'binary' } },
-      required: ['file'],
+      properties: {
+        files: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
+      required: ['files'],
     },
   })
   @ApiOperation({
-    summary: 'Attach a receipt file to an existing expense transaction',
+    summary: 'Attach a receipt (one or several photo pages) to an existing expense transaction',
     description:
       'Creates the receipt already linked to the transaction and enqueues extraction. Finish the ' +
       'review with POST /receipts/:id/reconcile. One receipt per transaction; expense transactions ' +
@@ -86,18 +90,17 @@ export class TransactionReceiptController {
   async attachFile(
     @CurrentUser() user: JwtPayload,
     @Param('id', new ParseUUIDPipe()) transactionId: string,
-    @UploadedFile() file: UploadedReceiptFile | undefined,
+    @UploadedFiles() files: UploadedReceiptFile[] | undefined,
   ): Promise<ReceiptResponseDto> {
-    if (!file || !file.buffer) {
+    if (!files || files.length === 0 || files.some((f) => !f.buffer)) {
       throw new BadRequestException({
-        message: "Multipart field 'file' is required",
+        message: "Multipart field 'files' is required",
         errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
       });
     }
     return this.service.createFromUpload(
       user.sub,
-      file.buffer,
-      file.originalname ?? null,
+      files.map((f) => ({ buffer: f.buffer, originalName: f.originalname ?? null })),
       transactionId,
     );
   }

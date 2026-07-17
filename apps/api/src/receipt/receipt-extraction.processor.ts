@@ -191,8 +191,6 @@ export class ReceiptExtractionProcessor extends WorkerHost {
   private async buildInput(receipt: {
     id: string;
     source: string;
-    fileRef: string | null;
-    mimeType: string | null;
     sourceUrl: string | null;
   }): Promise<ExtractionInput> {
     if (receipt.source === 'url') {
@@ -204,14 +202,26 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       // anonymized analysis logging all live in the intake service.
       return this.urlIntake.resolve(receipt.sourceUrl);
     }
-    if (!receipt.fileRef) {
+    // 8.22 — a receipt may span several photographed pages; PDFs are
+    // guaranteed single-page by the upload validator.
+    const files = await this.prisma.receiptFile.findMany({
+      where: { receiptId: receipt.id },
+      orderBy: { position: 'asc' },
+      select: { fileRef: true, mimeType: true },
+    });
+    if (files.length === 0) {
       throw new ExtractionFailedError('Receipt has no stored file');
     }
-    const buffer = await this.storage.read(receipt.fileRef);
-    if (receipt.mimeType === 'application/pdf') {
-      return { kind: 'pdf', data: buffer };
+    if (files[0].mimeType === 'application/pdf') {
+      return { kind: 'pdf', data: await this.storage.read(files[0].fileRef) };
     }
-    return { kind: 'image', data: buffer, mimeType: receipt.mimeType ?? 'image/jpeg' };
+    const pages = await Promise.all(
+      files.map(async (file) => ({
+        data: await this.storage.read(file.fileRef),
+        mimeType: file.mimeType,
+      })),
+    );
+    return { kind: 'image', pages };
   }
 
   /** Persist header + items and flip to REVIEW in one transaction. */

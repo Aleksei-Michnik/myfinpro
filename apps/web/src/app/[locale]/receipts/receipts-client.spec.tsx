@@ -72,8 +72,6 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     status: 'UPLOADED',
     source: 'upload',
     originalName: 'receipt.jpg',
-    mimeType: 'image/jpeg',
-    sizeBytes: 1234,
     sourceUrl: null,
     merchantId: null,
     merchantName: null,
@@ -89,6 +87,7 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     createdAt: '2026-07-04T10:00:00.000Z',
     updatedAt: '2026-07-04T10:00:00.000Z',
     items: [],
+    files: [{ id: 'f-1', position: 1, mimeType: 'image/jpeg' }],
     ...over,
   };
 }
@@ -146,8 +145,51 @@ describe('ReceiptsClient', () => {
     fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [file] } });
 
     await waitFor(() => expect(screen.getByTestId('receipt-row-r-new')).toBeInTheDocument());
-    expect(uploadReceiptMock).toHaveBeenCalledWith(file, expect.anything());
+    expect(uploadReceiptMock).toHaveBeenCalledWith([file], expect.anything());
     expect(addToastMock).toHaveBeenCalledWith('success', 'upload.uploadedToast:1');
+  });
+
+  it('multiple dropped images stage as pages of one receipt (8.22)', async () => {
+    global.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    global.URL.revokeObjectURL = vi.fn();
+    render(<ReceiptsClient />);
+    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
+    uploadReceiptMock.mockResolvedValue(makeReceipt({ id: 'r-multi' }));
+
+    const p1 = new File(['1'], 'p1.jpg', { type: 'image/jpeg' });
+    const p2 = new File(['2'], 'p2.jpg', { type: 'image/jpeg' });
+    fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [p1, p2] } });
+
+    // Nothing uploads yet — the tray holds both photos.
+    expect(uploadReceiptMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('staged-pages')).toBeInTheDocument();
+    expect(screen.getByTestId('staged-page-2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('staged-upload-one'));
+    await waitFor(() =>
+      expect(uploadReceiptMock).toHaveBeenCalledWith([p1, p2], expect.anything()),
+    );
+    expect(uploadReceiptMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByTestId('staged-pages')).not.toBeInTheDocument());
+  });
+
+  it('staged photos can upload as separate receipts instead (8.22)', async () => {
+    global.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    global.URL.revokeObjectURL = vi.fn();
+    render(<ReceiptsClient />);
+    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
+    uploadReceiptMock
+      .mockResolvedValueOnce(makeReceipt({ id: 'r-a' }))
+      .mockResolvedValueOnce(makeReceipt({ id: 'r-b' }));
+
+    const p1 = new File(['1'], 'p1.jpg', { type: 'image/jpeg' });
+    const p2 = new File(['2'], 'p2.jpg', { type: 'image/jpeg' });
+    fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [p1, p2] } });
+
+    fireEvent.click(screen.getByTestId('staged-upload-separately'));
+    await waitFor(() => expect(uploadReceiptMock).toHaveBeenCalledTimes(2));
+    expect(uploadReceiptMock).toHaveBeenNthCalledWith(1, [p1], expect.anything());
+    expect(uploadReceiptMock).toHaveBeenNthCalledWith(2, [p2], expect.anything());
   });
 
   it('adds URL receipts through the form', async () => {

@@ -5,8 +5,9 @@
 // live lifecycle updates (SSE receipt.updated / receipt.deleted, refetch on
 // realtime reconnect per docs/ui-realtime-conventions.md).
 
+import { RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
@@ -44,6 +45,8 @@ export function ReceiptsClient() {
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  // 8.22 — photos staged as the pages of ONE long receipt before uploading.
+  const [staged, setStaged] = useState<File[]>([]);
 
   const listOp = useAsyncOperation<ReceiptSummary[]>({ scope: 'container' });
   const intakeOp = useAsyncOperation<number>({ scope: 'control' });
@@ -85,22 +88,49 @@ export function ReceiptsClient() {
     setReceipts((prev) => prev.filter((r) => r.id !== event.receiptId));
   });
 
-  const handleFiles = (files: File[]) => {
+  const uploadBatches = (batches: File[][]) => {
     void intakeOp
       .run(async (signal) => {
-        for (const file of files) {
-          const created = await uploadReceipt(file, signal);
+        for (const batch of batches) {
+          const created = await uploadReceipt(batch, signal);
           setReceipts((prev) =>
             prev.some((r) => r.id === created.id) ? prev : [created, ...prev],
           );
         }
-        return files.length;
+        return batches.length;
       })
-      .then((r) => {
-        if (r !== undefined) {
-          addToast('success', t('upload.uploadedToast', { count: files.length }));
+      .then((count) => {
+        if (count !== undefined) {
+          addToast('success', t('upload.uploadedToast', { count }));
         }
       });
+  };
+
+  const stagePages = (files: File[]) => {
+    setStaged((prev) => {
+      const next = [...prev, ...files];
+      if (next.length > RECEIPT_MAX_FILES) {
+        addToast('error', t('upload.tooManyPages', { max: RECEIPT_MAX_FILES }));
+        return next.slice(0, RECEIPT_MAX_FILES);
+      }
+      return next;
+    });
+  };
+
+  // Routing (8.22): PDFs are always standalone receipts; camera shots stage
+  // as pages of one long receipt (shoot → add page → … → upload); a multi-
+  // image pick stages too so the user chooses one-vs-separate explicitly.
+  // A single picked image with an empty tray uploads straight away.
+  const handleFiles = (files: File[], source: 'picker' | 'camera') => {
+    const pdfs = files.filter((f) => f.type === 'application/pdf');
+    const images = files.filter((f) => f.type !== 'application/pdf');
+    if (pdfs.length > 0) uploadBatches(pdfs.map((pdf) => [pdf]));
+    if (images.length === 0) return;
+    if (source === 'picker' && staged.length === 0 && images.length === 1) {
+      uploadBatches([images]);
+      return;
+    }
+    stagePages(images);
   };
 
   const handleUrl = (url: string) => {
@@ -182,6 +212,23 @@ export function ReceiptsClient() {
       <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{t('title')}</h1>
 
       <ReceiptUploadZone onFiles={handleFiles} onUrl={handleUrl} pending={intakeOp.isLoading} />
+
+      {staged.length > 0 && (
+        <StagedPagesTray
+          files={staged}
+          pending={intakeOp.isLoading}
+          onRemove={(index) => setStaged((prev) => prev.filter((_, i) => i !== index))}
+          onUploadOne={() => {
+            uploadBatches([staged]);
+            setStaged([]);
+          }}
+          onUploadSeparately={() => {
+            uploadBatches(staged.map((file) => [file]));
+            setStaged([]);
+          }}
+          onClear={() => setStaged([])}
+        />
+      )}
 
       <section aria-label={t('list.title')} data-testid="receipts-list" aria-live="polite">
         {listOp.isLoading && receipts.length === 0 && (
@@ -322,5 +369,115 @@ export function ReceiptsClient() {
         )}
       </section>
     </main>
+  );
+}
+
+interface StagedPagesTrayProps {
+  files: File[];
+  pending: boolean;
+  onRemove(index: number): void;
+  onUploadOne(): void;
+  onUploadSeparately(): void;
+  onClear(): void;
+}
+
+/**
+ * 8.22 — the pending pages of one long receipt: thumbnails in shot order,
+ * per-page remove, and the one-receipt vs separate-receipts choice. More
+ * photos added while the tray is open append to it.
+ */
+function StagedPagesTray({
+  files,
+  pending,
+  onRemove,
+  onUploadOne,
+  onUploadSeparately,
+  onClear,
+}: StagedPagesTrayProps) {
+  const t = useTranslations('receipts.upload');
+  const urls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
+  useEffect(
+    () => () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+    },
+    [urls],
+  );
+
+  return (
+    <section
+      className="rounded-lg border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-900/10"
+      aria-label={t('stagedTitle')}
+      data-testid="staged-pages"
+    >
+      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+        {t('stagedTitle')}{' '}
+        <span className="text-gray-500 dark:text-gray-400">
+          {t('stagedCount', { count: files.length })}
+        </span>
+      </p>
+      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t('stagedHint')}</p>
+
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {files.map((file, index) => (
+          <li key={`${file.name}-${index}`} className="relative">
+            {/* Blob object-URL — next/image can't consume it. */}
+            <img
+              src={urls[index]}
+              alt={t('pageAlt', { page: index + 1 })}
+              className="h-20 w-16 rounded border border-gray-300 object-cover dark:border-gray-600"
+              data-testid={`staged-page-${index + 1}`}
+            />
+            <span className="absolute bottom-0.5 start-0.5 rounded bg-gray-900/70 px-1 text-[10px] leading-4 text-white">
+              {index + 1}
+            </span>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onRemove(index)}
+              aria-label={t('removePage', { page: index + 1 })}
+              data-testid={`staged-page-remove-${index + 1}`}
+              className="absolute -end-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-xs leading-none text-white hover:bg-gray-900 disabled:opacity-40"
+            >
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          disabled={pending}
+          onClick={onUploadOne}
+          data-testid="staged-upload-one"
+        >
+          {t('uploadAsOne', { count: files.length })}
+        </Button>
+        {files.length > 1 && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={pending}
+            onClick={onUploadSeparately}
+            data-testid="staged-upload-separately"
+          >
+            {t('uploadSeparately')}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={onClear}
+          data-testid="staged-clear"
+        >
+          {t('stagedClear')}
+        </Button>
+      </div>
+    </section>
   );
 }

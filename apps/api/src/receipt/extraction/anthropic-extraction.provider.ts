@@ -159,16 +159,17 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
 
   private buildDocBlocks(input: ExtractionInput): Anthropic.ContentBlockParam[] {
     if (input.kind === 'image') {
-      return [
-        {
+      // One block per photographed page, in shot order (8.22).
+      return input.pages.map(
+        (page): Anthropic.ContentBlockParam => ({
           type: 'image',
           source: {
             type: 'base64',
-            media_type: input.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-            data: input.data.toString('base64'),
+            media_type: page.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: page.data.toString('base64'),
           },
-        },
-      ];
+        }),
+      );
     }
     if (input.kind === 'pdf') {
       return [

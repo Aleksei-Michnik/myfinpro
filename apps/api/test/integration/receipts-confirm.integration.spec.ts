@@ -105,10 +105,17 @@ describe('POST /receipts/:id/confirm (integration)', () => {
       data: {
         status: 'REVIEW',
         source: 'upload',
-        fileRef: `test/${suffix}-${Math.random().toString(36).slice(2, 8)}.jpg`,
         originalName: 'receipt.jpg',
-        mimeType: 'image/jpeg',
-        sizeBytes: 2048,
+        files: {
+          create: [
+            {
+              position: 1,
+              fileRef: `test/${suffix}-${Math.random().toString(36).slice(2, 8)}.jpg`,
+              mimeType: 'image/jpeg',
+              sizeBytes: 2048,
+            },
+          ],
+        },
         extractedMerchantName: 'ConfirmCo Market',
         currency: 'USD',
         totalCents: 2599,

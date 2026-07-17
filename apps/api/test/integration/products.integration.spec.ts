@@ -99,8 +99,16 @@ describe('Products & walkthrough (integration)', () => {
       data: {
         status,
         source: 'upload',
-        fileRef: `test/${suffix}-${Math.random().toString(36).slice(2, 8)}.jpg`,
-        mimeType: 'image/jpeg',
+        files: {
+          create: [
+            {
+              position: 1,
+              fileRef: `test/${suffix}-${Math.random().toString(36).slice(2, 8)}.jpg`,
+              mimeType: 'image/jpeg',
+              sizeBytes: 2048,
+            },
+          ],
+        },
         currency: 'ILS',
         totalCents: 880,
         purchasedAt: new Date('2026-07-01T12:00:00.000Z'),

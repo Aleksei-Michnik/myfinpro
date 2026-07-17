@@ -217,7 +217,7 @@ describe('TransactionFormDialog', () => {
       target: { files: [file] },
     });
 
-    await waitFor(() => expect(uploadReceiptMock).toHaveBeenCalledWith(file, expect.anything()));
+    await waitFor(() => expect(uploadReceiptMock).toHaveBeenCalledWith([file], expect.anything()));
     await waitFor(() => expect(routerPushMock).toHaveBeenCalledWith('/receipts/r-77'));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });

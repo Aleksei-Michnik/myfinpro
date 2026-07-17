@@ -204,6 +204,7 @@ describe('TransactionDetailClient', () => {
     mockGetReceipt.mockResolvedValue({
       id: 'r-42',
       source: 'upload',
+      files: [{ id: 'f-1', position: 1, mimeType: 'image/jpeg' }],
       items: [
         {
           id: 'i1',

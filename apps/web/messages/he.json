@@ -811,7 +811,8 @@
       "loading": "טוען מסמכים…",
       "view": "צפייה",
       "none": "אין קובץ מסמך לקבלה זו.",
-      "unavailable": "המסמכים אינם זמינים עבור קבלה זו."
+      "unavailable": "המסמכים אינם זמינים עבור קבלה זו.",
+      "pages": "{count} עמודים"
     },
     "schedulePlan": {
       "occurrenceTitle": "לוח זמנים / תכנית",
@@ -1042,7 +1043,7 @@
     },
     "upload": {
       "title": "הוספת קבלה",
-      "dropLabel": "גררו קבלה לכאן או לחצו לבחירת קובץ",
+      "dropLabel": "גררו לכאן תמונות של קבלה או לחצו לבחירה",
       "formats": "JPEG, PNG, WebP, HEIC או PDF — עד 10MB",
       "browse": "בחירת קבצים",
       "camera": "צילום תמונה",
@@ -1050,7 +1051,16 @@
       "urlSubmit": "הוספת קישור",
       "uploadedToast": "{count, plural, =1 {הקבלה הועלתה} other {# קבלות הועלו}} — החילוץ החל",
       "urlAddedToast": "קישור הקבלה נוסף — החילוץ החל",
-      "failedToast": "ההעלאה נכשלה"
+      "failedToast": "ההעלאה נכשלה",
+      "tooManyPages": "קבלה יכולה לכלול עד {max} תמונות",
+      "stagedTitle": "תמונות של קבלה אחת",
+      "stagedCount": "{count, plural, =1 {תמונה אחת} other {# תמונות}}",
+      "stagedHint": "קבלה ארוכה? הוסיפו את התמונות שלה לפי הסדר, מלמעלה למטה — הן ייקראו כקבלה אחת.",
+      "pageAlt": "תמונה {page}",
+      "removePage": "הסרת תמונה {page}",
+      "uploadAsOne": "{count, plural, =1 {העלאת הקבלה} other {העלאה כקבלה אחת}}",
+      "uploadSeparately": "העלאה כקבלות נפרדות",
+      "stagedClear": "ניקוי"
     },
     "manual": {
       "title": "הוספת מוצרים לפי ברקוד",
@@ -1125,7 +1135,11 @@
       "openInNewTab": "פתיחה בלשונית חדשה",
       "close": "סגירה",
       "downloadPdf": "הורדת PDF",
-      "loadFailed": "טעינת קובץ המסמך נכשלה."
+      "loadFailed": "טעינת קובץ המסמך נכשלה.",
+      "pageControls": "ניווט בין עמודים",
+      "pageOf": "עמוד {current} מתוך {total}",
+      "prevPage": "העמוד הקודם",
+      "nextPage": "העמוד הבא"
     },
     "review": {
       "back": "חזרה לקבלות",

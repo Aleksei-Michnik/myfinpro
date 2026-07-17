@@ -4,6 +4,7 @@ import {
   encodeCursor,
   normalizeLookupName,
   PAGINATION_DEFAULTS,
+  RECEIPT_MAX_FILES,
 } from '@myfinpro/shared';
 import { InjectQueue } from '@nestjs/bullmq';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -34,10 +35,11 @@ import { UpdateReceiptDto } from './dto/update-receipt.dto';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { assertPublicReceiptUrl, UnsafeReceiptUrlError } from './utils/receipt-url-guard.util';
 
-/** Include set every read path uses — items (+ product join) + merchant. */
+/** Include set every read path uses — items (+ product join), merchant, pages. */
 export const RECEIPT_INCLUDE = {
   items: { include: { product: { select: { name: true, brand: true } } } },
   merchant: { select: { name: true } },
+  files: { orderBy: { position: 'asc' } },
 } satisfies Prisma.ReceiptInclude;
 
 /** List envelope (Phase 6 pagination conventions). */
@@ -74,41 +76,74 @@ export class ReceiptService {
   ) {}
 
   /**
-   * POST /receipts — multipart upload. When `transactionId` is set (Phase 8.15,
-   * `POST /transactions/:id/receipt`) the receipt is born linked to that transaction
+   * POST /receipts — multipart upload. Several image files are the pages of
+   * ONE long receipt, in the given order (8.22); a PDF is always a single
+   * file. When `transactionId` is set (Phase 8.15, `POST
+   * /transactions/:id/receipt`) the receipt is born linked to that transaction
    * and confirmed via reconcile rather than confirm; otherwise it's a
    * standalone receipt that creates its transaction at confirm.
    */
   async createFromUpload(
     userId: string,
-    buffer: Buffer,
-    originalName: string | null,
+    uploads: { buffer: Buffer; originalName: string | null }[],
     transactionId: string | null = null,
   ): Promise<ReceiptResponseDto> {
+    if (uploads.length === 0 || uploads.length > RECEIPT_MAX_FILES) {
+      throw new BadRequestException({
+        message: `A receipt takes 1–${RECEIPT_MAX_FILES} files`,
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
+      });
+    }
     if (transactionId) await this.assertAttachableTransaction(userId, transactionId);
-    const saved = await this.storage.save(buffer);
+
+    // Validate + persist every page first; a mixed batch aborts before any
+    // DB row exists (stored pages of the aborted batch are removed).
+    const saved: { fileRef: string; mimeType: string; sizeBytes: number }[] = [];
+    try {
+      for (const upload of uploads) {
+        saved.push(await this.storage.save(upload.buffer));
+      }
+      if (saved.length > 1 && saved.some((s) => s.mimeType === 'application/pdf')) {
+        throw new BadRequestException({
+          message: 'A PDF receipt is a single file — upload it alone',
+          errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_FILE_TYPE,
+        });
+      }
+    } catch (err) {
+      await Promise.all(saved.map((s) => this.storage.delete(s.fileRef)));
+      throw err;
+    }
+
+    const totalBytes = saved.reduce((sum, s) => sum + s.sizeBytes, 0);
     const row = await this.prisma.receipt.create({
       data: {
         status: 'UPLOADED',
         source: 'upload',
-        fileRef: saved.fileRef,
-        originalName: originalName?.slice(0, 255) ?? null,
-        mimeType: saved.mimeType,
-        sizeBytes: saved.sizeBytes,
+        originalName: uploads[0].originalName?.slice(0, 255) ?? null,
         uploadedById: userId,
         ...(transactionId ? { transactionId } : {}),
+        files: {
+          create: saved.map((s, index) => ({
+            position: index + 1,
+            fileRef: s.fileRef,
+            mimeType: s.mimeType,
+            sizeBytes: s.sizeBytes,
+          })),
+        },
       },
       include: RECEIPT_INCLUDE,
     });
 
     await this.enqueueExtraction(row.id);
     void this.writeAudit(userId, row.id, transactionId ? 'RECEIPT_ATTACHED' : 'RECEIPT_UPLOADED', {
-      mimeType: saved.mimeType,
-      sizeBytes: saved.sizeBytes,
+      pages: saved.length,
+      mimeType: saved[0].mimeType,
+      sizeBytes: totalBytes,
       ...(transactionId ? { transactionId } : {}),
     });
     this.logger.log(
-      `Receipt ${row.id} uploaded by user ${userId} (${saved.mimeType})` +
+      `Receipt ${row.id} uploaded by user ${userId} ` +
+        `(${saved.length} page(s), ${saved[0].mimeType})` +
         (transactionId ? ` → attached to transaction ${transactionId}` : ''),
     );
 
@@ -302,20 +337,22 @@ export class ReceiptService {
     return mapReceiptToDto(row);
   }
 
-  /** GET /receipts/:id/file — stream for the authenticated download. */
+  /** GET /receipts/:id/files/:fileId — stream one page (8.22). */
   async openFile(
     userId: string,
     id: string,
+    fileId: string,
   ): Promise<{ stream: NodeJS.ReadableStream; mimeType: string; sizeBytes: number }> {
     const row = await this.loadViewableOrThrow(userId, id);
-    if (!row.fileRef) {
+    const file = row.files.find((f) => f.id === fileId);
+    if (!file) {
       throw new NotFoundException({
-        message: 'Receipt has no stored file',
+        message: 'Receipt has no such stored file',
         errorCode: RECEIPT_ERRORS.RECEIPT_NOT_FOUND,
       });
     }
-    const { stream, sizeBytes } = await this.storage.openStream(row.fileRef);
-    return { stream, mimeType: row.mimeType ?? 'application/octet-stream', sizeBytes };
+    const { stream, sizeBytes } = await this.storage.openStream(file.fileRef);
+    return { stream, mimeType: file.mimeType, sizeBytes };
   }
 
   /** POST /receipts/:id/retry — FAILED → back through the pipeline. */
@@ -356,8 +393,8 @@ export class ReceiptService {
         errorCode: RECEIPT_ERRORS.RECEIPT_ALREADY_CONFIRMED,
       });
     }
-    await this.prisma.receipt.delete({ where: { id: row.id } }); // items cascade
-    if (row.fileRef) await this.storage.delete(row.fileRef);
+    await this.prisma.receipt.delete({ where: { id: row.id } }); // items + files cascade
+    await Promise.all(row.files.map((file) => this.storage.delete(file.fileRef)));
     void this.writeAudit(userId, row.id, 'RECEIPT_DELETED', { status: row.status });
     this.logger.log(`Receipt ${row.id} deleted by user ${userId}`);
     this.publishDeleted(userId, row.id);
@@ -606,15 +643,15 @@ export class ReceiptService {
           categoryId: dto.categoryId,
           note: note ?? null,
           attributions: dto.attributions,
-          document: row.fileRef
-            ? {
-                kind: 'receipt',
-                fileRef: row.fileRef,
-                originalName: row.originalName,
-                mimeType: row.mimeType,
-                sizeBytes: row.sizeBytes,
-              }
-            : null,
+          // One document row per stored page (8.22) — the panel renders the
+          // receipt itself; these rows are the audit/`hasDocuments` trail.
+          documents: row.files.map((file) => ({
+            kind: 'receipt',
+            fileRef: file.fileRef,
+            originalName: row.originalName,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+          })),
         });
 
         await tx.receipt.update({

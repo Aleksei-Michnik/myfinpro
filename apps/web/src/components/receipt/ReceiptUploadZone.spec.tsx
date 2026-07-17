@@ -15,7 +15,7 @@ describe('ReceiptUploadZone', () => {
     fireEvent.drop(screen.getByTestId('receipt-dropzone'), {
       dataTransfer: { files: [makeFile()] },
     });
-    expect(onFiles).toHaveBeenCalledWith([expect.any(File)]);
+    expect(onFiles).toHaveBeenCalledWith([expect.any(File)], 'picker');
   });
 
   it('fires onFiles from the browse input and resets it for re-selection', () => {

@@ -32,6 +32,12 @@ export type ReceiptMimeType = (typeof RECEIPT_ALLOWED_MIME_TYPES)[number];
 /** 10 MB — mirrors the Phase 0 file-upload security baseline. */
 export const RECEIPT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Phase 8.22 — one receipt may span several photos (a long slip shot in
+ * overlapping segments). Pages are images only; PDFs stay single-file.
+ */
+export const RECEIPT_MAX_FILES = 8;
+
 export const EXTRACTION_CONFIDENCES = ['high', 'medium', 'low'] as const;
 export type ExtractionConfidence = (typeof EXTRACTION_CONFIDENCES)[number];
 

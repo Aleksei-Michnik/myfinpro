@@ -138,6 +138,8 @@ export function buildExtractionPrompt(ctx: {
     'Extract the receipt data from the attached document.',
     '',
     'Rules:',
+    '- Several attached photos are consecutive segments of ONE long receipt, in order,',
+    '  possibly overlapping at the seams — extract each line item exactly once.',
     '- All money values are INTEGER cents (45.90 → 4590). Never use floats for money.',
     '- Keep item names exactly as printed, in their original language.',
     '- Many receipts print a product barcode (EAN/UPC, 8–14 digits) next to each line — return',

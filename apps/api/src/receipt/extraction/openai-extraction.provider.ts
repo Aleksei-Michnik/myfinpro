@@ -64,10 +64,13 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
 
     const docContent: unknown[] = [];
     if (input.kind === 'image') {
-      docContent.push({
-        type: 'image_url',
-        image_url: { url: `data:${input.mimeType};base64,${input.data.toString('base64')}` },
-      });
+      // One image per photographed page, in shot order (8.22).
+      for (const page of input.pages) {
+        docContent.push({
+          type: 'image_url',
+          image_url: { url: `data:${page.mimeType};base64,${page.data.toString('base64')}` },
+        });
+      }
     } else {
       docContent.push({
         type: 'text',

@@ -108,7 +108,7 @@ export class ReceiptUrlIntakeService {
     }
     if (binary?.kind === 'image') {
       await this.record(target, null, 'binary_image');
-      return { kind: 'image', data: res.body, mimeType: binary.mimeType };
+      return { kind: 'image', pages: [{ data: res.body, mimeType: binary.mimeType }] };
     }
     if (looksBinary(res.body)) {
       await this.record(target, null, 'binary_unsupported');

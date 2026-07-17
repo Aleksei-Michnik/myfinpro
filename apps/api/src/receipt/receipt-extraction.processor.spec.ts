@@ -13,6 +13,7 @@ import { ReceiptUrlIntakeService } from './url-intake/receipt-url-intake.service
 describe('ReceiptExtractionProcessor', () => {
   const prismaMock = {
     receipt: { findUnique: jest.fn(), update: jest.fn() },
+    receiptFile: { findMany: jest.fn() },
     receiptItem: { deleteMany: jest.fn(), createMany: jest.fn() },
     product: { findMany: jest.fn().mockResolvedValue([]) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -46,12 +47,11 @@ describe('ReceiptExtractionProcessor', () => {
     id: 'r-1',
     status: 'UPLOADED',
     source: 'upload',
-    fileRef: '2026/07/x.jpg',
-    mimeType: 'image/jpeg',
     sourceUrl: null,
     uploadedById: 'u-1',
     uploadedBy: { id: 'u-1', locale: 'en' },
     items: [],
+    files: [],
     merchant: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -109,8 +109,6 @@ describe('ReceiptExtractionProcessor', () => {
   const urlReceipt = (over: Record<string, unknown> = {}) =>
     makeReceipt({
       source: 'url',
-      fileRef: null,
-      mimeType: null,
       sourceUrl: 'https://r.example/x',
       ...over,
     });
@@ -126,6 +124,9 @@ describe('ReceiptExtractionProcessor', () => {
       { id: 'cat-2', name: 'Household' },
     ]);
     storageMock.read.mockResolvedValue(Buffer.from('image-bytes'));
+    prismaMock.receiptFile.findMany.mockResolvedValue([
+      { fileRef: '2026/07/x.jpg', mimeType: 'image/jpeg' },
+    ]);
     prismaMock.product.findMany.mockResolvedValue([]);
     matcherMock.getUserProductCandidates.mockResolvedValue([
       { id: 'prod-1', name: 'Milk 3%', brand: null },
@@ -160,7 +161,7 @@ describe('ReceiptExtractionProcessor', () => {
     // Provider got an image input + the OUT candidate list + locale.
     const [input, ctx] = providerMock.extract.mock.calls[0];
     expect(input.kind).toBe('image');
-    expect(input.mimeType).toBe('image/jpeg');
+    expect(input.pages).toEqual([{ data: Buffer.from('image-bytes'), mimeType: 'image/jpeg' }]);
     expect(ctx.categories).toEqual([
       { id: 'cat-1', name: 'Groceries' },
       { id: 'cat-2', name: 'Household' },
@@ -232,12 +233,34 @@ describe('ReceiptExtractionProcessor', () => {
   });
 
   it('pdf uploads become native document inputs', async () => {
-    prismaMock.receipt.findUnique.mockResolvedValue(
-      makeReceipt({ mimeType: 'application/pdf', fileRef: '2026/07/x.pdf' }),
-    );
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    prismaMock.receiptFile.findMany.mockResolvedValue([
+      { fileRef: '2026/07/x.pdf', mimeType: 'application/pdf' },
+    ]);
     providerMock.extract.mockResolvedValue(okResult());
     await processor.process(makeJob());
     expect(providerMock.extract.mock.calls[0][0].kind).toBe('pdf');
+  });
+
+  it('multi-photo receipts ride as ordered pages of one image input (8.22)', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    prismaMock.receiptFile.findMany.mockResolvedValue([
+      { fileRef: '2026/07/p1.jpg', mimeType: 'image/jpeg' },
+      { fileRef: '2026/07/p2.png', mimeType: 'image/png' },
+    ]);
+    storageMock.read
+      .mockResolvedValueOnce(Buffer.from('page-1'))
+      .mockResolvedValueOnce(Buffer.from('page-2'));
+    providerMock.extract.mockResolvedValue(okResult());
+
+    await processor.process(makeJob());
+
+    const [input] = providerMock.extract.mock.calls[0];
+    expect(input.kind).toBe('image');
+    expect(input.pages).toEqual([
+      { data: Buffer.from('page-1'), mimeType: 'image/jpeg' },
+      { data: Buffer.from('page-2'), mimeType: 'image/png' },
+    ]);
   });
 
   it('url sources delegate resolution to the intake service', async () => {

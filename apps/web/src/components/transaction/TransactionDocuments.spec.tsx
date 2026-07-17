@@ -6,7 +6,8 @@ const mockGetReceipt = vi.fn();
 const mockFetchFileBlob = vi.fn();
 
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string, values?: Record<string, unknown>) =>
+    values ? `${key}:${Object.values(values).join(',')}` : key,
 }));
 
 vi.mock('@/lib/receipt/receipt-context', () => ({
@@ -18,19 +19,20 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 vi.mock('@/components/receipt/ReceiptDocumentViewer', () => ({
   ReceiptDocumentViewer: ({
     open,
-    url,
+    pages,
     loadError,
     title,
   }: {
     open: boolean;
-    url: string | null;
+    pages: { url: string | null; mimeType: string | null }[];
     loadError?: boolean;
     title: string;
   }) =>
     open ? (
       <div
         data-testid="mock-viewer"
-        data-url={url ?? ''}
+        data-url={pages[0]?.url ?? ''}
+        data-pages={pages.length}
         data-load-error={loadError ? 'true' : 'false'}
         data-title={title}
       />
@@ -48,7 +50,7 @@ describe('TransactionDocuments (8.19)', () => {
     mockGetReceipt.mockResolvedValue({
       id: 'r-1',
       source: 'upload',
-      mimeType: 'image/jpeg',
+      files: [{ id: 'f-1', position: 1, mimeType: 'image/jpeg' }],
       originalName: 'receipt.jpg',
     });
     mockFetchFileBlob.mockResolvedValue(new Blob(['x']));
@@ -61,7 +63,7 @@ describe('TransactionDocuments (8.19)', () => {
 
     fireEvent.click(screen.getByTestId('transaction-document-view'));
     await waitFor(() => expect(screen.getByTestId('mock-viewer')).toBeInTheDocument());
-    expect(mockFetchFileBlob).toHaveBeenCalledWith('r-1');
+    expect(mockFetchFileBlob).toHaveBeenCalledWith('r-1', 'f-1');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-url', 'blob:mock');
     // Viewer titled by the FILE NAME (language-neutral), not the merchant.
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-title', 'receipt.jpg');
@@ -71,7 +73,7 @@ describe('TransactionDocuments (8.19)', () => {
     mockGetReceipt.mockResolvedValue({
       id: 'r-1',
       source: 'upload',
-      mimeType: 'image/jpeg',
+      files: [{ id: 'f-1', position: 1, mimeType: 'image/jpeg' }],
       originalName: 'receipt.jpg',
     });
     mockFetchFileBlob.mockRejectedValue(Object.assign(new Error('gone'), { status: 404 }));
@@ -91,7 +93,7 @@ describe('TransactionDocuments (8.19)', () => {
       id: 'r-2',
       source: 'url',
       sourceUrl: 'https://r.example/x',
-      mimeType: null,
+      files: [],
     });
     render(<TransactionDocuments receiptId="r-2" />);
 
@@ -105,7 +107,7 @@ describe('TransactionDocuments (8.19)', () => {
   });
 
   it('shows a "no document" note for a receipt with no file (e.g. manual)', async () => {
-    mockGetReceipt.mockResolvedValue({ id: 'r-3', source: 'manual', mimeType: null });
+    mockGetReceipt.mockResolvedValue({ id: 'r-3', source: 'manual', files: [] });
     render(<TransactionDocuments receiptId="r-3" />);
     await waitFor(() =>
       expect(screen.getByTestId('transaction-documents-none')).toBeInTheDocument(),

@@ -2959,13 +2959,15 @@ describe('TransactionService', () => {
             categoryId: 'cat-1',
             note: 'Shufersal',
             attributions: [{ scope: 'personal' }, { scope: 'group', groupId: 'g1' }],
-            document: {
-              kind: 'receipt',
-              fileRef: '2026/07/abc.jpg',
-              originalName: 'r.jpg',
-              mimeType: 'image/jpeg',
-              sizeBytes: 10,
-            },
+            documents: [
+              {
+                kind: 'receipt',
+                fileRef: '2026/07/abc.jpg',
+                originalName: 'r.jpg',
+                mimeType: 'image/jpeg',
+                sizeBytes: 10,
+              },
+            ],
           },
         );
         const arg = txTransactionCreate.mock.calls[0][0] as {
@@ -2976,7 +2978,7 @@ describe('TransactionService', () => {
             attributions: {
               create: Array<{ scopeType: string; userId: string | null; groupId: string | null }>;
             };
-            documents?: { create: { kind: string; uploadedById: string } };
+            documents?: { create: { kind: string; uploadedById: string }[] };
           };
         };
         expect(arg.data.direction).toBe('OUT');
@@ -2986,10 +2988,9 @@ describe('TransactionService', () => {
           { scopeType: 'personal', userId: 'user-1', groupId: null },
           { scopeType: 'group', userId: null, groupId: 'g1' },
         ]);
-        expect(arg.data.documents?.create).toMatchObject({
-          kind: 'receipt',
-          uploadedById: 'user-1',
-        });
+        expect(arg.data.documents?.create).toEqual([
+          expect.objectContaining({ kind: 'receipt', uploadedById: 'user-1' }),
+        ]);
       });
 
       it('omits the documents relation when no document is supplied', async () => {
@@ -3004,7 +3005,7 @@ describe('TransactionService', () => {
             categoryId: 'cat-1',
             note: null,
             attributions: [{ scope: 'personal' }],
-            document: null,
+            documents: [],
           },
         );
         const arg = txTransactionCreate.mock.calls[0][0] as { data: { documents?: unknown } };

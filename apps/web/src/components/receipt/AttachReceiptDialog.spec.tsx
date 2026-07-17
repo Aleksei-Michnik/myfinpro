@@ -44,7 +44,7 @@ describe('AttachReceiptDialog (8.15)', () => {
     fireEvent.change(screen.getByTestId('attach-receipt-file'), { target: { files: [file] } });
 
     await waitFor(() =>
-      expect(attachFileMock).toHaveBeenCalledWith('pay-1', file, expect.anything()),
+      expect(attachFileMock).toHaveBeenCalledWith('pay-1', [file], expect.anything()),
     );
     await waitFor(() => expect(onAttached).toHaveBeenCalledWith(created));
   });
