@@ -1,6 +1,8 @@
 # Phase 10: Budgets & Spending Targets — Design Document
 
-> **Status**: Planned (design 2026-07-04)
+> **Status**: In progress — 10.1–10.2 shipped; design revised 2026-07-17
+> (event-driven alerts, alert re-arm on edit, dedup-key fix, low-balance
+> deferral — decisions recorded in §2.5, §3, §9)
 > **Plan**: [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) §5 — Phase 10 (renumbered from the original Phase 8 in the 2026-07-03 re-plan)
 > **Depends on**: Phase 6 (Transaction entity, attributions, categories, BullMQ, realtime SSE stack), Phase 4 (mail infrastructure for alerts), Phase 5 (groups, roles)
 > **Independent of**: Phases 7–9 — budgets only need transactions, so this phase can run in parallel with the receipt/product/analytics track
@@ -26,16 +28,17 @@ deliverable is **due-transaction reminders** built on the existing
 
 ### Explicitly deferred
 
-| Concern                                       | Where                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------------- |
-| Telegram notification channel                 | Phase 12.9 (consumes the same alert events)                                     |
-| Web-push notification channel                 | Post-Phase 13 (needs service worker)                                            |
-| Budget analytics over receipt items/products  | Phase 9 (item-level analytics)                                                  |
-| MCP add/remove budgets & targets tools        | Phase 11.4                                                                      |
-| Mini-app budget view                          | Phase 13.8                                                                      |
-| Rollover budgets (unused amount carries over) | Out of scope — periods are independent                                          |
-| Income targets (direction `IN`)               | Out of scope — budgets track spending (`OUT`)                                   |
-| Multi-currency conversion inside one budget   | Out of scope — a budget counts only transactions in its own currency (see §2.4) |
+| Concern                                       | Where                                                                                                                                                                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Telegram notification channel                 | Phase 12.9 (consumes the same alert events)                                                                                                                                                                     |
+| Web-push notification channel                 | Post-Phase 13 (needs service worker)                                                                                                                                                                            |
+| Budget analytics over receipt items/products  | Phase 9 (item-level analytics)                                                                                                                                                                                  |
+| MCP add/remove budgets & targets tools        | Phase 11.4                                                                                                                                                                                                      |
+| Mini-app budget view                          | Phase 13.8                                                                                                                                                                                                      |
+| Rollover budgets (unused amount carries over) | Out of scope — periods are independent                                                                                                                                                                          |
+| Income targets (direction `IN`)               | Out of scope — budgets track spending (`OUT`)                                                                                                                                                                   |
+| Multi-currency conversion inside one budget   | Out of scope — a budget counts only transactions in its own currency (see §2.4)                                                                                                                                 |
+| Low-balance warnings                          | Deferred (2026-07-17 decision) — "balance" needs an account/balance concept the system doesn't have yet; revisit alongside Phase 12.9 bot alerts. Phase 10 ships budget alerts + due-transaction reminders only |
 
 ## 2. Core Concepts
 
@@ -107,12 +110,33 @@ other currencies were not counted".
 
 Each budget has optional alert configuration: `alertThresholdPct`
 (e.g. 80 — warn at 80% consumed) and `alertOverspend` (fire at ≥100%).
-A BullMQ **repeatable job** (hourly, same cadence as the Phase-6 occurrence
-worker) evaluates all active budgets' current periods and emits:
+Evaluation is **event-driven with an hourly backstop** (2026-07-17
+decision — an alert should land seconds after the expense, not up to an
+hour later):
+
+- **Event-driven**: every transaction create/edit/delete already publishes
+  a `transaction.*` event on the in-process EventBus; the budget module
+  listens and enqueues a debounced `BUDGET_ALERTS_QUEUE` job scoped to the
+  affected budgets (the transaction's personal/group attributions ×
+  currency × category). Deterministic job ids collapse bursts.
+- **Hourly backstop**: the repeatable sweep (same cadence as the Phase-6
+  occurrence worker) evaluates all active budgets — it catches backdated
+  edits from other code paths, missed events, and restarts. Both paths
+  run the same evaluator and are idempotent via the dedup key.
+
+The evaluator emits:
 
 - `budget.threshold` — consumed ≥ threshold, once per budget-period
-  (dedup via `budget_alert_events` unique key);
+  (dedup via `budget_alert_events` unique dedup key);
 - `budget.overspent` — consumed ≥ 100%, once per budget-period.
+
+**Re-arm on material edit** (2026-07-17 decision): editing a budget's
+`amountCents`, `currency`, `categoryId`, `period`/bounds, or
+`alertThresholdPct` deletes the current period's fired budget-alert rows,
+so alerts re-arm against the new definition (raise groceries ₪2,000 →
+₪3,000 after an 80% alert and the 80%-of-new-amount alert can fire again
+this period). Non-material edits (name, `alertOverspend` toggle, archive
+state) do not re-arm.
 
 Delivery: an in-app **realtime SSE event** (`budget.alert`) plus an
 **email** through the Phase 4 mail service. Recipients: the owner for
@@ -202,11 +226,16 @@ model BudgetAlertEvent {
   //   budget kinds  → period start date (yyyy-mm-dd)
   //   TRANSACTION_DUE   → due date (yyyy-mm-dd)
   periodKey   String   @map("period_key") @db.VarChar(10)
+  // The actual dedup guard: `${kind}:${budgetId ?? ''}:${transactionId ?? ''}:${periodKey}`,
+  // computed in the service. A composite unique over the nullable FK columns
+  // does NOT work — MariaDB treats NULLs as distinct in unique indexes, and
+  // every row has one of the two FKs NULL, so it would never fire (found
+  // 2026-07-17; replaces the 10.1 composite unique in a 10.9 migration).
+  dedupKey    String   @unique @map("dedup_key") @db.VarChar(110)
   // Snapshot for history/emails (spentCents, pct, dueAt, …).
   details     Json?
   createdAt   DateTime @default(now()) @map("created_at")
 
-  @@unique([kind, budgetId, transactionId, periodKey], name: "alert_dedup_unique")
   @@index([budgetId, createdAt])
   @@map("budget_alert_events")
 }
@@ -220,8 +249,8 @@ preferences table until there is a second notification preference
 
 **Indexes rationale**: budget lists are always fetched per scope
 (`ownerId`/`groupId` + `scopeType`, filtered on `archivedAt IS NULL`);
-alert history is read per budget ordered by time; the dedup unique key
-makes the hourly worker idempotent under re-fires — the same trick as
+alert history is read per budget ordered by time; the `dedup_key` unique
+makes both evaluation paths idempotent under re-fires — the same trick as
 `transactions.idempotency_key`.
 
 ## 4. Shared Types (`packages/shared`)
@@ -295,17 +324,28 @@ visible).
 
 ## 6. Workers (BullMQ)
 
-### 6.1 `BUDGET_ALERTS_QUEUE` — hourly repeatable job
+### 6.1 `BUDGET_ALERTS_QUEUE` — event-driven + hourly backstop
 
-1. Load active (non-archived) budgets with alert config in batches.
+Two producers, one evaluator (§2.5):
+
+- **Targeted jobs** — a `transaction.*` EventBus listener enqueues an
+  evaluation job for just the budgets matching the transaction's
+  attributions (deterministic job id per budget-period debounces bursts).
+- **Hourly sweep** — repeatable job evaluating all active budgets.
+
+Evaluator steps:
+
+1. Load the targeted (or all active, for the sweep) non-archived budgets
+   with alert config in batches.
 2. For each: `resolvePeriod(...)` → compute `spentCents` (one aggregate
    query per budget; batched with `Promise.all` chunks of 10).
 3. Threshold crossed / overspent → `INSERT ... budget_alert_events`
-   guarded by the unique key; on success (i.e. first time this
+   guarded by the `dedup_key` unique; on success (i.e. first time this
    budget-period), publish `budget.alert` SSE + send email (mail failures
    are logged, never crash the job — Phase 4 mail conventions), audit
    `BUDGET_ALERT_SENT`.
-4. Re-fires and restarts are no-ops thanks to the dedup key.
+4. Re-fires and restarts are no-ops thanks to the dedup key; material
+   budget edits delete the current period's rows so alerts re-arm (§2.5).
 
 ### 6.2 `TRANSACTION_DUE_QUEUE` — daily repeatable job (10.10)
 
@@ -341,7 +381,9 @@ Testcontainers.
   dashboards (`/groups/[groupId]`) gain a Budgets tab listing that group's
   budgets with per-member contribution split (member share of the period's
   counted transactions — computed in the progress endpoint via
-  `?breakdown=member`).
+  `?breakdown=member`, keyed on `transactions.created_by_id`: there is no
+  "on behalf of" field yet, so the creator is the member a transaction
+  counts toward; revisit if/when on-behalf-of attribution lands).
 - **Account Settings** — due-reminder window field (days, 0 = off).
 - All UI async flows via `useAsyncOperation()`
   ([`docs/ui-async-conventions.md`](ui-async-conventions.md)); realtime
@@ -354,18 +396,18 @@ Testcontainers.
 Matches the [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) Phase 10
 table, with concrete deltas:
 
-| It.   | Scope (delta)                                                                                                                                                                                                          | Tests                                                                      |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 10.1  | `packages/shared`: `BUDGET_PERIODS`, `BudgetAlertKind`, `BudgetProgress`, `resolvePeriod()` calculator; Prisma `Budget` + `BudgetAlertEvent` + `users.due_reminder_days`; expand-only migration                        | period-calculator unit tests (DST, ISO weeks); migration test              |
-| 10.2  | `BudgetModule`: create/get/patch/delete/archive endpoints, scope+role guards, DTO validation, error codes, audit actions, `budget.updated` SSE                                                                         | unit + integration (scope matrix: owner/admin/member/outsider)             |
-| 10.3  | `CreateBudgetDialog` + `BudgetFormDialog` (scope select w/ remember, category picker, period + custom range, threshold slider); i18n EN+HE                                                                             | unit + interaction                                                         |
-| 10.4  | `/budgets` list page (cards, filters, archived toggle) + edit/delete/archive flows wired                                                                                                                               | unit + interaction + E2E smoke                                             |
-| 10.5  | Progress service + `GET /budgets/:id/progress` (+ `?periods=N`, `?breakdown=member`, `excludedOtherCurrencyCount`); `EXPLAIN`-verified index usage; progress inline in list/get                                        | unit (aggregate math) + integration (attribution/currency/category matrix) |
-| 10.6  | Personal dashboard budgets section + `/budgets/[budgetId]` detail page (progress ring, history bars, counted transactions via `<TransactionsList>`)                                                                    | unit + interaction                                                         |
-| 10.7  | Group budgets end-to-end: admin-only mutations, member visibility, group-scope progress; group budget creation from the group page                                                                                     | integration (role matrix) + unit                                           |
-| 10.8  | Group dashboard Budgets tab with per-member breakdown UI                                                                                                                                                               | unit + interaction                                                         |
-| 10.9  | Alert config + `BUDGET_ALERTS_QUEUE` worker + `budget_alert_events` dedup + email templates + `budget.alert` SSE + `GET /budgets/alerts` history                                                                       | unit (worker, dedup) + integration (threshold/overspend fire-once)         |
-| 10.10 | `TRANSACTION_DUE_QUEUE` daily worker + `due_reminder_days` setting UI + due emails; audit matrix completion; i18n EN+HE sweep; dark-mode pass; Playwright E2E (create → spend → progress → alert); merge to production | full suite                                                                 |
+| It.     | Scope (delta)                                                                                                                                                                                                                | Tests                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 10.1 ✅ | `packages/shared`: `BUDGET_PERIODS`, `BudgetAlertKind`, `BudgetProgress`, `resolvePeriod()` calculator; Prisma `Budget` + `BudgetAlertEvent` + `users.due_reminder_days`; expand-only migration (shipped 2026-07-04)         | period-calculator unit tests (DST, ISO weeks); migration test                                           |
+| 10.2 ✅ | `BudgetModule`: create/get/patch/delete/archive endpoints, scope+role guards, DTO validation, error codes, audit actions, `budget.updated` SSE (shipped 2026-07-13)                                                          | unit + integration (scope matrix: owner/admin/member/outsider)                                          |
+| 10.3    | `CreateBudgetDialog` + `BudgetFormDialog` (scope select w/ remember, category picker, period + custom range, threshold slider); i18n EN+HE                                                                                   | unit + interaction                                                                                      |
+| 10.4    | `/budgets` list page (cards, filters, archived toggle) + edit/delete/archive flows wired                                                                                                                                     | unit + interaction + E2E smoke                                                                          |
+| 10.5    | Progress service + `GET /budgets/:id/progress` (+ `?periods=N`, `?breakdown=member`, `excludedOtherCurrencyCount`); `EXPLAIN`-verified index usage; progress inline in list/get                                              | unit (aggregate math) + integration (attribution/currency/category matrix)                              |
+| 10.6    | Personal dashboard budgets section + `/budgets/[budgetId]` detail page (progress ring, history bars, counted transactions via `<TransactionsList>`)                                                                          | unit + interaction                                                                                      |
+| 10.7    | Group budgets end-to-end: admin-only mutations, member visibility, group-scope progress; group budget creation from the group page                                                                                           | integration (role matrix) + unit                                                                        |
+| 10.8    | Group dashboard Budgets tab with per-member breakdown UI                                                                                                                                                                     | unit + interaction                                                                                      |
+| 10.9    | `dedup_key` migration (§3) + `BUDGET_ALERTS_QUEUE` evaluator (event-driven jobs from `transaction.*` events + hourly sweep) + re-arm-on-edit in PATCH + email templates + `budget.alert` SSE + `GET /budgets/alerts` history | unit (worker, dedup, re-arm) + integration (threshold/overspend fire-once; re-fire after material edit) |
+| 10.10   | `TRANSACTION_DUE_QUEUE` daily worker + `due_reminder_days` setting UI + due emails; audit matrix completion; i18n EN+HE sweep; dark-mode pass; Playwright E2E (create → spend → progress → alert); merge to production       | full suite                                                                                              |
 
 Each iteration ships with unit/integration tests, i18n keys where UI is
 touched, CI-green push, and a progress-notes entry — Phase 6/7 cadence.
@@ -375,11 +417,12 @@ worker-side incident can be disabled without a rollback.
 
 ## 9. Risks & Open Questions
 
-| Risk / question                                                    | Mitigation / decision                                                                                                              |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Progress query cost on large histories                             | Aggregate hits `(direction, occurred_at)` + attribution indexes; period-bounded; measured in 10.5, materialize only if p95 > 500ms |
-| Timezone edge cases (period boundaries, DST)                       | Single shared `resolvePeriod()` with exhaustive unit tests; boundaries half-open `[start, end)`                                    |
-| Alert spam on transaction backdating (period re-crosses threshold) | Dedup key is per budget-period — fires once, ever, per period; documented behavior                                                 |
-| Email deliverability failures blocking the worker                  | Mail send is fire-and-forget with error logging (Phase 4 pattern); SSE still delivered                                             |
-| Group creator's timezone for group budgets is arbitrary            | Acceptable v1 simplification; column-free (derived); revisit with a group setting if users ask                                     |
-| `CUSTOM` budgets after `endsAt`                                    | Worker skips them; UI shows "ended" state; archive suggested in detail page                                                        |
+| Risk / question                                                      | Mitigation / decision                                                                                                              |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Progress query cost on large histories                               | Aggregate hits `(direction, occurred_at)` + attribution indexes; period-bounded; measured in 10.5, materialize only if p95 > 500ms |
+| Timezone edge cases (period boundaries, DST)                         | Single shared `resolvePeriod()` with exhaustive unit tests; boundaries half-open `[start, end)`                                    |
+| Alert spam on transaction backdating (period re-crosses threshold)   | Dedup key is per budget-period — fires once per period unless the budget itself is materially edited (§2.5 re-arm); documented     |
+| Nullable-FK composite unique never fires on MariaDB (NULLs distinct) | Replaced with a required computed `dedup_key` column + unique (§3); migration in 10.9 while the table is still empty               |
+| Email deliverability failures blocking the worker                    | Mail send is fire-and-forget with error logging (Phase 4 pattern); SSE still delivered                                             |
+| Group creator's timezone for group budgets is arbitrary              | Acceptable v1 simplification; column-free (derived); revisit with a group setting if users ask                                     |
+| `CUSTOM` budgets after `endsAt`                                      | Worker skips them; UI shows "ended" state; archive suggested in detail page                                                        |
