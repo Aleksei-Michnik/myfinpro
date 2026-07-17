@@ -65,6 +65,15 @@ vi.mock('@/lib/group/group-context', () => ({
   useGroups: () => ({ groups: [] }),
 }));
 
+// TransactionPurchaseDetails renders ProductThumb (8.24), which resolves
+// image URLs through the product context.
+vi.mock('@/lib/product/product-context', () => ({
+  useProducts: () => ({
+    imageUrl: (p: { id: string; imageVersion: string | null }, size?: string) =>
+      `/api/v1/products/${p.id}/image?size=${size ?? 'full'}${p.imageVersion ? `&v=${p.imageVersion}` : ''}`,
+  }),
+}));
+
 vi.mock('@/lib/transaction/transaction-context', () => ({
   useTransactions: () => ({
     getTransaction: mockGetTransaction,
