@@ -1,11 +1,18 @@
-import { PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
+import {
+  PRODUCT_IMAGE_MAX_COUNT,
+  PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES,
+  type ProductImageInfo,
+  type ProductImageSize,
+} from '@myfinpro/shared';
 import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -40,8 +47,10 @@ import { PRODUCT_ERRORS } from './constants/product-errors';
 import { AddAliasDto } from './dto/add-alias.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ProductImageSizeQueryDto, ReorderProductImageDto } from './dto/product-image.dto';
 import {
   BarcodeLookupResponseDto,
+  productImageVersion,
   ProductPurchasesResponseDto,
   ProductResponseDto,
   type ProductListResponse,
@@ -213,9 +222,10 @@ export class ProductController {
     return this.service.addAlias(user.sub, id, dto);
   }
 
-  @CustomThrottle({ limit: 10, ttl: 60_000 })
+  // 30/min: camera bursts fit, scripted abuse does not (design §3.7).
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
   @UseGuards(JwtAuthGuard)
-  @Post(':id/image')
+  @Post(':id/images')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -232,35 +242,83 @@ export class ProductController {
     },
   })
   @ApiOperation({
-    summary: 'Upload the product image (processed in background)',
+    summary: 'Add a product picture (processed in background)',
     description:
-      'JPEG / PNG / WebP / HEIC up to 10MB. Staged and re-encoded asynchronously to a 512px ' +
-      'WebP with metadata stripped; the product carries the new image once the job completes.',
+      `JPEG / PNG / WebP / HEIC up to 10MB, at most ${PRODUCT_IMAGE_MAX_COUNT} per product. ` +
+      'Staged and re-encoded asynchronously to WebP + AVIF detail/thumbnail renditions with ' +
+      'metadata stripped; appended at the last position.',
   })
-  @ApiOkResponse({ description: 'Queued' })
+  @ApiOkResponse({ description: 'Queued; the created picture row' })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds the hard multipart cap' })
   @ApiNotFoundResponse({ description: 'Not found' })
   @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
   @ApiTooManyRequestsResponse({ description: 'Rate limited' })
-  async uploadImage(
+  async addImage(
+    @CurrentUser() user: JwtPayload,
     @Param('id', new ParseUUIDPipe()) id: string,
     @UploadedFile() file: UploadedImageFile | undefined,
-  ): Promise<{ queued: boolean }> {
+  ): Promise<ProductImageInfo> {
     if (!file || !file.buffer) {
       throw new BadRequestException({
         message: "Multipart field 'file' is required",
         errorCode: PRODUCT_ERRORS.PRODUCT_INVALID_IMAGE,
       });
     }
-    const product = await this.prisma.product.findUnique({ where: { id }, select: { id: true } });
-    if (!product) {
-      throw new BadRequestException({
-        message: 'Product not found',
-        errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
-      });
-    }
-    await this.images.enqueueUpload(id, file.buffer);
-    return { queued: true };
+    await this.loadProductOrThrow(id);
+    const row = await this.images.addFromUpload(id, file.buffer);
+    void this.service.writeImageAudit(user.sub, id, 'PRODUCT_IMAGE_ADDED', { imageId: row.id });
+    return { id: row.id, position: row.position, version: productImageVersion(row.baseRef)! };
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/images/:imageId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a product picture (survivors renumber)' })
+  @ApiOkResponse({ description: 'Removed' })
+  @ApiNotFoundResponse({ description: 'Not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async removeImage(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('imageId', new ParseUUIDPipe()) imageId: string,
+  ): Promise<{ removed: boolean }> {
+    await this.loadProductOrThrow(id);
+    await this.images.remove(id, imageId);
+    void this.service.writeImageAudit(user.sub, id, 'PRODUCT_IMAGE_REMOVED', { imageId });
+    return { removed: true };
+  }
+
+  @CustomThrottle({ limit: 30, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/images/:imageId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Move a picture to a position (1 = primary)',
+    description: 'Transactional renumber; the remaining pictures stay in order around it.',
+  })
+  @ApiOkResponse({ description: 'All pictures in the new order' })
+  @ApiNotFoundResponse({ description: 'Not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async reorderImage(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('imageId', new ParseUUIDPipe()) imageId: string,
+    @Body() dto: ReorderProductImageDto,
+  ): Promise<ProductImageInfo[]> {
+    await this.loadProductOrThrow(id);
+    const rows = await this.images.reorder(id, imageId, dto.position);
+    void this.service.writeImageAudit(user.sub, id, 'PRODUCT_IMAGE_REORDERED', {
+      imageId,
+      position: dto.position,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      position: row.position,
+      version: productImageVersion(row.baseRef)!,
+    }));
   }
 
   @CustomThrottle({ limit: 120, ttl: 60_000 })
@@ -268,41 +326,97 @@ export class ProductController {
   @Get(':id/image')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Stream the processed product image',
+    summary: 'Stream the primary product picture',
     description:
-      'WebP, ≤512px. The image_ref is immutable per version, so the ETag enables long-lived ' +
-      'revalidation (304) while re-uploads bust via ?v=.',
+      'The position-1 picture; ?size=thumb serves the 96px rendition. AVIF via Accept ' +
+      'negotiation (Vary: Accept), WebP otherwise. The stored file is immutable per version, ' +
+      'so the ETag enables long-lived revalidation (304) while changes bust via ?v=.',
   })
   @ApiOkResponse({ description: 'Image stream' })
   @ApiNotFoundResponse({ description: 'Not found / no image' })
   @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
   @ApiTooManyRequestsResponse({ description: 'Rate limited' })
-  async downloadImage(
+  async downloadPrimaryImage(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: ProductImageSizeQueryDto,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      select: { imageRef: true },
+    const primary = await this.prisma.productImage.findFirst({
+      where: { productId: id },
+      orderBy: { position: 'asc' },
+      select: { baseRef: true },
     });
-    if (!product?.imageRef) {
+    await this.streamRendition(primary?.baseRef ?? null, query.size ?? 'full', req, res);
+  }
+
+  @CustomThrottle({ limit: 120, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/images/:imageId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Stream one product picture',
+    description: 'Same rendition/negotiation semantics as the primary-image shortcut.',
+  })
+  @ApiOkResponse({ description: 'Image stream' })
+  @ApiNotFoundResponse({ description: 'Not found' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async downloadImage(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('imageId', new ParseUUIDPipe()) imageId: string,
+    @Query() query: ProductImageSizeQueryDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const row = await this.prisma.productImage.findFirst({
+      where: { id: imageId, productId: id },
+      select: { baseRef: true },
+    });
+    await this.streamRendition(row?.baseRef ?? null, query.size ?? 'full', req, res);
+  }
+
+  /** Accept-negotiated rendition streaming shared by both GET endpoints. */
+  private async streamRendition(
+    baseRef: string | null,
+    size: ProductImageSize,
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    if (!baseRef) {
       res.status(HttpStatus.NOT_FOUND).json({
         message: 'Product image not found',
         errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
       });
       return;
     }
-    const etag = `"${product.imageRef.split('/').pop()}"`;
+    const acceptsAvif = (req.headers.accept ?? '').includes('image/avif');
+    const { stream, sizeBytes, contentType } = await this.images.openRendition(
+      baseRef,
+      size,
+      acceptsAvif,
+    );
+    const format = contentType.split('/')[1];
+    const etag = `"${baseRef.split('/').pop()}.${size}.${format}"`;
+    res.setHeader('Vary', 'Accept');
     if (req.headers['if-none-match'] === etag) {
       res.status(HttpStatus.NOT_MODIFIED).end();
       return;
     }
-    const { stream, sizeBytes } = await this.images.openStream(product.imageRef);
-    res.setHeader('Content-Type', 'image/webp');
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(sizeBytes));
     res.setHeader('ETag', etag);
     res.setHeader('Cache-Control', 'private, max-age=86400');
     stream.pipe(res);
+  }
+
+  private async loadProductOrThrow(id: string): Promise<void> {
+    const product = await this.prisma.product.findUnique({ where: { id }, select: { id: true } });
+    if (!product) {
+      throw new NotFoundException({
+        message: 'Product not found',
+        errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
+      });
+    }
   }
 }

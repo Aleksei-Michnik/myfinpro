@@ -89,3 +89,58 @@ Reviewed the remaining design with four recorded decisions
    concept yet; revisit with Phase 12.9).
 
 **Next** — 10.3 (`CreateBudgetDialog` + `BudgetFormDialog`, i18n EN+HE).
+
+## Iteration 10.3 — Budget form dialogs (2026-07-17)
+
+Per design §7 — the budget creation/edit form UI in `apps/web`.
+
+### Scope
+
+- **`@/lib/budget`** — `types.ts` (wire types mirroring the 10.2 DTOs),
+  `budget-context.tsx` (`BudgetProvider` / `useBudgets` with the full
+  CRUD + archive surface, product/receipt-context conventions: optional
+  `AbortSignal` on every method, rich `errorCode`-carrying errors), and
+  `remember.ts` (last-used single budget scope, sharing the SSR-safe
+  storage guards now exported from `@/lib/transaction/remember`).
+  `parseAmountToCents` extracted from `TransactionFormDialog` into
+  `@/lib/money` so both amount forms share one parser.
+- **`<BudgetFormDialog>`** (`components/budget/`) — shared create/edit
+  form DRY like `TransactionFormDialog`: name, amount + currency
+  (defaults follow the scope's owner/group `defaultCurrency` until the
+  user picks one by hand), single-select scope over the reused
+  `<TransactionScopeSelector>` (locked in edit mode — scope is
+  immutable per API design §5), optional OUT-category picker (reused
+  `<TransactionCategoryPicker>` grew an `emptyOptionLabel` prop for the
+  clearable "All spending" state; categories narrowed client-side to
+  the chosen scope), period select with a CUSTOM date-range disclosure,
+  alert threshold input (1–100, empty = off) + overspend toggle.
+  Client-side validation mirrors the DTO rules (`noValidate` form so
+  the translated per-field messages own the UX); `BUDGET_INVALID_*`
+  domain errors map to fields, everything else hits the inline banner;
+  save via `useAsyncOperation({ scope: 'control' })`. Edit mode PATCHes
+  a minimal diff (`computeBudgetDiff`) — switching away from CUSTOM
+  sends only `period` (bounds auto-clear server-side).
+- **`<CreateBudgetDialog>`** — thin create-mode wrapper (POST /budgets)
+  with scope/currency/category pins for the 10.7 group-page host.
+- **`/budgets` route** — deliberately minimal (header + "New budget" +
+  plain name list) so the dialog is reachable and deployable; the full
+  cards/filters/archived page is 10.4. `BudgetProvider` mounted in the
+  locale layout; Budgets nav item added to the sidebar (chart-pie icon).
+- **i18n** — new `budgets.*` namespace (list + form + validation) in EN
+  and HE; dark-mode variants throughout, matching neighboring dialogs.
+
+### Tests
+
+28 new `BudgetFormDialog` vitest cases: scope remember pre-fill +
+defaults override + persistence on save; single-select scope semantics;
+currency-follows-scope (and manual-pick stickiness); scope-narrowed
+category options + invisible-category drop; CUSTOM disclosure
+show/hide; validation branches (name/amount/scope/threshold/custom
+range); create payload minimal + full shapes; API error banner vs
+`BUDGET_INVALID_CATEGORY` field mapping; edit prefill, locked scope,
+minimal diff, explicit-null threshold clear, CUSTOM→MONTHLY period-only
+diff, no-op save skip; focus + ESC/discard a11y. **web: 1234 green
+(106 files); typecheck + lint clean.**
+
+**Next** — 10.4 (`/budgets` list page: cards, filters, archived toggle,
+edit/delete/archive flows wired).

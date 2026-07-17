@@ -14,8 +14,12 @@ const DEFAULT_SCOPES: AttributionScope[] = [{ scope: 'personal' }];
 const DEFAULT_DIRECTION: TransactionDirection = 'OUT';
 const DEFAULT_TYPE: TransactionType = 'ONE_TIME';
 
-/** Return the browser's localStorage, or null when not available (SSR, privacy mode). */
-function safeStorage(): Storage | null {
+/**
+ * Return the browser's localStorage, or null when not available (SSR,
+ * privacy mode). Exported (10.3) so other remember modules — e.g.
+ * `@/lib/budget/remember` — share the exact same guards.
+ */
+export function safeStorage(): Storage | null {
   if (typeof window === 'undefined') return null;
   try {
     return window.localStorage;
@@ -24,7 +28,8 @@ function safeStorage(): Storage | null {
   }
 }
 
-function isValidScope(x: unknown): x is AttributionScope {
+/** Runtime validation of a parsed scope value. Shared with budget/remember (10.3). */
+export function isValidScope(x: unknown): x is AttributionScope {
   if (!x || typeof x !== 'object') return false;
   const v = x as { scope?: unknown; groupId?: unknown };
   if (v.scope === 'personal') return true;

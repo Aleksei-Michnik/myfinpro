@@ -22,6 +22,12 @@ export interface TransactionCategoryPickerProps {
   disabled?: boolean;
   /** Optional data-testid override */
   testId?: string;
+  /**
+   * When provided, the empty option is selectable and labelled with this
+   * string — `onChange('')` then means "no category". Used by forms where
+   * the category is optional (budgets, 10.3).
+   */
+  emptyOptionLabel?: string;
 }
 
 // Minimal private emoji map — a few known keys, unknown → no emoji.
@@ -81,6 +87,7 @@ export function TransactionCategoryPicker({
   categories: categoriesProp,
   disabled,
   testId,
+  emptyOptionLabel,
 }: TransactionCategoryPickerProps) {
   const t = useTranslations('transactions.categoryPicker');
   const { groups } = useGroups();
@@ -122,8 +129,8 @@ export function TransactionCategoryPicker({
         aria-busy={loading}
         className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
       >
-        <option value="" disabled>
-          {loading ? t('loading') : t('placeholder')}
+        <option value="" disabled={!emptyOptionLabel}>
+          {loading ? t('loading') : (emptyOptionLabel ?? t('placeholder'))}
         </option>
         {grouped && grouped.system.length > 0 && (
           <optgroup label={t('groupSystem')}>{grouped.system.map(renderOption)}</optgroup>

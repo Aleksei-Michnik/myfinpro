@@ -6,17 +6,31 @@
 // image fetch on create). The default category is restricted to SYSTEM
 // expense categories — the only ones meaningful on a global product.
 
-import { isValidGtin, normalizeGtin } from '@myfinpro/shared';
+import {
+  isValidGtin,
+  normalizeGtin,
+  PRODUCT_IMAGE_MAX_COUNT,
+  type ProductImageInfo,
+} from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog';
 import { Button } from '@/components/ui/Button';
+import { FileCaptureButtons } from '@/components/ui/FileCaptureButtons';
 import { useToast } from '@/components/ui/Toast';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
 import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
+
+const PICTURE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic';
+
+/** A picture staged in create mode — uploaded after the product exists. */
+interface StagedPicture {
+  file: File;
+  previewUrl: string;
+}
 
 const inputClass =
   'w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 ' +
@@ -46,8 +60,19 @@ export function ProductFormDialog({
   onSaved,
 }: ProductFormDialogProps) {
   const t = useTranslations('products.form');
+  // Camera label rides the intake-zone key — same wording everywhere.
+  const uploadT = useTranslations('receipts.upload');
   const locale = useLocale();
-  const { createProduct, updateProduct, lookupBarcode } = useProducts();
+  const {
+    createProduct,
+    updateProduct,
+    lookupBarcode,
+    getProduct,
+    uploadImage,
+    removeImage,
+    reorderImage,
+    productImageUrl,
+  } = useProducts();
   const { addToast } = useToast();
 
   const [name, setName] = useState('');
@@ -58,10 +83,19 @@ export function ProductFormDialog({
   const [offHint, setOffHint] = useState<'checking' | 'filled' | 'exists' | null>(null);
   const [offImageUrl, setOffImageUrl] = useState<string | null>(null);
   const [existing, setExisting] = useState<ProductSummary | null>(null);
+  // Pictures (8.25): server rows in edit mode, staged files in create mode.
+  const [images, setImages] = useState<ProductImageInfo[]>([]);
+  const [staged, setStaged] = useState<StagedPicture[]>([]);
 
   const saveOp = useAsyncOperation<ProductSummary>({ scope: 'control' });
+  const picturesOp = useAsyncOperation<void>({ scope: 'control' });
   const nameRef = useRef<HTMLInputElement | null>(null);
   const editing = !!product;
+
+  // Slots used: the OFF prefill occupies one in create mode (the API
+  // creates its row first, so it becomes the primary picture).
+  const usedSlots = editing ? images.length : staged.length + (offImageUrl ? 1 : 0);
+  const canAddPictures = usedSlots < PRODUCT_IMAGE_MAX_COUNT;
 
   const systemCategories = useMemo(
     () => categories.filter((c) => c.ownerType === 'system'),
@@ -77,6 +111,18 @@ export function ProductFormDialog({
     setOffHint(null);
     setOffImageUrl(null);
     setExisting(null);
+    setImages(product?.images ?? []);
+    setStaged((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      return [];
+    });
+    // Edit mode: list reads carry no gallery — fetch the detail row for
+    // the pictures strip (8.25).
+    if (product) {
+      void getProduct(product.id)
+        .then((full) => setImages(full.images ?? []))
+        .catch(() => undefined);
+    }
     // A create opened with a code (scan / printed receipt code, 8.23)
     // resolves it immediately — brand/image prefill shouldn't wait for a
     // manual field blur.
@@ -128,6 +174,60 @@ export function ProductFormDialog({
       .catch(() => setOffHint(null));
   };
 
+  /** Add pictures: upload now (edit) or stage until the product exists (create). */
+  const onPictures = (files: File[]) => {
+    const remaining = PRODUCT_IMAGE_MAX_COUNT - usedSlots;
+    const batch = files.slice(0, remaining);
+    if (batch.length === 0) return;
+    if (editing && product) {
+      void picturesOp.run(async (signal) => {
+        for (const file of batch) {
+          const row = await uploadImage(product.id, file, signal);
+          setImages((prev) => [...prev, row]);
+        }
+      });
+      return;
+    }
+    setStaged((prev) => [
+      ...prev,
+      ...batch.map((file) => ({ file, previewUrl: URL.createObjectURL(file) })),
+    ]);
+  };
+
+  const onRemovePicture = (index: number) => {
+    if (editing && product) {
+      const row = images[index];
+      if (!row) return;
+      void picturesOp.run(async (signal) => {
+        await removeImage(product.id, row.id, signal);
+        setImages((prev) =>
+          prev.filter((img) => img.id !== row.id).map((img, i) => ({ ...img, position: i + 1 })),
+        );
+      });
+      return;
+    }
+    setStaged((prev) => {
+      const removed = prev[index];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  /** Edit mode only — position 1 defines the primary picture. */
+  const onMakePrimary = (imageId: string) => {
+    if (!editing || !product) return;
+    void picturesOp.run(async (signal) => {
+      const rows = await reorderImage(product.id, imageId, 1, signal);
+      setImages(rows);
+    });
+  };
+
+  useEffect(() => {
+    if (picturesOp.error && picturesOp.error.reason !== 'aborted') {
+      addToast('error', picturesOp.error.message || t('pictureUploadFailed'));
+    }
+  }, [picturesOp.error, addToast, t]);
+
   const submit = () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -153,7 +253,7 @@ export function ProductFormDialog({
             signal,
           );
         }
-        return createProduct(
+        const created = await createProduct(
           {
             name: trimmedName,
             brand: brand.trim() || undefined,
@@ -164,6 +264,16 @@ export function ProductFormDialog({
           },
           signal,
         );
+        // Staged pictures upload once the id exists (design §3.5); a failed
+        // picture never fails the created product — warn and move on.
+        try {
+          for (const picture of staged) {
+            await uploadImage(created.id, picture.file, signal);
+          }
+        } catch {
+          addToast('error', t('pictureUploadFailed'));
+        }
+        return created;
       })
       .then((saved) => {
         if (saved !== undefined) {
@@ -316,6 +426,171 @@ export function ProductFormDialog({
               ))}
             </select>
             <p className="text-xs text-gray-400 dark:text-gray-500">{t('categoryHint')}</p>
+          </div>
+
+          {/* Pictures (8.25): strip of thumbs + shared capture control. */}
+          <div className="space-y-2">
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {t('picturesLabel')}
+            </span>
+            {usedSlots > 0 && (
+              <div className="flex flex-wrap items-center gap-2" data-testid="product-pictures">
+                {editing
+                  ? images.map((img, index) => (
+                      <div
+                        key={img.id}
+                        className="relative"
+                        data-testid={`product-picture-${index}`}
+                      >
+                        <img
+                          src={product ? productImageUrl(product.id, img, 'thumb') : ''}
+                          alt=""
+                          loading="lazy"
+                          className={`h-14 w-14 rounded-md object-cover ${
+                            img.position === 1
+                              ? 'ring-2 ring-primary-500'
+                              : 'border border-gray-200 dark:border-gray-600'
+                          }`}
+                        />
+                        {img.position !== 1 && (
+                          <button
+                            type="button"
+                            aria-label={t('makePrimary')}
+                            title={t('makePrimary')}
+                            disabled={picturesOp.isLoading}
+                            onClick={() => onMakePrimary(img.id)}
+                            data-testid={`product-picture-primary-${index}`}
+                            className="absolute -bottom-1 -start-1 rounded-full bg-white p-0.5 text-gray-500 shadow hover:text-primary-600 dark:bg-gray-700 dark:text-gray-300"
+                          >
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                              aria-hidden="true"
+                            >
+                              <path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={t('removePicture')}
+                          disabled={picturesOp.isLoading}
+                          onClick={() => onRemovePicture(index)}
+                          data-testid={`product-picture-remove-${index}`}
+                          className="absolute -end-1 -top-1 rounded-full bg-white p-0.5 text-gray-500 shadow hover:text-red-600 dark:bg-gray-700 dark:text-gray-300"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ))
+                  : [
+                      ...(offImageUrl
+                        ? [
+                            <div key="off" className="relative" data-testid="product-picture-off">
+                              <img
+                                src={offImageUrl}
+                                alt=""
+                                loading="lazy"
+                                className="h-14 w-14 rounded-md object-cover ring-2 ring-primary-500"
+                              />
+                              <button
+                                type="button"
+                                aria-label={t('removePicture')}
+                                onClick={() => setOffImageUrl(null)}
+                                data-testid="product-picture-off-remove"
+                                className="absolute -end-1 -top-1 rounded-full bg-white p-0.5 text-gray-500 shadow hover:text-red-600 dark:bg-gray-700 dark:text-gray-300"
+                              >
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth={2}
+                                  stroke="currentColor"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
+                                </svg>
+                              </button>
+                            </div>,
+                          ]
+                        : []),
+                      ...staged.map((picture, index) => (
+                        <div
+                          key={picture.previewUrl}
+                          className="relative"
+                          data-testid={`product-picture-${index}`}
+                        >
+                          <img
+                            src={picture.previewUrl}
+                            alt=""
+                            className={`h-14 w-14 rounded-md object-cover ${
+                              !offImageUrl && index === 0
+                                ? 'ring-2 ring-primary-500'
+                                : 'border border-gray-200 dark:border-gray-600'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            aria-label={t('removePicture')}
+                            onClick={() => onRemovePicture(index)}
+                            data-testid={`product-picture-remove-${index}`}
+                            className="absolute -end-1 -top-1 rounded-full bg-white p-0.5 text-gray-500 shadow hover:text-red-600 dark:bg-gray-700 dark:text-gray-300"
+                          >
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={2}
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      )),
+                    ]}
+              </div>
+            )}
+            {canAddPictures && (
+              <div className="flex flex-wrap items-center gap-2">
+                <FileCaptureButtons
+                  accept={PICTURE_ACCEPT}
+                  multiple
+                  disabled={saveOp.isLoading || picturesOp.isLoading}
+                  onFiles={onPictures}
+                  browseLabel={t('addPicture')}
+                  cameraLabel={uploadT('camera')}
+                  testIdPrefix="product-picture"
+                  variant="outline"
+                />
+              </div>
+            )}
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {t('picturesHint', { max: PRODUCT_IMAGE_MAX_COUNT })}
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">

@@ -9,7 +9,7 @@ import {
   type ProductAliasSource,
 } from '@myfinpro/shared';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma, type Product } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_ERRORS } from './constants/product-errors';
 import { AddAliasDto } from './dto/add-alias.dto';
@@ -17,6 +17,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
 import {
   mapProductToDto,
+  PRODUCT_PRIMARY_IMAGE_INCLUDE,
   type BarcodeLookupResponseDto,
   type ProductListResponse,
   type ProductPurchasesResponseDto,
@@ -58,6 +59,7 @@ export class ProductService {
       const candidates = await this.matcher.searchRegistry(q.search.trim(), SEARCH_LIMIT);
       const rows = await this.prisma.product.findMany({
         where: { id: { in: candidates.map((c) => c.productId) } },
+        include: PRODUCT_PRIMARY_IMAGE_INCLUDE,
       });
       const byId = new Map(rows.map((row) => [row.id, row]));
       const stats = await this.loadStats(
@@ -67,7 +69,7 @@ export class ProductService {
       return {
         data: candidates
           .map((c) => byId.get(c.productId))
-          .filter((row): row is Product => row !== undefined)
+          .filter((row): row is (typeof rows)[number] => row !== undefined)
           .map((row) => mapProductToDto(row, { stats: stats.get(row.id) })),
         nextCursor: null,
         hasMore: false,
@@ -80,11 +82,18 @@ export class ProductService {
   async getOne(userId: string, id: string): Promise<ProductResponseDto> {
     const row = await this.prisma.product.findUnique({
       where: { id },
-      include: { aliases: { orderBy: [{ confirmationCount: 'desc' }, { name: 'asc' }] } },
+      include: {
+        aliases: { orderBy: [{ confirmationCount: 'desc' }, { name: 'asc' }] },
+        images: { orderBy: { position: 'asc' } },
+      },
     });
     if (!row) this.throwNotFound();
     const stats = await this.loadStats(userId, [row.id]);
-    return mapProductToDto(row, { stats: stats.get(row.id), aliases: row.aliases });
+    return mapProductToDto(row, {
+      stats: stats.get(row.id),
+      aliases: row.aliases,
+      images: row.images,
+    });
   }
 
   /** GET /products/:id/purchases — caller's confirmed purchases only. */
@@ -202,8 +211,8 @@ export class ProductService {
     this.logger.log(`Product ${row.id} created by user ${userId}`);
     // OFF prefill image rides the background queue (design §1.5) — creation
     // never waits on a third-party image host.
-    if (dto.imageUrl) await this.images.enqueueUrlFetch(row.id, dto.imageUrl);
-    return mapProductToDto(row);
+    if (dto.imageUrl) await this.images.addFromUrl(row.id, dto.imageUrl);
+    return mapProductToDto({ ...row, images: [] });
   }
 
   /** PATCH /products/:id — registry update (audited). */
@@ -235,7 +244,11 @@ export class ProductService {
         : { disconnect: true };
     }
 
-    const updated = await this.prisma.product.update({ where: { id }, data });
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data,
+      include: PRODUCT_PRIMARY_IMAGE_INCLUDE,
+    });
     void this.writeAudit(userId, id, 'PRODUCT_UPDATED', { changed: Object.keys(data) });
     return mapProductToDto(updated);
   }
@@ -285,7 +298,10 @@ export class ProductService {
         errorCode: PRODUCT_ERRORS.PRODUCT_INVALID_BARCODE,
       });
     }
-    const row = await this.prisma.product.findUnique({ where: { barcode } });
+    const row = await this.prisma.product.findUnique({
+      where: { barcode },
+      include: PRODUCT_PRIMARY_IMAGE_INCLUDE,
+    });
     if (row) {
       const stats = await this.loadStats(userId, [row.id]);
       return {
@@ -360,7 +376,10 @@ export class ProductService {
     if (ids.length === 0) return { data: [], nextCursor: null, hasMore: false };
 
     const [rows, stats] = await Promise.all([
-      this.prisma.product.findMany({ where: { id: { in: ids } } }),
+      this.prisma.product.findMany({
+        where: { id: { in: ids } },
+        include: PRODUCT_PRIMARY_IMAGE_INCLUDE,
+      }),
       this.loadStats(userId, ids),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -368,7 +387,7 @@ export class ProductService {
     return {
       data: ids
         .map((id) => byId.get(id))
-        .filter((row): row is Product => row !== undefined)
+        .filter((row): row is (typeof rows)[number] => row !== undefined)
         .map((row) => mapProductToDto(row, { stats: stats.get(row.id) })),
       nextCursor:
         hasMore && last?.productId && last._max.purchasedAt
@@ -480,6 +499,16 @@ export class ProductService {
       message: 'Product not found',
       errorCode: PRODUCT_ERRORS.PRODUCT_NOT_FOUND,
     });
+  }
+
+  /** Picture-lifecycle audit rows (8.25) — same sink as the other actions. */
+  async writeImageAudit(
+    userId: string,
+    productId: string,
+    action: 'PRODUCT_IMAGE_ADDED' | 'PRODUCT_IMAGE_REMOVED' | 'PRODUCT_IMAGE_REORDERED',
+    details: Record<string, unknown>,
+  ): Promise<void> {
+    await this.writeAudit(userId, productId, action, details);
   }
 
   private async writeAudit(

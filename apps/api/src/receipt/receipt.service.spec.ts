@@ -8,6 +8,7 @@ import { ProductService } from '../product/product.service';
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { TransactionService } from '../transaction/transaction.service';
+import { ReceiptOptimizationService } from './receipt-optimization.service';
 import { ReceiptStorageService } from './receipt-storage.service';
 import { ReceiptService } from './receipt.service';
 
@@ -50,6 +51,7 @@ describe('ReceiptService', () => {
     create: jest.fn(),
     recordAlias: jest.fn().mockResolvedValue(undefined),
   };
+  const optimizationsMock = { enqueue: jest.fn().mockResolvedValue(undefined) };
 
   let service: ReceiptService;
 
@@ -98,6 +100,7 @@ describe('ReceiptService', () => {
         { provide: CategoryService, useValue: categoryMock },
         { provide: TransactionService, useValue: transactionServiceMock },
         { provide: ProductService, useValue: productServiceMock },
+        { provide: ReceiptOptimizationService, useValue: optimizationsMock },
         { provide: getQueueToken(RECEIPT_EXTRACTIONS_QUEUE), useValue: queueMock },
       ],
     }).compile();

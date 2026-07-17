@@ -41,7 +41,9 @@ describe('AttachReceiptDialog (8.15)', () => {
     const { onAttached } = renderDialog();
 
     const file = new File(['x'], 'r.jpg', { type: 'image/jpeg' });
-    fireEvent.change(screen.getByTestId('attach-receipt-file'), { target: { files: [file] } });
+    fireEvent.change(screen.getByTestId('attach-receipt-file-input'), {
+      target: { files: [file] },
+    });
 
     await waitFor(() =>
       expect(attachFileMock).toHaveBeenCalledWith('pay-1', [file], expect.anything()),

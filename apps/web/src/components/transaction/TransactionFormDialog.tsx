@@ -39,6 +39,7 @@ import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { isoToLocalInput, localInputToIso, nowLocalIso } from '@/lib/datetime';
 import { useGroups } from '@/lib/group/group-context';
+import { parseAmountToCents } from '@/lib/money';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import {
   getLastUsedDirection,
@@ -202,15 +203,6 @@ export function computeDiff(
   }
 
   return diff;
-}
-
-function parseAmountToCents(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (!/^-?\d+(\.\d{1,2})?$/.test(trimmed)) return null;
-  const val = Number(trimmed);
-  if (Number.isNaN(val)) return null;
-  return Math.round(val * 100);
 }
 
 function extractMessage(err: unknown): string {
