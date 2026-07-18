@@ -13,13 +13,17 @@ import {
 } from './extraction-provider.interface';
 import { buildExtractionPrompt } from './extraction.schema';
 import { MockExtractionProvider } from './mock-extraction.provider';
+import { OpenAiExtractionProvider } from './openai-extraction.provider';
 import { ResilientExtractionProvider } from './resilient-extraction.provider';
 
 // The Anthropic SDK is mocked at module level — the provider spec asserts
 // the request shape without any network. The provider streams and awaits
 // `finalMessage()` (8.21), so the mock resolves/rejects through that path;
 // `APIError` mirrors the SDK's static error class for instanceof checks.
+// 8.26: scripted raw events in `anthropicStreamEvents` replay to
+// `.on('streamEvent')` subscribers before finalMessage resolves.
 const anthropicCreateMock = jest.fn();
+const anthropicStreamEvents: unknown[] = [];
 jest.mock('@anthropic-ai/sdk', () => {
   class APIError extends Error {
     constructor(
@@ -31,7 +35,20 @@ jest.mock('@anthropic-ai/sdk', () => {
   }
   const ctor = jest.fn().mockImplementation(() => ({
     messages: {
-      stream: (req: unknown) => ({ finalMessage: () => anthropicCreateMock(req) }),
+      stream: (req: unknown) => {
+        const listeners: ((event: unknown) => void)[] = [];
+        return {
+          on: (name: string, fn: (event: unknown) => void) => {
+            if (name === 'streamEvent') listeners.push(fn);
+          },
+          finalMessage: () => {
+            for (const event of anthropicStreamEvents) {
+              for (const fn of listeners) fn(event);
+            }
+            return anthropicCreateMock(req);
+          },
+        };
+      },
     },
   }));
   return Object.assign(ctor, { APIError });
@@ -211,6 +228,7 @@ describe('AnthropicExtractionProvider', () => {
 
   beforeEach(() => {
     anthropicCreateMock.mockReset();
+    anthropicStreamEvents.length = 0;
   });
 
   const makeProvider = () =>
@@ -222,7 +240,8 @@ describe('AnthropicExtractionProvider', () => {
 
     const req = anthropicCreateMock.mock.calls[0][0];
     expect(req.model).toBe('claude-opus-4-8');
-    expect(req.thinking).toEqual({ type: 'adaptive' });
+    // 8.26 — summarized display so the thinking stream is visible.
+    expect(req.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
     expect(req.output_config.format.type).toBe('json_schema');
     expect(req.output_config.format.schema.properties.items).toBeDefined();
     const [first, second] = req.messages[0].content;
@@ -311,6 +330,45 @@ describe('AnthropicExtractionProvider', () => {
     expect(promptBlock?.text).toContain('"לחם"');
   });
 
+  it('streams thinking and text deltas into onProgress (8.26)', async () => {
+    anthropicCreateMock.mockResolvedValue(validPayload());
+    anthropicStreamEvents.push(
+      {
+        type: 'content_block_delta',
+        delta: { type: 'thinking_delta', thinking: 'Scanning the header. ' },
+      },
+      { type: 'content_block_delta', delta: { type: 'text_delta', text: '{"items":[{"rawName"' } },
+      { type: 'content_block_delta', delta: { type: 'text_delta', text: ':"a"},{"rawName":"b"}' } },
+    );
+    const updates: { stage: string; thought?: string; itemsSoFar?: number }[] = [];
+    await makeProvider().extract(IMAGE_INPUT, { ...CTX, onProgress: (u) => updates.push(u) });
+
+    expect(updates[0]).toEqual({ stage: 'processing' });
+    expect(updates).toContainEqual({ stage: 'thinking', thought: 'Scanning the header. ' });
+    // Running item count over the accumulated JSON, boundary-safe.
+    expect(updates.filter((u) => u.stage === 'generating').map((u) => u.itemsSoFar)).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('emits a continuing progress update at each chunk boundary (8.26)', async () => {
+    const truncated =
+      `{"merchantName":"Shufersal","purchasedAt":null,"currency":"ILS",` +
+      `"totalCents":880,"discountCents":0,"items":[{"rawName":"לחם","quantity":1,` +
+      `"unitPriceCents":440,"discountCents":0,"totalCents":440,` +
+      `"suggestedCategoryId":null,"suggestedProductId":null},{"rawName":"חצ`;
+    anthropicCreateMock
+      .mockResolvedValueOnce({
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 1000, output_tokens: 64000 },
+        content: [{ type: 'text', text: truncated }],
+      })
+      .mockResolvedValueOnce(validPayload());
+    const updates: { stage: string; pass?: number }[] = [];
+    await makeProvider().extract(IMAGE_INPUT, { ...CTX, onProgress: (u) => updates.push(u) });
+    expect(updates).toContainEqual({ stage: 'continuing', pass: 1, itemsSoFar: 1 });
+  });
+
   it('maps 4xx API rejections (e.g. unsupported thinking mode) to permanent failures', async () => {
     const Anthropic = jest.requireMock('@anthropic-ai/sdk') as {
       APIError: new (status: number, message: string) => Error;
@@ -333,6 +391,79 @@ describe('AnthropicExtractionProvider', () => {
   it('lets transport errors bubble for the resilience layer to retry', async () => {
     anthropicCreateMock.mockRejectedValue(new Error('overloaded_error'));
     await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow('overloaded_error');
+  });
+});
+
+describe('OpenAiExtractionProvider (8.26 streaming)', () => {
+  const validJson = JSON.stringify({
+    merchantName: 'Shufersal',
+    purchasedAt: null,
+    currency: 'ILS',
+    totalCents: 440,
+    discountCents: 0,
+    items: [
+      {
+        rawName: 'לחם',
+        quantity: 1,
+        unitPriceCents: 440,
+        discountCents: 0,
+        totalCents: 440,
+        suggestedCategoryId: null,
+        suggestedProductId: null,
+      },
+    ],
+    confidence: 'high',
+    notes: null,
+  });
+
+  const sseBody = (content: string) => {
+    const mid = Math.floor(content.length / 2);
+    return [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: content.slice(0, mid) } }] })}`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: content.slice(mid) } }] })}`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}`,
+      `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 9, completion_tokens: 5 } })}`,
+      'data: [DONE]',
+      '',
+    ].join('\n');
+  };
+
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('streams the completion and drives generating progress', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(new Response(sseBody(validJson)));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = new OpenAiExtractionProvider({ apiKey: 'sk-test', model: 'gpt-5.6' });
+    const updates: { stage: string; itemsSoFar?: number }[] = [];
+    const result = await provider.extract(IMAGE_INPUT, {
+      ...CTX,
+      onProgress: (u) => updates.push(u),
+    });
+
+    expect(result.items.map((i) => i.rawName)).toEqual(['לחם']);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+      stream: boolean;
+      stream_options: { include_usage: boolean };
+    };
+    expect(body.stream).toBe(true);
+    expect(body.stream_options).toEqual({ include_usage: true });
+    expect(updates[0]).toEqual({ stage: 'processing' });
+    expect(updates.at(-1)).toEqual({ stage: 'generating', itemsSoFar: 1 });
+  });
+
+  it('maps streamed refusals to a permanent failure', async () => {
+    const body = [
+      `data: ${JSON.stringify({ choices: [{ delta: { refusal: 'no' }, finish_reason: 'stop' }] })}`,
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    global.fetch = jest.fn().mockResolvedValue(new Response(body)) as unknown as typeof fetch;
+    const provider = new OpenAiExtractionProvider({ apiKey: 'sk-test' });
+    await expect(provider.extract(IMAGE_INPUT, CTX)).rejects.toThrow(ExtractionFailedError);
   });
 });
 

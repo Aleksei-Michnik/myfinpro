@@ -8,10 +8,12 @@ import {
   mergeContinuationItems,
   salvageCompleteItems,
 } from './extraction-continuation.util';
+import { RawNameCounter } from './extraction-progress.util';
 import {
   ExtractionFailedError,
   type ExtractionContext,
   type ExtractionInput,
+  type ExtractionProgressUpdate,
   type LlmClientOptions,
   type ReceiptExtractionProvider,
 } from './extraction-provider.interface';
@@ -56,7 +58,11 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
     const salvaged: Record<string, unknown>[] = [];
     let prompt = basePrompt;
     for (let pass = 0; pass <= MAX_EXTRACTION_CONTINUATIONS; pass++) {
-      const response = await this.callModel([...docBlocks, { type: 'text', text: prompt }]);
+      const response = await this.callModel(
+        [...docBlocks, { type: 'text', text: prompt }],
+        ctx.onProgress,
+        salvaged.length,
+      );
 
       if (response.stop_reason === 'refusal') {
         throw new ExtractionFailedError('Provider declined to process this document');
@@ -82,6 +88,8 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
           `anthropic extraction truncated (pass ${pass + 1}) — ` +
             `continuing from item ${salvaged.length}`,
         );
+        // 8.26 — surface the chunk boundary (1-based continuation pass).
+        ctx.onProgress?.({ stage: 'continuing', pass: pass + 1, itemsSoFar: salvaged.length });
         prompt = buildContinuationPrompt(basePrompt, salvaged.length, lastSalvagedName(salvaged));
         continue;
       }
@@ -109,27 +117,47 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
   }
 
   /** One streamed model call; permanent 4xx rejections fail the receipt. */
-  private async callModel(content: Anthropic.ContentBlockParam[]): Promise<Anthropic.Message> {
+  private async callModel(
+    content: Anthropic.ContentBlockParam[],
+    onProgress: ((update: ExtractionProgressUpdate) => void) | undefined,
+    itemsBase: number,
+  ): Promise<Anthropic.Message> {
     const started = Date.now();
     let response: Anthropic.Message;
     try {
       // Streaming is required by the SDK guidance for max_tokens > ~16K
-      // (non-streaming requests risk HTTP timeouts); we only need the
-      // final message, not the deltas.
-      response = await this.client.messages
-        .stream({
-          model: this.model,
-          max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
-          thinking: { type: 'adaptive' },
-          output_config: {
-            format: {
-              type: 'json_schema',
-              schema: EXTRACTION_RESULT_JSON_SCHEMA as unknown as Record<string, unknown>,
-            },
+      // (non-streaming requests risk HTTP timeouts). 8.26: the deltas now
+      // also feed live progress — summarized reasoning (`display` controls
+      // visibility only, not whether thinking happens) and a running item
+      // count over the JSON output.
+      const stream = this.client.messages.stream({
+        model: this.model,
+        max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
+        thinking: { type: 'adaptive', display: 'summarized' },
+        output_config: {
+          format: {
+            type: 'json_schema',
+            schema: EXTRACTION_RESULT_JSON_SCHEMA as unknown as Record<string, unknown>,
           },
-          messages: [{ role: 'user', content }],
-        })
-        .finalMessage();
+        },
+        messages: [{ role: 'user', content }],
+      });
+      if (onProgress) {
+        onProgress({ stage: 'processing' });
+        const itemCounter = new RawNameCounter();
+        stream.on('streamEvent', (event) => {
+          if (event.type !== 'content_block_delta') return;
+          if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
+            onProgress({ stage: 'thinking', thought: event.delta.thinking });
+          } else if (event.delta.type === 'text_delta') {
+            onProgress({
+              stage: 'generating',
+              itemsSoFar: itemsBase + itemCounter.add(event.delta.text),
+            });
+          }
+        });
+      }
+      response = await stream.finalMessage();
     } catch (err) {
       // A 4xx (other than 429) is a permanent request/model incompatibility
       // — e.g. a model that rejects adaptive thinking — not a provider

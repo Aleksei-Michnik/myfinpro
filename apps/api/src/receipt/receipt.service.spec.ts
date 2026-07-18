@@ -149,7 +149,8 @@ describe('ReceiptService', () => {
           backoff: { type: 'exponential', delay: 5_000 },
         }),
       );
-      expect(jobOpts.jobId).toMatch(/^receipt:r-1:/);
+      // No ':' anywhere — BullMQ rejects colons in custom job ids.
+      expect(jobOpts.jobId).toMatch(/^receipt-r-1-\d+$/);
       expect(eventBusMock.publish).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'receipt.updated', userIds: ['u-1'] }),
       );

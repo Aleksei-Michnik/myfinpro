@@ -30,6 +30,9 @@ services:
       # Receipt file storage — MUST point at the mounted volume below; a
       # container-local path loses every uploaded file on each blue/green swap.
       RECEIPT_STORAGE_DIR: /data/receipts
+      # Product image storage — same rule as receipts (8.25-hotfix-2: the
+      # default container-local path wiped every picture on each deploy).
+      PRODUCT_IMAGE_STORAGE_DIR: /data/products
       # Receipt extraction (LLM) — defaults to the deterministic mock provider;
       # set RECEIPT_EXTRACTION_PROVIDER=anthropic + ANTHROPIC_API_KEY to use Claude.
       RECEIPT_EXTRACTION_PROVIDER: ${RECEIPT_EXTRACTION_PROVIDER:-mock}
@@ -51,9 +54,10 @@ services:
       # DKIM — signed at Nodemailer layer (Haraka dkim_sign plugin has stream crash)
       DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
     volumes:
-      # Fixed-name volume shared by both blue/green slots (each runs under its
-      # own compose project, so the name must not be project-prefixed).
+      # Fixed-name volumes shared by both blue/green slots (each runs under its
+      # own compose project, so the names must not be project-prefixed).
       - myfinpro-staging-receipts:/data/receipts
+      - myfinpro-staging-products:/data/products
     networks:
       myfinpro-staging-net:
         aliases:
@@ -100,4 +104,7 @@ networks:
 volumes:
   myfinpro-staging-receipts:
     name: myfinpro-staging-receipts
+    driver: local
+  myfinpro-staging-products:
+    name: myfinpro-staging-products
     driver: local

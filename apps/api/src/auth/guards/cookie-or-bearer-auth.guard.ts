@@ -1,18 +1,24 @@
-// Phase 6 · Iteration 6.18.1.4 — SSE auth guard.
+// Phase 6 · 6.18.1.4 (as RealtimeAuthGuard) → generalized in 8.25-hotfix.
 //
-// EventSource cannot send `Authorization` headers, so we accept the JWT
-// from the `access_token` cookie set alongside the existing Bearer flow
-// (see [`apps/api/src/auth/utils/auth-cookie.ts`](../auth/utils/auth-cookie.ts)).
-// The header is still consulted as a fallback for tooling (curl smoke
-// tests, future non-browser clients).
+// Auth for endpoints the browser hits WITHOUT an `Authorization` header:
+// EventSource (SSE stream) and plain `<img>` tags (product pictures) can
+// only ride the `access_token` cookie set alongside the Bearer flow (see
+// [`../utils/auth-cookie.ts`](../utils/auth-cookie.ts)). The header is
+// still consulted as a fallback for tooling (curl smoke tests, future
+// non-browser clients). Read-only/GET surfaces only — mutations stay on
+// the Bearer-only JwtAuthGuard.
+//
+// @UseGuards instantiates this class inside the controller's host module,
+// so every consuming module must import JwtConfigModule to make the
+// injected JwtService resolvable there.
 
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
-export class RealtimeAuthGuard implements CanActivate {
+export class CookieOrBearerAuthGuard implements CanActivate {
   constructor(private readonly jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

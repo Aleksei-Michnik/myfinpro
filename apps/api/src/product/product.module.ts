@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { JwtConfigModule } from '../auth/jwt-config.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { OpenFoodFactsService } from './open-food-facts.service';
 import { ProductImageProcessor } from './product-image.processor';
@@ -16,7 +17,9 @@ import { ProductService } from './product.service';
  * The `product-images` queue itself comes from the global QueueModule.
  */
 @Module({
-  imports: [PrismaModule],
+  // JwtConfigModule backs CookieOrBearerAuthGuard on the <img>-consumed
+  // picture endpoints (8.25-hotfix — plain image tags carry no Bearer).
+  imports: [PrismaModule, JwtConfigModule],
   providers: [
     ProductService,
     ProductMatchingService,

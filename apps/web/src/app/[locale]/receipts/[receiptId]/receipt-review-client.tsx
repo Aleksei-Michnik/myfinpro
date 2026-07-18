@@ -11,6 +11,7 @@ import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
+import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
 import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemCard';
@@ -658,28 +659,34 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                   </div>
                 )}
             </div>
-            <div className="space-y-2" data-testid="review-items">
-              {items.map((row, index) => (
-                <ReceiptItemCard
-                  key={index}
-                  index={index}
-                  row={row}
-                  // Server-truth match state — hidden while rows have unsaved
-                  // edits (indices may no longer line up).
-                  serverItem={!dirty ? receipt.items[index] : undefined}
-                  editable={editable}
-                  matchable={receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED'}
-                  categories={categories}
-                  currency={currency || null}
-                  onChange={(patch) => setItem(index, patch)}
-                  onRemove={() => removeItem(index)}
-                  onOpenMatch={(itemId) => {
-                    setWalkthroughItemId(itemId);
-                    setWalkthroughOpen(true);
-                  }}
-                />
-              ))}
-            </div>
+            {/* 8.26 — while extraction runs the (empty) items area becomes
+                the live-progress panel; receipt.updated swaps it back. */}
+            {receipt.status === 'UPLOADED' || receipt.status === 'EXTRACTING' ? (
+              <ExtractionActivity receiptId={receiptId} variant="panel" />
+            ) : (
+              <div className="space-y-2" data-testid="review-items">
+                {items.map((row, index) => (
+                  <ReceiptItemCard
+                    key={index}
+                    index={index}
+                    row={row}
+                    // Server-truth match state — hidden while rows have unsaved
+                    // edits (indices may no longer line up).
+                    serverItem={!dirty ? receipt.items[index] : undefined}
+                    editable={editable}
+                    matchable={receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED'}
+                    categories={categories}
+                    currency={currency || null}
+                    onChange={(patch) => setItem(index, patch)}
+                    onRemove={() => removeItem(index)}
+                    onOpenMatch={(itemId) => {
+                      setWalkthroughItemId(itemId);
+                      setWalkthroughOpen(true);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
             {editable && (
               <Button
                 type="button"

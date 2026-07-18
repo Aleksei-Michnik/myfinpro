@@ -9,6 +9,7 @@ import { ProductMatchingService, type MatchProposal } from '../product/product-m
 import { RECEIPT_EXTRACTIONS_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
 import { mapReceiptToDto, type ReceiptWithRelations } from './dto/receipt-response.dto';
+import { createProgressEmitter } from './extraction/extraction-progress.util';
 import {
   ExtractionFailedError,
   type ExtractionInput,
@@ -88,7 +89,22 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     // Phase 8.11 — resolved inside the try so a permanent resolver failure
     // (selected model retired, no API key) rides the normal FAILED path.
     let resolved: ResolvedExtraction | null = null;
+    // 8.26 — transient progress fan-out to the uploader (design §4.2):
+    // throttled, decorated with the resolved binding, never persisted.
+    const progress = createProgressEmitter((update) =>
+      this.eventBus.publish({
+        type: 'receipt.extraction.progress',
+        userIds: [receipt.uploadedById],
+        receiptId,
+        progress: {
+          ...update,
+          provider: resolved?.providerName ?? null,
+          model: resolved?.model ?? null,
+        },
+      }),
+    );
     try {
+      progress.emit({ stage: 'preparing' });
       resolved = await this.extractionResolver.resolveForUser(receipt.uploadedById);
       const input = await this.buildInput(receipt);
 
@@ -106,11 +122,16 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       );
       const productCandidateIds = new Set(productCandidates.map((p) => p.id));
 
+      progress.emit({ stage: 'sending' });
       const result = await resolved.provider.extract(input, {
         categories: candidates,
         products: productCandidates,
         locale: receipt.uploadedBy?.locale ?? undefined,
+        onProgress: (update) => progress.emit(update),
       });
+      // Terminal from here on — drop any trailing progress tick before the
+      // REVIEW/FAILED receipt.updated goes out.
+      progress.stop();
 
       // Phase 8.17 — never land a receipt in REVIEW with nothing in it. A
       // JS-rendered page we can't read, or an unrelated link, yields an
@@ -159,6 +180,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
       );
       return { extracted: true, receiptId, items: itemCount };
     } catch (err) {
+      progress.stop();
       const permanent = err instanceof ExtractionFailedError;
       if (permanent || isFinalAttempt) {
         const reason = (err as Error).message?.slice(0, 500) || 'Extraction failed';

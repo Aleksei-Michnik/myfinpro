@@ -341,6 +341,53 @@ describe('ReceiptExtractionProcessor', () => {
     );
   });
 
+  it('publishes throttled progress to the uploader and stops at the terminal state (8.26)', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    providerMock.extract.mockImplementation(
+      async (_input: unknown, ctx: { onProgress?: (u: Record<string, unknown>) => void }) => {
+        ctx.onProgress?.({ stage: 'thinking', thought: 'reading the header' });
+        // Let the 300ms throttle window elapse so the coalesced event flushes.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        ctx.onProgress?.({ stage: 'generating', itemsSoFar: 2 });
+        return okResult();
+      },
+    );
+
+    await processor.process(makeJob());
+
+    const events = eventBusMock.publish.mock.calls.map((c) => c[0] as { type: string });
+    const progress = events.filter(
+      (e): e is { type: string; userIds: string[]; receiptId: string; progress: object } =>
+        e.type === 'receipt.extraction.progress',
+    );
+    // 'preparing' goes out before the binding is resolved → null decoration.
+    expect(progress[0]).toEqual({
+      type: 'receipt.extraction.progress',
+      userIds: ['u-1'],
+      receiptId: 'r-1',
+      progress: { stage: 'preparing', provider: null, model: null },
+    });
+    // Provider-driven updates arrive decorated with the resolved binding.
+    expect(progress).toContainEqual(
+      expect.objectContaining({
+        progress: expect.objectContaining({
+          stage: 'thinking',
+          thought: 'reading the header',
+          provider: 'mock',
+        }),
+      }),
+    );
+    // Ephemeral by construction: nothing after the terminal receipt.updated,
+    // and no stray trailing timer fires later.
+    const types = events.map((e) => e.type);
+    expect(types.lastIndexOf('receipt.extraction.progress')).toBeLessThan(
+      types.lastIndexOf('receipt.updated'),
+    );
+    const publishCount = eventBusMock.publish.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(eventBusMock.publish.mock.calls.length).toBe(publishCount);
+  });
+
   it('duplicate fires are no-ops for REVIEW / CONFIRMED / FAILED receipts', async () => {
     for (const status of ['REVIEW', 'CONFIRMED', 'FAILED']) {
       prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt({ status }));

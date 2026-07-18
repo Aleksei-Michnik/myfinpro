@@ -39,6 +39,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CookieOrBearerAuthGuard } from '../auth/guards/cookie-or-bearer-auth.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
@@ -322,11 +323,13 @@ export class ProductController {
   }
 
   @CustomThrottle({ limit: 120, ttl: 60_000 })
-  @UseGuards(JwtAuthGuard)
+  // Consumed by plain <img> tags, which carry no Authorization header —
+  // auth rides the access_token cookie, like the SSE stream (8.25-hotfix).
+  @UseGuards(CookieOrBearerAuthGuard)
   @Get(':id/image')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Stream the primary product picture',
+    summary: 'Stream the primary product picture (cookie or Bearer auth)',
     description:
       'The position-1 picture; ?size=thumb serves the 96px rendition. AVIF via Accept ' +
       'negotiation (Vary: Accept), WebP otherwise. The stored file is immutable per version, ' +
@@ -351,11 +354,11 @@ export class ProductController {
   }
 
   @CustomThrottle({ limit: 120, ttl: 60_000 })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(CookieOrBearerAuthGuard)
   @Get(':id/images/:imageId')
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Stream one product picture',
+    summary: 'Stream one product picture (cookie or Bearer auth)',
     description: 'Same rendition/negotiation semantics as the primary-image shortcut.',
   })
   @ApiOkResponse({ description: 'Image stream' })

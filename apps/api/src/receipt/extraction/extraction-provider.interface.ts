@@ -1,4 +1,4 @@
-import type { ExtractionResult } from '@myfinpro/shared';
+import type { ExtractionResult, ReceiptExtractionProgress } from '@myfinpro/shared';
 
 /**
  * Phase 7, iteration 7.5 — the pluggable extraction provider contract
@@ -34,6 +34,12 @@ export interface ProductCandidate {
   brand: string | null;
 }
 
+/**
+ * What a provider reports about its own progress — the worker decorates
+ * with provider/model (it owns the resolution) before publishing (8.26).
+ */
+export type ExtractionProgressUpdate = Omit<ReceiptExtractionProgress, 'provider' | 'model'>;
+
 export interface ExtractionContext {
   /**
    * The uploader's visible OUT-direction categories. `suggestedCategoryId`
@@ -49,6 +55,12 @@ export interface ExtractionContext {
   products: ProductCandidate[];
   /** BCP-47 hint for date/number disambiguation (e.g. 'he-IL'). */
   locale?: string;
+  /**
+   * 8.26 — best-effort live progress. Providers call it as their stream
+   * advances; absence is a no-op (tests, non-realtime callers). The worker
+   * throttles and fans out — providers never talk to the EventBus.
+   */
+  onProgress?: (progress: ExtractionProgressUpdate) => void;
 }
 
 export interface ReceiptExtractionProvider {

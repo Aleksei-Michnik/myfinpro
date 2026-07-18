@@ -8,6 +8,7 @@
 import { RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
@@ -299,6 +300,10 @@ export function ReceiptsClient() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* 8.26 — live extraction verbs next to the pill. */}
+                  {receipt.status === 'EXTRACTING' && (
+                    <ExtractionActivity receiptId={receipt.id} variant="inline" />
+                  )}
                   <ReceiptStatusPill status={receipt.status} />
                   {receipt.status === 'FAILED' && (
                     <Button
