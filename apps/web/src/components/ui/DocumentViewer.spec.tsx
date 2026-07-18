@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentViewer } from './DocumentViewer';
 
 vi.mock('next-intl', () => ({
@@ -10,8 +10,16 @@ vi.mock('next-intl', () => ({
 const noop = () => {};
 const page = (src: string | null, kind: 'image' | 'pdf' = 'image') => ({ kind, src });
 
+/** A horizontal drag on the image stage (pointer capture path). */
+const swipeStage = (fromX: number, toX: number, y = 10) => {
+  const stage = screen.getByTestId('viewer-image-stage');
+  fireEvent.pointerDown(stage, { clientX: fromX, clientY: y, pointerId: 1 });
+  fireEvent.pointerUp(stage, { clientX: toX, clientY: y, pointerId: 1 });
+};
+
 describe('DocumentViewer (8.18, generalized 8.27)', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => document.documentElement.removeAttribute('dir'));
 
   it('renders nothing when closed', () => {
     render(<DocumentViewer open={false} pages={[page('blob:x')]} title="R" onClose={noop} />);
@@ -95,6 +103,59 @@ describe('DocumentViewer (8.18, generalized 8.27)', () => {
   it('single-page documents render no pager', () => {
     render(<DocumentViewer open pages={[page('blob:img')]} title="R" onClose={noop} />);
     expect(screen.queryByTestId('viewer-page-indicator')).not.toBeInTheDocument();
+  });
+
+  // ── Swipe paging at 1× (8.27) ────────────────────────────────────────────
+
+  it('at 1× a horizontal drag pages next/prev without zooming, stopping at the ends', () => {
+    render(
+      <DocumentViewer open pages={[page('blob:p1'), page('blob:p2')]} title="R" onClose={noop} />,
+    );
+
+    swipeStage(200, 100); // left → next
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p2');
+    swipeStage(200, 100); // at the last — no wrap-around
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p2');
+    swipeStage(100, 200); // right → previous
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p1');
+
+    // The click a real tap fires after the swipe must NOT zoom in…
+    swipeStage(200, 100);
+    fireEvent.click(screen.getByTestId('viewer-image-stage'));
+    expect(screen.getByTestId('viewer-zoom-level')).toHaveTextContent('100%');
+    // …while a plain click still does.
+    fireEvent.click(screen.getByTestId('viewer-image-stage'));
+    expect(screen.getByTestId('viewer-zoom-level')).toHaveTextContent('200%');
+  });
+
+  it('swipe paging inverts under RTL', () => {
+    document.documentElement.setAttribute('dir', 'rtl');
+    render(
+      <DocumentViewer open pages={[page('blob:p1'), page('blob:p2')]} title="R" onClose={noop} />,
+    );
+
+    swipeStage(100, 200); // RTL: swipe right = next
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p2');
+    swipeStage(200, 100); // RTL: swipe left = previous
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p1');
+  });
+
+  it('when zoomed in, dragging keeps panning instead of paging', () => {
+    render(
+      <DocumentViewer open pages={[page('blob:p1'), page('blob:p2')]} title="R" onClose={noop} />,
+    );
+    fireEvent.click(screen.getByTestId('viewer-zoom-in'));
+    expect(screen.getByTestId('viewer-zoom-level')).toHaveTextContent('150%');
+
+    const stage = screen.getByTestId('viewer-image-stage');
+    fireEvent.pointerDown(stage, { clientX: 200, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(stage, { clientX: 100, clientY: 10, pointerId: 1 });
+    fireEvent.pointerUp(stage, { clientX: 100, clientY: 10, pointerId: 1 });
+
+    // Still page 1, panned 100px — the transform carries the offset.
+    expect(screen.getByTestId('viewer-image')).toHaveAttribute('src', 'blob:p1');
+    expect(screen.getByTestId('viewer-page-indicator')).toHaveTextContent('pageOf:1,2');
+    expect(screen.getByTestId('viewer-image').style.transform).toContain('translate(-100px, 0px)');
   });
 
   it('closes on ESC, backdrop click and the close button', () => {

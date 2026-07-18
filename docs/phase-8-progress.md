@@ -807,3 +807,26 @@ ProductQuickViewDialog, the moved DocumentViewer, and product-detail;
 seven touched specs updated. web suite green (the two budget/transaction
 dialog spec files that fail locally do so identically at HEAD — jsdom
 `localStorage` env issue on this host; CI is the gate).
+
+### 8.27 follow-up — gallery UX from staging review (2026-07-19)
+
+Staging review surfaced three gallery problems, all fixed:
+
+- **The thumb ring marked the primary picture, not the selection**, so the
+  first thumb always looked active. The ring now follows the selected
+  thumb; the primary picture carries a static star badge instead
+  (`products.detail.primaryPicture`), in both editable and read-only modes.
+- **One accidental tap on a thumb's ✕ deleted the picture.** Removal now
+  confirms through the new generic `components/ui/ConfirmDialog.tsx`
+  (dialog semantics modeled on DeleteTransactionDialog; reuses
+  `common.delete`/`common.cancel`) — added to the image-handling standard
+  as THE destructive-confirmation building block.
+- **No swipe navigation.** `lib/swipe.ts` centralizes RTL-aware carousel
+  math (40px threshold, vertical-scroll dominance check, direction
+  inversion off the nearest `[dir]`). The gallery main picture swipes
+  (pointer capture + `touch-action: pan-y`, mouse drag included) and takes
+  ArrowLeft/ArrowRight, with WAI-ARIA carousel semantics
+  (`aria-roledescription`, polite "Picture n of m" announcement); a
+  completed swipe suppresses the follow-up click so it never doubles as
+  open-lightbox. `DocumentViewer` pages with the same gesture at 1× —
+  zoomed-in drags keep panning.

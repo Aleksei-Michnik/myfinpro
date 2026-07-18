@@ -79,17 +79,18 @@ are compacted to ≤2048px WebP by `ReceiptOptimizationService`.
 Reuse these — do not hand-roll new ones. All async operations follow
 `docs/ui-async-conventions.md` (`useAsyncOperation`, no ad-hoc spinners).
 
-| Concern                    | The one implementation                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Pick / capture files       | `components/ui/FileCaptureButtons.tsx` — browse + camera pair                                                |
-| Accept lists & size caps   | `lib/upload.ts` — `IMAGE_ACCEPT`, `RECEIPT_ACCEPT`, `validateUploadFiles()`                                  |
-| Product image URL          | `useProducts().imageUrl(product, size?)` / `.productImageUrl(id, img, size?)` — both append `?v=`            |
-| Product `<img>` + fallback | `components/product/ProductImage.tsx` — cube placeholder, `onError` swap                                     |
-| Registry thumbnail         | `components/product/ProductThumb.tsx` (wraps `ProductImage` for receipt/transaction lines)                   |
-| Gallery (server rows)      | `components/product/ProductGallery.tsx` — primary + thumb strip, add/remove/make-primary, lightbox           |
-| Full-size viewer           | `components/ui/DocumentViewer.tsx` — zoom/pan/pager/PDF lightbox (portal, focus-trapped)                     |
-| Product quick view         | `components/product/ProductQuickViewDialog.tsx` — read-only product popup with gallery                       |
-| Staged local previews      | object-URL pattern (`URL.createObjectURL` + revoke on unmount) as in `ProductFormDialog` / `StagedPagesTray` |
+| Concern                    | The one implementation                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Pick / capture files       | `components/ui/FileCaptureButtons.tsx` — browse + camera pair                                                          |
+| Accept lists & size caps   | `lib/upload.ts` — `IMAGE_ACCEPT`, `RECEIPT_ACCEPT`, `validateUploadFiles()`                                            |
+| Product image URL          | `useProducts().imageUrl(product, size?)` / `.productImageUrl(id, img, size?)` — both append `?v=`                      |
+| Product `<img>` + fallback | `components/product/ProductImage.tsx` — cube placeholder, `onError` swap                                               |
+| Registry thumbnail         | `components/product/ProductThumb.tsx` (wraps `ProductImage` for receipt/transaction lines)                             |
+| Gallery (server rows)      | `components/product/ProductGallery.tsx` — primary + thumb strip, add/remove/make-primary, lightbox                     |
+| Full-size viewer           | `components/ui/DocumentViewer.tsx` — zoom/pan/pager/PDF lightbox (portal, focus-trapped)                               |
+| Destructive confirmation   | `components/ui/ConfirmDialog.tsx` — generic confirm modal; destructive actions (picture removal, …) confirm through it |
+| Product quick view         | `components/product/ProductQuickViewDialog.tsx` — read-only product popup with gallery                                 |
+| Staged local previews      | object-URL pattern (`URL.createObjectURL` + revoke on unmount) as in `ProductFormDialog` / `StagedPagesTray`           |
 
 Rules:
 
@@ -106,6 +107,15 @@ Rules:
   zoom/pan, PDFs get `<object>` + download fallback, multi-page gets the
   pager. Product galleries pass API URLs (cookie auth); receipts pass blob
   object URLs.
+- **Destructive picture actions confirm through `ConfirmDialog`** — one
+  accidental tap must never delete anything.
+- **Galleries and viewers support swipe + arrow-key navigation** — the
+  RTL-aware gesture/keyboard math lives in `lib/swipe.ts` (threshold,
+  vertical-scroll dominance, direction inversion); a completed swipe
+  suppresses the click that follows it. `ProductGallery` follows the
+  WAI-ARIA carousel pattern (`aria-roledescription`, polite position
+  announcement); `DocumentViewer` swipes pages only at 1× — zoomed-in
+  drags keep panning.
 - **i18n**: viewer strings live in `common.viewer`; upload-rejection toasts
   in `common.upload` (`rejectedType`/`rejectedSize`, formatted by
   `uploadRejectionMessage()` in `lib/upload.ts`); browse/camera wording in

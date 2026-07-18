@@ -11,6 +11,7 @@
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { swipeDelta } from '@/lib/swipe';
 
 /** One page to display — `src` is null while its blob still loads. */
 export interface ViewerPage {
@@ -50,6 +51,10 @@ export function DocumentViewer({
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  // At 1× a horizontal drag pages next/prev (RTL-aware, 8.27); a completed
+  // swipe suppresses the click that follows so it never doubles as zoom-in.
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -156,7 +161,15 @@ export function DocumentViewer({
     zoomBy(e.deltaY < 0 ? 0.4 : -0.4);
   };
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!isImage || scale === 1) return;
+    if (!isImage) return;
+    if (scale === 1) {
+      // Not zoomed: a horizontal drag pages through a multi-page document.
+      if (pages.length > 1) {
+        swipeStartRef.current = { x: e.clientX, y: e.clientY };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
+      return;
+    }
     dragRef.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
@@ -167,6 +180,18 @@ export function DocumentViewer({
   };
   const endDrag = () => {
     dragRef.current = null;
+    swipeStartRef.current = null;
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const start = swipeStartRef.current;
+    if (start) {
+      const delta = swipeDelta(e.currentTarget, e.clientX - start.x, e.clientY - start.y);
+      if (delta !== 0) {
+        suppressClickRef.current = true;
+        setPageIndex((i) => Math.min(pages.length - 1, Math.max(0, i + delta)));
+      }
+    }
+    endDrag();
   };
 
   const zoomControls = isImage && (
@@ -331,9 +356,13 @@ export function DocumentViewer({
               onWheel={onWheel}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
-              onPointerUp={endDrag}
+              onPointerUp={onPointerUp}
               onPointerLeave={endDrag}
               onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
                 if (scale === 1) zoomBy(1);
               }}
               data-testid="viewer-image-stage"
