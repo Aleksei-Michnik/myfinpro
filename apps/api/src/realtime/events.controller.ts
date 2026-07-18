@@ -14,9 +14,9 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Observable, Subject, finalize, interval, map, merge, takeUntil } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CookieOrBearerAuthGuard } from '../auth/guards/cookie-or-bearer-auth.guard';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { EventBus } from './event-bus.service';
-import { RealtimeAuthGuard } from './realtime-auth.guard';
 
 /** Mirror of NestJS's MessageEvent — declared to keep the type local. */
 interface SseMessage {
@@ -39,7 +39,7 @@ export class EventsController implements OnApplicationShutdown {
 
   constructor(private readonly eventBus: EventBus) {}
 
-  @UseGuards(RealtimeAuthGuard)
+  @UseGuards(CookieOrBearerAuthGuard)
   @Sse('stream')
   @ApiBearerAuth()
   @ApiOperation({

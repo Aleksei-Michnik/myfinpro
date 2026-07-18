@@ -696,3 +696,28 @@ end-to-end with request-shape assertions, processor emission ordering
 component spec (subscription filter, catalog label fallback chain, ticker +
 disclosure accumulation, inline variant, reduced-motion markup). api 1212 /
 web 1265 green; typecheck + lint clean.
+
+## 8.25-hotfix — product pictures 401 behind `<img>` tags (2026-07-18)
+
+Production report (catalog screenshot): pictures exist for 19/22 products
+— rows, files and all four renditions verified on the server — yet every
+card showed the cube placeholder. The API logs told the story: every
+`GET /products/:id/image` returned **401**. Plain `<img>` tags cannot send
+an `Authorization` header, and the image endpoints sat behind the
+Bearer-only `JwtAuthGuard`; the card's `onError` then swapped in the
+placeholder. (Same-origin deploys do send the `access_token` cookie the
+API has set since 6.18.1.4 — but only the SSE guard read it.)
+
+**Fix.** The SSE `RealtimeAuthGuard` — cookie first, Bearer fallback — was
+the mechanism already built for header-less endpoints; it is now the
+shared `CookieOrBearerAuthGuard` (`auth/guards/`). Both picture GETs
+(`:id/image`, `:id/images/:imageId`) use it; mutations stay Bearer-only.
+Because `@UseGuards` instantiates the guard inside the controller's host
+module, the JwtModule registration duplicated verbatim in AuthModule and
+RealtimeModule became the shared `JwtConfigModule`, imported by Auth,
+Realtime, and Product (one secret/TTL definition — DRY). No web changes
+needed.
+
+**Tests.** Guard spec moved with the rename; new integration case proves a
+cookie-only request reaches the endpoint (404 for a product without a
+picture, not 401) while a credential-less one stays 401. api 1212 green.

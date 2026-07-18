@@ -366,4 +366,22 @@ describe('Products & walkthrough (integration)', () => {
     expect(res.body.errorCode).toBe('PRODUCT_INVALID_CATEGORY');
     await prisma.category.delete({ where: { id: personal.id } });
   });
+
+  it('7. picture endpoints authenticate via the access_token cookie (8.25-hotfix)', async () => {
+    // Plain <img> tags carry no Authorization header — the cookie set at
+    // login must be enough. 404 (no picture yet) proves auth passed; a
+    // credential-less request stays 401.
+    const product = await request(app.getHttpServer())
+      .post('/api/v1/products')
+      .set(auth(alice.accessToken))
+      .send({ name: pname('Pictured') })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/products/${product.body.id}/image`)
+      .set('Cookie', [`access_token=${alice.accessToken}`])
+      .expect(404);
+
+    await request(app.getHttpServer()).get(`/api/v1/products/${product.body.id}/image`).expect(401);
+  });
 });

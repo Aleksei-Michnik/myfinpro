@@ -1,6 +1,6 @@
 import { UnauthorizedException, type ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { RealtimeAuthGuard } from './realtime-auth.guard';
+import { CookieOrBearerAuthGuard } from './cookie-or-bearer-auth.guard';
 
 interface MockRequest {
   cookies: Record<string, string>;
@@ -17,10 +17,10 @@ const ctxFor = (request: MockRequest): ExecutionContext =>
     }),
   }) as unknown as ExecutionContext;
 
-describe('RealtimeAuthGuard', () => {
+describe('CookieOrBearerAuthGuard', () => {
   const validPayload = { sub: 'user-1', email: 'a@b', name: 'A' };
   let jwtService: JwtService;
-  let guard: RealtimeAuthGuard;
+  let guard: CookieOrBearerAuthGuard;
 
   beforeEach(() => {
     jwtService = {
@@ -29,7 +29,7 @@ describe('RealtimeAuthGuard', () => {
         throw new Error('invalid');
       }),
     } as unknown as JwtService;
-    guard = new RealtimeAuthGuard(jwtService);
+    guard = new CookieOrBearerAuthGuard(jwtService);
   });
 
   it('passes when access_token cookie carries a valid JWT', async () => {
