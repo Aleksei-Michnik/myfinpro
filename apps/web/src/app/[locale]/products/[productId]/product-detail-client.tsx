@@ -1,14 +1,15 @@
 'use client';
 
-// Phase 8 · Iteration 8.9 — product detail: registry data (image, names,
+// Phase 8 · Iteration 8.9 — product detail: registry data (gallery, names,
 // aliases with locale tags, barcode, default category) + the CALLER's
 // purchase history and per-merchant price summary (private layer, design
-// §1.1). Registry edits, alias add, image upload and barcode attach all
-// live here.
+// §1.1). Registry edits, alias add, picture management and barcode attach
+// all live here (pictures via the shared ProductGallery, 8.27).
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ProductFormDialog } from '@/components/product/ProductFormDialog';
+import { ProductGallery } from '@/components/product/ProductGallery';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
@@ -39,7 +40,7 @@ function formatWhen(iso: string, locale: string): string {
 export function ProductDetailClient({ productId }: { productId: string }) {
   const t = useTranslations('products.detail');
   const locale = useLocale();
-  const { getProduct, fetchPurchases, addAlias, uploadImage, imageUrl } = useProducts();
+  const { getProduct, fetchPurchases, addAlias } = useProducts();
   const { listCategories } = useTransactions();
   const { addToast } = useToast();
 
@@ -48,11 +49,9 @@ export function ProductDetailClient({ productId }: { productId: string }) {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [aliasText, setAliasText] = useState('');
-  const [imageFailed, setImageFailed] = useState(false);
 
   const loadOp = useAsyncOperation<ProductSummary>({ scope: 'container' });
   const actOp = useAsyncOperation<boolean>({ scope: 'control' });
-  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(() => {
     void loadOp
@@ -96,18 +95,6 @@ export function ProductDetailClient({ productId }: { productId: string }) {
           setAliasText('');
           addToast('success', t('aliasAddedToast'));
         }
-      });
-  };
-
-  const onImagePicked = (file: File | undefined) => {
-    if (!file || !product) return;
-    void actOp
-      .run(async (signal) => {
-        await uploadImage(product.id, file, signal);
-        return true;
-      })
-      .then((r) => {
-        if (r !== undefined) addToast('success', t('imageQueuedToast'));
       });
   };
 
@@ -184,57 +171,17 @@ export function ProductDetailClient({ productId }: { productId: string }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[200px_1fr]">
-        {/* ── Image ──────────────────────────────────────────────────── */}
+        {/* ── Pictures (8.27 — shared gallery: view, manage, lightbox) ── */}
         <section
           aria-label={t('imageTitle')}
           className="space-y-2"
           data-testid="product-detail-image"
         >
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
-            {product.hasImage && !imageFailed ? (
-              <img
-                src={imageUrl(product)}
-                alt={product.name}
-                decoding="async"
-                onError={() => setImageFailed(true)}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <svg
-                className="h-12 w-12 text-gray-300 dark:text-gray-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-                />
-              </svg>
-            )}
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic"
-            className="hidden"
-            onChange={(e) => onImagePicked(e.target.files?.[0])}
-            data-testid="product-detail-image-input"
+          <ProductGallery
+            product={{ id: product.id, name: product.name, images: product.images ?? [] }}
+            editable
+            onChanged={load}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => fileRef.current?.click()}
-            disabled={actOp.isLoading}
-            className="w-full"
-            data-testid="product-detail-image-upload"
-          >
-            {t('uploadImage')}
-          </Button>
         </section>
 
         {/* ── Registry data ──────────────────────────────────────────── */}

@@ -6,7 +6,7 @@
 // caller-scoped private layer.
 
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { ProductImage } from '@/components/product/ProductImage';
 import { Link } from '@/i18n/navigation';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
@@ -24,7 +24,6 @@ function formatMoney(cents: number, currency: string | null, locale: string): st
 export function ProductCard({ product, locale }: { product: ProductSummary; locale: string }) {
   const t = useTranslations('products.card');
   const { imageUrl } = useProducts();
-  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <Link
@@ -33,32 +32,12 @@ export function ProductCard({ product, locale }: { product: ProductSummary; loca
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 motion-reduce:transition-none dark:border-gray-700 dark:bg-gray-800"
     >
       <div className="flex aspect-square items-center justify-center bg-gray-50 dark:bg-gray-900/40">
-        {product.hasImage && !imageFailed ? (
-          // Authenticated API endpoint + blob-free <img>; ?v= busts on re-upload.
-          <img
-            src={imageUrl(product)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setImageFailed(true)}
-            className="h-full w-full object-contain"
-          />
-        ) : (
-          <svg
-            className="h-10 w-10 text-gray-300 dark:text-gray-600"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-            />
-          </svg>
-        )}
+        {/* Authenticated API endpoint + blob-free <img>; ?v= busts on re-upload. */}
+        <ProductImage
+          src={product.hasImage ? imageUrl(product) : null}
+          className="h-full w-full object-contain"
+          placeholderClassName="h-10 w-10"
+        />
       </div>
       <div className="flex flex-1 flex-col gap-0.5 p-3">
         {product.brand && (

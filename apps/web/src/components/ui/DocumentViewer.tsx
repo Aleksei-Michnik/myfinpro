@@ -1,29 +1,35 @@
 'use client';
 
-// Phase 8.18 — accessible popup document viewer for a receipt's stored
-// file(s). Images support zoom (buttons / wheel / +-0 keys) and drag-to-pan;
-// PDFs render in the browser's native viewer; multi-photo receipts (8.22)
-// get a page navigator. Portal-mounted, focus-trapped, focus-restored,
-// ESC + backdrop close — the dialog pattern used across the app (cf.
-// RetryReturnDialog).
+// Phase 8.18, generalized in 8.27 — THE accessible popup viewer for any
+// full-size document (docs/image-handling.md §4): receipt pages (blob object
+// URLs) and product pictures (cookie-authed API URLs). Images support zoom
+// (buttons / wheel / +-0 keys) and drag-to-pan; PDFs render in the browser's
+// native viewer with a download fallback; multi-page documents get a page
+// navigator. Portal-mounted, focus-trapped, focus-restored, ESC + backdrop
+// close — the dialog pattern used across the app (cf. RetryReturnDialog).
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { swipeDelta } from '@/lib/swipe';
 
-/** One page to display — object URL is null while its blob still loads. */
+/** One page to display — `src` is null while its blob still loads. */
 export interface ViewerPage {
-  url: string | null;
-  mimeType: string | null;
+  kind: 'image' | 'pdf';
+  src: string | null;
+  /** File name suggested by the PDF download fallback. */
+  downloadName?: string;
 }
 
-interface ReceiptDocumentViewerProps {
+interface DocumentViewerProps {
   open: boolean;
-  /** Pages in shot order (8.22); a single-file document is one page. */
+  /** Pages in display order; a single-file document is one page. */
   pages: ViewerPage[];
+  /** Page shown when the viewer opens (defaults to the first). */
+  initialIndex?: number;
   /** True when the file(s) failed to load — renders an error instead of the spinner. */
   loadError?: boolean;
-  /** Accessible title (e.g. the file name). */
+  /** Accessible title (e.g. the file or product name). */
   title: string;
   onClose(): void;
 }
@@ -32,27 +38,32 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
-export function ReceiptDocumentViewer({
+export function DocumentViewer({
   open,
   pages,
+  initialIndex = 0,
   loadError = false,
   title,
   onClose,
-}: ReceiptDocumentViewerProps) {
-  const t = useTranslations('receipts.viewer');
+}: DocumentViewerProps) {
+  const t = useTranslations('common.viewer');
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  // At 1× a horizontal drag pages next/prev (RTL-aware, 8.27); a completed
+  // swipe suppresses the click that follows so it never doubles as zoom-in.
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [pageIndex, setPageIndex] = useState(0);
 
   const page = pages[Math.min(pageIndex, Math.max(0, pages.length - 1))] ?? null;
-  const url = page?.url ?? null;
-  const isImage = (page?.mimeType ?? '').startsWith('image/');
-  const isPdf = page?.mimeType === 'application/pdf';
+  const url = page?.src ?? null;
+  const isImage = page?.kind === 'image';
+  const isPdf = page?.kind === 'pdf';
 
   const reset = useCallback(() => {
     setScale(1);
@@ -68,13 +79,15 @@ export function ReceiptDocumentViewer({
   }, []);
 
   // Reset the transform whenever the dialog opens or the page changes;
-  // reopening always starts back at page 1.
+  // reopening always starts back at the initial page.
   useEffect(() => {
     if (open) reset();
   }, [open, url, reset]);
   useEffect(() => {
-    if (open) setPageIndex(0);
-  }, [open]);
+    if (open) setPageIndex(Math.min(Math.max(0, initialIndex), Math.max(0, pages.length - 1)));
+    // Re-anchor only on open/initialIndex — page flips inside a session must
+    // not snap back when the pages array identity changes.
+  }, [open, initialIndex]);
 
   // Snapshot the previously-focused element on open; restore on close.
   useEffect(() => {
@@ -148,7 +161,15 @@ export function ReceiptDocumentViewer({
     zoomBy(e.deltaY < 0 ? 0.4 : -0.4);
   };
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!isImage || scale === 1) return;
+    if (!isImage) return;
+    if (scale === 1) {
+      // Not zoomed: a horizontal drag pages through a multi-page document.
+      if (pages.length > 1) {
+        swipeStartRef.current = { x: e.clientX, y: e.clientY };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
+      return;
+    }
     dragRef.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
@@ -159,6 +180,18 @@ export function ReceiptDocumentViewer({
   };
   const endDrag = () => {
     dragRef.current = null;
+    swipeStartRef.current = null;
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const start = swipeStartRef.current;
+    if (start) {
+      const delta = swipeDelta(e.currentTarget, e.clientX - start.x, e.clientY - start.y);
+      if (delta !== 0) {
+        suppressClickRef.current = true;
+        setPageIndex((i) => Math.min(pages.length - 1, Math.max(0, i + delta)));
+      }
+    }
+    endDrag();
   };
 
   const zoomControls = isImage && (
@@ -232,7 +265,7 @@ export function ReceiptDocumentViewer({
 
   const node = (
     <div
-      data-testid="receipt-viewer-backdrop"
+      data-testid="document-viewer-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -243,7 +276,7 @@ export function ReceiptDocumentViewer({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        data-testid="receipt-viewer"
+        data-testid="document-viewer"
         className="flex h-full w-full flex-col overflow-hidden rounded-lg bg-gray-900 shadow-2xl"
       >
         <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
@@ -306,7 +339,12 @@ export function ReceiptDocumentViewer({
               data-testid="viewer-pdf"
             >
               <div className="flex h-full items-center justify-center p-4 text-center text-sm text-white/80">
-                <a href={url} download className="underline" data-testid="viewer-pdf-fallback">
+                <a
+                  href={url}
+                  download={page?.downloadName ?? true}
+                  className="underline"
+                  data-testid="viewer-pdf-fallback"
+                >
                   {t('downloadPdf')}
                 </a>
               </div>
@@ -318,14 +356,18 @@ export function ReceiptDocumentViewer({
               onWheel={onWheel}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
-              onPointerUp={endDrag}
+              onPointerUp={onPointerUp}
               onPointerLeave={endDrag}
               onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return;
+                }
                 if (scale === 1) zoomBy(1);
               }}
               data-testid="viewer-image-stage"
             >
-              {/* Blob object-URL — next/image can't consume it. */}
+              {/* Blob object-URL / cookie-authed API URL — next/image can't consume either. */}
               <img
                 src={url}
                 alt={title}

@@ -192,6 +192,30 @@ describe('ProductFormDialog', () => {
       await waitFor(() => expect(removeImageMock).toHaveBeenCalled());
     });
 
+    it('rejects unsupported/oversize pictures client-side without staging them (8.27)', () => {
+      render(
+        <ProductFormDialog
+          open
+          initialName="Milk"
+          categories={[]}
+          onCancel={vi.fn()}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const gif = new File(['x'], 'x.gif', { type: 'image/gif' });
+      const huge = new File(['x'], 'huge.jpg', { type: 'image/jpeg' });
+      Object.defineProperty(huge, 'size', { value: 11 * 1024 * 1024 });
+      fireEvent.change(screen.getByTestId('product-picture-file-input'), {
+        target: { files: [gif, huge] },
+      });
+
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('rejectedType'));
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('rejectedSize'));
+      expect(screen.queryByTestId('product-picture-0')).not.toBeInTheDocument();
+      expect(uploadImageMock).not.toHaveBeenCalled();
+    });
+
     it('hides the capture buttons at the 5-picture cap', async () => {
       getProductMock.mockResolvedValue({
         ...PRODUCT,

@@ -16,22 +16,23 @@ vi.mock('@/lib/receipt/receipt-context', () => ({
 
 // Stub the shared viewer — its own behaviour is covered by its spec; here we
 // only assert TransactionDocuments opens it with the fetched blob URL / error.
-vi.mock('@/components/receipt/ReceiptDocumentViewer', () => ({
-  ReceiptDocumentViewer: ({
+vi.mock('@/components/ui/DocumentViewer', () => ({
+  DocumentViewer: ({
     open,
     pages,
     loadError,
     title,
   }: {
     open: boolean;
-    pages: { url: string | null; mimeType: string | null }[];
+    pages: { kind: 'image' | 'pdf'; src: string | null }[];
     loadError?: boolean;
     title: string;
   }) =>
     open ? (
       <div
         data-testid="mock-viewer"
-        data-url={pages[0]?.url ?? ''}
+        data-url={pages[0]?.src ?? ''}
+        data-kind={pages[0]?.kind ?? ''}
         data-pages={pages.length}
         data-load-error={loadError ? 'true' : 'false'}
         data-title={title}
@@ -65,6 +66,7 @@ describe('TransactionDocuments (8.19)', () => {
     await waitFor(() => expect(screen.getByTestId('mock-viewer')).toBeInTheDocument());
     expect(mockFetchFileBlob).toHaveBeenCalledWith('r-1', 'f-1');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-url', 'blob:mock');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-kind', 'image');
     // Viewer titled by the FILE NAME (language-neutral), not the merchant.
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-title', 'receipt.jpg');
   });

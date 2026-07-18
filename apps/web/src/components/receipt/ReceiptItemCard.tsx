@@ -37,6 +37,8 @@ export interface ReceiptItemCardProps {
   onChange(patch: Partial<ItemRow>): void;
   onRemove(): void;
   onOpenMatch(itemId: string): void;
+  /** 8.27 — the linked product's thumbnail opens the quick-view popup. */
+  onOpenProduct(productId: string): void;
 }
 
 const labelClass = 'flex flex-col text-xs text-gray-500 dark:text-gray-400';
@@ -52,8 +54,10 @@ export function ReceiptItemCard({
   onChange,
   onRemove,
   onOpenMatch,
+  onOpenProduct,
 }: ReceiptItemCardProps) {
   const t = useTranslations('receipts.review');
+  const tQuickView = useTranslations('products.quickView');
   // Money fields carry the receipt currency in their label — the inputs
   // themselves stay plain decimal strings.
   const moneyLabel = (label: string) => (currency ? `${label} (${currency})` : label);
@@ -65,7 +69,22 @@ export function ReceiptItemCard({
     >
       {/* Header: thumbnail + name (match dot beside it, registry chip under) + remove. */}
       <div className="flex items-start gap-2">
-        <ProductThumb item={serverItem} sizeClass="h-12 w-12" />
+        {/* 8.27 — a linked product's thumbnail opens the quick-view popup. */}
+        {serverItem?.productId ? (
+          <button
+            type="button"
+            onClick={() => onOpenProduct(serverItem.productId!)}
+            aria-label={tQuickView('openLabel', {
+              name: serverItem.productName ?? row.rawName,
+            })}
+            data-testid={`item-thumb-${index}`}
+            className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+          >
+            <ProductThumb item={serverItem} sizeClass="h-12 w-12" />
+          </button>
+        ) : (
+          <ProductThumb item={serverItem} sizeClass="h-12 w-12" />
+        )}
         <div className="min-w-0 flex-1">
           <label className={labelClass}>
             <span>{t('itemName')}</span>

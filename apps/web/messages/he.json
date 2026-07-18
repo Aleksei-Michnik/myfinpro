@@ -7,7 +7,25 @@
     "cancel": "ביטול",
     "delete": "מחק",
     "edit": "ערוך",
-    "back": "חזרה"
+    "back": "חזרה",
+    "viewer": {
+      "zoomControls": "בקרות זום",
+      "zoomIn": "הגדלה",
+      "zoomOut": "הקטנה",
+      "reset": "איפוס",
+      "openInNewTab": "פתיחה בלשונית חדשה",
+      "close": "סגירה",
+      "downloadPdf": "הורדת PDF",
+      "loadFailed": "טעינת קובץ המסמך נכשלה.",
+      "pageControls": "ניווט בין עמודים",
+      "pageOf": "עמוד {current} מתוך {total}",
+      "prevPage": "העמוד הקודם",
+      "nextPage": "העמוד הבא"
+    },
+    "upload": {
+      "rejectedType": "{name}: סוג הקובץ אינו נתמך",
+      "rejectedSize": "{name}: הקובץ גדול מדי (עד {maxMb} MB)"
+    }
   },
   "ui": {
     "loading": {
@@ -1161,20 +1179,6 @@
       "loadMore": "טעינת עוד",
       "actionFailed": "הפעולה נכשלה"
     },
-    "viewer": {
-      "zoomControls": "בקרות זום",
-      "zoomIn": "הגדלה",
-      "zoomOut": "הקטנה",
-      "reset": "איפוס",
-      "openInNewTab": "פתיחה בלשונית חדשה",
-      "close": "סגירה",
-      "downloadPdf": "הורדת PDF",
-      "loadFailed": "טעינת קובץ המסמך נכשלה.",
-      "pageControls": "ניווט בין עמודים",
-      "pageOf": "עמוד {current} מתוך {total}",
-      "prevPage": "העמוד הקודם",
-      "nextPage": "העמוד הבא"
-    },
     "review": {
       "back": "חזרה לקבלות",
       "viewTransaction": "צפייה בתנועה",
@@ -1329,8 +1333,11 @@
       "loading": "טוען מוצר…",
       "edit": "עריכה",
       "imageTitle": "תמונת המוצר",
-      "uploadImage": "העלאת תמונה",
       "imageQueuedToast": "התמונה הועלתה — היא תופיע לאחר העיבוד",
+      "removePictureConfirm": "התמונה תוסר מהמוצר עבור כולם. להסיר אותה?",
+      "primaryPicture": "התמונה הראשית",
+      "carousel": "קרוסלה",
+      "pictureOf": "תמונה {current} מתוך {total}",
       "barcodeLabel": "ברקוד",
       "categoryLabel": "קטגוריית ברירת מחדל",
       "timesPurchasedLabel": "מספר רכישות",
@@ -1355,6 +1362,12 @@
       "unitPriceCol": "מחיר ליחידה",
       "totalCol": "סה״כ",
       "noPurchases": "אין עדיין רכישות מאושרות של המוצר הזה."
+    },
+    "quickView": {
+      "title": "פרטי מוצר",
+      "close": "סגירה",
+      "openProduct": "פתיחה בעמוד המוצר",
+      "openLabel": "הצגת המוצר: {name}"
     }
   },
   "budgets": {

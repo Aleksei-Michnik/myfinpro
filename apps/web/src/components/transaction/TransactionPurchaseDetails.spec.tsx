@@ -30,6 +30,13 @@ vi.mock('@/lib/product/product-context', () => ({
   }),
 }));
 
+// The quick-view dialog has its own spec — the stub surfaces which product
+// it was opened on (thumbnail-click product info, 8.27).
+vi.mock('@/components/product/ProductQuickViewDialog', () => ({
+  ProductQuickViewDialog: ({ productId }: { productId: string | null }) =>
+    productId ? <div data-testid="quick-view-stub" data-product={productId} /> : null,
+}));
+
 function item(over: Partial<ReceiptItem>): ReceiptItem {
   return {
     id: over.id ?? 'i',
@@ -104,6 +111,23 @@ describe('TransactionPurchaseDetails (8.18)', () => {
     fireEvent.click(toggle); // collapse
     fireEvent.click(toggle); // re-open
     expect(mockGetReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  it("a linked line's thumbnail opens the product quick view; unmatched lines stay static (8.27)", async () => {
+    mockGetReceipt.mockResolvedValueOnce(
+      receipt([
+        item({ id: 'i1', rawName: 'Milk', productId: 'p-1', productName: 'Milk 3%' }),
+        item({ id: 'i2', rawName: 'Bread' }),
+      ]),
+    );
+    render(<TransactionPurchaseDetails receiptId="r-42" currency="USD" />);
+    fireEvent.click(screen.getByTestId('purchase-details-toggle'));
+    await waitFor(() => expect(screen.getByTestId('purchase-details-items')).toBeInTheDocument());
+
+    expect(screen.queryByTestId('purchase-details-thumb-i2')).toBeNull();
+    expect(screen.queryByTestId('quick-view-stub')).toBeNull();
+    fireEvent.click(screen.getByTestId('purchase-details-thumb-i1'));
+    expect(screen.getByTestId('quick-view-stub')).toHaveAttribute('data-product', 'p-1');
   });
 
   it('shows an empty note when the receipt has no line items', async () => {

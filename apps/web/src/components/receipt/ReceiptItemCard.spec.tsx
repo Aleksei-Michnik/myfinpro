@@ -19,6 +19,7 @@ vi.mock('@/lib/product/product-context', () => ({
 const onChange = vi.fn();
 const onRemove = vi.fn();
 const onOpenMatch = vi.fn();
+const onOpenProduct = vi.fn();
 
 const row: ItemRow = {
   rawName: 'Milk',
@@ -64,6 +65,7 @@ const renderCard = (over: Partial<Parameters<typeof ReceiptItemCard>[0]> = {}) =
       onChange={onChange}
       onRemove={onRemove}
       onOpenMatch={onOpenMatch}
+      onOpenProduct={onOpenProduct}
       {...over}
     />,
   );
@@ -164,6 +166,29 @@ describe('ReceiptItemCard (8.24)', () => {
       'src',
       '/api/v1/products/p-1/image?v=v42',
     );
+  });
+
+  // ── 8.27: thumbnail → product quick view ───────────────────────────────
+
+  it("a linked product's thumbnail is a button that opens the quick view", () => {
+    renderCard({
+      serverItem: {
+        ...serverItem,
+        productId: 'p-1',
+        productName: 'Milk 3% 1L',
+        matchStatus: 'CONFIRMED',
+      },
+    });
+    const thumb = screen.getByTestId('item-thumb-0');
+    expect(thumb).toHaveAttribute('aria-label', 'openLabel:Milk 3% 1L');
+    fireEvent.click(thumb);
+    expect(onOpenProduct).toHaveBeenCalledWith('p-1');
+  });
+
+  it('the thumbnail stays non-interactive while unmatched', () => {
+    renderCard();
+    expect(screen.queryByTestId('item-thumb-0')).toBeNull();
+    expect(screen.getByTestId('product-thumb-placeholder')).toBeInTheDocument();
   });
 
   it('hides match dot and chip without server truth (unsaved rows)', () => {

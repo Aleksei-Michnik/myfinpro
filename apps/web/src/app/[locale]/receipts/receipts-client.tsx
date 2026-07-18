@@ -5,7 +5,7 @@
 // live lifecycle updates (SSE receipt.updated / receipt.deleted, refetch on
 // realtime reconnect per docs/ui-realtime-conventions.md).
 
-import { RECEIPT_MAX_FILES } from '@myfinpro/shared';
+import { RECEIPT_MAX_FILE_SIZE_BYTES, RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
@@ -20,6 +20,7 @@ import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
 import { useAsyncOperation } from '@/lib/ui';
+import { RECEIPT_ACCEPT, uploadRejectionMessage, validateUploadFiles } from '@/lib/upload';
 
 function formatMoney(cents: number, currency: string | null, locale: string): string {
   try {
@@ -39,6 +40,7 @@ function formatWhen(iso: string, locale: string): string {
 
 export function ReceiptsClient() {
   const t = useTranslations('receipts');
+  const tUpload = useTranslations('common.upload');
   const locale = useLocale();
   const { uploadReceipt, createFromUrl, fetchList, retryReceipt, removeReceipt } = useReceipts();
   const { addToast } = useToast();
@@ -122,9 +124,17 @@ export function ReceiptsClient() {
   // as pages of one long receipt (shoot → add page → … → upload); a multi-
   // image pick stages too so the user chooses one-vs-separate explicitly.
   // A single picked image with an empty tray uploads straight away.
-  const handleFiles = (files: File[], source: 'picker' | 'camera') => {
-    const pdfs = files.filter((f) => f.type === 'application/pdf');
-    const images = files.filter((f) => f.type !== 'application/pdf');
+  const handleFiles = (rawFiles: File[], source: 'picker' | 'camera') => {
+    // 8.27 — type/size gate before any request (drops bypass the accept attr).
+    const { accepted, rejected } = validateUploadFiles(rawFiles, {
+      accept: RECEIPT_ACCEPT,
+      maxBytes: RECEIPT_MAX_FILE_SIZE_BYTES,
+    });
+    for (const rejection of rejected) {
+      addToast('error', uploadRejectionMessage(tUpload, rejection, RECEIPT_MAX_FILE_SIZE_BYTES));
+    }
+    const pdfs = accepted.filter((f) => f.type === 'application/pdf');
+    const images = accepted.filter((f) => f.type !== 'application/pdf');
     if (pdfs.length > 0) uploadBatches(pdfs.map((pdf) => [pdf]));
     if (images.length === 0) return;
     if (source === 'picker' && staged.length === 0 && images.length === 1) {
