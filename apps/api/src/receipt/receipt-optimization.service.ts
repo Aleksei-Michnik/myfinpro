@@ -58,7 +58,8 @@ export class ReceiptOptimizationService implements OnApplicationBootstrap {
       'optimize',
       { receiptId },
       {
-        jobId: `receipt-optimize:${receiptId}`,
+        // Dash-separated: BullMQ rejects custom ids containing ':'.
+        jobId: `receipt-optimize-${receiptId}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 10_000 },
         removeOnComplete: 100,
@@ -139,7 +140,7 @@ export class ReceiptOptimizationService implements OnApplicationBootstrap {
         'optimize',
         { receiptId: row.id },
         {
-          jobId: `receipt-optimize:${row.id}`,
+          jobId: `receipt-optimize-${row.id}`,
           delay: index * BACKFILL_STAGGER_MS,
           attempts: 3,
           backoff: { type: 'exponential', delay: 10_000 },

@@ -1061,7 +1061,8 @@ export class ReceiptService {
       'extract',
       { receiptId },
       {
-        jobId: `receipt:${receiptId}:${Date.now()}`,
+        // Dash-separated: BullMQ rejects custom ids containing ':'.
+        jobId: `receipt-${receiptId}-${Date.now()}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 5_000 },
         removeOnComplete: 100,

@@ -382,6 +382,15 @@ describe('Products & walkthrough (integration)', () => {
       .set('Cookie', [`access_token=${alice.accessToken}`])
       .expect(404);
 
+    // The web client always appends a ?v= cache-buster (and ?size= for
+    // thumbs) — the query DTO must accept the full real-world URL shape.
+    // forbidNonWhitelisted turned `v` into a 400 that the 401 masked
+    // until the cookie fix landed (8.25-hotfix-2).
+    await request(app.getHttpServer())
+      .get(`/api/v1/products/${product.body.id}/image?size=thumb&v=${product.body.id}`)
+      .set('Cookie', [`access_token=${alice.accessToken}`])
+      .expect(404);
+
     await request(app.getHttpServer()).get(`/api/v1/products/${product.body.id}/image`).expect(401);
   });
 });

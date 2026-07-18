@@ -721,3 +721,35 @@ needed.
 **Tests.** Guard spec moved with the rename; new integration case proves a
 cookie-only request reaches the endpoint (404 for a product without a
 picture, not 401) while a credential-less one stays 401. api 1212 green.
+
+## 8.25-hotfix-2 — the 400 behind the 401, and dead BullMQ enqueues (2026-07-18)
+
+Staging verification of the cookie fix still showed cube placeholders.
+The logs revealed a second, stacked bug: with auth now passing, every
+image GET died at validation — **400** in 2–3ms. The web client appends a
+`?v=` cache-buster to every image URL (so the browser refetches when an
+image changes), but `ProductImageSizeQueryDto` only declared `size`, and
+the global `ValidationPipe` runs with `forbidNonWhitelisted`. Guards run
+before pipes in Nest, so the 401 had masked the 400 all along — and the
+hotfix's own integration test requested `/image` without the query string
+a real `<img>` carries, which is why it went green.
+
+The same staging boot log surfaced an unrelated casualty: `Rendition
+backfill enqueue failed: Custom Id cannot contain :`. BullMQ ≥5 rejects
+custom job ids containing `:` — unless they split into exactly three
+parts, a compatibility loophole for old repeatable jobs. That lottery is
+why uploads worked (`product-image:<uuid>:<ts>`, 3 parts) while the
+rendition backfill (`product-image-regen:<uuid>`) and **receipt storage
+compaction** (`receipt-optimize:<uuid>`) threw on every single add —
+production logs show optimization failing at real confirms since 8.25
+shipped (caught and logged, so confirms succeeded).
+
+**Fix.** `v` declared on the query DTO as an optional, server-ignored
+string; all four custom job ids switched to dash separators (the colon
+loophole is slated for removal in BullMQ's next breaking release, so the
+two "working" 3-part ids moved too).
+
+**Tests.** The integration case now requests the full real-world URL
+shape (`?size=thumb&v=…` → 404, was 400 red before the fix); unit specs
+pin the dash-separated job ids for upload, regen backfill, extraction and
+optimization enqueues.

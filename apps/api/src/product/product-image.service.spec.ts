@@ -94,6 +94,8 @@ describe('ProductImageService (8.25)', () => {
         expect.objectContaining({ productImageId: 'img-3', kind: 'staged' }),
         expect.any(Object),
       );
+      // No ':' anywhere — BullMQ rejects colons in custom job ids.
+      expect(queueMock.add.mock.calls[0][2].jobId).toMatch(/^product-image-img-3-\d+$/);
     });
 
     it('rejects PDFs and unknown bytes', async () => {
@@ -103,6 +105,22 @@ describe('ProductImageService (8.25)', () => {
       } catch (err) {
         expect(codeOf(err)).toBe('PRODUCT_INVALID_IMAGE');
       }
+    });
+  });
+
+  describe('rendition backfill', () => {
+    it('enqueues a colon-free stable regen jobId for rows missing thumbs', async () => {
+      // The boot sweep died on its very first add when the jobId carried a
+      // ':' (8.25-hotfix-2) — BullMQ rejects colons in custom job ids.
+      prismaMock.productImage.findMany.mockResolvedValueOnce([
+        { id: 'img-old', baseRef: '2026/06/legacy' },
+      ]);
+      await service['enqueueRenditionBackfill']();
+      expect(queueMock.add).toHaveBeenCalledWith(
+        'process',
+        { productImageId: 'img-old', kind: 'regen' },
+        expect.objectContaining({ jobId: 'product-image-regen-img-old' }),
+      );
     });
   });
 

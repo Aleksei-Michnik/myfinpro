@@ -375,7 +375,8 @@ export class ProductImageService implements OnApplicationBootstrap {
           { productImageId: row.id, kind: 'regen' },
           {
             // Stable jobId — a re-boot while jobs are queued is a no-op.
-            jobId: `product-image-regen:${row.id}`,
+            // Dash-separated: BullMQ rejects custom ids containing ':'.
+            jobId: `product-image-regen-${row.id}`,
             delay: enqueued * BACKFILL_STAGGER_MS,
             attempts: 3,
             backoff: { type: 'exponential', delay: 5_000 },
@@ -391,7 +392,7 @@ export class ProductImageService implements OnApplicationBootstrap {
 
   private async enqueue(job: ProductImageJob): Promise<void> {
     await this.queue.add('process', job, {
-      jobId: `product-image:${job.productImageId}:${Date.now()}`,
+      jobId: `product-image-${job.productImageId}-${Date.now()}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5_000 },
       removeOnComplete: 100,

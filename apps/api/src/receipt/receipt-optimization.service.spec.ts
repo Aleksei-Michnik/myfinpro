@@ -50,10 +50,11 @@ describe('ReceiptOptimizationService (8.25)', () => {
 
   it('enqueue dedups on a stable jobId', async () => {
     await service.enqueue('r-9');
+    // Dash-separated — BullMQ rejects colons in custom job ids.
     expect(queueMock.add).toHaveBeenCalledWith(
       'optimize',
       { receiptId: 'r-9' },
-      expect.objectContaining({ jobId: 'receipt-optimize:r-9' }),
+      expect.objectContaining({ jobId: 'receipt-optimize-r-9' }),
     );
   });
 
