@@ -7,7 +7,25 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
-    "back": "Back"
+    "back": "Back",
+    "viewer": {
+      "zoomControls": "Zoom controls",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset",
+      "openInNewTab": "Open in a new tab",
+      "close": "Close",
+      "downloadPdf": "Download PDF",
+      "loadFailed": "Could not load the document file.",
+      "pageControls": "Page navigation",
+      "pageOf": "Page {current} of {total}",
+      "prevPage": "Previous page",
+      "nextPage": "Next page"
+    },
+    "upload": {
+      "rejectedType": "{name}: unsupported file type",
+      "rejectedSize": "{name}: the file is too large (up to {maxMb} MB)"
+    }
   },
   "ui": {
     "loading": {
@@ -1161,20 +1179,6 @@
       "loadMore": "Load more",
       "actionFailed": "Action failed"
     },
-    "viewer": {
-      "zoomControls": "Zoom controls",
-      "zoomIn": "Zoom in",
-      "zoomOut": "Zoom out",
-      "reset": "Reset",
-      "openInNewTab": "Open in a new tab",
-      "close": "Close",
-      "downloadPdf": "Download PDF",
-      "loadFailed": "Could not load the document file.",
-      "pageControls": "Page navigation",
-      "pageOf": "Page {current} of {total}",
-      "prevPage": "Previous page",
-      "nextPage": "Next page"
-    },
     "review": {
       "back": "Back to receipts",
       "viewTransaction": "View transaction",
@@ -1329,7 +1333,6 @@
       "loading": "Loading product…",
       "edit": "Edit",
       "imageTitle": "Product image",
-      "uploadImage": "Upload image",
       "imageQueuedToast": "Image uploaded — it will appear once processed",
       "barcodeLabel": "Barcode",
       "categoryLabel": "Default category",
@@ -1355,6 +1358,12 @@
       "unitPriceCol": "Unit price",
       "totalCol": "Total",
       "noPurchases": "No confirmed purchases of this product yet."
+    },
+    "quickView": {
+      "title": "Product info",
+      "close": "Close",
+      "openProduct": "Open product page",
+      "openLabel": "View product: {name}"
     }
   },
   "budgets": {

@@ -71,6 +71,20 @@ describe('AttachReceiptDialog (8.15)', () => {
     await waitFor(() => expect(onAttached).toHaveBeenCalledWith(created));
   });
 
+  it('rejects unsupported files client-side before any request (8.27)', async () => {
+    renderDialog();
+
+    const gif = new File(['x'], 'x.gif', { type: 'image/gif' });
+    fireEvent.change(screen.getByTestId('attach-receipt-file-input'), {
+      target: { files: [gif] },
+    });
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('rejectedType')),
+    );
+    expect(attachFileMock).not.toHaveBeenCalled();
+  });
+
   it('toasts and stays open when the attach fails', async () => {
     attachUrlMock.mockRejectedValue(new Error('This transaction already has a receipt'));
     const { onAttached } = renderDialog();

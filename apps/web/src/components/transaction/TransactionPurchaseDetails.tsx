@@ -8,6 +8,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useId, useRef, useState } from 'react';
+import { ProductQuickViewDialog } from '@/components/product/ProductQuickViewDialog';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Link } from '@/i18n/navigation';
@@ -27,10 +28,13 @@ export function TransactionPurchaseDetails({
   currency,
 }: TransactionPurchaseDetailsProps) {
   const t = useTranslations('transactions.detail');
+  const tQuickView = useTranslations('products.quickView');
   const locale = useLocale();
   const { getReceipt } = useReceipts();
   const [open, setOpen] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
+  // Thumbnail-click product info (8.27) — ONE dialog serves the whole list.
+  const [quickViewProductId, setQuickViewProductId] = useState<string | null>(null);
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const panelId = useId();
   // Fetch exactly once, on first expand (retries go through the banner).
@@ -131,8 +135,23 @@ export function TransactionPurchaseDetails({
                     className="flex items-start justify-between gap-3 py-2"
                     data-testid="purchase-details-item"
                   >
-                    {/* 8.24 — registry thumbnail (placeholder when unmatched). */}
-                    <ProductThumb item={item} />
+                    {/* 8.24 — registry thumbnail (placeholder when unmatched);
+                        8.27 — a linked product's thumb opens the quick view. */}
+                    {item.productId ? (
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewProductId(item.productId)}
+                        aria-label={tQuickView('openLabel', {
+                          name: item.productName ?? item.rawName,
+                        })}
+                        data-testid={`purchase-details-thumb-${item.id}`}
+                        className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+                      >
+                        <ProductThumb item={item} />
+                      </button>
+                    ) : (
+                      <ProductThumb item={item} />
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-gray-900 dark:text-gray-100">
                         {item.productName ?? item.rawName}
@@ -172,6 +191,15 @@ export function TransactionPurchaseDetails({
             </>
           )}
         </div>
+      )}
+
+      {/* Mounted only while open — keeps the dialog (and its product-context
+          dependency) entirely off the tree otherwise. */}
+      {quickViewProductId && (
+        <ProductQuickViewDialog
+          productId={quickViewProductId}
+          onClose={() => setQuickViewProductId(null)}
+        />
       )}
     </section>
   );

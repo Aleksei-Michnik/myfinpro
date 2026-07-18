@@ -4,7 +4,7 @@
 // thumbnail of a receipt line's linked product: the processed image when one
 // exists, the cube placeholder otherwise (unmatched items, load errors).
 
-import { useState } from 'react';
+import { ProductImage } from '@/components/product/ProductImage';
 import { useProducts } from '@/lib/product/product-context';
 import type { ReceiptItem } from '@/lib/receipt/types';
 
@@ -17,34 +17,16 @@ export interface ProductThumbProps {
 
 export function ProductThumb({ item, sizeClass = 'h-5 w-5' }: ProductThumbProps) {
   const { imageUrl } = useProducts();
-  const [failed, setFailed] = useState(false);
-  if (!item?.productId || !item.productHasImage || failed) {
-    return (
-      <svg
-        className={`${sizeClass} shrink-0 text-gray-300 dark:text-gray-600`}
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.5}
-        stroke="currentColor"
-        aria-hidden="true"
-        data-testid="product-thumb-placeholder"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"
-        />
-      </svg>
-    );
-  }
+  const src =
+    item?.productId && item.productHasImage
+      ? imageUrl({ id: item.productId, imageVersion: item.productImageVersion }, 'thumb')
+      : null;
   return (
-    <img
-      src={imageUrl({ id: item.productId, imageVersion: item.productImageVersion }, 'thumb')}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
+    <ProductImage
+      src={src}
       className={`${sizeClass} shrink-0 rounded object-cover`}
+      placeholderClassName={`${sizeClass} shrink-0`}
+      placeholderTestId="product-thumb-placeholder"
     />
   );
 }

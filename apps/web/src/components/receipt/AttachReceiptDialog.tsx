@@ -11,6 +11,7 @@
 // close, labelled URL field with Enter-to-submit, errors via toast; every
 // colour has a dark-mode variant.
 
+import { RECEIPT_MAX_FILE_SIZE_BYTES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,6 +22,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
 import { useAsyncOperation } from '@/lib/ui';
+import { RECEIPT_ACCEPT, uploadRejectionMessage, validateUploadFiles } from '@/lib/upload';
 
 const inputClass =
   'w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 ' +
@@ -44,6 +46,7 @@ export function AttachReceiptDialog({
   const t = useTranslations('receipts.attach');
   // Browse/camera labels ride the intake-zone keys — same wording everywhere.
   const uploadT = useTranslations('receipts.upload');
+  const tUpload = useTranslations('common.upload');
   const { attachFileToTransaction, attachUrlToTransaction } = useReceipts();
   const { addToast } = useToast();
 
@@ -84,8 +87,16 @@ export function AttachReceiptDialog({
 
   // Several selected images attach as the pages of ONE receipt (8.22).
   const onFiles = (files: File[]) => {
-    if (files.length === 0) return;
-    attach((signal) => attachFileToTransaction(transactionId, files, signal));
+    // 8.27 — type/size gate before any request.
+    const { accepted, rejected } = validateUploadFiles(files, {
+      accept: RECEIPT_ACCEPT,
+      maxBytes: RECEIPT_MAX_FILE_SIZE_BYTES,
+    });
+    for (const rejection of rejected) {
+      addToast('error', uploadRejectionMessage(tUpload, rejection, RECEIPT_MAX_FILE_SIZE_BYTES));
+    }
+    if (accepted.length === 0) return;
+    attach((signal) => attachFileToTransaction(transactionId, accepted, signal));
   };
   const onUrl = () => {
     const trimmed = url.trim();
@@ -144,7 +155,7 @@ export function AttachReceiptDialog({
         {/* 8.25 — shared capture control; this dialog gains the camera path. */}
         <div className="flex flex-wrap items-center gap-2">
           <FileCaptureButtons
-            accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+            accept={RECEIPT_ACCEPT}
             multiple
             disabled={op.isLoading}
             onFiles={(files) => onFiles(files)}

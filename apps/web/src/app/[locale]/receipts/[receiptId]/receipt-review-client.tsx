@@ -11,13 +11,14 @@ import { CURRENCY_CODES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
+import { ProductQuickViewDialog } from '@/components/product/ProductQuickViewDialog';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
-import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
 import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemCard';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
+import { DocumentViewer } from '@/components/ui/DocumentViewer';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { inputClass } from '@/components/ui/input-styles';
 import { useToast } from '@/components/ui/Toast';
@@ -56,7 +57,7 @@ function receiptToItemRows(receipt: ReceiptSummary): ItemRow[] {
 export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const t = useTranslations('receipts.review');
   const tStatus = useTranslations('receipts.status');
-  const tViewer = useTranslations('receipts.viewer');
+  const tViewer = useTranslations('common.viewer');
   const { getReceipt, updateReceipt, replaceItems, searchMerchants, fetchFileBlob, retryReceipt } =
     useReceipts();
   const { listCategories } = useTransactions();
@@ -85,6 +86,8 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   // Row-click match editing (8.23) — open the walkthrough on that exact item.
   const [walkthroughItemId, setWalkthroughItemId] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // Thumbnail-click product info (8.27) — ONE dialog serves the whole list.
+  const [quickViewProductId, setQuickViewProductId] = useState<string | null>(null);
   // Attached receipts (Phase 8.15) finish via reconcile, not confirm. Auto-open
   // the reconcile dialog the first time such a receipt reaches REVIEW.
   const autoReconciledRef = useRef(false);
@@ -683,6 +686,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                       setWalkthroughItemId(itemId);
                       setWalkthroughOpen(true);
                     }}
+                    onOpenProduct={setQuickViewProductId}
                   />
                 ))}
               </div>
@@ -792,14 +796,24 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         />
       )}
 
+      {/* Thumbnail-click product info (8.27) — mounted only while open, like
+          the walkthrough. */}
+      {quickViewProductId && (
+        <ProductQuickViewDialog
+          productId={quickViewProductId}
+          onClose={() => setQuickViewProductId(null)}
+        />
+      )}
+
       {/* Popup document viewer (uploaded image/PDF) — zoom/pan for pictures,
           native PDF viewer for slips. URL receipts open externally instead. */}
       {receipt.source !== 'url' && (
-        <ReceiptDocumentViewer
+        <DocumentViewer
           open={viewerOpen}
           pages={receipt.files.map((file, index) => ({
-            url: previewUrls[index] ?? null,
-            mimeType: file.mimeType,
+            kind: file.mimeType === 'application/pdf' ? ('pdf' as const) : ('image' as const),
+            src: previewUrls[index] ?? null,
+            downloadName: receipt.originalName ?? undefined,
           }))}
           loadError={previewError}
           title={

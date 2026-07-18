@@ -1,13 +1,13 @@
 'use client';
 
 // Phase 8.19 — the transaction's Documents panel: the linked receipt as a
-// viewable document. Uploaded files open in the shared ReceiptDocumentViewer;
+// viewable document. Uploaded files open in the shared DocumentViewer;
 // URL receipts link out. Read access is granted to any transaction co-viewer,
 // group members see it too.
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
-import { ReceiptDocumentViewer } from '@/components/receipt/ReceiptDocumentViewer';
+import { DocumentViewer } from '@/components/ui/DocumentViewer';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
@@ -150,11 +150,12 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
       )}
 
       {receipt && receipt.source !== 'url' && (
-        <ReceiptDocumentViewer
+        <DocumentViewer
           open={viewerOpen}
           pages={receipt.files.map((file, index) => ({
-            url: blobUrls[index] ?? null,
-            mimeType: file.mimeType,
+            kind: file.mimeType === 'application/pdf' ? ('pdf' as const) : ('image' as const),
+            src: blobUrls[index] ?? null,
+            downloadName: receipt.originalName ?? undefined,
           }))}
           loadError={blobError}
           title={title}

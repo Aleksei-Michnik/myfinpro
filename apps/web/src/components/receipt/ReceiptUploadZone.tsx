@@ -12,6 +12,7 @@ import {
   FileCaptureButtons,
   type FileCaptureButtonsHandle,
 } from '@/components/ui/FileCaptureButtons';
+import { RECEIPT_ACCEPT } from '@/lib/upload';
 
 export interface ReceiptUploadZoneProps {
   /** Camera shots stage as pages of one receipt (8.22); picker/drop may batch. */
@@ -19,8 +20,6 @@ export interface ReceiptUploadZoneProps {
   onUrl(url: string): void;
   pending?: boolean;
 }
-
-const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,application/pdf';
 
 export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUploadZoneProps) {
   const t = useTranslations('receipts.upload');
@@ -95,7 +94,7 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <FileCaptureButtons
           ref={captureRef}
-          accept={ACCEPT}
+          accept={RECEIPT_ACCEPT}
           multiple
           disabled={pending}
           onFiles={onFiles}

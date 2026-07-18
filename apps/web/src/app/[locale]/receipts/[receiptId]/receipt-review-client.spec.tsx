@@ -57,6 +57,25 @@ vi.mock('@/lib/product/product-context', () => ({
   }),
 }));
 
+// The quick-view dialog has its own spec — the stub surfaces which product
+// it was opened on (thumbnail-click product info, 8.27).
+vi.mock('@/components/product/ProductQuickViewDialog', () => ({
+  ProductQuickViewDialog: ({
+    productId,
+    onClose,
+  }: {
+    productId: string | null;
+    onClose: () => void;
+  }) =>
+    productId ? (
+      <div data-testid="quick-view-stub" data-product={productId}>
+        <button data-testid="quick-view-close" onClick={onClose}>
+          close
+        </button>
+      </div>
+    ) : null,
+}));
+
 // Confirm dialog is exercised in its own spec — here we stub it to a marker
 // that surfaces its props and lets us fire onConfirmed.
 vi.mock('@/components/receipt/ReceiptConfirmDialog', () => ({
@@ -450,6 +469,28 @@ describe('ReceiptReviewClient', () => {
     expect(chip).toHaveTextContent('7290119381043');
     fireEvent.click(chip);
     expect(screen.getByTestId('walkthrough-stub')).toHaveAttribute('data-initial-item', 'i-2');
+  });
+
+  it("clicking a linked item's thumbnail opens ONE quick-view dialog on that product (8.27)", async () => {
+    const receipt = makeReceipt();
+    receipt.items[0] = {
+      ...receipt.items[0],
+      productId: 'p-1',
+      productName: 'Milk 3% 1L',
+      productHasImage: true,
+      productImageVersion: 'v42',
+      matchStatus: 'CONFIRMED',
+    };
+    await renderLoaded(receipt);
+    expect(screen.queryByTestId('quick-view-stub')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('item-thumb-0'));
+    expect(screen.getByTestId('quick-view-stub')).toHaveAttribute('data-product', 'p-1');
+
+    fireEvent.click(screen.getByTestId('quick-view-close'));
+    expect(screen.queryByTestId('quick-view-stub')).toBeNull();
+    // Unmatched rows keep the non-interactive placeholder.
+    expect(screen.queryByTestId('item-thumb-1')).toBeNull();
   });
 
   it('the header walkthrough button opens the dialog without an initial item', async () => {

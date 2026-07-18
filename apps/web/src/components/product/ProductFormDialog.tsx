@@ -10,6 +10,7 @@ import {
   isValidGtin,
   normalizeGtin,
   PRODUCT_IMAGE_MAX_COUNT,
+  PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES,
   type ProductImageInfo,
 } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
@@ -23,8 +24,7 @@ import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
 import type { CategoryDto } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
-
-const PICTURE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic';
+import { IMAGE_ACCEPT, uploadRejectionMessage, validateUploadFiles } from '@/lib/upload';
 
 /** A picture staged in create mode — uploaded after the product exists. */
 interface StagedPicture {
@@ -62,6 +62,7 @@ export function ProductFormDialog({
   const t = useTranslations('products.form');
   // Camera label rides the intake-zone key — same wording everywhere.
   const uploadT = useTranslations('receipts.upload');
+  const tUpload = useTranslations('common.upload');
   const locale = useLocale();
   const {
     createProduct,
@@ -176,8 +177,19 @@ export function ProductFormDialog({
 
   /** Add pictures: upload now (edit) or stage until the product exists (create). */
   const onPictures = (files: File[]) => {
+    // 8.27 — type/size gate before staging or uploading anything.
+    const { accepted, rejected } = validateUploadFiles(files, {
+      accept: IMAGE_ACCEPT,
+      maxBytes: PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES,
+    });
+    for (const rejection of rejected) {
+      addToast(
+        'error',
+        uploadRejectionMessage(tUpload, rejection, PRODUCT_IMAGE_MAX_FILE_SIZE_BYTES),
+      );
+    }
     const remaining = PRODUCT_IMAGE_MAX_COUNT - usedSlots;
-    const batch = files.slice(0, remaining);
+    const batch = accepted.slice(0, remaining);
     if (batch.length === 0) return;
     if (editing && product) {
       void picturesOp.run(async (signal) => {
@@ -577,7 +589,7 @@ export function ProductFormDialog({
             {canAddPictures && (
               <div className="flex flex-wrap items-center gap-2">
                 <FileCaptureButtons
-                  accept={PICTURE_ACCEPT}
+                  accept={IMAGE_ACCEPT}
                   multiple
                   disabled={saveOp.isLoading || picturesOp.isLoading}
                   onFiles={onPictures}

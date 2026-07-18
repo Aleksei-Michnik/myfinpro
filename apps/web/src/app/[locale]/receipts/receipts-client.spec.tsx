@@ -209,14 +209,25 @@ describe('ReceiptsClient', () => {
   it('a failed upload surfaces an error toast', async () => {
     render(<ReceiptsClient />);
     await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
-    uploadReceiptMock.mockRejectedValue(new Error('Unsupported file type'));
+    uploadReceiptMock.mockRejectedValue(new Error('Storage unavailable'));
+
+    fireEvent.drop(screen.getByTestId('receipt-dropzone'), {
+      dataTransfer: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Storage')),
+    );
+  });
+
+  it('client-side validation rejects unsupported drops before any request (8.27)', async () => {
+    render(<ReceiptsClient />);
+    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
 
     fireEvent.drop(screen.getByTestId('receipt-dropzone'), {
       dataTransfer: { files: [new File(['x'], 'x.gif', { type: 'image/gif' })] },
     });
-    await waitFor(() =>
-      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Unsupported')),
-    );
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith('error', 'rejectedType'));
+    expect(uploadReceiptMock).not.toHaveBeenCalled();
   });
 
   it('retries FAILED receipts and patches the row', async () => {

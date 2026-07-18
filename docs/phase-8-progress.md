@@ -769,3 +769,41 @@ their next swap (staging: 4 files; production: 80 — done during the
 production rollout). Rows whose files predate the running container are
 unrecoverable; those pictures need re-uploading (rendered as the same
 placeholder, so no UI breakage).
+
+## 8.27 — image handling standardization + product galleries (2026-07-18)
+
+The hotfix chain exposed how scattered image handling had become, so the
+patterns are now written down and enforced by shared code.
+[`docs/image-handling.md`](image-handling.md) is the standard: two image
+families (catalog imagery = cookie-authed `<img>` renditions; private
+documents = Bearer blob fetch into the viewer), the server pipeline
+contract, and the table of THE web building blocks every future image
+feature reuses.
+
+**Unification.** `lib/upload.ts` centralizes the accept lists
+(`IMAGE_ACCEPT`, `RECEIPT_ACCEPT`) that four surfaces had copy-pasted, and
+adds `validateUploadFiles()` — client-side type/size validation with
+toast messages (`common.upload`) before any request hits the network.
+`ProductImage` extracts the cube placeholder + `onError` fallback that
+ProductThumb, ProductCard and the detail page each re-implemented. The
+receipt lightbox became the shared `DocumentViewer`
+(`components/ui/`, i18n moved `receipts.viewer` → `common.viewer`) —
+zoom/pan/pager/PDF for any consumer; product galleries pass cookie-authed
+API URLs, receipts keep blob object-URLs.
+
+**Galleries.** The product detail page's single image + bespoke hidden
+input is gone; `ProductGallery` shows the selected picture large with a
+thumb strip (primary ring), opens the lightbox over all pictures, and in
+editable mode adds pictures via `FileCaptureButtons` (validated, capped,
+immediate upload), removes, and makes-primary — parent refetches via
+`onChanged`. `ProductQuickViewDialog` is the read-only product popup
+(name/brand/barcode/category + gallery + link to the page), opened by
+clicking a linked product's thumbnail on receipt-review item cards and
+transaction purchase details — registry pictures are now reachable from
+every surface that references a product.
+
+**Tests.** New specs for the upload lib, ProductImage, ProductGallery,
+ProductQuickViewDialog, the moved DocumentViewer, and product-detail;
+seven touched specs updated. web suite green (the two budget/transaction
+dialog spec files that fail locally do so identically at HEAD — jsdom
+`localStorage` env issue on this host; CI is the gate).
