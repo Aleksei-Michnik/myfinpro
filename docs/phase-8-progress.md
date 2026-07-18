@@ -753,3 +753,19 @@ two "working" 3-part ids moved too).
 shape (`?size=thumb&v=…` → 404, was 400 red before the fix); unit specs
 pin the dash-separated job ids for upload, regen backfill, extraction and
 optimization enqueues.
+
+**Third layer — ephemeral storage.** With auth and validation fixed,
+staging still 404'd: uploads from before the deploy had no files. Receipt
+storage rides a named volume (`/data/receipts`), but product images had
+no `PRODUCT_IMAGE_STORAGE_DIR` and no mount — renditions were written to
+the container's own filesystem, so **every blue/green swap deleted every
+product picture** while the DB rows survived. This — not the 401 — is why
+production showed cubes for pictures "uploaded weeks ago": the files had
+been wiped by interim deploys. Fix: `myfinpro-<env>-products` volume
+mounted at `/data/products` + `PRODUCT_IMAGE_STORAGE_DIR` in both compose
+files, mirroring the receipts pattern. Ops: the surviving files were
+copied out of the running containers into the pre-created volumes before
+their next swap (staging: 4 files; production: 80 — done during the
+production rollout). Rows whose files predate the running container are
+unrecoverable; those pictures need re-uploading (rendered as the same
+placeholder, so no UI breakage).
