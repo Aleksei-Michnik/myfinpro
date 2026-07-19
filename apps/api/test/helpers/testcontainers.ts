@@ -22,15 +22,12 @@ export async function setupTestDatabase(): Promise<{
   databaseUrl: string;
 }> {
   // Start MySQL container
-  container = await new MySqlContainer('mysql:8.4')
+  container = await new MySqlContainer('mysql:9.7')
     .withDatabase('myfinpro_test')
     .withUsername('test_user')
     .withUserPassword('test_password')
-    .withCommand([
-      '--default-authentication-plugin=mysql_native_password',
-      '--character-set-server=utf8mb4',
-      '--collation-server=utf8mb4_unicode_ci',
-    ])
+    // Default auth is caching_sha2_password — same as staging/production.
+    .withCommand(['--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci'])
     .start();
 
   const databaseUrl = container.getConnectionUri();

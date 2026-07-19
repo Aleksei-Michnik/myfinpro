@@ -252,6 +252,21 @@ commit on `main`).
   which `mysql:8.4` already rejects (removed in 8.4) — the test MySQL
   container has never started locally on this image; fix lands in step 3
   with the 9.7 bump.
+- 2026-07-19 — Step 3 (MySQL 9.7 code-side) prepared: all compose files →
+  `mysql:9.7`; testcontainers helper → 9.7 with the removed auth flag
+  dropped; backup-verify workflow restores into `mysql:9.7` (was
+  `mariadb:11.8`) so backups are verified against the production engine.
+  Validated locally: full integration suite against 9.7 testcontainers —
+  22/30 suites pass including every DB-sensitive one (transactions,
+  receipts, products/trigram, budgets, queue, system-categories); the 8
+  failing suites are the auth/email family that bypasses testcontainers and
+  hits a stale local dev DB on 3306 (409 fixed-email conflicts, 429
+  throttling, local redis) — pre-existing local-env class,
+  engine-independent. Fresh-9.7 validation: `prisma migrate deploy` applies
+  all migrations, `prisma db seed` completes (also exercising
+  caching_sha2_password via the mariadb driver over plain TCP). Not pushed
+  until the staging backup (step 4) is taken — push auto-upgrades the
+  staging datadir.
 
 ## 6. Watch list (follow-ups, not part of this change)
 
