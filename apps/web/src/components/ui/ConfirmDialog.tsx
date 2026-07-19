@@ -10,6 +10,7 @@
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { useBodyScrollLock } from '@/lib/ui';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -34,6 +35,9 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  // Conditionally rendered by the parent — mounted means open.
+  useBodyScrollLock(true);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

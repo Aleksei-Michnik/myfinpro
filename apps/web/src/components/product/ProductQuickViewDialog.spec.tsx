@@ -113,6 +113,13 @@ describe('ProductQuickViewDialog (8.27)', () => {
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 
+  it('locks body scroll while open and releases when closed', async () => {
+    const { rerender } = render(<ProductQuickViewDialog productId="p-1" onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('hidden');
+    rerender(<ProductQuickViewDialog productId={null} onClose={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('');
+  });
+
   it('surfaces a load failure with a retry affordance', async () => {
     getProductMock.mockRejectedValue(Object.assign(new Error('nope'), { status: 500 }));
     render(<ProductQuickViewDialog productId="p-1" onClose={vi.fn()} />);

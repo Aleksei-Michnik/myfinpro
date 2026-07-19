@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { swipeDelta } from '@/lib/swipe';
+import { useBodyScrollLock } from '@/lib/ui';
 
 /** One page to display — `src` is null while its blob still loads. */
 export interface ViewerPage {
@@ -47,6 +48,7 @@ export function DocumentViewer({
   onClose,
 }: DocumentViewerProps) {
   const t = useTranslations('common.viewer');
+  useBodyScrollLock(open);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);

@@ -33,6 +33,13 @@ describe('ConfirmDialog (8.27)', () => {
     expect(screen.getByTestId('confirm-dialog-cancel')).toHaveTextContent('Cancel');
   });
 
+  it('locks body scroll while mounted and releases on unmount', () => {
+    const { unmount } = renderDialog();
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe('');
+  });
+
   it('confirm fires onConfirm (and only that)', () => {
     renderDialog();
     fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));

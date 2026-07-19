@@ -16,7 +16,7 @@ import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type { CategoryDto } from '@/lib/transaction/types';
-import { useAsyncOperation } from '@/lib/ui';
+import { useAsyncOperation, useBodyScrollLock } from '@/lib/ui';
 
 export interface ProductQuickViewDialogProps {
   /** Product to show; null keeps the dialog closed. */
@@ -37,6 +37,7 @@ export function ProductQuickViewDialog({ productId, onClose }: ProductQuickViewD
   const loadOp = useAsyncOperation<ProductSummary>({ scope: 'container' });
 
   const open = productId !== null;
+  useBodyScrollLock(open);
 
   const load = useCallback(() => {
     if (!productId) return;
@@ -83,122 +84,132 @@ export function ProductQuickViewDialog({ productId, onClose }: ProductQuickViewD
       ? (categories.find((c) => c.id === product.defaultCategoryId)?.name ?? null)
       : null;
 
+  // Centered when it fits; when taller than the viewport the BACKDROP
+  // scrolls (my-auto keeps the top edge reachable) — never the body, which
+  // useBodyScrollLock freezes while open.
   const node = (
     <div
       data-testid="product-quick-view-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/60 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-gray-900/60"
     >
       <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="product-quick-view-title"
-        tabIndex={-1}
-        data-testid="product-quick-view-dialog"
-        className="flex max-h-[90vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl outline-none sm:rounded-2xl dark:border-gray-700 dark:bg-gray-800"
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            {product?.brand && (
-              <p className="truncate text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {product.brand}
-              </p>
-            )}
-            <h2
-              id="product-quick-view-title"
-              className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-              data-testid="product-quick-view-name"
-            >
-              {product?.name ?? t('title')}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('close')}
-            data-testid="product-quick-view-close"
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {product ? (
-          <>
-            <ProductGallery
-              product={{ id: product.id, name: product.name, images: product.images ?? [] }}
-              editable={false}
-            />
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-              {product.brand && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">
-                    {tForm('brandLabel')}
-                  </dt>
-                  <dd className="text-gray-900 dark:text-gray-100">{product.brand}</dd>
-                </div>
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="product-quick-view-title"
+          tabIndex={-1}
+          data-testid="product-quick-view-dialog"
+          className="my-auto flex w-full max-w-md flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              {product?.brand && (
+                <p className="truncate text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {product.brand}
+                </p>
               )}
-              <div>
-                <dt className="text-xs text-gray-500 dark:text-gray-400">
-                  {tDetail('barcodeLabel')}
-                </dt>
-                <dd
-                  className="font-mono text-gray-900 dark:text-gray-100"
-                  data-testid="product-quick-view-barcode"
-                >
-                  {product.barcode ?? '—'}
-                </dd>
-              </div>
-              {defaultCategoryName && (
+              <h2
+                id="product-quick-view-title"
+                className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                data-testid="product-quick-view-name"
+              >
+                {product?.name ?? t('title')}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('close')}
+              data-testid="product-quick-view-close"
+              className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {product ? (
+            <>
+              <ProductGallery
+                product={{ id: product.id, name: product.name, images: product.images ?? [] }}
+                editable={false}
+              />
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                {product.brand && (
+                  <div>
+                    <dt className="text-xs text-gray-500 dark:text-gray-400">
+                      {tForm('brandLabel')}
+                    </dt>
+                    <dd className="text-gray-900 dark:text-gray-100">{product.brand}</dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">
-                    {tDetail('categoryLabel')}
+                    {tDetail('barcodeLabel')}
                   </dt>
                   <dd
-                    className="text-gray-900 dark:text-gray-100"
-                    data-testid="product-quick-view-category"
+                    className="font-mono text-gray-900 dark:text-gray-100"
+                    data-testid="product-quick-view-barcode"
                   >
-                    {defaultCategoryName}
+                    {product.barcode ?? '—'}
                   </dd>
                 </div>
-              )}
-            </dl>
-            <Link
-              href={`/products/${product.id}`}
-              className="text-sm text-primary-700 hover:underline dark:text-primary-300"
-              data-testid="product-quick-view-open"
+                {defaultCategoryName && (
+                  <div>
+                    <dt className="text-xs text-gray-500 dark:text-gray-400">
+                      {tDetail('categoryLabel')}
+                    </dt>
+                    <dd
+                      className="text-gray-900 dark:text-gray-100"
+                      data-testid="product-quick-view-category"
+                    >
+                      {defaultCategoryName}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <Link
+                href={`/products/${product.id}`}
+                className="text-sm text-primary-700 hover:underline dark:text-primary-300"
+                data-testid="product-quick-view-open"
+              >
+                {t('openProduct')} →
+              </Link>
+            </>
+          ) : loadOp.error && loadOp.error.reason !== 'aborted' ? (
+            <InlineErrorBanner
+              reason={loadOp.error.reason}
+              httpStatus={loadOp.error.httpStatus}
+              onRetry={load}
+            />
+          ) : (
+            <div
+              className="flex items-center justify-center py-10"
+              role="status"
+              aria-label={tDetail('loading')}
+              data-testid="product-quick-view-loading"
             >
-              {t('openProduct')} →
-            </Link>
-          </>
-        ) : loadOp.error && loadOp.error.reason !== 'aborted' ? (
-          <InlineErrorBanner
-            reason={loadOp.error.reason}
-            httpStatus={loadOp.error.httpStatus}
-            onRetry={load}
-          />
-        ) : (
-          <div
-            className="flex items-center justify-center py-10"
-            role="status"
-            aria-label={tDetail('loading')}
-            data-testid="product-quick-view-loading"
-          >
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600 motion-reduce:animate-none" />
-          </div>
-        )}
+              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600 motion-reduce:animate-none" />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
