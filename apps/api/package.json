@@ -17,9 +17,9 @@
     "test:unit": "jest --testPathPatterns=\\.spec\\.ts$",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:e2e": "jest --config jest.integration.config.ts --runInBand",
-    "test:integration": "jest --config jest.integration.config.ts --runInBand",
-    "test:staging": "jest --config jest.staging.config.ts --runInBand",
+    "test:e2e": "jest --config jest.integration.config.js --runInBand",
+    "test:integration": "jest --config jest.integration.config.js --runInBand",
+    "test:staging": "jest --config jest.staging.config.js --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -67,7 +67,7 @@
   "devDependencies": {
     "@myfinpro/eslint-config": "workspace:*",
     "@myfinpro/tsconfig": "workspace:*",
-    "@nestjs/cli": "^11.0.21",
+    "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.19",
     "@testcontainers/mysql": "^11.14.0",
@@ -76,7 +76,7 @@
     "@types/express-session": "^1.19.0",
     "@types/heic-convert": "^2.1.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.1.1",
     "@types/nodemailer": "^8.0.0",
     "@types/passport-google-oauth20": "2.0.17",
     "@types/passport-jwt": "^4.0.1",
@@ -91,11 +91,6 @@
     "testcontainers": "^11.14.0",
     "ts-jest": "^29.4.9",
     "ts-loader": "^9.5.7",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
-  },
-  "prisma": {
-    "schema": "prisma/schema.prisma",
-    "seed": "ts-node prisma/seed.ts"
+    "typescript": "~6.0.3"
   }
 }

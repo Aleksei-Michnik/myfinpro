@@ -41,7 +41,7 @@ import type { Request, Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CookieOrBearerAuthGuard } from '../auth/guards/cookie-or-bearer-auth.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_ERRORS } from './constants/product-errors';

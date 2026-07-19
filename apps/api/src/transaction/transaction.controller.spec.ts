@@ -9,7 +9,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import type { Response } from 'express';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { DeleteTransactionQueryDto } from './dto/delete-transaction.query.dto';
 import { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';

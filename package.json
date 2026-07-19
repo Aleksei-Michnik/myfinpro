@@ -5,7 +5,7 @@
   "description": "Personal/Family Finance Management Application",
   "packageManager": "pnpm@10.32.1",
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=26.0.0",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
@@ -45,7 +45,7 @@
   "devDependencies": {
     "prettier": "^3.8.3",
     "turbo": "^2.9.6",
-    "typescript": "^5.9.3"
+    "typescript": "~6.0.3"
   },
   "pnpm": {
     "peerDependencyRules": {

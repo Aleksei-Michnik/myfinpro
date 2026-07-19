@@ -27,7 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { ScheduleResponseDto } from './dto/schedule-response.dto';

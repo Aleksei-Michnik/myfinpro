@@ -1,6 +1,5 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.integration.spec.ts$',
@@ -11,9 +10,4 @@ const config: Config = {
   testTimeout: 60_000, // Testcontainers need time to start
   maxWorkers: 1, // Run integration tests serially
   setupFilesAfterEnv: ['./test/integration/setup.ts'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-  },
 };
-
-export default config;

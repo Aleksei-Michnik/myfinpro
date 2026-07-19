@@ -1,6 +1,5 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.staging.spec.ts$',
@@ -11,9 +10,4 @@ const config: Config = {
   testTimeout: 30_000,
   maxWorkers: 1,
   setupFilesAfterEnv: ['./test/staging/setup.ts'],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-  },
 };
-
-export default config;

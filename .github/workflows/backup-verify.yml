@@ -20,17 +20,17 @@ jobs:
     timeout-minutes: 15
 
     services:
-      mariadb:
-        image: mariadb:11.8
+      mysql:
+        image: mysql:9.7
         env:
-          MARIADB_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
-          MARIADB_USER: ${{ env.MYSQL_USER }}
-          MARIADB_PASSWORD: ${{ env.MYSQL_PASSWORD }}
-          MARIADB_DATABASE: ${{ env.MYSQL_DATABASE }}
+          MYSQL_ROOT_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
+          MYSQL_USER: ${{ env.MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ env.MYSQL_PASSWORD }}
+          MYSQL_DATABASE: ${{ env.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mariadb-admin ping -h localhost"
+          --health-cmd="mysqladmin ping -h localhost"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -42,14 +42,14 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
 
-      - name: Wait for MariaDB to be ready
+      - name: Wait for MySQL to be ready
         run: |
           for i in $(seq 1 30); do
             if mysqladmin ping -h 127.0.0.1 -P 3306 -u root --password=$MYSQL_ROOT_PASSWORD 2>/dev/null; then
-              echo "MariaDB is ready"
+              echo "MySQL is ready"
               break
             fi
-            echo "Waiting for MariaDB... ($i/30)"
+            echo "Waiting for MySQL... ($i/30)"
             sleep 2
           done
 

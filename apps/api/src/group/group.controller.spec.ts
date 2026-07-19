@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';

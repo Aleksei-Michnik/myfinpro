@@ -3,9 +3,9 @@
   "display": "Base",
   "compilerOptions": {
     "target": "ES2024",
-    "module": "commonjs",
+    "module": "nodenext",
     "lib": ["ES2024"],
-    "moduleResolution": "node",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,

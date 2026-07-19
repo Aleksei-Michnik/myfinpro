@@ -11,7 +11,7 @@
 
 import { Controller, Logger, OnApplicationShutdown, Req, Sse, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { Observable, Subject, finalize, interval, map, merge, takeUntil } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CookieOrBearerAuthGuard } from '../auth/guards/cookie-or-bearer-auth.guard';

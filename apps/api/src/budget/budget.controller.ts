@@ -29,7 +29,7 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { BudgetService } from './budget.service';
 import { BudgetListResponseDto } from './dto/budget-list-response.dto';
