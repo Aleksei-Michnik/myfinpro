@@ -85,8 +85,13 @@ function localParts(date: Date, timezone: string): LocalParts {
   };
 }
 
-/** UTC-offset (ms) the timezone applies at the given UTC instant. */
-function tzOffsetMs(utcMs: number, timezone: string): number {
+/**
+ * UTC-offset (ms) the timezone applies at the given UTC instant.
+ *
+ * Exported for the Phase 9 analytics engine, which converts it into a
+ * `±HH:MM` string for SQL `CONVERT_TZ` period bucketing (design §2.5).
+ */
+export function tzOffsetMs(utcMs: number, timezone: string): number {
   const p = localParts(new Date(utcMs), timezone);
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - utcMs;
 }
