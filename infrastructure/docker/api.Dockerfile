@@ -1,6 +1,6 @@
 # ───── Base Stage ─────
-FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
+FROM node:26-alpine AS base
+RUN npm install -g corepack && corepack enable
 WORKDIR /app
 
 # ───── Dependencies Stage ─────

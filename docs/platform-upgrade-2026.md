@@ -215,6 +215,19 @@ commit on `main`).
   staging/production account-plugin audit (all `caching_sha2_password`),
   `mysql:9.7.1` and `node:26-alpine` images validated locally. Plan written.
   (Entries below are appended as each step ships.)
+- 2026-07-19 — Step 1 (Node 26) shipped: `.nvmrc`/engines/CI → 26,
+  Dockerfiles → `node:26-alpine` with corepack installed via npm (pnpm
+  version now sourced solely from `packageManager`; verified 10.32.1 inside
+  the built image), `@types/node` → ^26. **Root-caused the "pre-existing"
+  local BudgetFormDialog/TransactionFormDialog spec failures**: Node 26
+  defines a bare `localStorage` global (undefined without
+  `--localstorage-file`) that pre-empts jsdom's implementation in the vitest
+  realm — they were a genuine Node-26 incompatibility that would have broken
+  CI on this bump, fixed with an in-memory Storage in
+  `apps/web/src/test-setup.ts` (vitest patch-bumped to 4.1.10 along the way).
+  Full suite green on 26.5.0: api 1213, web 1329, shared; `_stream_*`
+  internals audit clean; api image dependencies stage builds on
+  `node:26-alpine`.
 
 ## 6. Watch list (follow-ups, not part of this change)
 
