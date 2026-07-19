@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import {
   ThrottlerGuard,
   ThrottlerLimitDetail,
-  ThrottlerModuleOptions,
+  type ThrottlerModuleOptions,
   ThrottlerStorage,
 } from '@nestjs/throttler';
 import { MetricsService } from '../metrics/metrics.service';

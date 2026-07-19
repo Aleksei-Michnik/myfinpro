@@ -16,6 +16,7 @@ export default defineConfig({
         : undefined),
   },
   migrations: {
-    seed: 'npx ts-node prisma/seed.ts',
+    // Node 26 strips types natively — the seed graph is erasable TS only.
+    seed: 'node prisma/seed.ts',
   },
 });

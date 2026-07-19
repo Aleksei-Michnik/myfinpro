@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PRODUCT_IMAGE_MAX_COUNT } from '@myfinpro/shared';
@@ -133,7 +133,6 @@ describe('ProductImageService (8.25)', () => {
         .toFile(staged)
         .catch(async () => {
           // parent dir may not exist yet
-          const { mkdir } = await import('node:fs/promises');
           await mkdir(path.dirname(staged), { recursive: true });
           await sharp({ create: { width: 900, height: 900, channels: 3, background: '#37c' } })
             .png()
@@ -157,7 +156,6 @@ describe('ProductImageService (8.25)', () => {
 
     it('regen derives missing renditions from the stored detail WebP', async () => {
       const refs = renditionRefs('2026/07/base-2');
-      const { mkdir } = await import('node:fs/promises');
       await mkdir(path.join(root, '2026/07'), { recursive: true });
       await sharp({ create: { width: 512, height: 340, channels: 3, background: '#c73' } })
         .webp()
@@ -172,7 +170,6 @@ describe('ProductImageService (8.25)', () => {
 
   describe('openRendition', () => {
     beforeEach(async () => {
-      const { mkdir } = await import('node:fs/promises');
       await mkdir(path.join(root, '2026/07'), { recursive: true });
     });
 

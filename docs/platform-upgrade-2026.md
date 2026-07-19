@@ -228,6 +228,30 @@ commit on `main`).
   Full suite green on 26.5.0: api 1213, web 1329, shared; `_stream_*`
   internals audit clean; api image dependencies stage builds on
   `node:26-alpine`.
+- 2026-07-19 — Step 2 (TypeScript 6.0.3) shipped. Presets → `nodenext`
+  (base), `baseUrl` removed everywhere, api's unused `@/*` alias dropped
+  (tsconfig + dead jest moduleNameMapper), explicit `types` per preset.
+  Fallout fixed: (a) 99× TS1272 — TS 6 requires `import type` for
+  interfaces referenced in decorated signatures under nodenext; converted
+  `JwtPayload`/express `Request`/`Response`/`ThrottlerModuleOptions` imports
+  across 14 controllers/guards; (b) one spec used dynamic
+  `import('node:fs/promises')`, which nodenext preserves as a real dynamic
+  import that jest's CJS VM rejects — made static; (c) jest configs → `.js`
+  and ts-node/ts-node-dev removed; Prisma seed runs via Node native type
+  stripping (needed an explicit `.ts` extension on its relative import) and
+  bot dev via `node --watch`; (d) surfaced a latent Prisma 7 bug: the seed
+  constructed `new PrismaClient()` without a driver adapter — broken since
+  the Prisma 7 migration, now uses `PrismaMariaDb` like PrismaService;
+  (e) removed the legacy package.json `prisma` block (Prisma 7 reads
+  `prisma.config.ts`). Deprecation-clean without `ignoreDeprecations` →
+  TS7-ready. Verified: typecheck/lint green, `nest build` emits 212 files
+  (non-empty — the nest-cli #3312 check), full unit suite green
+  (api 1213 / web 1329 / shared), seed + bot smoke-run on bare Node.
+  **Also root-caused the long-standing local integration-suite failures**:
+  the testcontainers helper passes `--default-authentication-plugin`,
+  which `mysql:8.4` already rejects (removed in 8.4) — the test MySQL
+  container has never started locally on this image; fix lands in step 3
+  with the 9.7 bump.
 
 ## 6. Watch list (follow-ups, not part of this change)
 

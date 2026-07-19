@@ -31,7 +31,7 @@ import {
   ApiUnauthorizedResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { AuthService, GoogleProfile, TelegramProfile } from './auth.service';
 import { AUTH_ERRORS } from './constants/auth-errors';
@@ -47,7 +47,7 @@ import { TelegramAuthDto } from './dto/telegram-auth.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
+import type { JwtPayload } from './interfaces/jwt-payload.interface';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';

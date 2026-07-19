@@ -3,12 +3,12 @@
   "display": "Node Library",
   "extends": "./base.json",
   "compilerOptions": {
-    "module": "commonjs",
     "target": "ES2024",
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   }
 }

@@ -1,7 +1,7 @@
 import { ForbiddenException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { TransactionCommentController } from './transaction-comment.controller';
 import { TransactionCommentService } from './transaction-comment.service';
 

@@ -1,8 +1,11 @@
 /// <reference types="node" />
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '@prisma/client';
-import { seedSystemCategories } from '../src/transaction/seed-system-categories';
+import { seedSystemCategories } from '../src/transaction/seed-system-categories.ts';
 
-const prisma = new PrismaClient();
+// Prisma 7 requires a driver adapter — same construction as PrismaService.
+const adapter = new PrismaMariaDb(process.env.DATABASE_URL ?? '');
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🌱 Starting database seed...');
