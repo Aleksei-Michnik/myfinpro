@@ -268,6 +268,16 @@ commit on `main`).
   until the staging backup (step 4) is taken — push auto-upgrades the
   staging datadir.
 
+- 2026-07-19 — Step 4 (staging DB) executed. Pre-push safety nets under
+  `/opt/myfinpro/backups/pre-mysql97/`: verified logical dump of
+  `myfinpro_staging` + cold datadir snapshot of the `myfinpro-staging-mysql`
+  volume (taken during a ~30 s stop). Deploy performed the in-place upgrade:
+  data dictionary 80300→90200 and server 80408→90701 both completed in the
+  mysqld log; `SELECT VERSION()` = 9.7.1; row counts intact (users 22,
+  transactions 1916); api/web healthy; CI, Deploy Staging and the
+  post-deploy Test Staging workflow (integration + e2e against staging) all
+  green. Awaiting manual verification before production.
+
 ## 6. Watch list (follow-ups, not part of this change)
 
 - **October 2026** — Node 26 LTS promotion: retag CI/Dockerfiles if pinning
