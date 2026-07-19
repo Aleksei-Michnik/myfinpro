@@ -109,6 +109,13 @@ Rules:
   object URLs.
 - **Destructive picture actions confirm through `ConfirmDialog`** — one
   accidental tap must never delete anything.
+- **Modal surfaces lock body scroll** via `useBodyScrollLock` (`lib/ui`,
+  counter-based so nested modals release correctly). Dialogs that can
+  outgrow the viewport center when they fit and scroll the BACKDROP
+  (`fixed inset-0 overflow-y-auto` + `min-h-full` flex wrapper + `my-auto`
+  panel — see ProductQuickViewDialog) so the top edge is always reachable;
+  never size a mobile panel with `vh` (browser chrome makes it overshoot —
+  the visible viewport is `dvh`).
 - **Galleries and viewers support swipe + arrow-key navigation** — the
   RTL-aware gesture/keyboard math lives in `lib/swipe.ts` (threshold,
   vertical-scroll dominance, direction inversion); a completed swipe

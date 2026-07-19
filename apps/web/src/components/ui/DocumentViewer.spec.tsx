@@ -26,6 +26,15 @@ describe('DocumentViewer (8.18, generalized 8.27)', () => {
     expect(screen.queryByTestId('document-viewer')).not.toBeInTheDocument();
   });
 
+  it('locks body scroll while open and releases when closed', () => {
+    const { rerender } = render(
+      <DocumentViewer open pages={[page('blob:x')]} title="R" onClose={noop} />,
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+    rerender(<DocumentViewer open={false} pages={[page('blob:x')]} title="R" onClose={noop} />);
+    expect(document.body.style.overflow).toBe('');
+  });
+
   it('shows a loader while the blob URL is still resolving', () => {
     render(<DocumentViewer open pages={[page(null)]} title="R" onClose={noop} />);
     expect(screen.getByTestId('viewer-loading')).toBeInTheDocument();

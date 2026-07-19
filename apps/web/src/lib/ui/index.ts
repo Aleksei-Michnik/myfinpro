@@ -29,4 +29,5 @@ export {
   type UIStatusProviderProps,
 } from './ui-status-context';
 export { useAsyncOperation, type UseAsyncOperationResult } from './use-async-operation';
+export { useBodyScrollLock } from './use-body-scroll-lock';
 export { useResetOnLocaleChange } from './use-reset-on-locale-change';
