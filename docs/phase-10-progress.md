@@ -144,3 +144,60 @@ diff, no-op save skip; focus + ESC/discard a11y. **web: 1234 green
 
 **Next** — 10.4 (`/budgets` list page: cards, filters, archived toggle,
 edit/delete/archive flows wired).
+
+## Iteration 10.4 — /budgets list page (2026-07-20)
+
+Per design §7 — the full budgets list UI in `apps/web`, replacing the
+deliberately-minimal 10.3 page.
+
+### Scope
+
+- **`/budgets` orchestrator** (`budgets-client.tsx`) — the /transactions
+  commit pattern: the visual controls (scope tabs reusing
+  `<TransactionsScopeTabs>`, show-archived toggle) bind to _committed_
+  filters only; a pending intent stays invisible until its fetch
+  commits; failures open `<RetryReturnDialog>` (with a newest-fetch
+  guard so a superseded run can't pop the dialog). Filters map to the
+  10.2 list API (`scope=personal|group:<id>|all`, `includeArchived=`);
+  cursor "load more" with replace-on-first-page / dedupe-append
+  semantics (receipts-page pattern). Realtime per conventions:
+  `budget.updated` events, reconnect-after-gap resyncs, and locale
+  flips all refetch the committed first page. `budget.updated` added to
+  the web `RealtimeEvent` union (the API half shipped in 10.2).
+- **`<BudgetCard>`** — name, formatted amount (`formatAmount`), scope
+  chip (Personal / group name via `formatScopeLabel`), category chip
+  (icon + name, or the form's "All spending"), period label (CUSTOM
+  renders its date range), archived styling + chip. No progress bar —
+  the progress row slots in under the chips once 10.5 ships the API
+  (10.6 wires it); nothing is faked. ⋮ menu (`<RowActionsMenu>`): edit
+  (disabled while archived — the API rejects with `BUDGET_ARCHIVED`),
+  archive/unarchive, delete; hidden entirely on group budgets for
+  non-admin members (the API 403s their mutations, design §2.3).
+- **Flows** — edit opens `<BudgetFormDialog>` in edit mode
+  (replace-by-id on save); delete confirms via the 8.27 generic
+  `<ConfirmDialog>` then hard-deletes; archive/unarchive share one
+  control-scope op with success/error toasts. A freshly-archived budget
+  drops out of a hide-archived list; local state updates on the HTTP
+  response, never the SSE echo.
+- **i18n** — `budgets.list.*` additions + `budgets.delete.*` in EN and
+  HE; the card's period/category labels reuse the existing
+  `budgets.form.*` keys and the scope chip reuses `transactions.scope.*`
+  (one key per value). Dark-mode variants throughout; the card layout is
+  RTL-safe (logical flex/gap, no directional margins).
+
+### Tests
+
+18 new `budgets-client` vitest cases: card fields (scope/category
+chips, period incl. the CUSTOM range, archived styling); tabs commit
+only after the fetch succeeds + `scope=` mapping; `includeArchived=`
+mapping both ways; cursor pagination + dedupe; edit open /
+replace-on-save + disabled-while-archived; member-role menu gating;
+delete confirm/cancel; archive removal vs unarchive replace-in-place +
+toasts; failed-archive error toast; `budget.updated` refetch with the
+committed filters; resync refetch; recovery dialog + retry;
+create-refetch. Plus `e2e/budgets.spec.ts` — live-stack happy-path
+smoke (create → card → edit → archive → show archived → unarchive →
+delete), same fresh-user convention as the payments/receipts suites.
+**web: 1347 green (118 files); typecheck + lint clean.**
+
+**Next** — 10.5 (progress service + GET /budgets/:id/progress).

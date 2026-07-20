@@ -105,6 +105,10 @@ export type RealtimeEvent =
   | { type: 'receipt.deleted'; receiptId: string }
   // Phase 8.26 — transient extraction progress (never persisted server-side).
   | { type: 'receipt.extraction.progress'; receiptId: string; progress: ReceiptExtractionProgress }
+  // Phase 10.2 — budget lifecycle. Advisory (design §2.6): fired on every
+  // budget mutation (create / edit / delete / archive / unarchive); clients
+  // refetch budget lists on receipt.
+  | { type: 'budget.updated'; budgetId: string }
   | { type: 'ping' };
 
 export type RealtimeEventType = RealtimeEvent['type'];

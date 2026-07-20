@@ -1375,7 +1375,26 @@
       "title": "Budgets",
       "newBudget": "New budget",
       "loading": "Loading budgets…",
-      "empty": "No budgets yet. Create your first spending target."
+      "empty": "No budgets yet. Create your first spending target.",
+      "showArchived": "Show archived",
+      "archivedChip": "Archived",
+      "customRange": "{start} – {end}",
+      "actions": "Budget actions",
+      "edit": "Edit",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete",
+      "loadMore": "Load more",
+      "archivedToast": "Budget archived",
+      "unarchivedToast": "Budget unarchived",
+      "deletedToast": "Budget deleted",
+      "actionFailed": "Action failed"
+    },
+    "delete": {
+      "title": "Delete budget",
+      "warning": "Are you sure you want to delete \"{name}\"? Its alert history is deleted too. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
     },
     "form": {
       "createTitle": "New budget",
