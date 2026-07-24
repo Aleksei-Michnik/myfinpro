@@ -877,7 +877,7 @@ describe('ReceiptService', () => {
       expect(transactionServiceMock.update).toHaveBeenCalledWith('u-1', 'pay-1', {
         amountCents: 3400,
         currency: 'EUR',
-        categoryId: 'cat-food', // 3000 > 400
+        categoryIds: ['cat-food'], // 3000 > 400
       });
       expect(prismaMock.receipt.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'r-1' }, data: { status: 'CONFIRMED' } }),
@@ -885,6 +885,21 @@ describe('ReceiptService', () => {
       expect(prismaMock.receiptItem.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { receiptId: 'r-1' } }),
       );
+    });
+
+    it("applyCategory keeps the transaction's additional categories, minus the new primary", async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(attachedReview());
+      // First findUnique is the additional-category read; the occurredAt read
+      // falls back to the beforeEach default.
+      prismaMock.transaction.findUnique.mockResolvedValueOnce({
+        transactionCategories: [{ categoryId: 'cat-extra' }, { categoryId: 'cat-food' }],
+      });
+
+      await service.reconcile('u-1', 'r-1', { applyTotal: false, applyCategory: true });
+
+      expect(transactionServiceMock.update).toHaveBeenCalledWith('u-1', 'pay-1', {
+        categoryIds: ['cat-food', 'cat-extra'], // dominant promoted, duplicate dropped
+      });
     });
 
     it('keeps the transaction untouched when both flags are false', async () => {

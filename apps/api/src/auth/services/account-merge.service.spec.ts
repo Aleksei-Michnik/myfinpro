@@ -42,6 +42,11 @@ describe('AccountMergeService', () => {
         delete: jest.fn().mockResolvedValue({}),
       },
       transaction: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      transactionCategory: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       transactionAttribution: {
         findMany: jest.fn().mockResolvedValue([]),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -155,6 +160,18 @@ describe('AccountMergeService', () => {
 
       // Duplicate slug+direction → repoint and delete
       expect(tx.transaction.updateMany).toHaveBeenCalledWith({
+        where: { categoryId: 'src-cat' },
+        data: { categoryId: 'tgt-cat' },
+      });
+      // Additional-category join rows: drop the ones the primary remap made
+      // redundant, then remap the survivors onto the target category.
+      expect(tx.transactionCategory.deleteMany).toHaveBeenCalledWith({
+        where: {
+          categoryId: { in: ['src-cat', 'tgt-cat'] },
+          transaction: { categoryId: 'tgt-cat' },
+        },
+      });
+      expect(tx.transactionCategory.updateMany).toHaveBeenCalledWith({
         where: { categoryId: 'src-cat' },
         data: { categoryId: 'tgt-cat' },
       });

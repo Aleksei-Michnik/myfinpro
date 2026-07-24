@@ -38,7 +38,8 @@ export class ListTransactionsQueryDto {
   @IsIn([...TRANSACTION_DIRECTIONS])
   direction?: 'IN' | 'OUT';
 
-  @ApiPropertyOptional()
+  /** Any-match: the transaction's primary OR any additional category. */
+  @ApiPropertyOptional({ description: 'Matches the primary or any additional category.' })
   @IsOptional()
   @IsUUID()
   categoryId?: string;

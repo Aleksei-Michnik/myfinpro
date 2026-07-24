@@ -106,7 +106,7 @@ describe('DELETE + PATCH(attributions) /transactions/:id (integration)', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: outCategoryId,
+    categoryIds: [outCategoryId],
     attributions: [{ scope: 'personal' }],
     ...over,
   });

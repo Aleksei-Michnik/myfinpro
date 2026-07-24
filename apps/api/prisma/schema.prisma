@@ -251,6 +251,7 @@ model Transaction {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   attributions TransactionAttribution[]
+  transactionCategories TransactionCategory[]
   comments     TransactionComment[]
   stars        TransactionStar[]
   documents    TransactionDocument[]
@@ -299,6 +300,7 @@ model Category {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   transactions     Transaction[]
+  transactionCategories TransactionCategory[]
   receiptItems ReceiptItem[]
   budgets      Budget[]
   products     Product[]
@@ -307,6 +309,25 @@ model Category {
   @@index([ownerType, ownerId])
   @@index([direction])
   @@map("categories")
+}
+
+// Additional categories on a transaction. The PRIMARY category lives only on
+// transactions.category_id (the analytics category dimension groups by it) and
+// is never duplicated here; this table holds the ADDITIONAL categories in
+// display order (position is 1-based).
+model TransactionCategory {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  transactionId String      @map("transaction_id") @db.VarChar(36)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  categoryId    String      @map("category_id") @db.VarChar(36)
+  category      Category    @relation(fields: [categoryId], references: [id])
+  position      Int
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([transactionId, categoryId])
+  @@unique([transactionId, position])
+  @@index([categoryId])
+  @@map("transaction_categories")
 }
 
 model TransactionSchedule {

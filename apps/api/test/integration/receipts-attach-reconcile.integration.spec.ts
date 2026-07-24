@@ -31,6 +31,7 @@ describe('attach receipt to transaction + reconcile (integration)', () => {
   let bob: Awaited<ReturnType<typeof registerUser>>;
   let groceriesId: string;
   let diningId: string;
+  let extraOutId: string;
 
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -71,6 +72,10 @@ describe('attach receipt to transaction + reconcile (integration)', () => {
     });
     groceriesId = groceries!.id;
     diningId = dining!.id;
+    const extraOut = await prisma.category.findFirst({
+      where: { ownerType: 'system', direction: 'OUT', id: { notIn: [groceriesId, diningId] } },
+    });
+    extraOutId = extraOut!.id;
   }, 120_000);
 
   afterAll(async () => {
@@ -109,7 +114,7 @@ describe('attach receipt to transaction + reconcile (integration)', () => {
         amountCents: 1000,
         currency: 'USD',
         occurredAt: '2026-07-01T12:00:00.000Z',
-        categoryId: groceriesId,
+        categoryIds: [groceriesId],
         attributions: [{ scope: 'personal' }],
         ...over,
       })
@@ -154,9 +159,11 @@ describe('attach receipt to transaction + reconcile (integration)', () => {
   });
 
   it('4. reconcile applies the total and dominant category to the transaction', async () => {
+    // Extra additional category on the transaction — applyCategory must only
+    // replace the PRIMARY and preserve it.
     const transactionId = await createTransaction(alice.accessToken, {
       amountCents: 1000,
-      categoryId: groceriesId,
+      categoryIds: [groceriesId, extraOutId],
     });
     // Attach + push straight to REVIEW with a richer total and a dining-heavy
     // basket (dominant category = dining).
@@ -191,14 +198,19 @@ describe('attach receipt to transaction + reconcile (integration)', () => {
       .expect(201);
 
     expect(res.body.status).toBe('CONFIRMED');
-    const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: { transactionCategories: { orderBy: { position: 'asc' } } },
+    });
     expect(transaction).toMatchObject({ amountCents: 4200, currency: 'USD', categoryId: diningId });
+    // Additional categories survive the primary swap.
+    expect(transaction!.transactionCategories.map((tc) => tc.categoryId)).toEqual([extraOutId]);
   });
 
   it('5. reconcile with both flags false confirms without touching the transaction', async () => {
     const transactionId = await createTransaction(alice.accessToken, {
       amountCents: 1000,
-      categoryId: groceriesId,
+      categoryIds: [groceriesId],
     });
     const receipt = await prisma.receipt.create({
       data: {

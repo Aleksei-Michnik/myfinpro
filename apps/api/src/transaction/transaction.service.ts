@@ -55,6 +55,15 @@ const MAX_AMOUNT_CENTS = 1e11;
 export const SUPPORTED_CREATE_TYPES = ['ONE_TIME', 'RECURRING'] as const;
 export type SupportedCreateType = (typeof SUPPORTED_CREATE_TYPES)[number];
 
+/** Compact category projection embedded in transaction responses. */
+const CATEGORY_SUMMARY_SELECT = {
+  id: true,
+  slug: true,
+  name: true,
+  icon: true,
+  color: true,
+} as const;
+
 /**
  * Single source of truth for the relation load used by list(), findByIdForUser(),
  * and update(). Keeps mapping code honest — every path feeds the same shape into
@@ -62,8 +71,11 @@ export type SupportedCreateType = (typeof SUPPORTED_CREATE_TYPES)[number];
  * include drift.
  */
 export const TRANSACTION_DETAIL_INCLUDE = {
-  category: {
-    select: { id: true, slug: true, name: true, icon: true, color: true },
+  category: { select: CATEGORY_SUMMARY_SELECT },
+  // Additional categories (the primary lives on `categoryId`), position-ordered.
+  transactionCategories: {
+    include: { category: { select: CATEGORY_SUMMARY_SELECT } },
+    orderBy: { position: 'asc' as const },
   },
   attributions: { include: { group: { select: { name: true } } } },
   stars: { select: { id: true }, where: {} as { userId?: string } },
@@ -77,6 +89,7 @@ export const TRANSACTION_DETAIL_INCLUDE = {
 function buildDetailInclude(userId: string) {
   return {
     category: TRANSACTION_DETAIL_INCLUDE.category,
+    transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
     attributions: TRANSACTION_DETAIL_INCLUDE.attributions,
     stars: { where: { userId }, select: { id: true } },
     _count: TRANSACTION_DETAIL_INCLUDE._count,
@@ -116,6 +129,17 @@ export type TransactionWithRelations = {
     icon: string | null;
     color: string | null;
   };
+  /** Additional categories (position-ordered by the include). */
+  transactionCategories: Array<{
+    position: number;
+    category: {
+      id: string;
+      slug: string;
+      name: string;
+      icon: string | null;
+      color: string | null;
+    };
+  }>;
   attributions: Array<{
     scopeType: string;
     userId: string | null;
@@ -127,20 +151,19 @@ export type TransactionWithRelations = {
 };
 
 /**
- * Map a persisted Transaction (with category + attributions + attribution.group loaded)
- * into the wire-level `TransactionSummaryDto`. Shared by create / list / get / update.
+ * Map a persisted Transaction (with categories + attributions + attribution.group
+ * loaded) into the wire-level `TransactionSummaryDto`. Shared by create / list /
+ * get / update.
  */
 export function mapTransactionToSummary(
   transaction: TransactionWithRelations,
   opts: { starredByMe: boolean; commentCount?: number; hasDocuments?: boolean },
 ): TransactionSummaryDto {
-  const category: TransactionCategorySummary = {
-    id: transaction.category.id,
-    slug: transaction.category.slug,
-    name: transaction.category.name,
-    icon: transaction.category.icon,
-    color: transaction.category.color,
-  };
+  // Primary first, then the additional categories by position.
+  const categories: TransactionCategorySummary[] = [
+    transaction.category,
+    ...transaction.transactionCategories.map((tc) => tc.category),
+  ].map((c) => ({ id: c.id, slug: c.slug, name: c.name, icon: c.icon, color: c.color }));
 
   const attributions: TransactionAttributionSummary[] = transaction.attributions.map((a) => ({
     scope: a.scopeType as 'personal' | 'group',
@@ -157,7 +180,7 @@ export function mapTransactionToSummary(
     currency: transaction.currency,
     occurredAt: transaction.occurredAt.toISOString(),
     status: transaction.status,
-    category,
+    categories,
     attributions,
     note: transaction.note,
     commentCount: opts.commentCount ?? 0,
@@ -297,9 +320,10 @@ export class TransactionService {
     // 5. Date — reject occurredAt more than 1 day in the future (timezone grace).
     const occurredAt = this.parseAndValidateOccurredAt(dto.occurredAt);
 
-    // 6. Category — reuse CategoryService.findById() for visibility; then check direction.
-    const category = await this.loadCategoryOrThrow(userId, dto.categoryId);
-    this.ensureCategoryDirectionMatches(category, dto.direction);
+    // 6. Categories — every id passes the visibility + direction checks. The
+    //    first id is the primary (stored on `categoryId`), the rest become
+    //    position-ordered `TransactionCategory` rows.
+    await this.loadAndValidateCategories(userId, dto.categoryIds, dto.direction);
 
     // 7. Attributions — non-empty, well-formed, de-duplicated, in-scope.
     await this.validateAttributions(userId, dto.attributions);
@@ -328,7 +352,8 @@ export class TransactionService {
             currency: dto.currency,
             occurredAt,
             status: 'POSTED',
-            categoryId: dto.categoryId,
+            categoryId: dto.categoryIds[0],
+            transactionCategories: { create: additionalCategoriesCreate(dto.categoryIds) },
             note: dto.note ?? null,
             createdById: userId,
             attributions: {
@@ -340,12 +365,9 @@ export class TransactionService {
             },
           },
           include: {
-            category: {
-              select: { id: true, slug: true, name: true, icon: true, color: true },
-            },
-            attributions: {
-              include: { group: { select: { name: true } } },
-            },
+            category: TRANSACTION_DETAIL_INCLUDE.category,
+            transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
+            attributions: TRANSACTION_DETAIL_INCLUDE.attributions,
           },
         });
         if (planComputed && dto.plan && isPlanKind(dto.type)) {
@@ -362,7 +384,7 @@ export class TransactionService {
       type: dto.type,
       amountCents: dto.amountCents,
       currency: dto.currency,
-      categoryId: dto.categoryId,
+      categoryIds: dto.categoryIds,
       attributions: dto.attributions,
       ...(planComputed
         ? {
@@ -399,6 +421,7 @@ export class TransactionService {
       amountCents: number;
       currency: string;
       occurredAt: string;
+      /** Receipt-created transactions carry exactly one (primary) category. */
       categoryId: string;
       attributions: AttributionDto[];
     },
@@ -432,6 +455,7 @@ export class TransactionService {
       amountCents: number;
       currency: string;
       occurredAt: Date;
+      /** Receipt-created transactions carry exactly one (primary) category. */
       categoryId: string;
       note: string | null;
       attributions: AttributionDto[];
@@ -479,8 +503,9 @@ export class TransactionService {
           : {}),
       },
       include: {
-        category: { select: { id: true, slug: true, name: true, icon: true, color: true } },
-        attributions: { include: { group: { select: { name: true } } } },
+        category: TRANSACTION_DETAIL_INCLUDE.category,
+        transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
+        attributions: TRANSACTION_DETAIL_INCLUDE.attributions,
       },
     });
     return transaction as TransactionWithRelations;
@@ -581,7 +606,15 @@ export class TransactionService {
 
     // ── 2. Simple column filters ──
     if (q.direction) andClauses.push({ direction: q.direction });
-    if (q.categoryId) andClauses.push({ categoryId: q.categoryId });
+    // Category filter is any-match: the primary OR any additional category.
+    if (q.categoryId) {
+      andClauses.push({
+        OR: [
+          { categoryId: q.categoryId },
+          { transactionCategories: { some: { categoryId: q.categoryId } } },
+        ],
+      });
+    }
     if (q.type) andClauses.push({ type: q.type });
 
     // ── 2a. Recurring-occurrences filters (iteration 6.18.1.3) ──
@@ -742,7 +775,7 @@ export class TransactionService {
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
       dto.occurredAt !== undefined ||
-      dto.categoryId !== undefined ||
+      dto.categoryIds !== undefined ||
       dto.note !== undefined ||
       dto.type !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
@@ -770,19 +803,27 @@ export class TransactionService {
       });
     }
 
-    // 5+6. Category + direction compatibility.
+    // 5+6. Categories + direction compatibility. `categoryIds` replaces the
+    //    whole set (primary = first element, additional = rest, like
+    //    attributions); a direction change must validate EVERY attached
+    //    category, not just the primary.
     const effectiveDirection = dto.direction ?? (existing.direction as 'IN' | 'OUT');
-    const categoryChanging = dto.categoryId !== undefined && dto.categoryId !== existing.categoryId;
+    const existingCategoryIds = [
+      existing.categoryId,
+      ...existing.transactionCategories.map((tc) => tc.categoryId),
+    ];
+    const categoriesChanging =
+      dto.categoryIds !== undefined &&
+      !(
+        dto.categoryIds.length === existingCategoryIds.length &&
+        dto.categoryIds.every((id, i) => id === existingCategoryIds[i])
+      );
 
-    let nextCategoryId = existing.categoryId;
-    if (categoryChanging) {
-      const cat = await this.loadCategoryOrThrow(userId, dto.categoryId as string);
-      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
-      nextCategoryId = dto.categoryId as string;
+    if (dto.categoryIds !== undefined) {
+      await this.loadAndValidateCategories(userId, dto.categoryIds, effectiveDirection);
     } else if (dto.direction !== undefined && dto.direction !== existing.direction) {
-      // Direction-only change — validate against the existing category.
-      const cat = await this.loadCategoryOrThrow(userId, existing.categoryId);
-      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+      // Direction-only change — validate against every existing category.
+      await this.loadAndValidateCategories(userId, existingCategoryIds, effectiveDirection);
     }
 
     // 7. Date.
@@ -888,7 +929,9 @@ export class TransactionService {
     if (dto.amountCents !== undefined) data.amountCents = dto.amountCents;
     if (dto.currency !== undefined) data.currency = dto.currency;
     if (nextOccurredAt !== undefined) data.occurredAt = nextOccurredAt;
-    if (categoryChanging) data.category = { connect: { id: nextCategoryId } };
+    if (categoriesChanging && dto.categoryIds) {
+      data.category = { connect: { id: dto.categoryIds[0] } };
+    }
     if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
     if (dto.type !== undefined) data.type = dto.type;
 
@@ -905,6 +948,13 @@ export class TransactionService {
     const txResult = await this.prisma.$transaction(async (tx) => {
       if (hasScalarField) {
         await tx.transaction.update({ where: { id: transactionId }, data });
+      }
+      if (categoriesChanging && dto.categoryIds) {
+        // Replace the additional-category rows wholesale (primary went via `data`).
+        await tx.transactionCategory.deleteMany({ where: { transactionId } });
+        await tx.transactionCategory.createMany({
+          data: additionalCategoriesCreate(dto.categoryIds).map((c) => ({ ...c, transactionId })),
+        });
       }
       if (cascadeOnTypeChange) {
         const cascade = await removeScheduleForTransaction(this.prisma, this.queue, transactionId, {
@@ -1152,21 +1202,28 @@ export class TransactionService {
       dto.direction !== undefined ||
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
-      dto.categoryId !== undefined ||
+      dto.categoryIds !== undefined ||
       dto.note !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
-    // 5. Validate scalar fields (reuse the single-edit validators).
+    // 5. Validate scalar fields (reuse the single-edit validators). Like
+    //    update(), `categoryIds` replaces the whole set and a direction change
+    //    validates EVERY attached category.
     const effectiveDirection = dto.direction ?? (existing.direction as 'IN' | 'OUT');
-    const categoryChanging = dto.categoryId !== undefined && dto.categoryId !== existing.categoryId;
-    let nextCategoryId = existing.categoryId;
-    if (categoryChanging) {
-      const cat = await this.loadCategoryOrThrow(userId, dto.categoryId as string);
-      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
-      nextCategoryId = dto.categoryId as string;
+    const existingCategoryIds = [
+      existing.categoryId,
+      ...existing.transactionCategories.map((tc) => tc.categoryId),
+    ];
+    const categoriesChanging =
+      dto.categoryIds !== undefined &&
+      !(
+        dto.categoryIds.length === existingCategoryIds.length &&
+        dto.categoryIds.every((id, i) => id === existingCategoryIds[i])
+      );
+    if (dto.categoryIds !== undefined) {
+      await this.loadAndValidateCategories(userId, dto.categoryIds, effectiveDirection);
     } else if (dto.direction !== undefined && dto.direction !== existing.direction) {
-      const cat = await this.loadCategoryOrThrow(userId, existing.categoryId);
-      this.ensureCategoryDirectionMatches(cat, effectiveDirection);
+      await this.loadAndValidateCategories(userId, existingCategoryIds, effectiveDirection);
     }
     if (dto.amountCents !== undefined) this.validateAmount(dto.amountCents);
     if (
@@ -1185,13 +1242,18 @@ export class TransactionService {
       await this.validateAttributions(userId, desired);
     }
 
-    // 7. Build the reusable scalar delta payload (parent + each child).
+    // 7. Build the reusable scalar delta payload (parent + each child). The
+    //    additional-category set replacement rides along per target in
+    //    `applyFieldDeltas` (join rows can't be expressed as one update input).
     const scalarData: Prisma.TransactionUpdateInput = {};
     if (dto.direction !== undefined) scalarData.direction = dto.direction;
     if (dto.amountCents !== undefined) scalarData.amountCents = dto.amountCents;
     if (dto.currency !== undefined) scalarData.currency = dto.currency;
-    if (categoryChanging) scalarData.category = { connect: { id: nextCategoryId } };
+    if (categoriesChanging && dto.categoryIds) {
+      scalarData.category = { connect: { id: dto.categoryIds[0] } };
+    }
     if (dto.note !== undefined) scalarData.note = dto.note === '' ? null : dto.note;
+    const categoryIdsReplace = categoriesChanging && dto.categoryIds ? dto.categoryIds : null;
 
     // Nothing to do — return the current parent summary with zero counts.
     if (!hasScalarField && !hasAttributionField) {
@@ -1256,7 +1318,14 @@ export class TransactionService {
 
     // 12. Transaction — apply deltas to parent + every controllable child.
     await this.prisma.$transaction(async (tx) => {
-      await this.applyFieldDeltas(tx, transactionId, existingAttrs, scalarData, attrPlanFor);
+      await this.applyFieldDeltas(
+        tx,
+        transactionId,
+        existingAttrs,
+        scalarData,
+        attrPlanFor,
+        categoryIdsReplace,
+      );
       for (const c of controllableChildren) {
         await this.applyFieldDeltas(
           tx,
@@ -1264,6 +1333,7 @@ export class TransactionService {
           c.attributions as unknown as AttributionRow[],
           scalarData,
           attrPlanFor,
+          categoryIdsReplace,
         );
       }
     });
@@ -1366,9 +1436,20 @@ export class TransactionService {
     targetAttrs: AttributionRow[],
     scalarData: Prisma.TransactionUpdateInput,
     attrPlanFor: ((attrs: AttributionRow[]) => ReturnType<typeof planAttributionReplace>) | null,
+    categoryIdsReplace: string[] | null,
   ): Promise<void> {
     if (Object.keys(scalarData).length > 0) {
       await tx.transaction.update({ where: { id: targetId }, data: scalarData });
+    }
+    if (categoryIdsReplace) {
+      // Replace the additional-category rows wholesale (primary went via `scalarData`).
+      await tx.transactionCategory.deleteMany({ where: { transactionId: targetId } });
+      await tx.transactionCategory.createMany({
+        data: additionalCategoriesCreate(categoryIdsReplace).map((c) => ({
+          ...c,
+          transactionId: targetId,
+        })),
+      });
     }
     if (attrPlanFor) {
       const plan = attrPlanFor(targetAttrs);
@@ -1649,6 +1730,22 @@ export class TransactionService {
     }
   }
 
+  /**
+   * Run the visibility + direction checks over EVERY category id — used by
+   * create() (all ids), update()/cascade-edit (whole-set replacement), and
+   * direction-only changes (which must re-validate all attached categories).
+   */
+  private async loadAndValidateCategories(
+    userId: string,
+    categoryIds: string[],
+    direction: 'IN' | 'OUT',
+  ): Promise<void> {
+    for (const categoryId of categoryIds) {
+      const category = await this.loadCategoryOrThrow(userId, categoryId);
+      this.ensureCategoryDirectionMatches(category, direction);
+    }
+  }
+
   private ensureCategoryDirectionMatches(
     category: { direction: string },
     direction: 'IN' | 'OUT',
@@ -1873,6 +1970,16 @@ export class TransactionService {
 
 /** Re-export for symmetry with other services that keep currency types local. */
 export type { CurrencyCode };
+
+/**
+ * Nested-create rows for the ADDITIONAL categories of an ordered id list —
+ * everything after the primary (first) id, positions 1..n.
+ */
+function additionalCategoriesCreate(
+  categoryIds: string[],
+): Array<{ categoryId: string; position: number }> {
+  return categoryIds.slice(1).map((categoryId, i) => ({ categoryId, position: i + 1 }));
+}
 
 // ── Cascade-edit attribution helpers (Phase 6 · Iteration 6.18.1.5) ──
 

@@ -49,6 +49,10 @@ describe('TransactionService', () => {
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
       count: jest.fn().mockResolvedValue(1),
     },
+    transactionCategory: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
     transactionStar: {
       findUnique: jest.fn(),
       create: jest.fn().mockResolvedValue({}),
@@ -112,6 +116,7 @@ describe('TransactionService', () => {
       icon: null,
       color: null,
     },
+    transactionCategories: [],
     attributions: [{ scopeType: 'personal', userId: 'user-1', groupId: null, group: null }],
     ...over,
   });
@@ -122,7 +127,7 @@ describe('TransactionService', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: 'cat-1',
+    categoryIds: ['cat-1'],
     attributions: [{ scope: 'personal' }],
     ...over,
   });
@@ -164,6 +169,7 @@ describe('TransactionService', () => {
       cb({
         transaction: prismaMock.transaction,
         transactionAttribution: prismaMock.transactionAttribution,
+        transactionCategory: prismaMock.transactionCategory,
         transactionStar: prismaMock.transactionStar,
         transactionSchedule: prismaMock.transactionSchedule,
         transactionPlan: prismaMock.transactionPlan,
@@ -383,6 +389,24 @@ describe('TransactionService', () => {
 
       await expect(service.create('user-1', baseDto({ direction: 'IN' }))).resolves.toBeDefined();
     });
+
+    it('rejects a direction mismatch on a NON-primary category (first OK, second mismatched)', async () => {
+      categoryServiceMock.findById.mockImplementation(async (_userId: string, id: string) =>
+        id === 'cat-2' ? okCategory({ id: 'cat-2', direction: 'IN' }) : okCategory(),
+      );
+      try {
+        await service.create(
+          'user-1',
+          baseDto({ direction: 'OUT', categoryIds: ['cat-1', 'cat-2'] }),
+        );
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_CATEGORY_DIRECTION_MISMATCH);
+      }
+      // Every id is validated in payload order; nothing was written.
+      expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-2');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
   });
 
   // ── attributions ──
@@ -508,10 +532,46 @@ describe('TransactionService', () => {
           hasDocuments: false,
         }),
       );
-      expect(r.category).toEqual(
+      expect(r.categories).toEqual([
         expect.objectContaining({ id: 'cat-1', slug: 'groceries', name: 'Groceries' }),
-      );
+      ]);
       expect(r.attributions).toHaveLength(1);
+    });
+
+    it('creates with multiple categories: first is primary, the rest become position-ordered rows', async () => {
+      prismaMock.transaction.create.mockResolvedValue(
+        makePersistedTransaction({
+          transactionCategories: [
+            {
+              position: 1,
+              category: { id: 'cat-2', slug: 'c2', name: 'C2', icon: null, color: null },
+            },
+            {
+              position: 2,
+              category: { id: 'cat-3', slug: 'c3', name: 'C3', icon: null, color: null },
+            },
+          ],
+        }),
+      );
+
+      const r = await service.create(
+        'user-1',
+        baseDto({ categoryIds: ['cat-1', 'cat-2', 'cat-3'] }),
+      );
+
+      const arg = prismaMock.transaction.create.mock.calls[0][0] as {
+        data: {
+          categoryId: string;
+          transactionCategories: { create: Array<{ categoryId: string; position: number }> };
+        };
+      };
+      // Primary on the column; additional categories as join rows, positions 1..n in payload order.
+      expect(arg.data.categoryId).toBe('cat-1');
+      expect(arg.data.transactionCategories.create).toEqual([
+        { categoryId: 'cat-2', position: 1 },
+        { categoryId: 'cat-3', position: 2 },
+      ]);
+      expect(r.categories.map((c) => c.id)).toEqual(['cat-1', 'cat-2', 'cat-3']);
     });
 
     it('creates an INSTALLMENT parent with plan row + pre-generated PENDING children (6.19)', async () => {
@@ -676,6 +736,7 @@ describe('TransactionService', () => {
             entity: 'Transaction',
             entityId: 'pay-1',
             userId: 'user-1',
+            details: expect.objectContaining({ categoryIds: ['cat-1'] }),
           }),
         }),
       );
@@ -715,6 +776,7 @@ describe('TransactionService', () => {
           createdAt: now,
           updatedAt: now,
           category: { id: 'cat-1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+          transactionCategories: [],
           attributions: [{ scopeType: 'personal', userId: 'user-1', groupId: null, group: null }],
           stars: [],
           _count: { comments: 0, documents: 0 },
@@ -754,6 +816,7 @@ describe('TransactionService', () => {
         createdAt: now,
         updatedAt: now,
         category: { id: 'cat-1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+        transactionCategories: [],
         attributions: [{ scopeType: 'personal', userId: 'user-1', groupId: null, group: null }],
         stars: [] as Array<{ id: string }>,
         _count: { comments: 0, documents: 0 },
@@ -839,9 +902,14 @@ describe('TransactionService', () => {
         expect(lastFindManyArg().where.AND).toContainEqual({ direction: 'IN' });
       });
 
-      it('categoryId filter adds WHERE', async () => {
+      it('categoryId filter any-matches the primary OR an additional category', async () => {
         await service.list('user-1', baseQ({ categoryId: 'cat-1' }));
-        expect(lastFindManyArg().where.AND).toContainEqual({ categoryId: 'cat-1' });
+        expect(lastFindManyArg().where.AND).toContainEqual({
+          OR: [
+            { categoryId: 'cat-1' },
+            { transactionCategories: { some: { categoryId: 'cat-1' } } },
+          ],
+        });
       });
 
       it('type filter adds WHERE', async () => {
@@ -1254,6 +1322,29 @@ describe('TransactionService', () => {
       expect(dto.commentCount).toBe(3);
       expect(dto.hasDocuments).toBe(true);
     });
+
+    it('lists the primary category first, then the additional ones in position order', () => {
+      const dto = mapTransactionToSummary(
+        makePersistedTransaction({
+          transactionCategories: [
+            {
+              position: 1,
+              category: { id: 'cat-2', slug: 'c2', name: 'C2', icon: '🍔', color: '#111' },
+            },
+            {
+              position: 2,
+              category: { id: 'cat-3', slug: 'c3', name: 'C3', icon: null, color: null },
+            },
+          ],
+        }),
+        { starredByMe: false },
+      );
+      expect(dto.categories).toEqual([
+        { id: 'cat-1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+        { id: 'cat-2', slug: 'c2', name: 'C2', icon: '🍔', color: '#111' },
+        { id: 'cat-3', slug: 'c3', name: 'C3', icon: null, color: null },
+      ]);
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1391,7 +1482,7 @@ describe('TransactionService', () => {
       expect(auditArg.data.details.changed).toEqual(['note']);
     });
 
-    it('edits multiple scalars at once (amount, currency, occurredAt, categoryId)', async () => {
+    it('edits multiple scalars at once (amount, currency, occurredAt, categoryIds)', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow());
       categoryServiceMock.findById.mockResolvedValue(okCategory({ id: 'cat-2', direction: 'OUT' }));
 
@@ -1399,7 +1490,7 @@ describe('TransactionService', () => {
         amountCents: 9999,
         currency: 'EUR',
         occurredAt: '2026-04-30',
-        categoryId: 'cat-2',
+        categoryIds: ['cat-2'],
       });
 
       const updateArg = prismaMock.transaction.update.mock.calls[0][0] as {
@@ -1480,12 +1571,12 @@ describe('TransactionService', () => {
       }
     });
 
-    it('direction IN + categoryId switch to an IN category succeeds', async () => {
+    it('direction IN + categoryIds switch to an IN category succeeds', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow());
       categoryServiceMock.findById.mockResolvedValue(okCategory({ id: 'cat-in', direction: 'IN' }));
 
       await expect(
-        service.update('user-1', 'pay-1', { direction: 'IN', categoryId: 'cat-in' }),
+        service.update('user-1', 'pay-1', { direction: 'IN', categoryIds: ['cat-in'] }),
       ).resolves.toBeDefined();
 
       const updateArg = prismaMock.transaction.update.mock.calls[0][0] as {
@@ -1499,7 +1590,7 @@ describe('TransactionService', () => {
       prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow());
       categoryServiceMock.findById.mockRejectedValue(new NotFoundException('gone'));
       try {
-        await service.update('user-1', 'pay-1', { categoryId: 'unknown-cat' });
+        await service.update('user-1', 'pay-1', { categoryIds: ['unknown-cat'] });
       } catch (err) {
         expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_INVALID_CATEGORY);
       }
@@ -1511,7 +1602,7 @@ describe('TransactionService', () => {
         okCategory({ id: 'cat-both', direction: 'BOTH' }),
       );
       await expect(
-        service.update('user-1', 'pay-1', { categoryId: 'cat-both' }),
+        service.update('user-1', 'pay-1', { categoryIds: ['cat-both'] }),
       ).resolves.toBeDefined();
     });
 
@@ -1586,6 +1677,66 @@ describe('TransactionService', () => {
       await expect(service.update('user-1', 'pay-1', { direction: 'IN' })).resolves.toBeDefined();
       // categoryService.findById was called with the transaction's existing category id.
       expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-1');
+    });
+
+    it('categoryIds replaces the whole set: connects the new primary + rewrites the additional rows', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow()); // current set: ['cat-1']
+
+      await service.update('user-1', 'pay-1', { categoryIds: ['cat-2', 'cat-3'] });
+
+      const updateArg = prismaMock.transaction.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(updateArg.data.category).toEqual({ connect: { id: 'cat-2' } });
+      // The join rows are replaced wholesale inside the $transaction.
+      expect(prismaMock.transactionCategory.deleteMany).toHaveBeenCalledWith({
+        where: { transactionId: 'pay-1' },
+      });
+      expect(prismaMock.transactionCategory.createMany).toHaveBeenCalledWith({
+        data: [{ categoryId: 'cat-3', position: 1, transactionId: 'pay-1' }],
+      });
+    });
+
+    it('categoryIds identical to the current set skips the category rewrite', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow()); // current set: ['cat-1']
+
+      await service.update('user-1', 'pay-1', { categoryIds: ['cat-1'] });
+
+      const updateArg = prismaMock.transaction.update.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(updateArg.data.category).toBeUndefined();
+      expect(prismaMock.transactionCategory.deleteMany).not.toHaveBeenCalled();
+      expect(prismaMock.transactionCategory.createMany).not.toHaveBeenCalled();
+    });
+
+    it('direction-only change validates ALL attached categories — a mismatched ADDITIONAL one rejects', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        makeFullRow({
+          transactionCategories: [
+            {
+              categoryId: 'cat-2',
+              position: 1,
+              category: { id: 'cat-2', slug: 'c2', name: 'C2', icon: null, color: null },
+            },
+          ],
+        }),
+      );
+      // Primary is BOTH (fine either way); the additional category is OUT-only.
+      categoryServiceMock.findById.mockImplementation(async (_userId: string, id: string) =>
+        id === 'cat-2'
+          ? okCategory({ id: 'cat-2', direction: 'OUT' })
+          : okCategory({ direction: 'BOTH' }),
+      );
+
+      try {
+        await service.update('user-1', 'pay-1', { direction: 'IN' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_CATEGORY_DIRECTION_MISMATCH);
+      }
+      expect(categoryServiceMock.findById).toHaveBeenCalledWith('user-1', 'cat-2');
+      expect(prismaMock.transaction.update).not.toHaveBeenCalled();
     });
   });
 

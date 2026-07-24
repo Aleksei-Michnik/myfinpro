@@ -33,6 +33,7 @@ describe('POST /transactions (integration)', () => {
   let bob: Awaited<ReturnType<typeof registerUser>>;
   let groupId: string;
   let outCategoryId: string;
+  let altOutCategoryId: string;
   let inCategoryId: string;
 
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
@@ -82,10 +83,14 @@ describe('POST /transactions (integration)', () => {
     const outCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'OUT', slug: 'groceries' },
     });
+    const altOutCat = await prisma.category.findFirst({
+      where: { ownerType: 'system', direction: 'OUT', slug: { not: 'groceries' } },
+    });
     const inCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'IN' },
     });
     outCategoryId = outCat!.id;
+    altOutCategoryId = altOutCat!.id;
     inCategoryId = inCat!.id;
   }, 120_000);
 
@@ -116,7 +121,7 @@ describe('POST /transactions (integration)', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: outCategoryId,
+    categoryIds: [outCategoryId],
     attributions: [{ scope: 'personal' }],
     ...over,
   });
@@ -193,7 +198,7 @@ describe('POST /transactions (integration)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/transactions')
       .set('Authorization', `Bearer ${alice.accessToken}`)
-      .send(basePayload({ direction: 'IN', categoryId: outCategoryId }))
+      .send(basePayload({ direction: 'IN', categoryIds: [outCategoryId] }))
       .expect(400);
 
     expect(res.body.errorCode).toBe('TRANSACTION_CATEGORY_DIRECTION_MISMATCH');
@@ -203,8 +208,47 @@ describe('POST /transactions (integration)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/transactions')
       .set('Authorization', `Bearer ${alice.accessToken}`)
-      .send(basePayload({ direction: 'IN', categoryId: inCategoryId }))
+      .send(basePayload({ direction: 'IN', categoryIds: [inCategoryId] }))
       .expect(201);
+  });
+
+  it('4c. creates a transaction with multiple categories — primary first in the response and DB', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${alice.accessToken}`)
+      .send(basePayload({ categoryIds: [outCategoryId, altOutCategoryId] }))
+      .expect(201);
+
+    expect((res.body.categories as Array<{ id: string }>).map((c) => c.id)).toEqual([
+      outCategoryId,
+      altOutCategoryId,
+    ]);
+
+    // Primary lives on transactions.category_id; the rest are ordered join rows.
+    const row = await prisma.transaction.findUnique({
+      where: { id: res.body.id },
+      include: { transactionCategories: { orderBy: { position: 'asc' } } },
+    });
+    expect(row!.categoryId).toBe(outCategoryId);
+    expect(row!.transactionCategories.map((tc) => tc.categoryId)).toEqual([altOutCategoryId]);
+  });
+
+  it('4d. rejects a direction mismatch on a NON-primary category', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${alice.accessToken}`)
+      .send(basePayload({ categoryIds: [outCategoryId, inCategoryId] }))
+      .expect(400);
+
+    expect(res.body.errorCode).toBe('TRANSACTION_CATEGORY_DIRECTION_MISMATCH');
+  });
+
+  it('4e. rejects duplicate category ids (DTO ArrayUnique)', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Authorization', `Bearer ${alice.accessToken}`)
+      .send(basePayload({ categoryIds: [outCategoryId, outCategoryId] }))
+      .expect(400);
   });
 
   it('5. rejects group attribution from a non-member (403)', async () => {

@@ -68,6 +68,8 @@ export interface PlanParentRow {
   amountCents: number;
   currency: string;
   categoryId: string;
+  /** Additional categories, cloned onto every pre-generated occurrence. */
+  transactionCategories: { categoryId: string; position: number }[];
   createdById: string;
   attributions: { scopeType: string; userId: string | null; groupId: string | null }[];
 }
@@ -112,6 +114,12 @@ export async function createPlanWithinTransaction(
         occurredAt: row.dueAt,
         status: 'PENDING',
         categoryId: parent.categoryId,
+        transactionCategories: {
+          create: parent.transactionCategories.map((tc) => ({
+            categoryId: tc.categoryId,
+            position: tc.position,
+          })),
+        },
         parentTransactionId: parent.id,
         note: null,
         createdById: parent.createdById,

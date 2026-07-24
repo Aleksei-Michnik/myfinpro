@@ -50,7 +50,7 @@ describe('TransactionController', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: '00000000-0000-0000-0000-000000000001',
+    categoryIds: ['00000000-0000-0000-0000-000000000001'],
     attributions: [{ scope: 'personal' }],
   };
 

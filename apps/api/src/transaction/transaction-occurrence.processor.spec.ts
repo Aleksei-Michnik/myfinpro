@@ -58,7 +58,13 @@ describe('TransactionOccurrenceProcessor', () => {
     };
   }
 
-  function buildParent(overrides: Partial<{ type: string; attributions: unknown[] }> = {}) {
+  function buildParent(
+    overrides: Partial<{
+      type: string;
+      attributions: unknown[];
+      transactionCategories: { categoryId: string; position: number }[];
+    }> = {},
+  ) {
     return {
       id: PARENT_ID,
       direction: 'OUT',
@@ -73,6 +79,7 @@ describe('TransactionOccurrenceProcessor', () => {
       createdById: CREATOR_ID,
       idempotencyKey: null,
       attributions: [{ id: 'a1', scopeType: 'personal', userId: CREATOR_ID, groupId: null }],
+      transactionCategories: [],
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,
@@ -213,6 +220,32 @@ describe('TransactionOccurrenceProcessor', () => {
       { scopeType: 'personal', userId: CREATOR_ID, groupId: null },
       { scopeType: 'group', userId: null, groupId: 'g-1' },
       { scopeType: 'group', userId: null, groupId: 'g-2' },
+    ]);
+  });
+
+  it("clones the parent's additional-category set onto the child", async () => {
+    const mocks = buildMocks();
+    (mocks.prisma.transactionSchedule as { findUnique: jest.Mock }).findUnique.mockResolvedValue(
+      buildSchedule({
+        transaction: buildParent({
+          transactionCategories: [
+            { categoryId: 'cat-2', position: 1 },
+            { categoryId: 'cat-3', position: 2 },
+          ],
+        }),
+      }),
+    );
+
+    const processor = build(mocks);
+    await processor.process(buildJob());
+
+    const tx = (mocks.prisma as unknown as { _tx: { transaction: { create: jest.Mock } } })._tx;
+    const createArg = tx.transaction.create.mock.calls[0][0];
+    // The primary rides on categoryId; the additional rows keep their positions.
+    expect(createArg.data.categoryId).toBe('cat-1');
+    expect(createArg.data.transactionCategories.create).toEqual([
+      { categoryId: 'cat-2', position: 1 },
+      { categoryId: 'cat-3', position: 2 },
     ]);
   });
 

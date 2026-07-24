@@ -46,7 +46,10 @@ export interface AnalyticsQueryFilters {
   dateFrom?: string;
   /** ISO 8601 exclusive upper bound on the transaction date. */
   dateTo?: string;
-  /** Effective category (item category with header fallback — design §2.1). */
+  /**
+   * Any-match: the effective category (item category with header fallback —
+   * design §2.1) OR any of the transaction's additional categories.
+   */
   categoryIds?: string[];
   merchantIds?: string[];
   /** Item-only field: selects item rows exclusively (design §2.1). */

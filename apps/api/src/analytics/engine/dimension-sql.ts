@@ -32,6 +32,9 @@ export function dimensionSelects(
 ): DimensionSelect[] {
   switch (dimension) {
     case 'category':
+      // Deliberately PRIMARY-only (transactions.category_id with item-level
+      // override): grouping by the additional categories in
+      // transaction_categories would fan out rows and double-count SUM().
       return [{ expr: Prisma.sql`p.category_id`, alias: 'k_category' }];
     case 'merchant':
       return [{ expr: Prisma.sql`p.merchant_id`, alias: 'k_merchant' }];
