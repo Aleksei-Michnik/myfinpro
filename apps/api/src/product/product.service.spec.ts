@@ -120,10 +120,26 @@ describe('ProductService', () => {
       prismaMock.product.update.mockResolvedValue(makeProduct({ name: 'Whole Milk' }));
 
       await service.update('u-1', 'p-1', { name: ' Whole  Milk ', barcode: '7290000066318' });
-      expect(prismaMock.product.update.mock.calls[0][0].data).toMatchObject({
+      const data = prismaMock.product.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
         name: 'Whole  Milk',
         normalizedName: 'whole milk',
         barcode: '7290000066318',
+      });
+      // Unchanged barcode keeps its OFF-checked stamp.
+      expect(data.offCheckedAt).toBeUndefined();
+    });
+
+    it('a changed barcode resets the OFF-checked stamp for the nightly sweep', async () => {
+      prismaMock.product.findUnique
+        .mockResolvedValueOnce(makeProduct({ barcode: '7290000066318' })) // load
+        .mockResolvedValueOnce(null); // new barcode is free
+      prismaMock.product.update.mockResolvedValue(makeProduct({ barcode: '96385074' }));
+
+      await service.update('u-1', 'p-1', { barcode: '96385074' });
+      expect(prismaMock.product.update.mock.calls[0][0].data).toMatchObject({
+        barcode: '96385074',
+        offCheckedAt: null,
       });
     });
 
@@ -197,6 +213,81 @@ describe('ProductService', () => {
       await service
         .lookupBarcode('u-1', 'not-a-barcode')
         .catch((err) => expect(codeOf(err)).toBe('PRODUCT_INVALID_BARCODE'));
+    });
+
+    it('auto-imports a named OFF hit with importUnknown (design §1.4)', async () => {
+      prismaMock.product.findUnique.mockResolvedValue(null); // registry miss + barcode free
+      offMock.lookup.mockResolvedValue({
+        status: 'hit',
+        name: 'Nutella',
+        brand: 'Ferrero',
+        imageUrl: 'https://images.example/n.jpg',
+      });
+      prismaMock.product.create.mockResolvedValue(
+        makeProduct({ id: 'p-off', name: 'Nutella', brand: 'Ferrero', barcode: '3017620422003' }),
+      );
+
+      const out = await service.lookupBarcode('u-1', '3017620422003', true);
+
+      expect(out).toMatchObject({ found: true, offStatus: 'imported' });
+      expect(out.product?.name).toBe('Nutella');
+      const args = prismaMock.product.create.mock.calls[0][0].data;
+      expect(args).toMatchObject({ name: 'Nutella', brand: 'Ferrero', barcode: '3017620422003' });
+      // Provenance: the seeded alias is marked as an OFF import, and the
+      // row is born enriched (skipped by the nightly sweep).
+      expect(args.aliases.create).toMatchObject({ source: 'off' });
+      expect(args.offCheckedAt).toBeInstanceOf(Date);
+      // The OFF image rides the background queue, never blocking the lookup.
+      expect(imagesMock.addFromUrl).toHaveBeenCalledWith('p-off', 'https://images.example/n.jpg');
+    });
+
+    it('returns the concurrent winner when the import races on the barcode', async () => {
+      prismaMock.product.findUnique
+        .mockResolvedValueOnce(null) // registry miss
+        .mockResolvedValueOnce(null) // barcode still free at validation time
+        .mockResolvedValueOnce(makeProduct({ id: 'p-winner', barcode: '3017620422003' }));
+      offMock.lookup.mockResolvedValue({
+        status: 'hit',
+        name: 'Nutella',
+        brand: null,
+        imageUrl: null,
+      });
+      prismaMock.product.create.mockRejectedValue(new Error('Unique constraint failed'));
+
+      const out = await service.lookupBarcode('u-1', '3017620422003', true);
+      expect(out).toMatchObject({ found: true, offStatus: 'registry' });
+      expect(out.product?.id).toBe('p-winner');
+    });
+
+    it('keeps a nameless OFF hit as a prefill even with importUnknown', async () => {
+      prismaMock.product.findUnique.mockResolvedValue(null);
+      offMock.lookup.mockResolvedValue({
+        status: 'hit',
+        name: null,
+        brand: 'Ferrero',
+        imageUrl: null,
+      });
+      const out = await service.lookupBarcode('u-1', '3017620422003', true);
+      expect(out).toMatchObject({ found: false, offStatus: 'off' });
+      expect(prismaMock.product.create).not.toHaveBeenCalled();
+    });
+
+    it('degrades to the prefill when the import fails outright', async () => {
+      prismaMock.product.findUnique.mockResolvedValue(null); // miss everywhere, incl. re-fetch
+      offMock.lookup.mockResolvedValue({
+        status: 'hit',
+        name: 'Nutella',
+        brand: 'Ferrero',
+        imageUrl: null,
+      });
+      prismaMock.product.create.mockRejectedValue(new Error('db down'));
+
+      const out = await service.lookupBarcode('u-1', '3017620422003', true);
+      expect(out).toMatchObject({
+        found: false,
+        offStatus: 'off',
+        prefill: { name: 'Nutella', brand: 'Ferrero' },
+      });
     });
   });
 

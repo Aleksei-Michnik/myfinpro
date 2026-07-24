@@ -94,7 +94,8 @@ export interface BarcodeLookupResponse {
   found: boolean;
   product?: ProductSummary;
   prefill?: { name: string | null; brand: string | null; imageUrl: string | null };
-  offStatus: 'registry' | 'off' | 'miss' | 'unavailable' | 'disabled';
+  /** 'imported' = the unknown code was just auto-added from Open Food Facts. */
+  offStatus: 'registry' | 'imported' | 'off' | 'miss' | 'unavailable' | 'disabled';
 }
 
 /** POST /receipts/:id/items/:itemId/match body (walkthrough confirm). */

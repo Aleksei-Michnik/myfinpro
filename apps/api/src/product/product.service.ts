@@ -175,8 +175,16 @@ export class ProductService {
     };
   }
 
-  /** POST /products — publish to the global registry (design §1.1). */
-  async create(userId: string, dto: CreateProductDto): Promise<ProductResponseDto> {
+  /**
+   * POST /products — publish to the global registry (design §1.1).
+   * `aliasSource` marks provenance: 'manual' for user submissions, 'off'
+   * when the row is auto-imported from Open Food Facts (design §1.4).
+   */
+  async create(
+    userId: string,
+    dto: CreateProductDto,
+    aliasSource: ProductAliasSource = 'manual',
+  ): Promise<ProductResponseDto> {
     const name = dto.name.trim().slice(0, PRODUCT_NAME_MAX_LENGTH);
     const normalizedName = normalizeLookupName(name, PRODUCT_NAME_MAX_LENGTH);
     if (!normalizedName) {
@@ -194,6 +202,8 @@ export class ProductService {
         normalizedName,
         brand: dto.brand?.trim() || null,
         barcode,
+        // An OFF import is born enriched — the nightly sweep skips it.
+        offCheckedAt: aliasSource === 'off' ? new Date() : null,
         defaultCategoryId: dto.defaultCategoryId ?? null,
         // The canonical name doubles as the first alias so alias-stage
         // matching works from day one.
@@ -202,12 +212,12 @@ export class ProductService {
             name,
             normalizedName,
             locale: dto.aliasLocale ?? null,
-            source: 'manual',
+            source: aliasSource,
           },
         },
       },
     });
-    void this.writeAudit(userId, row.id, 'PRODUCT_CREATED', { name, barcode });
+    void this.writeAudit(userId, row.id, 'PRODUCT_CREATED', { name, barcode, source: aliasSource });
     this.logger.log(`Product ${row.id} created by user ${userId}`);
     // OFF prefill image rides the background queue (design §1.5) — creation
     // never waits on a third-party image host.
@@ -236,6 +246,9 @@ export class ProductService {
     if (dto.brand !== undefined) data.brand = dto.brand?.trim() || null;
     if (dto.barcode !== undefined) {
       data.barcode = await this.validateBarcode(dto.barcode, id);
+      // A different code was never checked against OFF — let the nightly
+      // enrichment sweep pick it up (design §1.4).
+      if (data.barcode !== row.barcode) data.offCheckedAt = null;
     }
     if (dto.defaultCategoryId !== undefined) {
       if (dto.defaultCategoryId) await this.assertSystemOutCategory(dto.defaultCategoryId);
@@ -264,11 +277,12 @@ export class ProductService {
   /**
    * Alias upsert — THE registry auto-update primitive (design §1.3, 8.5).
    * New spelling → row with count 1; known spelling → count bump. Callable
-   * inside a transaction (walkthrough confirm) or standalone.
+   * inside a transaction (walkthrough confirm) or standalone. A null
+   * userId marks a system action (nightly OFF enrichment).
    */
   async recordAlias(
     db: Prisma.TransactionClient | PrismaService,
-    userId: string,
+    userId: string | null,
     productId: string,
     rawName: string,
     locale: string | null,
@@ -289,8 +303,20 @@ export class ProductService {
     });
   }
 
-  /** GET /products/barcode/:code — local registry, then OFF (design §1.4). */
-  async lookupBarcode(userId: string, raw: string): Promise<BarcodeLookupResponseDto> {
+  /**
+   * GET /products/barcode/:code — local registry, then OFF (design §1.4).
+   *
+   * With `importUnknown` (scan-driven flows) a named OFF hit is published to
+   * the registry on the spot — alias source 'off', image fetched in the
+   * background — and returned as a regular product (offStatus 'imported').
+   * Without it (form prefill while typing/editing) an OFF hit stays a
+   * prefill so no duplicate row is minted under the user's hands.
+   */
+  async lookupBarcode(
+    userId: string,
+    raw: string,
+    importUnknown = false,
+  ): Promise<BarcodeLookupResponseDto> {
     const barcode = normalizeGtin(raw);
     if (!isValidGtin(barcode)) {
       throw new BadRequestException({
@@ -312,6 +338,10 @@ export class ProductService {
     }
     const off = await this.off.lookup(barcode);
     if (off.status === 'hit') {
+      if (importUnknown && off.name) {
+        const imported = await this.importFromOff(userId, barcode, off.name, off);
+        if (imported) return imported;
+      }
       return {
         found: false,
         prefill: { name: off.name, brand: off.brand, imageUrl: off.imageUrl },
@@ -319,6 +349,45 @@ export class ProductService {
       };
     }
     return { found: false, offStatus: off.status };
+  }
+
+  /**
+   * Publish an OFF hit to the registry (design §1.4). Returns null when the
+   * import fails for any non-race reason — the caller degrades to the
+   * prefill response, so a registry hiccup never breaks the scan flow.
+   */
+  private async importFromOff(
+    userId: string,
+    barcode: string,
+    name: string,
+    off: { brand: string | null; imageUrl: string | null },
+  ): Promise<BarcodeLookupResponseDto | null> {
+    try {
+      const product = await this.create(
+        userId,
+        {
+          name,
+          brand: off.brand ?? undefined,
+          barcode,
+          imageUrl: off.imageUrl ?? undefined,
+        },
+        'off',
+      );
+      this.logger.log(`Product ${product.id} imported from OFF for barcode ${barcode}`);
+      return { found: true, product, offStatus: 'imported' };
+    } catch (err) {
+      // A concurrent scan may have imported the same code first — the
+      // barcode-taken error means the row now exists, so return it.
+      const winner = await this.prisma.product.findUnique({
+        where: { barcode },
+        include: PRODUCT_PRIMARY_IMAGE_INCLUDE,
+      });
+      if (winner) {
+        return { found: true, product: mapProductToDto(winner), offStatus: 'registry' };
+      }
+      this.logger.warn(`OFF import failed for barcode ${barcode}: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
@@ -511,8 +580,9 @@ export class ProductService {
     await this.writeAudit(userId, productId, action, details);
   }
 
+  /** Product audit rows; a null userId marks a system action. */
   private async writeAudit(
-    userId: string,
+    userId: string | null,
     productId: string,
     action: string,
     details: Record<string, unknown>,

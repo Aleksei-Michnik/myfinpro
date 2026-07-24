@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtConfigModule } from '../auth/jwt-config.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { OpenFoodFactsService } from './open-food-facts.service';
+import { ProductEnrichmentProcessor } from './product-enrichment.processor';
+import { ProductEnrichmentService } from './product-enrichment.service';
 import { ProductImageProcessor } from './product-image.processor';
 import { ProductImageService } from './product-image.service';
 import { ProductMatchingService } from './product-matching.service';
@@ -26,6 +28,8 @@ import { ProductService } from './product.service';
     OpenFoodFactsService,
     ProductImageService,
     ProductImageProcessor,
+    ProductEnrichmentService,
+    ProductEnrichmentProcessor,
   ],
   controllers: [ProductController],
   exports: [ProductService, ProductMatchingService, ProductImageService],

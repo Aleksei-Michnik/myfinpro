@@ -3,8 +3,12 @@
 // Phase 8 — create/edit a global registry product (design §1.1/§1.4).
 // Barcode can be typed or scanned; unknown barcodes are looked up against
 // Open Food Facts and prefill empty name/brand fields (plus a background
-// image fetch on create). The default category is restricted to SYSTEM
-// expense categories — the only ones meaningful on a global product.
+// image fetch on create). Deliberately a prefill, never an auto-import:
+// mid-form the user is already composing a row (or editing an existing
+// one), so minting a registry product behind their back would duplicate
+// it — scan-first flows import before this form ever opens. The default
+// category is restricted to SYSTEM expense categories — the only ones
+// meaningful on a global product.
 
 import {
   isValidGtin,
@@ -60,6 +64,7 @@ export function ProductFormDialog({
   onSaved,
 }: ProductFormDialogProps) {
   const t = useTranslations('products.form');
+  const tLookup = useTranslations('products.lookup');
   // Camera label rides the intake-zone key — same wording everywhere.
   const uploadT = useTranslations('receipts.upload');
   const tUpload = useTranslations('common.upload');
@@ -395,7 +400,7 @@ export function ProductFormDialog({
             </div>
             <p role="status" aria-live="polite" className="min-h-4 text-xs">
               {offHint === 'checking' && (
-                <span className="text-gray-500 dark:text-gray-400">{t('offChecking')}</span>
+                <span className="text-gray-500 dark:text-gray-400">{tLookup('checking')}</span>
               )}
               {offHint === 'filled' && (
                 <span

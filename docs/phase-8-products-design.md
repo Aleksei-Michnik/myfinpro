@@ -83,9 +83,33 @@ only confirmed receipts).
   available, `@zxing/browser` fallback (lazy-loaded). Used to attach a
   barcode to a product and to scan-to-find during the walkthrough/catalog.
 - `GET /products/barcode/:code` resolves locally first; unknown codes go to
-  the Open Food Facts API (name/brand/image prefill for the create form)
-  behind a circuit breaker + client-side rate limit. OFF being down degrades
-  to manual entry — never an error the user has to care about.
+  the Open Food Facts API behind a circuit breaker + client-side rate limit.
+  With `?import=true` (all scan-driven flows: catalog scan, walkthrough
+  printed-code/scan-to-find, manual-receipt scan) a named OFF hit is
+  auto-published to the registry on the spot — alias source `off`, image
+  fetched in the background — and returned as a regular product
+  (`offStatus=imported`); the UI announces the import and uses the row
+  directly (navigate / lead candidate / receipt line). Without the flag
+  (typing in the create/edit form, where an auto-import would duplicate the
+  row under the user's hands) an OFF hit stays a name/brand/image prefill.
+  OFF being down degrades to manual entry — never an error the user has to
+  care about.
+- **Nightly enrichment sweep.** Products can reach the registry without
+  ever meeting the barcode checker (manual create with a typed code,
+  walkthrough create, a code added by edit). `products.off_checked_at`
+  records when a barcode was last checked against OFF: set on
+  `?import=true` imports and by the sweep itself, reset to `NULL` when a
+  product's barcode changes. A BullMQ job scheduler (`product-enrichments`
+  queue, id `product-enrichment-nightly`, cron `10 3 * * *`, upserted
+  idempotently on boot and skipped when `OFF_ENABLED=false`) sweeps up to
+  200 never-checked products per night, paced to the OFF client's 1 s
+  etiquette throttle. Per hit it fills only the gaps — a missing brand, the
+  OFF name as an `off`-source alias (audited with a `NULL` user id — a
+  system action; the user-facing name is never overwritten), a primary
+  image when the product has none — and stamps the product checked; a
+  clean miss is stamped too so it is never re-asked. An OFF outage halts
+  the run and leaves the remainder for the next night, so the sweep is
+  self-resuming and larger backlogs drain across nights.
 
 ### 1.5 Product images (design §8.8)
 

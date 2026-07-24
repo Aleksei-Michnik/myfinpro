@@ -10,8 +10,10 @@
 //
 // 8.23 — printed-code first: an item that carries an extracted barcode is
 // looked up automatically (registry → Open Food Facts). A registry owner
-// becomes the leading 100% candidate; an OFF hit becomes a one-click
-// "create & link" offer (edit-first optional). Saving splits into
+// becomes the leading 100% candidate; a named OFF hit is auto-imported
+// into the registry (design §1.4) and leads the same way, with a banner
+// saying so. The one-click "create & link" offer remains the degraded
+// path when the import could not land. Saving splits into
 // stay / close / next so the dialog doubles as a per-row match editor
 // (opened via `initialItemId`).
 //
@@ -86,6 +88,7 @@ export function ItemWalkthroughDialog({
   onReceiptUpdated,
 }: ItemWalkthroughDialogProps) {
   const t = useTranslations('products.walkthrough');
+  const tLookup = useTranslations('products.lookup');
   const locale = useLocale();
   const { matchItem, skipItemMatch } = useReceipts();
   const { fetchProducts, lookupBarcode } = useProducts();
@@ -109,6 +112,11 @@ export function ItemWalkthroughDialog({
   const lookupCache = useRef(new Map<string, BarcodeLookupResponse>());
 
   const actOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
+  // Printed-code auto-resolve — silent degrade, but its isLoading feeds the
+  // "checking open databases" indicator.
+  const codeLookupOp = useAsyncOperation<void>({ scope: 'control' });
+  // Scan-to-find — failures surface as a toast (the user asked for it).
+  const scanLookupOp = useAsyncOperation<void>({ scope: 'control' });
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,7 +157,8 @@ export function ItemWalkthroughDialog({
     }
   }, [actOp.error, addToast, t]);
 
-  // Look up the item's printed code (registry → OFF) the moment it shows.
+  // Look up the item's printed code the moment it shows (registry → OFF,
+  // auto-importing a named OFF hit into the registry — design §1.4).
   useEffect(() => {
     setBarcodeLookup(null);
     const code = item?.barcode;
@@ -159,16 +168,13 @@ export function ItemWalkthroughDialog({
       setBarcodeLookup({ code, res: cached });
       return;
     }
-    let cancelled = false;
-    void lookupBarcode(code)
-      .then((res) => {
-        lookupCache.current.set(code, res);
-        if (!cancelled) setBarcodeLookup({ code, res });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    void codeLookupOp.run(async (signal) => {
+      const res = await lookupBarcode(code, { import: true }, signal);
+      lookupCache.current.set(code, res);
+      setBarcodeLookup({ code, res });
+    });
+    return () => codeLookupOp.cancel();
+    // codeLookupOp identity is stable (useAsyncOperation contract).
   }, [open, item?.id, item?.barcode, lookupBarcode]);
 
   const options: Option[] = useMemo(() => {
@@ -311,20 +317,30 @@ export function ItemWalkthroughDialog({
   };
 
   const onScanDetected = (code: string) => {
-    void lookupBarcode(code)
-      .then((res) => {
-        if (res.found && res.product) {
-          confirmProduct(res.product.id);
-          return;
+    void scanLookupOp.run(async (signal) => {
+      const res = await lookupBarcode(code, { import: true }, signal);
+      if (res.found && res.product) {
+        // Registry hit or a fresh OFF import — either way the product now
+        // exists, so link it right away (import gets a toast, 8.23).
+        if (res.offStatus === 'imported') {
+          addToast('success', tLookup('imported', { name: res.product.name }));
         }
-        // Unknown barcode → straight into create, code attached, OFF prefill
-        // (or manual entry) handled inside the form.
-        setCreateName(undefined);
-        setCreateBarcode(code);
-        setCreateOpen(true);
-      })
-      .catch(() => addToast('error', t('actionFailed')));
+        confirmProduct(res.product.id);
+        return;
+      }
+      // Unknown everywhere → straight into create, code attached, manual
+      // entry (or the degraded OFF prefill) handled inside the form.
+      setCreateName(undefined);
+      setCreateBarcode(code);
+      setCreateOpen(true);
+    });
   };
+
+  useEffect(() => {
+    if (scanLookupOp.error && scanLookupOp.error.reason !== 'aborted') {
+      addToast('error', t('actionFailed'));
+    }
+  }, [scanLookupOp.error, addToast, t]);
 
   // Keyboard-fast flow (8.4 acceptance).
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -493,8 +509,36 @@ export function ItemWalkthroughDialog({
           )}
         </div>
 
-        {/* Printed code known to Open Food Facts but not the registry yet —
-            matching is one click (create & link) or an edit-first (8.23). */}
+        {/* Printed code being resolved against the registry / open databases. */}
+        {(codeLookupOp.isLoading || scanLookupOp.isLoading) && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-gray-500 dark:text-gray-400"
+            data-testid="walkthrough-code-checking"
+          >
+            {tLookup('checking')}
+          </p>
+        )}
+
+        {/* Printed code just auto-imported from Open Food Facts — the new
+            product already leads the candidates at 100% (design §1.4). */}
+        {!item.productId &&
+          barcodeLookup?.code === item.barcode &&
+          barcodeLookup.res.offStatus === 'imported' &&
+          barcodeLookup.res.product && (
+            <div
+              role="status"
+              className="rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm text-gray-800 dark:border-primary-800 dark:bg-primary-900/30 dark:text-gray-200"
+              data-testid="walkthrough-code-imported"
+            >
+              {tLookup('imported', { name: barcodeLookup.res.product.name })}
+            </div>
+          )}
+
+        {/* Printed code known to Open Food Facts but not the registry yet
+            (the import degraded to a prefill) — matching is one click
+            (create & link) or an edit-first (8.23). */}
         {!item.productId &&
           barcodeLookup?.code === item.barcode &&
           !barcodeLookup.res.found &&

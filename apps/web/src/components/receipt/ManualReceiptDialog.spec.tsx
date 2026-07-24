@@ -136,6 +136,26 @@ describe('ManualReceiptDialog', () => {
     expect(screen.getAllByTestId(/manual-receipt-line-/)).toHaveLength(1);
   });
 
+  it('an OFF auto-import adds the line and announces the import', async () => {
+    lookupBarcodeMock.mockResolvedValue({
+      found: true,
+      product: { id: 'p-off', name: 'Nutella', brand: 'Ferrero' },
+      offStatus: 'imported',
+    });
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId('manual-receipt-scan'));
+    fireEvent.click(screen.getByTestId('scanner-detect'));
+
+    await waitFor(() => expect(screen.getByTestId('manual-receipt-line-p-off')).toBeTruthy());
+    expect(lookupBarcodeMock).toHaveBeenCalledWith(
+      holder.scanCode,
+      { import: true },
+      expect.anything(),
+    );
+    expect(addToastMock).toHaveBeenCalledWith('success', expect.stringContaining('Nutella'));
+  });
+
   it('an unknown barcode opens the create form and adds the created product', async () => {
     lookupBarcodeMock.mockResolvedValue({ found: false, offStatus: 'miss' });
     renderDialog();

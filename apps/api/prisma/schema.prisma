@@ -562,6 +562,11 @@ model Product {
   defaultCategoryId String?   @map("default_category_id") @db.VarChar(36)
   defaultCategory   Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
 
+  // When the barcode was last checked against Open Food Facts (design
+  // §1.4): set at import/enrichment, reset when the barcode changes,
+  // null = never checked — swept by the nightly product-enrichments job.
+  offCheckedAt DateTime? @map("off_checked_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -570,6 +575,7 @@ model Product {
   images       ProductImage[]
 
   @@index([normalizedName])
+  @@index([offCheckedAt])
   @@map("products")
 }
 

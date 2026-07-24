@@ -14,6 +14,7 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  ParseBoolPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -33,6 +34,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiPayloadTooLargeResponse,
+  ApiQuery,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
@@ -109,8 +111,16 @@ export class ProductController {
   @ApiOperation({
     summary: 'Resolve a barcode',
     description:
-      'Local registry first; unknown codes fall through to Open Food Facts for a create-form ' +
-      'prefill. OFF being down degrades to manual entry (offStatus=unavailable) — never an error.',
+      'Local registry first; unknown codes fall through to Open Food Facts. With ?import=true ' +
+      '(scan-driven flows) a named OFF hit is auto-added to the registry and returned as a ' +
+      'product (offStatus=imported); without it the hit stays a create-form prefill. OFF being ' +
+      'down degrades to manual entry (offStatus=unavailable) — never an error.',
+  })
+  @ApiQuery({
+    name: 'import',
+    required: false,
+    type: Boolean,
+    description: 'Auto-add a named Open Food Facts hit to the registry.',
   })
   @ApiOkResponse({ description: 'Lookup result', type: BarcodeLookupResponseDto })
   @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
@@ -118,8 +128,9 @@ export class ProductController {
   async lookupBarcode(
     @CurrentUser() user: JwtPayload,
     @Param('code') code: string,
+    @Query('import', new ParseBoolPipe({ optional: true })) importUnknown?: boolean,
   ): Promise<BarcodeLookupResponseDto> {
-    return this.service.lookupBarcode(user.sub, code);
+    return this.service.lookupBarcode(user.sub, code, importUnknown ?? false);
   }
 
   @CustomThrottle({ limit: 60, ttl: 60_000 })

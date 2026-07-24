@@ -43,6 +43,7 @@ export function ProductsClient() {
 
   const listOp = useAsyncOperation<ProductSummary[]>({ scope: 'container' });
   const moreOp = useAsyncOperation<ProductSummary[]>({ scope: 'control' });
+  const scanOp = useAsyncOperation<void>({ scope: 'control' });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -97,18 +98,29 @@ export function ProductsClient() {
       });
   };
 
+  // Scan-to-find: registry hit navigates; an unknown code known to Open
+  // Food Facts is auto-added to the registry (offStatus 'imported') and
+  // navigates too; a full miss falls back to manual create.
   const onScanDetected = (code: string) => {
-    void lookupBarcode(code)
-      .then((res) => {
-        if (res.found && res.product) {
-          router.push(`/products/${res.product.id}`);
-          return;
+    void scanOp.run(async (signal) => {
+      const res = await lookupBarcode(code, { import: true }, signal);
+      if (res.found && res.product) {
+        if (res.offStatus === 'imported') {
+          addToast('success', t('lookup.imported', { name: res.product.name }));
         }
-        setCreateBarcode(code);
-        setCreateOpen(true);
-      })
-      .catch(() => addToast('error', t('list.lookupFailed')));
+        router.push(`/products/${res.product.id}`);
+        return;
+      }
+      setCreateBarcode(code);
+      setCreateOpen(true);
+    });
   };
+
+  useEffect(() => {
+    if (scanOp.error && scanOp.error.reason !== 'aborted') {
+      addToast('error', t('list.lookupFailed'));
+    }
+  }, [scanOp.error, addToast, t]);
 
   return (
     <main className="container mx-auto max-w-5xl space-y-4 px-4 py-8">
@@ -120,6 +132,7 @@ export function ProductsClient() {
             variant="outline"
             size="sm"
             onClick={() => setScannerOpen(true)}
+            disabled={scanOp.isLoading}
             data-testid="products-scan"
           >
             {t('list.scan')}
@@ -138,6 +151,17 @@ export function ProductsClient() {
           </Button>
         </div>
       </div>
+
+      {scanOp.isLoading && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-xs text-gray-500 dark:text-gray-400"
+          data-testid="products-scan-checking"
+        >
+          {t('lookup.checking')}
+        </p>
+      )}
 
       <search role="search">
         <label htmlFor="products-search" className="sr-only">

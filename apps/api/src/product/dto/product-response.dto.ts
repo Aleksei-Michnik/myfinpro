@@ -157,12 +157,13 @@ export class BarcodeLookupResponseDto {
   prefill?: { name: string | null; brand: string | null; imageUrl: string | null };
 
   @ApiProperty({
-    enum: ['registry', 'off', 'miss', 'unavailable', 'disabled'],
+    enum: ['registry', 'imported', 'off', 'miss', 'unavailable', 'disabled'],
     description:
-      'registry = local hit; off = OFF prefill; miss = unknown everywhere; ' +
+      'registry = local hit; imported = unknown code just auto-added from OFF (?import=true); ' +
+      'off = OFF prefill; miss = unknown everywhere; ' +
       'unavailable = OFF down (circuit open / error); disabled = OFF turned off.',
   })
-  offStatus!: 'registry' | 'off' | 'miss' | 'unavailable' | 'disabled';
+  offStatus!: 'registry' | 'imported' | 'off' | 'miss' | 'unavailable' | 'disabled';
 }
 
 export function mapAliasToDto(row: ProductAlias): ProductAliasResponseDto {

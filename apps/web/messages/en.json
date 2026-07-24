@@ -1288,6 +1288,10 @@
     "card": {
       "timesPurchased": "{count, plural, =1 {bought once} other {bought # times}}"
     },
+    "lookup": {
+      "checking": "Looking up the barcode…",
+      "imported": "“{name}” was added from Open Food Facts"
+    },
     "scanner": {
       "title": "Scan a barcode",
       "close": "Close scanner",
@@ -1316,7 +1320,6 @@
       "saveFailed": "Could not save the product",
       "createdToast": "Product created",
       "updatedToast": "Product updated",
-      "offChecking": "Looking up the barcode…",
       "offFilled": "Details prefilled from Open Food Facts — please review.",
       "barcodeExists": "This barcode already belongs to “{name}”.",
       "picturesLabel": "Pictures",
