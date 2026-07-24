@@ -171,7 +171,7 @@ export class CategoryService {
     if (dto.color !== undefined) data.color = dto.color;
 
     if (dto.direction !== undefined && dto.direction !== existing.direction) {
-      const usage = await this.prisma.transaction.count({ where: { categoryId: id } });
+      const usage = await this.countUsage(id);
       if (usage > 0) {
         throw new ConflictException({
           message: 'Cannot change direction of a category that is in use',
@@ -218,7 +218,7 @@ export class CategoryService {
     }
     await this.requireOwner(existing, userId);
 
-    const usage = await this.prisma.transaction.count({ where: { categoryId: id } });
+    const usage = await this.countUsage(id);
 
     if (usage === 0) {
       await this.prisma.category.delete({ where: { id } });
@@ -270,8 +270,30 @@ export class CategoryService {
         where: { categoryId: id },
         data: { categoryId: q.replaceWithCategoryId! },
       });
+      // Additional-category rows (unique on transactionId+categoryId; the
+      // primary is never duplicated in the join table) — same dedup dance as
+      // the account-merge remap: drop rows the primary remap above made
+      // redundant, then rows that would collide with an existing row for the
+      // replacement category, then remap the rest.
+      await tx.transactionCategory.deleteMany({
+        where: { categoryId: id, transaction: { categoryId: q.replaceWithCategoryId! } },
+      });
+      const targetJoins = await tx.transactionCategory.findMany({
+        where: { categoryId: q.replaceWithCategoryId! },
+        select: { transactionId: true },
+      });
+      await tx.transactionCategory.deleteMany({
+        where: {
+          categoryId: id,
+          transactionId: { in: targetJoins.map((j) => j.transactionId) },
+        },
+      });
+      const remapped = await tx.transactionCategory.updateMany({
+        where: { categoryId: id },
+        data: { categoryId: q.replaceWithCategoryId! },
+      });
       await tx.category.delete({ where: { id } });
-      return upd.count;
+      return upd.count + remapped.count;
     });
 
     await this.writeAudit(userId, 'CATEGORY_REASSIGNED', id, {
@@ -292,6 +314,20 @@ export class CategoryService {
   }
 
   // ── helpers ──
+
+  /**
+   * Total transaction references: primary (transactions.category_id) plus
+   * additional (transaction_categories join rows). Both block deletion and
+   * direction changes — the join-table FK is ON DELETE RESTRICT, so missing
+   * the additional count would surface as a raw P2003 instead of a 409.
+   */
+  private async countUsage(id: string): Promise<number> {
+    const [primary, additional] = await Promise.all([
+      this.prisma.transaction.count({ where: { categoryId: id } }),
+      this.prisma.transactionCategory.count({ where: { categoryId: id } }),
+    ]);
+    return primary + additional;
+  }
 
   private async isVisibleTo(row: CategoryRow, userId: string): Promise<boolean> {
     if (row.ownerType === 'system') return true;
