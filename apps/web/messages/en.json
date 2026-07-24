@@ -794,7 +794,9 @@
       "purchaseLoading": "Loading purchase details…",
       "purchaseEmpty": "This receipt has no itemised products.",
       "purchaseUnavailable": "Purchase details aren't available for this receipt.",
-      "receiptLink": "View the source receipt"
+      "receiptLink": "View the source receipt",
+      "noReceiptHint": "No receipt is linked to this transaction yet.",
+      "attachReceipt": "Add a receipt"
     },
     "comments": {
       "title": "Comments",
@@ -1146,7 +1148,9 @@
       "urlPlaceholder": "https://…",
       "urlSubmit": "Add",
       "close": "Close",
-      "failed": "Failed to attach the receipt"
+      "failed": "Failed to attach the receipt",
+      "or": "or",
+      "linkExisting": "Link an existing receipt"
     },
     "reconcile": {
       "title": "Update the transaction?",
@@ -1238,6 +1242,31 @@
       "missingScope": "Choose at least one scope",
       "confirmedToast": "Receipt confirmed",
       "confirmFailed": "Could not confirm the receipt"
+    },
+    "link": {
+      "toTransactionTitle": "Link to a transaction",
+      "toTransactionHint": "Choose an existing expense to attach this receipt to — no new transaction is created.",
+      "searchTransactions": "Search transactions",
+      "searchTransactionsPlaceholder": "Search by note…",
+      "noTransactions": "No matching transactions without a receipt.",
+      "toReceiptTitle": "Link an existing receipt",
+      "toReceiptHint": "Choose a receipt you already uploaded to attach to this transaction.",
+      "searchReceipts": "Search receipts",
+      "noReceipts": "No unattached receipts to link.",
+      "untitledReceipt": "Untitled receipt",
+      "loading": "Loading…",
+      "close": "Close",
+      "link": "Link",
+      "linkToTransaction": "Link to a transaction",
+      "linkedToast": "Receipt linked",
+      "detachReceipt": "Detach receipt",
+      "detachTransaction": "Detach",
+      "detachTitle": "Detach this receipt?",
+      "detachMessage": "The receipt and transaction will be separated. You can link them again at any time.",
+      "detachConfirm": "Detach",
+      "detachCancel": "Cancel",
+      "detachedToast": "Receipt detached",
+      "failed": "Something went wrong. Please try again."
     }
   },
   "products": {
@@ -1375,7 +1404,26 @@
       "title": "Budgets",
       "newBudget": "New budget",
       "loading": "Loading budgets…",
-      "empty": "No budgets yet. Create your first spending target."
+      "empty": "No budgets yet. Create your first spending target.",
+      "showArchived": "Show archived",
+      "archivedChip": "Archived",
+      "customRange": "{start} – {end}",
+      "actions": "Budget actions",
+      "edit": "Edit",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete",
+      "loadMore": "Load more",
+      "archivedToast": "Budget archived",
+      "unarchivedToast": "Budget unarchived",
+      "deletedToast": "Budget deleted",
+      "actionFailed": "Action failed"
+    },
+    "delete": {
+      "title": "Delete budget",
+      "warning": "Are you sure you want to delete \"{name}\"? Its alert history is deleted too. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
     },
     "form": {
       "createTitle": "New budget",

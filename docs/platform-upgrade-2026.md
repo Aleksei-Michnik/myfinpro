@@ -277,6 +277,15 @@ commit on `main`).
   transactions 1916); api/web healthy; CI, Deploy Staging and the
   post-deploy Test Staging workflow (integration + e2e against staging) all
   green. Awaiting manual verification before production.
+- 2026-07-19 — Step 5 (production) executed after staging sign-off. Safety
+  nets under `/opt/myfinpro/backups/pre-mysql97/`: verified logical dump of
+  `myfinpro` + cold datadir snapshot (~30 s pause). Release merge
+  `2bdbda6` → Deploy Production green first try; in-place upgrade
+  completed (data dictionary 80300→90200, server 80408→90701),
+  `SELECT VERSION()` = 9.7.1, row counts identical to the pre-upgrade
+  baseline, blue-green flip healthy, api on Node 26.5.0. Keep the 8.4
+  dump + snapshot until the environment has soaked; after that the
+  `pre-mysql97` directory can be removed.
 
 ## 6. Watch list (follow-ups, not part of this change)
 

@@ -41,6 +41,7 @@ import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateManualReceiptDto } from './dto/create-manual-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
+import { LinkReceiptDto } from './dto/link-receipt.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { MatchItemDto } from './dto/match-item.dto';
 import { ReceiptResponseDto } from './dto/receipt-response.dto';
@@ -311,6 +312,51 @@ export class ReceiptController {
     @Body() dto: ReconcileReceiptDto,
   ): Promise<ReceiptResponseDto> {
     return this.service.reconcile(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/link')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Link an existing receipt to an existing expense transaction',
+    description:
+      'Glues a receipt and a transaction that were created separately (Phase 8.28) — sets the ' +
+      "receipt's transaction link without re-uploading or minting a new transaction. REVIEW or " +
+      'CONFIRMED (unattached) receipts only; the transaction must be an expense you created with ' +
+      'no receipt yet. A REVIEW receipt is then finished via reconcile; a CONFIRMED one is done.',
+  })
+  @ApiOkResponse({ description: 'Receipt now linked to the transaction', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Receipt/transaction not found / not the caller' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async link(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: LinkReceiptDto,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.link(user.sub, id, dto);
+  }
+
+  @CustomThrottle({ limit: 20, ttl: 60_000 })
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/link')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Detach a receipt from its transaction',
+    description:
+      'Separates a linked receipt and transaction without deleting either (Phase 8.28). Revertible ' +
+      '— the pair can be re-linked. The uploader only.',
+  })
+  @ApiOkResponse({ description: 'Receipt now detached', type: ReceiptResponseDto })
+  @ApiNotFoundResponse({ description: 'Not found / not the uploader' })
+  @ApiUnauthorizedResponse({ description: 'Missing/invalid JWT' })
+  @ApiTooManyRequestsResponse({ description: 'Rate limited' })
+  async unlink(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<ReceiptResponseDto> {
+    return this.service.unlink(user.sub, id);
   }
 
   @CustomThrottle({ limit: 120, ttl: 60_000 })

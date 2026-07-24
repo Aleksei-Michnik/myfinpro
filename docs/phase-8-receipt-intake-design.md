@@ -350,3 +350,54 @@ is printed on the paper should be a confirmation, not a search:
   chip — official product name + thumbnail once matched, "Match product… ·
   code" until then — that opens the walkthrough dialog focused on that exact
   item (`initialItemId`).
+
+## 12. 8.28 — Link existing receipts ⇄ transactions
+
+Until now a receipt and a transaction could only become linked **at creation
+time**: 7.9 confirm mints a _new_ transaction from a receipt, and 8.15 attach
+uploads a _new_ receipt onto a transaction. A user who created the two
+**separately** — added an expense by hand, and independently uploaded a receipt —
+had no way to glue them: confirming the receipt would duplicate the transaction,
+and the transaction could not adopt the already-uploaded receipt. Orphaned
+CONFIRMED receipts (whose transaction was deleted → `transaction_id` SetNull, §2.1)
+were likewise stranded. This iteration closes the gap and, with it, the linking
+half of the still-open 8.16 invariant (every receipt belongs to a transaction).
+
+The whole feature is one DB effect — set/clear `receipts.transaction_id` on an
+existing pair — reachable from **both** directions, with a revertible unlink. **No
+schema change** (`transaction_id` is already nullable + unique).
+
+**API.**
+
+- `POST /receipts/:id/link` `{ transactionId }` — link an existing receipt to an
+  existing expense transaction. Uploader-only; the receipt must be **unattached**
+  and in **REVIEW** or **CONFIRMED** (the states with reviewable data);
+  UPLOADED/EXTRACTING/FAILED are rejected. The transaction guard is shared with
+  8.15 (`assertAttachableTransaction`: OUT, created by the caller, no receipt
+  yet — 404 for foreign/missing). A REVIEW receipt stays REVIEW and is finished
+  via the existing reconcile flow; a CONFIRMED orphan is done immediately and its
+  item `purchasedAt` is frozen to the transaction's `occurredAt` (the
+  `(product_id, purchased_at)` price-history key, mirroring confirm/reconcile). No
+  `TransactionDocument` rows are written — the transaction's panels read
+  `transaction.receiptId`, exactly like the reconcile path. Audited
+  `RECEIPT_ATTACHED { linkedExisting: true }`; fans out `receipt.updated` +
+  `transaction.updated`.
+- `DELETE /receipts/:id/link` — detach, separating the pair without deleting
+  either (the revertible counterpart; a detached CONFIRMED becomes a re-linkable
+  orphan). Audited `RECEIPT_UNLINKED`.
+- **Candidate listings** reuse the existing list machinery: `GET /transactions`
+  gains `hasReceipt` + `createdByMe` (the receipt-side picker uses
+  `direction=OUT&hasReceipt=false&createdByMe=true`); `GET /receipts` gains
+  `linkable=true` (unattached REVIEW/CONFIRMED — the transaction-side picker).
+- `TransactionService.publishUpdatedById` fans out `transaction.updated` for a row
+  whose projection changed via its receipt link, without editing it.
+
+**Web.** A generic `LinkPickerDialog` backs both directions. **Receipt → transaction**
+(`LinkTransactionDialog`): a "Link to a transaction" action on the receipt review
+page and each receipts-list row (unattached REVIEW/CONFIRMED only — those rows are
+only visible to their uploader). **Transaction → receipt** (`LinkReceiptDialog`): a
+third "Link an existing receipt" option inside `AttachReceiptDialog`, plus a new
+attach/link entry point on the transaction **detail** page (which previously had
+none). **Detach** ("Detach receipt" / "Detach transaction") is a creator-only
+action gated by the shared `ConfirmDialog` with a note that it is revertible. A
+REVIEW receipt routes on to reconcile; a CONFIRMED one lands in place.

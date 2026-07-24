@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-17
-> **Current work:** Phase 8 — Product Catalog, Matching & Barcode (8.1–8.23 shipped, incl. the Payment → Transaction rename, chunked extraction, multi-photo receipts and printed-code-first matching) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
+> **Last updated:** 2026-07-20
+> **Current work:** Phase 9 — Purchase Analytics (9.1 aggregation engine shipped, saved views next) · Phase 8 — Product Catalog, Matching & Barcode (8.1–8.27 shipped) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
 
 This document is an **index**: per-phase status and a short summary, with a link to each phase's detailed progress document (`phase-<number>-progress.md`). Formatting rules for progress documentation live in [`.kilocode/rules/docs.md`](../.kilocode/rules/docs.md).
 
@@ -50,7 +50,7 @@ This document is an **index**: per-phase status and a short summary, with a link
 | 6     | Payment Management (unified incomes + expenses) | ✅ Complete    | 2026-07-04 | [phase-6-progress.md](phase-6-progress.md)   |
 | 7     | Receipt Ingestion & LLM Extraction              | ✅ Complete    | 2026-07-09 | [phase-7-progress.md](phase-7-progress.md)   |
 | 8     | Product Catalog, Matching & Barcode             | 🔄 In progress | —          | [phase-8-progress.md](phase-8-progress.md)   |
-| 9     | Purchase Analytics (configurable)               | ⬜ Not started | —          | —                                            |
+| 9     | Purchase Analytics (configurable)               | 🔄 In progress | —          | [phase-9-progress.md](phase-9-progress.md)   |
 | 10    | Budgets & Spending Targets                      | 🔄 In progress | —          | [phase-10-progress.md](phase-10-progress.md) |
 | 11    | MCP Server (LLM access to purchases)            | ⬜ Not started | —          | —                                            |
 | 12    | Telegram Bot                                    | ⬜ Not started | —          | —                                            |
@@ -101,6 +101,10 @@ Receipt intake (photo/PDF/URL) with file storage, ingestion API and BullMQ extra
 ### Phase 8 — Product Catalog, Matching & Barcode (in progress)
 
 Two-layer product DB: a global barcode-keyed registry with multi-language aliases plus private per-user purchase data. Shipped so far (8.1–8.23): staged matcher, walkthrough UI, registry auto-update, camera barcode scanning, Open Food Facts enrichment, product images, catalog UI, per-user LLM selection with BYOK, receipt-intake improvements (content-based URL routing, intake chooser, manual barcode receipts, attach-to-existing transactions with LLM reconciliation, online-receipt provider adapters), accessible receipt document viewer, the transaction Documents panel with cross-member receipt access, the end-to-end Payment → Transaction rename (DB, API, web, docs), extraction hardening with chunked continuation, printed product-code extraction with code-first matching UX, and multi-photo receipts. Details: [phase-8-progress.md](phase-8-progress.md).
+
+### Phase 9 — Purchase Analytics (in progress)
+
+Configurable analytics over the hybrid purchase-row grain: receipt items where confirmed, transaction headers otherwise, balancing rows keeping totals exact. Shipped so far (9.1): the aggregation engine and `POST /analytics/query` — composable dimensions (category/merchant/product/member/group/scope/period + implicit currency), scope-aware visibility, fingerprinted cursor pagination. Next: saved views + query-builder UI, dashboards, price dynamics, merchant/group analytics, habit summaries. Details: [phase-9-progress.md](phase-9-progress.md).
 
 ### Phase 10 — Budgets & Spending Targets (in progress)
 

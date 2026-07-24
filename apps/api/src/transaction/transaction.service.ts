@@ -508,6 +508,37 @@ export class TransactionService {
   }
 
   /**
+   * Fan out `transaction.updated` for a transaction by id, without editing it
+   * (Phase 8.28). Used when a *related* row changes the transaction's projection
+   * — today the receipt link/unlink, which flips the transaction's `receiptId`
+   * (and thus whether the detail page shows purchase details + documents). Loads
+   * the current row, maps the caller's summary, and publishes to every viewer so
+   * open tabs update live. Best-effort: a missing transaction is a no-op.
+   */
+  async publishUpdatedById(userId: string, transactionId: string): Promise<void> {
+    const fresh = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: buildDetailInclude(userId),
+    });
+    if (!fresh) return;
+    const summary = mapTransactionToSummary(fresh as unknown as TransactionWithRelations, {
+      starredByMe: fresh.stars.length > 0,
+      commentCount: fresh._count.comments,
+      hasDocuments: fresh._count.documents > 0,
+    });
+    const recipients = await computeTransactionRecipients(
+      this.prisma,
+      fresh.attributions as RecipientAttribution[],
+      fresh.createdById,
+    );
+    this.eventBus.publish({
+      type: 'transaction.updated',
+      userIds: recipients,
+      transaction: summary,
+    });
+  }
+
+  /**
    * List transactions visible to `userId`, honoring the scope / filter / sort / cursor query.
    *
    * Visibility (design §5.2): a transaction is visible iff at least one of its
@@ -583,6 +614,19 @@ export class TransactionService {
     if (q.search) {
       // MySQL's default utf8mb4_unicode_ci is already case-insensitive on LIKE.
       andClauses.push({ note: { contains: q.search } });
+    }
+
+    // ── 2b. Receipt-link candidate filters (8.28) ──
+    // `receipt` is the 1:1 back-relation; `is: null` / `isNot: null` partition
+    // by whether a receipt is attached. `createdByMe` narrows the visible set to
+    // the caller's own rows (link targets must be creator-owned).
+    if (q.hasReceipt === 'true') {
+      andClauses.push({ receipt: { isNot: null } });
+    } else if (q.hasReceipt === 'false') {
+      andClauses.push({ receipt: { is: null } });
+    }
+    if (q.createdByMe === 'true') {
+      andClauses.push({ createdById: userId });
     }
 
     if (q.starred === 'true') {

@@ -25,8 +25,10 @@ import { TransactionFormDialog } from './TransactionFormDialog';
 import { TransactionRow } from './TransactionRow';
 import { TransactionsFilters, type TransactionsFiltersValue } from './TransactionsFilters';
 import { AttachReceiptDialog } from '@/components/receipt/AttachReceiptDialog';
+import { LinkReceiptDialog } from '@/components/receipt/LinkReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { InlineLoader } from '@/components/ui/InlineLoader';
+import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
@@ -125,8 +127,10 @@ export function TransactionsList({
 }: TransactionsListProps) {
   const t = useTranslations('transactions');
   const tListLoading = useTranslations('transactions.list');
+  const tLink = useTranslations('receipts.link');
   const locale = useLocale();
   const router = useRouter();
+  const { addToast } = useToast();
   const { fetchList, getTransaction } = useTransactions();
 
   const isOrchestratorMode = orchestratorData !== undefined;
@@ -174,6 +178,8 @@ export function TransactionsList({
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionSummary | null>(null);
   const [transactionToEdit, setTransactionToEdit] = useState<TransactionSummary | null>(null);
   const [transactionToAttach, setTransactionToAttach] = useState<TransactionSummary | null>(null);
+  // 8.28 — the transaction whose "link an existing receipt" picker is open.
+  const [transactionToLink, setTransactionToLink] = useState<TransactionSummary | null>(null);
   const [creating, setCreating] = useState(false);
 
   // Track whether the very first self-fetch has completed (used to render
@@ -575,7 +581,8 @@ export function TransactionsList({
       )}
 
       {/* Attach a receipt to an existing expense transaction (Phase 8.15) — the
-          linked receipt hands off to review → reconcile. */}
+          linked receipt hands off to review → reconcile. 8.28 adds the
+          "link an existing receipt" handoff to LinkReceiptDialog. */}
       {transactionToAttach && (
         <AttachReceiptDialog
           open
@@ -584,6 +591,29 @@ export function TransactionsList({
           onAttached={(receipt) => {
             setTransactionToAttach(null);
             router.push(`/receipts/${receipt.id}`);
+          }}
+          onLinkExisting={() => {
+            setTransactionToLink(transactionToAttach);
+            setTransactionToAttach(null);
+          }}
+        />
+      )}
+
+      {/* 8.28 — link an already-uploaded receipt to this transaction. A REVIEW
+          receipt continues to reconcile; a CONFIRMED one is done in place. */}
+      {transactionToLink && (
+        <LinkReceiptDialog
+          open
+          transactionId={transactionToLink.id}
+          locale={locale}
+          onClose={() => setTransactionToLink(null)}
+          onLinked={(receipt) => {
+            setTransactionToLink(null);
+            if (receipt.status === 'REVIEW') {
+              router.push(`/receipts/${receipt.id}`);
+            } else {
+              addToast('success', tLink('linkedToast'));
+            }
           }}
         />
       )}

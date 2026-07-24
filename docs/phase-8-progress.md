@@ -830,3 +830,37 @@ Staging review surfaced three gallery problems, all fixed:
   completed swipe suppresses the follow-up click so it never doubles as
   open-lightbox. `DocumentViewer` pages with the same gesture at 1× —
   zoomed-in drags keep panning.
+
+## 8.28 — Link existing receipts ⇄ transactions (2026-07-24)
+
+Staging/user report: a receipt and a transaction created **separately** could
+not be glued. Confirm (7.9) always mints a _new_ transaction and attach (8.15)
+always uploads a _new_ receipt — neither adopts an existing counterpart, and an
+orphaned CONFIRMED receipt (transaction deleted → `transaction_id` SetNull) was
+stranded. This closes the gap both ways and advances the 8.16 invariant. See
+design doc §12.
+
+**API.** `POST /receipts/:id/link { transactionId }` sets `receipts.transaction_id`
+on an existing pair (uploader-only; unattached REVIEW/CONFIRMED only; transaction
+guard shared with 8.15 — `assertAttachableTransaction`). A REVIEW receipt is
+finished via the existing reconcile flow; a CONFIRMED orphan is done immediately
+(item `purchasedAt` frozen to the transaction date). `DELETE /receipts/:id/link`
+detaches (revertible). Both audit (`RECEIPT_ATTACHED { linkedExisting }` /
+`RECEIPT_UNLINKED`) and fan out `receipt.updated` + `transaction.updated` (new
+`TransactionService.publishUpdatedById`). Pickers reuse the list endpoints:
+`GET /transactions` gains `hasReceipt` + `createdByMe`; `GET /receipts` gains
+`linkable`. No schema change (`transaction_id` already nullable + unique).
+
+**Web.** Generic `LinkPickerDialog` backs both directions. `LinkTransactionDialog`
+(receipt → transaction) hangs off the receipt review page + list rows;
+`LinkReceiptDialog` (transaction → receipt) is a third option in
+`AttachReceiptDialog` and a **new** attach/link entry point on the transaction
+detail page (which had none). Detach ("Detach receipt" / "Detach transaction") is
+creator-only via the shared `ConfirmDialog`, noted as revertible. EN+HE strings
+added (`receipts.link.*`, `receipts.attach.{or,linkExisting}`,
+`transactions.detail.{noReceiptHint,attachReceipt}`; HE feminine agreement).
+
+**Tests.** api receipt-service link/unlink (REVIEW vs CONFIRMED, guards, events,
+audit) + controller + transaction `hasReceipt`/`createdByMe`/`publishUpdatedById`;
+web `LinkTransactionDialog`/`LinkReceiptDialog`/`AttachReceiptDialog` specs. All
+touched suites green; typecheck + lint + prettier clean.

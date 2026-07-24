@@ -98,6 +98,26 @@ export class ListTransactionsQueryDto {
   @IsBooleanString()
   withParent?: string;
 
+  /**
+   * 8.28 — `false` narrows to receiptless transactions, `true` to ones that
+   * already have a receipt. Powers the receipt-side "link to a transaction"
+   * picker (`hasReceipt=false`).
+   */
+  @ApiPropertyOptional({ example: 'false' })
+  @IsOptional()
+  @IsBooleanString()
+  hasReceipt?: string;
+
+  /**
+   * 8.28 — `true` restricts to transactions the caller created (a subset of the
+   * visible set). Link targets must be created by the caller, so the linking
+   * picker pairs this with `hasReceipt=false`.
+   */
+  @ApiPropertyOptional({ example: 'true' })
+  @IsOptional()
+  @IsBooleanString()
+  createdByMe?: string;
+
   /** Free-text search against note (case-insensitive substring match). */
   @ApiPropertyOptional()
   @IsOptional()

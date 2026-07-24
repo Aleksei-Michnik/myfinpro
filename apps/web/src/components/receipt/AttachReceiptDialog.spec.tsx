@@ -99,4 +99,24 @@ describe('AttachReceiptDialog (8.15)', () => {
     );
     expect(onAttached).not.toHaveBeenCalled();
   });
+
+  it('offers the "link an existing receipt" handoff only when the prop is given (8.28)', () => {
+    const onLinkExisting = vi.fn();
+    const { rerender } = render(
+      <AttachReceiptDialog open transactionId="pay-1" onClose={vi.fn()} onAttached={vi.fn()} />,
+    );
+    expect(screen.queryByTestId('attach-receipt-link-existing')).toBeNull();
+
+    rerender(
+      <AttachReceiptDialog
+        open
+        transactionId="pay-1"
+        onClose={vi.fn()}
+        onAttached={vi.fn()}
+        onLinkExisting={onLinkExisting}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('attach-receipt-link-existing'));
+    expect(onLinkExisting).toHaveBeenCalled();
+  });
 });

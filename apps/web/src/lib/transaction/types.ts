@@ -342,6 +342,10 @@ export interface ListTransactionsParams {
   parentTransactionId?: string;
   /** Iteration 6.18.1.3 — `true` parents only, `false` occurrences only. */
   withParent?: boolean;
+  /** 8.28 — `false` receiptless only, `true` with-receipt only (link picker). */
+  hasReceipt?: boolean;
+  /** 8.28 — `true` restricts to transactions the caller created (link picker). */
+  createdByMe?: boolean;
 }
 
 /** Query knobs accepted by `useTransactions().listOccurrences()`. */

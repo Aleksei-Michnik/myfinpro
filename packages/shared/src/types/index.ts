@@ -2,6 +2,7 @@
  * Shared type definitions — barrel export.
  */
 
+export * from './analytics.types';
 export * from './budget.types';
 export * from './common.types';
 export * from './currency.types';
