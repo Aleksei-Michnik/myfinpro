@@ -37,6 +37,7 @@ describe('ReceiptService', () => {
     validateExpenseInputs: jest.fn(),
     createExpenseWithinTx: jest.fn(),
     publishCreated: jest.fn().mockResolvedValue({}),
+    publishUpdatedById: jest.fn().mockResolvedValue(undefined),
     update: jest.fn().mockResolvedValue({}),
     assertVisible: jest.fn().mockResolvedValue(undefined),
   };
@@ -906,6 +907,151 @@ describe('ReceiptService', () => {
         expect(codeOf(err)).toBe('RECEIPT_NOT_ATTACHED');
       }
       expect(transactionServiceMock.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('link (8.28)', () => {
+    // findUnique serves two callers: assertAttachableTransaction (existing-receipt
+    // check, keyed by transactionId → null) and refresh (the mapped row, keyed by id).
+    const linkFindUnique = (refreshRow: Record<string, unknown>) =>
+      prismaMock.receipt.findUnique.mockImplementation(
+        ({ where }: { where: { id?: string; transactionId?: string } }) =>
+          Promise.resolve(where.transactionId ? null : refreshRow),
+      );
+
+    beforeEach(() => {
+      prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ receipt: prismaMock.receipt, receiptItem: prismaMock.receiptItem }),
+      );
+      prismaMock.transaction.findFirst.mockResolvedValue({ id: 'pay-1', direction: 'OUT' });
+      prismaMock.transaction.findUnique.mockResolvedValue({
+        occurredAt: new Date('2026-07-02T00:00:00.000Z'),
+      });
+    });
+
+    it('links a REVIEW receipt to an existing transaction and fans out both events', async () => {
+      const linked = makeRow({ status: 'REVIEW', transactionId: 'pay-1' });
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      linkFindUnique(linked);
+
+      const dto = await service.link('u-1', 'r-1', { transactionId: 'pay-1' });
+
+      expect(prismaMock.transaction.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'pay-1', createdById: 'u-1' } }),
+      );
+      expect(prismaMock.receipt.update).toHaveBeenCalledWith({
+        where: { id: 'r-1' },
+        data: { transactionId: 'pay-1' },
+      });
+      // REVIEW is finished later by reconcile — no purchasedAt freeze here.
+      expect(prismaMock.receiptItem.updateMany).not.toHaveBeenCalled();
+      expect(transactionServiceMock.publishUpdatedById).toHaveBeenCalledWith('u-1', 'pay-1');
+      expect(eventBusMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'receipt.updated' }),
+      );
+      expect(dto.transactionId).toBe('pay-1');
+    });
+
+    it('links a CONFIRMED orphan and freezes item purchasedAt to the transaction date', async () => {
+      const linked = makeRow({ status: 'CONFIRMED', transactionId: 'pay-1' });
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'CONFIRMED' }));
+      linkFindUnique(linked);
+
+      await service.link('u-1', 'r-1', { transactionId: 'pay-1' });
+
+      expect(prismaMock.receipt.update).toHaveBeenCalledWith({
+        where: { id: 'r-1' },
+        data: { transactionId: 'pay-1' },
+      });
+      expect(prismaMock.receiptItem.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { receiptId: 'r-1' },
+          data: { purchasedAt: new Date('2026-07-02T00:00:00.000Z') },
+        }),
+      );
+    });
+
+    it('rejects linking an already-attached receipt', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ status: 'REVIEW', transactionId: 'pay-existing' }),
+      );
+      try {
+        await service.link('u-1', 'r-1', { transactionId: 'pay-1' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+      expect(prismaMock.receipt.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects linking a receipt that is not REVIEW/CONFIRMED', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'UPLOADED' }));
+      try {
+        await service.link('u-1', 'r-1', { transactionId: 'pay-1' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_INVALID_STATE');
+      }
+      expect(prismaMock.transaction.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('404s when the target transaction is not the caller’s', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      prismaMock.transaction.findFirst.mockResolvedValue(null);
+      await expect(service.link('u-1', 'r-1', { transactionId: 'pay-x' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prismaMock.receipt.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a transaction that already has a receipt', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(makeRow({ status: 'REVIEW' }));
+      prismaMock.receipt.findUnique.mockImplementation(
+        ({ where }: { where: { transactionId?: string } }) =>
+          Promise.resolve(where.transactionId ? { id: 'r-other' } : null),
+      );
+      try {
+        await service.link('u-1', 'r-1', { transactionId: 'pay-1' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('TRANSACTION_ALREADY_HAS_RECEIPT');
+      }
+      expect(prismaMock.receipt.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unlink (8.28)', () => {
+    it('detaches an attached receipt and fans out both events', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ status: 'CONFIRMED', transactionId: 'pay-1' }),
+      );
+      prismaMock.receipt.findUnique.mockResolvedValue(makeRow({ status: 'CONFIRMED' }));
+
+      const dto = await service.unlink('u-1', 'r-1');
+
+      expect(prismaMock.receipt.update).toHaveBeenCalledWith({
+        where: { id: 'r-1' },
+        data: { transactionId: null },
+      });
+      expect(transactionServiceMock.publishUpdatedById).toHaveBeenCalledWith('u-1', 'pay-1');
+      expect(eventBusMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'receipt.updated' }),
+      );
+      expect(dto.id).toBe('r-1');
+    });
+
+    it('rejects detaching a receipt with no transaction', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(
+        makeRow({ status: 'REVIEW', transactionId: null }),
+      );
+      try {
+        await service.unlink('u-1', 'r-1');
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('RECEIPT_NOT_ATTACHED');
+      }
+      expect(prismaMock.receipt.update).not.toHaveBeenCalled();
+      expect(transactionServiceMock.publishUpdatedById).not.toHaveBeenCalled();
     });
   });
 

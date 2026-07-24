@@ -80,6 +80,8 @@ export interface ReceiptListResponse {
 
 export interface ListReceiptsParams {
   status?: ReceiptStatus;
+  /** 8.28 — `true` narrows to link candidates (unattached REVIEW/CONFIRMED). */
+  linkable?: boolean;
   limit?: number;
   cursor?: string;
 }

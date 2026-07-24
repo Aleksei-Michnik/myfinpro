@@ -9,12 +9,13 @@ import { RECEIPT_MAX_FILE_SIZE_BYTES, RECEIPT_MAX_FILES } from '@myfinpro/shared
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
+import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialog';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -40,14 +41,18 @@ function formatWhen(iso: string, locale: string): string {
 
 export function ReceiptsClient() {
   const t = useTranslations('receipts');
+  const tLink = useTranslations('receipts.link');
   const tUpload = useTranslations('common.upload');
   const locale = useLocale();
+  const router = useRouter();
   const { uploadReceipt, createFromUrl, fetchList, retryReceipt, removeReceipt } = useReceipts();
   const { addToast } = useToast();
 
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  // 8.28 — the receipt whose "link to a transaction" picker is open.
+  const [linkingReceipt, setLinkingReceipt] = useState<ReceiptSummary | null>(null);
   // 8.22 — photos staged as the pages of ONE long receipt before uploading.
   const [staged, setStaged] = useState<File[]>([]);
 
@@ -327,6 +332,20 @@ export function ReceiptsClient() {
                       {t('list.retry')}
                     </Button>
                   )}
+                  {/* 8.28 — glue an unattached, data-carrying receipt to an
+                      existing transaction (instead of confirming a new one). */}
+                  {!receipt.transactionId &&
+                    (receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED') && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLinkingReceipt(receipt)}
+                        data-testid={`receipt-link-transaction-${receipt.id}`}
+                      >
+                        {tLink('link')}
+                      </Button>
+                    )}
                   {receipt.status !== 'CONFIRMED' &&
                     (confirmingDelete === receipt.id ? (
                       <span className="inline-flex items-center gap-1">
@@ -383,6 +402,27 @@ export function ReceiptsClient() {
           </div>
         )}
       </section>
+
+      {/* 8.28 — link a standalone receipt to an existing transaction. */}
+      {linkingReceipt && (
+        <LinkTransactionDialog
+          open
+          receiptId={linkingReceipt.id}
+          locale={locale}
+          onClose={() => setLinkingReceipt(null)}
+          onLinked={(linked) => {
+            setLinkingReceipt(null);
+            setReceipts((prev) => prev.map((r) => (r.id === linked.id ? linked : r)));
+            // A REVIEW receipt still needs reconciling — open its review page,
+            // where the reconcile dialog auto-opens. A CONFIRMED one is done.
+            if (linked.status === 'REVIEW') {
+              router.push(`/receipts/${linked.id}`);
+            } else {
+              addToast('success', tLink('linkedToast'));
+            }
+          }}
+        />
+      )}
     </main>
   );
 }

@@ -11,6 +11,8 @@
 import { isPlanKind } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AttachReceiptDialog } from '@/components/receipt/AttachReceiptDialog';
+import { LinkReceiptDialog } from '@/components/receipt/LinkReceiptDialog';
 import { DeleteTransactionDialog } from '@/components/transaction/DeleteTransactionDialog';
 import { RecurringOccurrencesSection } from '@/components/transaction/RecurringOccurrencesSection';
 import { ScheduleBadge } from '@/components/transaction/ScheduleBadge';
@@ -26,11 +28,13 @@ import { TransactionPlanSection } from '@/components/transaction/TransactionPlan
 import { TransactionPurchaseDetails } from '@/components/transaction/TransactionPurchaseDetails';
 import { TransactionSchedulePlanPlaceholder } from '@/components/transaction/TransactionSchedulePlanPlaceholder';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
+import { useReceipts } from '@/lib/receipt/receipt-context';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type {
   AttributionChangeResult,
@@ -53,9 +57,11 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
   const tDetail = useTranslations('transactions.detail');
   const tComments = useTranslations('transactions.comments');
   const tBadge = useTranslations('transactions.schedule.badge');
+  const tLink = useTranslations('receipts.link');
   const locale = useLocale();
   const { getTransaction, getSchedule, pauseSchedule, resumeSchedule, cancelSchedule } =
     useTransactions();
+  const { unlinkReceipt } = useReceipts();
   const { addToast } = useToast();
   const { user } = useAuth();
   const router = useRouter();
@@ -67,6 +73,11 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
 
   const [editOpen, setEditOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionSummary | null>(null);
+  // 8.28 — attach a new receipt, link an existing one, or detach the linked one.
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [detachOpen, setDetachOpen] = useState(false);
+  const detachOp = useAsyncOperation<boolean>({ scope: 'control' });
 
   // Container-scope async op for the schedule fetch — separate from the
   // transaction fetch so loading/error states stay independent.
@@ -247,6 +258,31 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
     [addToast, getTransaction, transactionId, router, tDetail],
   );
 
+  // 8.28 — detach the linked receipt (revertible). The receipt uploader is
+  // always the transaction creator in every linking flow, so unlink succeeds.
+  const handleDetachReceipt = useCallback(() => {
+    if (!transaction?.receiptId) return;
+    const receiptId = transaction.receiptId;
+    setDetachOpen(false);
+    void detachOp
+      .run(async (signal) => {
+        await unlinkReceipt(receiptId, signal);
+        return true;
+      })
+      .then(async (ok) => {
+        if (ok === undefined) return;
+        addToast('success', tLink('detachedToast'));
+        await load();
+      });
+    // detachOp identity is stable (useAsyncOperation contract).
+  }, [transaction?.receiptId, unlinkReceipt, addToast, tLink, load]);
+
+  useEffect(() => {
+    if (detachOp.error && detachOp.error.reason !== 'aborted') {
+      addToast('error', detachOp.error.message || tLink('failed'));
+    }
+  }, [detachOp.error, addToast, tLink]);
+
   // ── Render branches ──────────────────────────────────────────────────────
 
   if (loading) {
@@ -315,6 +351,9 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
     transaction.type === 'RECURRING' && transaction.parentTransactionId === null;
   const isPlanParent = isPlanKind(transaction.type) && transaction.parentTransactionId === null;
   const isChildOccurrence = transaction.parentTransactionId !== null;
+  // 8.28 — receipt attach/link/detach is a creator-only action on an expense.
+  const canManageReceipt =
+    !!user && user.id === transaction.createdById && transaction.direction === 'OUT';
   const showLegacyPlaceholder =
     !isRecurringParent &&
     !isPlanParent &&
@@ -374,15 +413,50 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
 
       {/* 7.13 / 8.18 / 8.19 — the linked receipt is this transaction's proving
           document: its items fold open (purchase details) and its file(s) are
-          viewable (documents). Both are visible to any transaction co-viewer. */}
-      {transaction.receiptId && (
+          viewable (documents). Both are visible to any transaction co-viewer.
+          8.28 — the creator can detach it (revertible), or, when there is none,
+          attach a new receipt / link an existing one. */}
+      {transaction.receiptId ? (
         <>
+          {canManageReceipt && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDetachOpen(true)}
+                disabled={detachOp.isLoading}
+                data-testid="transaction-detach-receipt"
+                className="text-sm text-gray-500 hover:text-gray-800 hover:underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                {tLink('detachReceipt')}
+              </button>
+            </div>
+          )}
           <TransactionPurchaseDetails
             receiptId={transaction.receiptId}
             currency={transaction.currency}
           />
           <TransactionDocuments receiptId={transaction.receiptId} />
         </>
+      ) : (
+        canManageReceipt && (
+          <section
+            className="rounded-lg border border-dashed border-gray-300 bg-white p-5 text-center dark:border-gray-600 dark:bg-gray-800"
+            data-testid="transaction-attach-receipt-cta"
+          >
+            <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
+              {tDetail('noReceiptHint')}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAttachOpen(true)}
+              data-testid="transaction-attach-receipt"
+            >
+              {tDetail('attachReceipt')}
+            </Button>
+          </section>
+        )
       )}
 
       <section
@@ -422,6 +496,54 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
           transaction={transactionToDelete}
           onClose={() => setTransactionToDelete(null)}
           onDeleted={handleDeleted}
+        />
+      )}
+
+      {/* 8.28 — attach a new receipt (upload/URL) or hand off to the existing-
+          receipt picker; a linked REVIEW receipt continues to reconcile. */}
+      {attachOpen && (
+        <AttachReceiptDialog
+          open
+          transactionId={transaction.id}
+          onClose={() => setAttachOpen(false)}
+          onAttached={(receipt) => {
+            setAttachOpen(false);
+            router.push(`/receipts/${receipt.id}`);
+          }}
+          onLinkExisting={() => {
+            setAttachOpen(false);
+            setLinkOpen(true);
+          }}
+        />
+      )}
+
+      {linkOpen && (
+        <LinkReceiptDialog
+          open
+          transactionId={transaction.id}
+          locale={locale}
+          onClose={() => setLinkOpen(false)}
+          onLinked={(receipt) => {
+            setLinkOpen(false);
+            if (receipt.status === 'REVIEW') {
+              router.push(`/receipts/${receipt.id}`);
+            } else {
+              addToast('success', tLink('linkedToast'));
+              void load();
+            }
+          }}
+        />
+      )}
+
+      {detachOpen && (
+        <ConfirmDialog
+          title={tLink('detachTitle')}
+          message={tLink('detachMessage')}
+          confirmLabel={tLink('detachConfirm')}
+          cancelLabel={tLink('detachCancel')}
+          busy={detachOp.isLoading}
+          onConfirm={handleDetachReceipt}
+          onClose={() => setDetachOpen(false)}
         />
       )}
     </main>

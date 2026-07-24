@@ -22,6 +22,7 @@ import { RECEIPT_ERRORS } from './constants/receipt-errors';
 import { ConfirmReceiptDto } from './dto/confirm-receipt.dto';
 import { CreateManualReceiptDto } from './dto/create-manual-receipt.dto';
 import { CreateReceiptUrlDto } from './dto/create-receipt-url.dto';
+import { LinkReceiptDto } from './dto/link-receipt.dto';
 import { ListReceiptsQueryDto } from './dto/list-receipts-query.dto';
 import { MatchItemDto } from './dto/match-item.dto';
 import {
@@ -323,6 +324,12 @@ export class ReceiptService {
       where: {
         uploadedById: userId,
         ...(q.status ? { status: q.status } : {}),
+        // 8.28 — link-candidate filter: unattached receipts that carry reviewable
+        // data (REVIEW or a re-linkable CONFIRMED orphan). Powers the "link an
+        // existing receipt" picker on the transaction side.
+        ...(q.linkable === 'true'
+          ? { transactionId: null, status: { in: ['REVIEW', 'CONFIRMED'] } }
+          : {}),
         ...(cursorFilter ?? {}),
       },
       include: RECEIPT_INCLUDE,
@@ -809,6 +816,113 @@ export class ReceiptService {
     this.logger.log(
       `Receipt ${row.id} reconciled by user ${userId} → transaction ${row.transactionId} ` +
         `(total=${dto.applyTotal}, category=${dto.applyCategory})`,
+    );
+
+    return this.refresh(userId, row.id);
+  }
+
+  /**
+   * POST /receipts/:id/link (Phase 8.28) — glue an EXISTING standalone receipt
+   * to an EXISTING expense transaction. This is the missing counterpart to 8.15
+   * (which uploads a NEW receipt onto a transaction) and 7.9 confirm (which
+   * mints a NEW transaction from a receipt): here both already exist and were
+   * created separately. Only `receipts.transaction_id` is set.
+   *
+   * Linkable receipt statuses are REVIEW (finished via reconcile afterwards) and
+   * CONFIRMED (an orphan whose transaction was deleted — re-linked immediately).
+   * The transaction guard is shared with the 8.15 attach path
+   * ({@link assertAttachableTransaction}: OUT, created by the caller, no receipt
+   * yet). No `TransactionDocument` rows are written — the transaction's panels
+   * read `transaction.receiptId`, exactly like the reconcile path.
+   */
+  async link(userId: string, id: string, dto: LinkReceiptDto): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, id);
+    if (row.transactionId) {
+      throw new BadRequestException({
+        message: 'Receipt is already attached to a transaction',
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+    if (row.status !== 'REVIEW' && row.status !== 'CONFIRMED') {
+      throw new BadRequestException({
+        message: `Only reviewed or confirmed receipts can be linked (status: ${row.status})`,
+        errorCode: RECEIPT_ERRORS.RECEIPT_INVALID_STATE,
+      });
+    }
+    await this.assertAttachableTransaction(userId, dto.transactionId);
+
+    // A CONFIRMED orphan is terminal on the receipt side: linking finishes it, so
+    // freeze the item purchase date to the transaction's — the
+    // (product_id, purchased_at) price-history key (design §2), mirroring confirm.
+    // A REVIEW receipt is finished later by reconcile, which freezes it then.
+    if (row.status === 'CONFIRMED') {
+      const transaction = await this.prisma.transaction.findUnique({
+        where: { id: dto.transactionId },
+        select: { occurredAt: true },
+      });
+      const occurredAt = transaction?.occurredAt ?? row.purchasedAt ?? row.createdAt;
+      await this.prisma.$transaction(async (tx) => {
+        await tx.receipt.update({
+          where: { id: row.id },
+          data: { transactionId: dto.transactionId },
+        });
+        await tx.receiptItem.updateMany({
+          where: { receiptId: row.id },
+          data: { purchasedAt: occurredAt },
+        });
+      });
+    } else {
+      await this.prisma.receipt.update({
+        where: { id: row.id },
+        data: { transactionId: dto.transactionId },
+      });
+    }
+
+    void this.writeAudit(userId, row.id, 'RECEIPT_ATTACHED', {
+      transactionId: dto.transactionId,
+      linkedExisting: true,
+      status: row.status,
+    });
+    // The transaction now has a proving document — fan out so every viewer's
+    // detail/list picks up `receiptId` (panels appear) live.
+    await this.transactionService.publishUpdatedById(userId, dto.transactionId);
+    this.logger.log(
+      `Receipt ${row.id} linked by user ${userId} → existing transaction ${dto.transactionId} ` +
+        `(status ${row.status})`,
+    );
+
+    return this.refresh(userId, row.id);
+  }
+
+  /**
+   * DELETE /receipts/:id/link (Phase 8.28) — detach a receipt from its
+   * transaction, separating the pair without deleting either. The revertible
+   * counterpart to {@link link}: a mis-link is fixed by detaching and re-linking
+   * rather than deleting the whole transaction. A detached CONFIRMED receipt
+   * becomes a re-linkable orphan; a detached REVIEW receipt is confirmable again.
+   */
+  async unlink(userId: string, id: string): Promise<ReceiptResponseDto> {
+    const row = await this.loadOwnedOrThrow(userId, id);
+    if (!row.transactionId) {
+      throw new BadRequestException({
+        message: 'Receipt is not attached to a transaction',
+        errorCode: RECEIPT_ERRORS.RECEIPT_NOT_ATTACHED,
+      });
+    }
+    const previousTransactionId = row.transactionId;
+    await this.prisma.receipt.update({
+      where: { id: row.id },
+      data: { transactionId: null },
+    });
+
+    void this.writeAudit(userId, row.id, 'RECEIPT_UNLINKED', {
+      transactionId: previousTransactionId,
+      status: row.status,
+    });
+    // The transaction lost its proving document — fan out so panels disappear live.
+    await this.transactionService.publishUpdatedById(userId, previousTransactionId);
+    this.logger.log(
+      `Receipt ${row.id} detached by user ${userId} from transaction ${previousTransactionId}`,
     );
 
     return this.refresh(userId, row.id);

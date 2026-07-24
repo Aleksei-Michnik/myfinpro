@@ -696,6 +696,45 @@ describe('TransactionService', () => {
     });
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Iteration 8.28 — publishUpdatedById() (receipt link/unlink fan-out)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    describe('publishUpdatedById()', () => {
+      it('fans out transaction.updated to the recipients for an existing row', async () => {
+        prismaMock.transaction.findUnique.mockResolvedValue({
+          id: 'pay-1',
+          direction: 'OUT',
+          type: 'ONE_TIME',
+          amountCents: 1000,
+          currency: 'USD',
+          occurredAt: new Date('2026-04-25T00:00:00Z'),
+          status: 'POSTED',
+          note: null,
+          parentTransactionId: null,
+          createdById: 'user-1',
+          createdAt: now,
+          updatedAt: now,
+          category: { id: 'cat-1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+          attributions: [{ scopeType: 'personal', userId: 'user-1', groupId: null, group: null }],
+          stars: [],
+          _count: { comments: 0, documents: 0 },
+        });
+
+        await service.publishUpdatedById('user-1', 'pay-1');
+
+        expect(eventBusMock.publish).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'transaction.updated', userIds: ['user-1'] }),
+        );
+      });
+
+      it('is a no-op when the transaction no longer exists', async () => {
+        prismaMock.transaction.findUnique.mockResolvedValue(null);
+        await service.publishUpdatedById('user-1', 'gone');
+        expect(eventBusMock.publish).not.toHaveBeenCalled();
+      });
+    });
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Iteration 6.6 — list()
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -808,6 +847,23 @@ describe('TransactionService', () => {
       it('type filter adds WHERE', async () => {
         await service.list('user-1', baseQ({ type: 'ONE_TIME' }));
         expect(lastFindManyArg().where.AND).toContainEqual({ type: 'ONE_TIME' });
+      });
+
+      // ── 8.28 receipt-link candidate filters ──
+
+      it('hasReceipt=false narrows to receiptless transactions', async () => {
+        await service.list('user-1', baseQ({ hasReceipt: 'false' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ receipt: { is: null } });
+      });
+
+      it('hasReceipt=true narrows to transactions with a receipt', async () => {
+        await service.list('user-1', baseQ({ hasReceipt: 'true' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ receipt: { isNot: null } });
+      });
+
+      it('createdByMe=true narrows to the caller’s own transactions', async () => {
+        await service.list('user-1', baseQ({ createdByMe: 'true' }));
+        expect(lastFindManyArg().where.AND).toContainEqual({ createdById: 'user-1' });
       });
 
       it('from + to compose a single occurredAt range', async () => {

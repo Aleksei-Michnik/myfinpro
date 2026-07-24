@@ -794,7 +794,9 @@
       "purchaseLoading": "טוען את פרטי הרכישה…",
       "purchaseEmpty": "לקבלה זו אין פירוט מוצרים.",
       "purchaseUnavailable": "פרטי הרכישה אינם זמינים עבור קבלה זו.",
-      "receiptLink": "צפייה בקבלת המקור"
+      "receiptLink": "צפייה בקבלת המקור",
+      "noReceiptHint": "עדיין לא משויכת קבלה לתנועה זו.",
+      "attachReceipt": "הוספת קבלה"
     },
     "comments": {
       "title": "תגובות",
@@ -1146,7 +1148,9 @@
       "urlPlaceholder": "https://…",
       "urlSubmit": "הוספה",
       "close": "סגירה",
-      "failed": "צירוף הקבלה נכשל"
+      "failed": "צירוף הקבלה נכשל",
+      "or": "או",
+      "linkExisting": "קישור קבלה קיימת"
     },
     "reconcile": {
       "title": "לעדכן את התנועה?",
@@ -1238,6 +1242,31 @@
       "missingScope": "יש לבחור לפחות שיוך אחד",
       "confirmedToast": "הקבלה אושרה",
       "confirmFailed": "לא ניתן לאשר את הקבלה"
+    },
+    "link": {
+      "toTransactionTitle": "קישור לתנועה",
+      "toTransactionHint": "בחרו הוצאה קיימת לשייך אליה את הקבלה — לא נוצרת תנועה חדשה.",
+      "searchTransactions": "חיפוש תנועות",
+      "searchTransactionsPlaceholder": "חיפוש לפי הערה…",
+      "noTransactions": "אין תנועות תואמות ללא קבלה.",
+      "toReceiptTitle": "קישור קבלה קיימת",
+      "toReceiptHint": "בחרו קבלה שכבר העליתם כדי לשייך אותה לתנועה זו.",
+      "searchReceipts": "חיפוש קבלות",
+      "noReceipts": "אין קבלות לא משויכות לקישור.",
+      "untitledReceipt": "קבלה ללא שם",
+      "loading": "טוען…",
+      "close": "סגירה",
+      "link": "קישור",
+      "linkToTransaction": "קישור לתנועה",
+      "linkedToast": "הקבלה קושרה",
+      "detachReceipt": "ניתוק קבלה",
+      "detachTransaction": "ניתוק",
+      "detachTitle": "לנתק את הקבלה?",
+      "detachMessage": "הקבלה והתנועה יופרדו. אפשר לקשר אותן מחדש בכל עת.",
+      "detachConfirm": "ניתוק",
+      "detachCancel": "ביטול",
+      "detachedToast": "הקבלה נותקה",
+      "failed": "משהו השתבש. נסו שוב."
     }
   },
   "products": {

@@ -1,7 +1,16 @@
 import { RECEIPT_STATUSES, type ReceiptStatus } from '@myfinpro/shared';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsBooleanString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 /** GET /receipts query (Phase 7.4). Cursor is opaque base64url. */
 export class ListReceiptsQueryDto {
@@ -9,6 +18,16 @@ export class ListReceiptsQueryDto {
   @IsOptional()
   @IsIn([...RECEIPT_STATUSES])
   status?: ReceiptStatus;
+
+  /**
+   * 8.28 — `true` narrows to link candidates: unattached receipts in REVIEW or
+   * CONFIRMED (the states with reviewable data). Feeds the transaction-side
+   * "link an existing receipt" picker.
+   */
+  @ApiPropertyOptional({ example: 'true' })
+  @IsOptional()
+  @IsBooleanString()
+  linkable?: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
   @IsOptional()

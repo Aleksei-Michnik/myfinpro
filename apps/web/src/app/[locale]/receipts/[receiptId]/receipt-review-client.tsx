@@ -8,16 +8,18 @@
 // render a read-only summary. Confirm (→ transaction) lands in 7.9.
 
 import { CURRENCY_CODES } from '@myfinpro/shared';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialog';
 import { ProductQuickViewDialog } from '@/components/product/ProductQuickViewDialog';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
+import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialog';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemCard';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DocumentViewer } from '@/components/ui/DocumentViewer';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { inputClass } from '@/components/ui/input-styles';
@@ -56,10 +58,19 @@ function receiptToItemRows(receipt: ReceiptSummary): ItemRow[] {
 
 export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const t = useTranslations('receipts.review');
+  const tLink = useTranslations('receipts.link');
   const tStatus = useTranslations('receipts.status');
   const tViewer = useTranslations('common.viewer');
-  const { getReceipt, updateReceipt, replaceItems, searchMerchants, fetchFileBlob, retryReceipt } =
-    useReceipts();
+  const locale = useLocale();
+  const {
+    getReceipt,
+    updateReceipt,
+    replaceItems,
+    searchMerchants,
+    fetchFileBlob,
+    retryReceipt,
+    unlinkReceipt,
+  } = useReceipts();
   const { listCategories } = useTransactions();
   const { addToast } = useToast();
   const router = useRouter();
@@ -82,6 +93,9 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  // 8.28 — glue this receipt to an existing transaction / detach a mis-link.
+  const [linkTxOpen, setLinkTxOpen] = useState(false);
+  const [detachOpen, setDetachOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   // Row-click match editing (8.23) — open the walkthrough on that exact item.
   const [walkthroughItemId, setWalkthroughItemId] = useState<string | null>(null);
@@ -94,6 +108,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
 
   const loadOp = useAsyncOperation<ReceiptSummary>({ scope: 'container' });
   const saveOp = useAsyncOperation<boolean>({ scope: 'control' });
+  const detachOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hydrate = useCallback((fresh: ReceiptSummary) => {
@@ -323,6 +338,33 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
       });
   };
 
+  // 8.28 — a freshly linked receipt: a REVIEW one auto-opens reconcile (existing
+  // effect), a CONFIRMED one is done. Either way rehydrate + confirm to the user.
+  const handleLinked = (linked: ReceiptSummary) => {
+    setLinkTxOpen(false);
+    hydrate(linked);
+    addToast('success', tLink('linkedToast'));
+  };
+
+  const handleDetach = () => {
+    setDetachOpen(false);
+    void detachOp
+      .run(async (signal) => {
+        const updated = await unlinkReceipt(receiptId, signal);
+        hydrate(updated);
+        return updated;
+      })
+      .then((r) => {
+        if (r !== undefined) addToast('success', tLink('detachedToast'));
+      });
+  };
+
+  useEffect(() => {
+    if (detachOp.error && detachOp.error.reason !== 'aborted') {
+      addToast('error', detachOp.error.message || tLink('failed'));
+    }
+  }, [detachOp.error, addToast, tLink]);
+
   // ── Render branches ────────────────────────────────────────────────────
 
   if (loadOp.error && !receipt) {
@@ -393,8 +435,36 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               {t('viewTransaction')} →
             </Link>
           )}
+          {/* 8.28 — detach a mis-linked pair (revertible). */}
+          {receipt.transactionId && (
+            <button
+              type="button"
+              onClick={() => setDetachOpen(true)}
+              disabled={detachOp.isLoading}
+              data-testid="receipt-review-detach"
+              className="text-sm text-gray-500 hover:text-gray-800 hover:underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {tLink('detachTransaction')}
+            </button>
+          )}
         </div>
-        <ReceiptStatusPill status={receipt.status} />
+        <div className="flex items-center gap-3">
+          {/* 8.28 — glue this standalone receipt to an existing transaction
+              instead of creating a new one. Unattached, data-carrying only. */}
+          {!receipt.transactionId &&
+            (receipt.status === 'REVIEW' || receipt.status === 'CONFIRMED') && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setLinkTxOpen(true)}
+                data-testid="receipt-review-link-transaction"
+              >
+                {tLink('linkToTransaction')}
+              </Button>
+            )}
+          <ReceiptStatusPill status={receipt.status} />
+        </div>
       </div>
 
       {receipt.status === 'FAILED' && (
@@ -777,6 +847,28 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
             setReconcileOpen(false);
             router.push(`/transactions/${transactionId}`);
           }}
+        />
+      )}
+
+      {/* 8.28 — glue this standalone receipt to an existing transaction. */}
+      <LinkTransactionDialog
+        open={linkTxOpen}
+        receiptId={receiptId}
+        locale={locale}
+        onClose={() => setLinkTxOpen(false)}
+        onLinked={handleLinked}
+      />
+
+      {/* 8.28 — detach confirmation (revertible, so not styled destructive). */}
+      {detachOpen && (
+        <ConfirmDialog
+          title={tLink('detachTitle')}
+          message={tLink('detachMessage')}
+          confirmLabel={tLink('detachConfirm')}
+          cancelLabel={tLink('detachCancel')}
+          busy={detachOp.isLoading}
+          onConfirm={handleDetach}
+          onClose={() => setDetachOpen(false)}
         />
       )}
 

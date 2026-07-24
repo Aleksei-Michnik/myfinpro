@@ -35,6 +35,11 @@ export interface AttachReceiptDialogProps {
   onClose(): void;
   /** The created (linked) receipt — the parent routes to its review. */
   onAttached(receipt: ReceiptSummary): void;
+  /**
+   * 8.28 — switch to the "link an existing receipt" picker. When provided a
+   * third option is offered; the parent swaps this dialog for LinkReceiptDialog.
+   */
+  onLinkExisting?(): void;
 }
 
 export function AttachReceiptDialog({
@@ -42,6 +47,7 @@ export function AttachReceiptDialog({
   transactionId,
   onClose,
   onAttached,
+  onLinkExisting,
 }: AttachReceiptDialogProps) {
   const t = useTranslations('receipts.attach');
   // Browse/camera labels ride the intake-zone keys — same wording everywhere.
@@ -203,6 +209,27 @@ export function AttachReceiptDialog({
             </Button>
           </div>
         </div>
+
+        {/* 8.28 — glue an already-uploaded standalone receipt instead of a new one. */}
+        {onLinkExisting && (
+          <>
+            <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+              <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              {t('or')}
+              <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              disabled={op.isLoading}
+              onClick={onLinkExisting}
+              data-testid="attach-receipt-link-existing"
+            >
+              {t('linkExisting')}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

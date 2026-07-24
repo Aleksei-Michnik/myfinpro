@@ -48,6 +48,14 @@ interface ReceiptContextValue {
     input: { applyTotal: boolean; applyCategory: boolean },
     signal?: AbortSignal,
   ): Promise<ReceiptSummary>;
+  /** Glue an existing receipt to an existing expense transaction (8.28). */
+  linkToTransaction(
+    receiptId: string,
+    transactionId: string,
+    signal?: AbortSignal,
+  ): Promise<ReceiptSummary>;
+  /** Detach a receipt from its transaction — revertible (8.28). */
+  unlinkReceipt(receiptId: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   fetchList(params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse>;
   getReceipt(id: string, signal?: AbortSignal): Promise<ReceiptSummary>;
   /** FAILED → back through the extraction pipeline. */
@@ -258,6 +266,35 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
     [authHeaders, run],
   );
 
+  const linkToTransaction = useCallback(
+    (receiptId: string, transactionId: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(receiptId)}/link`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ transactionId }),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to link receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
+  const unlinkReceipt = useCallback(
+    (receiptId: string, signal?: AbortSignal): Promise<ReceiptSummary> =>
+      run(async () => {
+        const res = await fetch(`${API_BASE}/receipts/${encodeURIComponent(receiptId)}/link`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+          signal,
+        });
+        if (!res.ok) await throwApiError(res, 'Failed to detach receipt');
+        return (await res.json()) as ReceiptSummary;
+      }),
+    [authHeaders, run],
+  );
+
   const fetchList = useCallback(
     (params?: ListReceiptsParams, signal?: AbortSignal): Promise<ReceiptListResponse> =>
       run(async () => {
@@ -429,6 +466,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       attachFileToTransaction,
       attachUrlToTransaction,
       reconcileReceipt,
+      linkToTransaction,
+      unlinkReceipt,
       fetchList,
       getReceipt,
       retryReceipt,
@@ -452,6 +491,8 @@ export function ReceiptProvider({ children }: { children: ReactNode }) {
       attachFileToTransaction,
       attachUrlToTransaction,
       reconcileReceipt,
+      linkToTransaction,
+      unlinkReceipt,
       fetchList,
       getReceipt,
       retryReceipt,

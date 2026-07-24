@@ -10,6 +10,8 @@ describe('ReceiptController', () => {
     createFromUrl: jest.Mock;
     createManual: jest.Mock;
     reconcile: jest.Mock;
+    link: jest.Mock;
+    unlink: jest.Mock;
     list: jest.Mock;
     getOne: jest.Mock;
     openFile: jest.Mock;
@@ -23,6 +25,8 @@ describe('ReceiptController', () => {
       createFromUrl: jest.fn(),
       createManual: jest.fn(),
       reconcile: jest.fn(),
+      link: jest.fn(),
+      unlink: jest.fn(),
       list: jest.fn(),
       getOne: jest.fn(),
       openFile: jest.fn(),
@@ -80,6 +84,16 @@ describe('ReceiptController', () => {
     const dto = { applyTotal: true, applyCategory: false };
     await controller.reconcile(user as never, 'r1', dto);
     expect(service.reconcile).toHaveBeenCalledWith('u1', 'r1', dto);
+  });
+
+  it('POST /:id/link → service.link; DELETE /:id/link → service.unlink (8.28)', async () => {
+    service.link.mockResolvedValue({ id: 'r1', transactionId: 'pay-1' });
+    await controller.link(user as never, 'r1', { transactionId: 'pay-1' });
+    expect(service.link).toHaveBeenCalledWith('u1', 'r1', { transactionId: 'pay-1' });
+
+    service.unlink.mockResolvedValue({ id: 'r1', transactionId: null });
+    await controller.unlink(user as never, 'r1');
+    expect(service.unlink).toHaveBeenCalledWith('u1', 'r1');
   });
 
   it('GET → service.list; GET /:id → service.getOne; POST /:id/retry; DELETE', async () => {
