@@ -120,10 +120,26 @@ describe('ProductService', () => {
       prismaMock.product.update.mockResolvedValue(makeProduct({ name: 'Whole Milk' }));
 
       await service.update('u-1', 'p-1', { name: ' Whole  Milk ', barcode: '7290000066318' });
-      expect(prismaMock.product.update.mock.calls[0][0].data).toMatchObject({
+      const data = prismaMock.product.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
         name: 'Whole  Milk',
         normalizedName: 'whole milk',
         barcode: '7290000066318',
+      });
+      // Unchanged barcode keeps its OFF-checked stamp.
+      expect(data.offCheckedAt).toBeUndefined();
+    });
+
+    it('a changed barcode resets the OFF-checked stamp for the nightly sweep', async () => {
+      prismaMock.product.findUnique
+        .mockResolvedValueOnce(makeProduct({ barcode: '7290000066318' })) // load
+        .mockResolvedValueOnce(null); // new barcode is free
+      prismaMock.product.update.mockResolvedValue(makeProduct({ barcode: '96385074' }));
+
+      await service.update('u-1', 'p-1', { barcode: '96385074' });
+      expect(prismaMock.product.update.mock.calls[0][0].data).toMatchObject({
+        barcode: '96385074',
+        offCheckedAt: null,
       });
     });
 
@@ -217,8 +233,10 @@ describe('ProductService', () => {
       expect(out.product?.name).toBe('Nutella');
       const args = prismaMock.product.create.mock.calls[0][0].data;
       expect(args).toMatchObject({ name: 'Nutella', brand: 'Ferrero', barcode: '3017620422003' });
-      // Provenance: the seeded alias is marked as an OFF import.
+      // Provenance: the seeded alias is marked as an OFF import, and the
+      // row is born enriched (skipped by the nightly sweep).
       expect(args.aliases.create).toMatchObject({ source: 'off' });
+      expect(args.offCheckedAt).toBeInstanceOf(Date);
       // The OFF image rides the background queue, never blocking the lookup.
       expect(imagesMock.addFromUrl).toHaveBeenCalledWith('p-off', 'https://images.example/n.jpg');
     });

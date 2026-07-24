@@ -202,6 +202,8 @@ export class ProductService {
         normalizedName,
         brand: dto.brand?.trim() || null,
         barcode,
+        // An OFF import is born enriched — the nightly sweep skips it.
+        offCheckedAt: aliasSource === 'off' ? new Date() : null,
         defaultCategoryId: dto.defaultCategoryId ?? null,
         // The canonical name doubles as the first alias so alias-stage
         // matching works from day one.
@@ -244,6 +246,9 @@ export class ProductService {
     if (dto.brand !== undefined) data.brand = dto.brand?.trim() || null;
     if (dto.barcode !== undefined) {
       data.barcode = await this.validateBarcode(dto.barcode, id);
+      // A different code was never checked against OFF — let the nightly
+      // enrichment sweep pick it up (design §1.4).
+      if (data.barcode !== row.barcode) data.offCheckedAt = null;
     }
     if (dto.defaultCategoryId !== undefined) {
       if (dto.defaultCategoryId) await this.assertSystemOutCategory(dto.defaultCategoryId);
@@ -272,11 +277,12 @@ export class ProductService {
   /**
    * Alias upsert — THE registry auto-update primitive (design §1.3, 8.5).
    * New spelling → row with count 1; known spelling → count bump. Callable
-   * inside a transaction (walkthrough confirm) or standalone.
+   * inside a transaction (walkthrough confirm) or standalone. A null
+   * userId marks a system action (nightly OFF enrichment).
    */
   async recordAlias(
     db: Prisma.TransactionClient | PrismaService,
-    userId: string,
+    userId: string | null,
     productId: string,
     rawName: string,
     locale: string | null,
@@ -574,8 +580,9 @@ export class ProductService {
     await this.writeAudit(userId, productId, action, details);
   }
 
+  /** Product audit rows; a null userId marks a system action. */
   private async writeAudit(
-    userId: string,
+    userId: string | null,
     productId: string,
     action: string,
     details: Record<string, unknown>,

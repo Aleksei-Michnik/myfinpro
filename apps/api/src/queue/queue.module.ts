@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { buildRedisConnection } from '../config/redis.config';
 import {
   TRANSACTION_OCCURRENCES_QUEUE,
+  PRODUCT_ENRICHMENTS_QUEUE,
   PRODUCT_IMAGES_QUEUE,
   RECEIPT_EXTRACTIONS_QUEUE,
   RECEIPT_OPTIMIZATIONS_QUEUE,
@@ -40,6 +41,7 @@ import {
     BullModule.registerQueue({ name: RECEIPT_EXTRACTIONS_QUEUE }),
     BullModule.registerQueue({ name: PRODUCT_IMAGES_QUEUE }),
     BullModule.registerQueue({ name: RECEIPT_OPTIMIZATIONS_QUEUE }),
+    BullModule.registerQueue({ name: PRODUCT_ENRICHMENTS_QUEUE }),
   ],
   exports: [BullModule],
 })

@@ -6,11 +6,10 @@ import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { OFF_MIN_CALL_INTERVAL_MS } from '../../src/product/open-food-facts.service';
+import { ProductEnrichmentService } from '../../src/product/product-enrichment.service';
 import { PRODUCT_IMAGES_QUEUE, RECEIPT_EXTRACTIONS_QUEUE } from '../../src/queue/queue.constants';
 import { bootstrapTestApp, registerUser } from './helpers';
-
-/** The OFF client throttles itself to one outbound call per second. */
-const OFF_MIN_CALL_INTERVAL_MS = 1_000;
 
 /** Valid GTIN-13 from a unique 12-digit base — re-runs never collide. */
 function uniqueGtin13(seed: number): string {
@@ -41,6 +40,7 @@ describe('OFF auto-import (integration)', () => {
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
   const importCode = uniqueGtin13(Date.now());
   const prefillCode = uniqueGtin13(Date.now() + 1);
+  const enrichCode = uniqueGtin13(Date.now() + 2);
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
   const originalEnv = {
@@ -144,5 +144,45 @@ describe('OFF auto-import (integration)', () => {
       prefill: { name: `Stub Nutella ${suffix}`, brand: 'Ferrero' },
     });
     expect(await prisma.product.findUnique({ where: { barcode: prefillCode } })).toBeNull();
+  });
+
+  it('the nightly enrichment sweep fills a never-checked product from OFF', async () => {
+    // A manually created product carries a barcode the checker never saw.
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/products')
+      .set(auth(alice.accessToken))
+      .send({ name: `Manual Spread ${suffix}`, barcode: enrichCode })
+      .expect(201);
+    const before = await prisma.product.findUnique({ where: { id: created.body.id } });
+    expect(before!.offCheckedAt).toBeNull();
+
+    // ...while the ?import=true row from the first test was born enriched.
+    const imported = await prisma.product.findUnique({ where: { barcode: importCode } });
+    expect(imported!.offCheckedAt).not.toBeNull();
+
+    // Pin the sweep to this test's row — a shared dev DB may hold other
+    // never-checked products, and stamping them here would be a side effect.
+    await prisma.product.updateMany({
+      where: { barcode: { not: enrichCode }, offCheckedAt: null },
+      data: { offCheckedAt: new Date() },
+    });
+
+    // Respect the OFF client's one-call-per-second etiquette throttle.
+    await new Promise((resolve) => setTimeout(resolve, OFF_MIN_CALL_INTERVAL_MS + 100));
+    const summary = await app.get(ProductEnrichmentService).enrichUnchecked();
+    expect(summary).toMatchObject({ scanned: 1, enriched: 1, halted: false });
+
+    const after = await prisma.product.findUnique({
+      where: { id: created.body.id },
+      include: { aliases: true },
+    });
+    expect(after!.offCheckedAt).not.toBeNull();
+    expect(after!.brand).toBe('Ferrero'); // gap filled from OFF
+    expect(after!.name).toBe(`Manual Spread ${suffix}`); // user name untouched
+    expect(after!.aliases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'off', name: `Stub Nutella ${suffix}` }),
+      ]),
+    );
   });
 });

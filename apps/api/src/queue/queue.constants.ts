@@ -38,3 +38,13 @@ export const PRODUCT_IMAGES_QUEUE = 'product-images';
  * Consumer: receipt-optimization processor (re-encode CONFIRMED pages to WebP).
  */
 export const RECEIPT_OPTIMIZATIONS_QUEUE = 'receipt-optimizations';
+
+/**
+ * Product Open Food Facts enrichment queue (design §1.4).
+ *
+ * Producer: a nightly job scheduler upserted on boot by
+ * ProductEnrichmentService.
+ * Consumer: product-enrichment processor (sweeps never-checked barcodes
+ * through OFF, filling brand/alias/image gaps).
+ */
+export const PRODUCT_ENRICHMENTS_QUEUE = 'product-enrichments';

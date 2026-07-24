@@ -11,8 +11,12 @@ export type OffLookupResult =
 const BREAKER_FAILURE_THRESHOLD = 3;
 /** How long the breaker stays open before a probe is allowed. */
 const BREAKER_COOLDOWN_MS = 60_000;
-/** Minimum spacing between outbound calls (OFF etiquette — well under their limits). */
-const MIN_CALL_INTERVAL_MS = 1_000;
+/**
+ * Minimum spacing between outbound calls (OFF etiquette — well under their
+ * limits). Exported so batch callers (nightly enrichment) pace themselves
+ * to the same rhythm instead of tripping the throttle.
+ */
+export const OFF_MIN_CALL_INTERVAL_MS = 1_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 /**
@@ -43,11 +47,16 @@ export class OpenFoodFactsService {
       configService.get<string>('OFF_BASE_URL', '') || 'https://world.openfoodfacts.org';
   }
 
+  /** OFF_ENABLED — lets dependents (nightly enrichment) skip scheduling. */
+  get isEnabled(): boolean {
+    return this.enabled;
+  }
+
   async lookup(barcode: string): Promise<OffLookupResult> {
     if (!this.enabled) return { status: 'disabled' };
     const now = Date.now();
     if (now < this.breakerOpenUntil) return { status: 'unavailable' };
-    if (now - this.lastCallAt < MIN_CALL_INTERVAL_MS) return { status: 'unavailable' };
+    if (now - this.lastCallAt < OFF_MIN_CALL_INTERVAL_MS) return { status: 'unavailable' };
     this.lastCallAt = now;
 
     try {
