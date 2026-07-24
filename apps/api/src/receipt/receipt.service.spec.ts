@@ -70,6 +70,7 @@ describe('ReceiptService', () => {
     totalCents: null,
     discountCents: null,
     rawExtraction: null,
+    extractionReasoning: null,
     failureReason: null,
     uploadedById: 'u-1',
     transactionId: null,

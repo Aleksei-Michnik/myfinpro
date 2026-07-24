@@ -41,6 +41,7 @@ const receipt = (over: Partial<ReceiptSummary> = {}): ReceiptSummary =>
     currency: 'ILS',
     totalCents: 4590,
     discountCents: null,
+    extractionReasoning: null,
     failureReason: null,
     transactionId: null,
     itemsSumCents: 4590,

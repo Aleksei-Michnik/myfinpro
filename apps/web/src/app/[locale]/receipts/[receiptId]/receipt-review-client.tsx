@@ -14,6 +14,7 @@ import { ItemWalkthroughDialog } from '@/components/product/ItemWalkthroughDialo
 import { ProductQuickViewDialog } from '@/components/product/ProductQuickViewDialog';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
 import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialog';
+import { ReasoningDisclosure } from '@/components/receipt/ReasoningDisclosure';
 import { ReceiptConfirmDialog } from '@/components/receipt/ReceiptConfirmDialog';
 import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemCard';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
@@ -774,6 +775,18 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               </Button>
             )}
           </div>
+
+          {/* Persisted model reasoning from the last extraction run — while a
+              run is live, ExtractionActivity streams it instead. */}
+          {receipt.extractionReasoning &&
+            receipt.status !== 'UPLOADED' &&
+            receipt.status !== 'EXTRACTING' && (
+              <ReasoningDisclosure
+                text={receipt.extractionReasoning}
+                maxHeightClass="max-h-96"
+                testIdPrefix="receipt-reasoning"
+              />
+            )}
 
           {editable && (
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">

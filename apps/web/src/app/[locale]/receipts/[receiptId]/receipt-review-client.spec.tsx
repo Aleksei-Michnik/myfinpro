@@ -170,6 +170,7 @@ function makeReceipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
     currency: 'ILS',
     totalCents: 4590,
     discountCents: null,
+    extractionReasoning: null,
     failureReason: null,
     transactionId: null,
     itemsSumCents: 4590,
@@ -255,6 +256,29 @@ describe('ReceiptReviewClient', () => {
     expect(screen.queryByTestId('review-mismatch-warning')).toBeNull();
     // Save stays disabled until something changes.
     expect(screen.getByTestId('review-save')).toBeDisabled();
+  });
+
+  it('discloses the persisted extraction reasoning on settled receipts only', async () => {
+    await renderLoaded(
+      makeReceipt({ extractionReasoning: 'Header says Shufersal.\n\nTotals ok.' }),
+    );
+
+    const toggle = screen.getByTestId('receipt-reasoning-toggle');
+    expect(screen.queryByTestId('receipt-reasoning-full')).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('receipt-reasoning-full')).toHaveTextContent(
+      'Header says Shufersal.',
+    );
+    expect(screen.getByTestId('receipt-reasoning-full')).toHaveClass('whitespace-pre-wrap');
+  });
+
+  it('hides the persisted reasoning while a run is live and when there is none', async () => {
+    // Live run → the ExtractionActivity stream owns the surface.
+    await renderLoaded(
+      makeReceipt({ status: 'EXTRACTING', extractionReasoning: 'stale from a failed run' }),
+    );
+    expect(screen.queryByTestId('receipt-reasoning-toggle')).toBeNull();
+    expect(screen.getByTestId('extraction-activity')).toBeInTheDocument();
   });
 
   it('renders the not-found branch on a 404 load failure', async () => {

@@ -60,6 +60,8 @@ export interface ReceiptSummary {
   currency: string | null;
   totalCents: number | null;
   discountCents: number | null;
+  /** Full model reasoning transcript from the last extraction run (success or failure). */
+  extractionReasoning: string | null;
   failureReason: string | null;
   transactionId: string | null;
   itemsSumCents: number;

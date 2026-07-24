@@ -89,8 +89,12 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     // Phase 8.11 — resolved inside the try so a permanent resolver failure
     // (selected model retired, no API key) rides the normal FAILED path.
     let resolved: ResolvedExtraction | null = null;
+    // Full reasoning transcript, accumulated untrimmed — the throttled SSE
+    // emitter below caps `thought` for transport, so it cannot be the source;
+    // this lands on the receipt row at either terminal state.
+    let reasoning = '';
     // 8.26 — transient progress fan-out to the uploader (design §4.2):
-    // throttled, decorated with the resolved binding, never persisted.
+    // throttled and decorated with the resolved binding.
     const progress = createProgressEmitter((update) =>
       this.eventBus.publish({
         type: 'receipt.extraction.progress',
@@ -127,7 +131,15 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         categories: candidates,
         products: productCandidates,
         locale: receipt.uploadedBy?.locale ?? undefined,
-        onProgress: (update) => progress.emit(update),
+        onProgress: (update) => {
+          if (update.stage === 'thinking' && update.thought) {
+            reasoning += update.thought;
+          } else if (update.stage === 'continuing' && reasoning) {
+            // Blank line between continuation passes keeps the transcript readable.
+            reasoning += '\n\n';
+          }
+          progress.emit(update);
+        },
       });
       // Terminal from here on — drop any trailing progress tick before the
       // REVIEW/FAILED receipt.updated goes out.
@@ -164,7 +176,13 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         result.confidence,
       );
 
-      const itemCount = await this.persistResult(receiptId, result, candidateIds, proposals);
+      const itemCount = await this.persistResult(
+        receiptId,
+        result,
+        candidateIds,
+        proposals,
+        reasoning,
+      );
       void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTED', {
         provider: resolved.providerName,
         model: resolved.model,
@@ -186,7 +204,9 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         const reason = (err as Error).message?.slice(0, 500) || 'Extraction failed';
         await this.prisma.receipt.update({
           where: { id: receiptId },
-          data: { status: 'FAILED', failureReason: reason },
+          // Whatever reasoning streamed before the failure is kept — it is
+          // often the best clue to why the model gave up.
+          data: { status: 'FAILED', failureReason: reason, extractionReasoning: reasoning || null },
         });
         void this.writeAudit(receipt.uploadedById, receiptId, 'RECEIPT_EXTRACTION_FAILED', {
           provider: resolved?.providerName ?? 'unresolved',
@@ -252,6 +272,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
     result: ExtractionResult,
     candidateIds: Set<string>,
     proposals: MatchProposal[],
+    reasoning: string,
   ): Promise<number> {
     // Default categories for auto-linked products backfill lines the
     // extraction left uncategorized (only ids visible to the uploader).
@@ -281,6 +302,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
           totalCents: result.totalCents,
           discountCents: result.discountCents,
           rawExtraction: result as unknown as Prisma.InputJsonValue,
+          extractionReasoning: reasoning || null,
           failureReason: null,
         },
       });

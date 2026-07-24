@@ -6,22 +6,25 @@
 //   - variant="panel"  — the review page's items area (primary wait surface)
 //   - variant="inline" — compact line on EXTRACTING receipt-list rows
 //
-// Fed by the transient `receipt.extraction.progress` SSE event. Everything
-// here is component state: thoughts are never persisted anywhere — reload
-// forgets them, by design. The stream is advisory: with no events the
+// Fed by the transient `receipt.extraction.progress` SSE event. The buffer
+// here is advisory (throttled stream, component state): the worker persists
+// the FULL transcript on the receipt (`extractionReasoning`) at either
+// terminal state, and the review page renders it. With no events the
 // component keeps rotating generic verbs until `receipt.updated` unmounts it.
 
 import { findLlmModel, type ReceiptExtractionProgress } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ReasoningDisclosure } from './ReasoningDisclosure';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 
 /** Client-side verb rotation cadence while no fresh event arrives. */
 const VERB_ROTATION_MS = 2500;
 /** Every rotating stage has exactly this many verb variants in messages. */
 const VERBS_PER_STAGE = 3;
-/** Cap on accumulated reasoning kept in memory (newest tail wins). */
-const THOUGHTS_MAX_CHARS = 8000;
+/** Runaway guard on the in-memory live buffer (newest tail wins) — sized so
+ * a normal run is never clipped; the persisted transcript is always full. */
+const THOUGHTS_MAX_CHARS = 200_000;
 
 /** Stages rendered as rotating verb sets (the rest have data-driven lines). */
 type RotatingStage = 'waiting' | 'preparing' | 'processing' | 'thinking' | 'generating';
@@ -37,8 +40,8 @@ export function ExtractionActivity({
   const [progress, setProgress] = useState<ReceiptExtractionProgress | null>(null);
   const [thoughts, setThoughts] = useState('');
   const [tick, setTick] = useState(0);
+  // Mirrors the disclosure's state so the one-line ticker yields to the box.
   const [expanded, setExpanded] = useState(false);
-  const thoughtsRef = useRef<HTMLDivElement | null>(null);
 
   useRealtimeEvents({ type: 'receipt.extraction.progress', receiptId }, (event) => {
     setProgress(event.progress);
@@ -55,13 +58,6 @@ export function ExtractionActivity({
     return () => clearInterval(id);
     // New event → new interval, so the fresh line holds a full beat.
   }, [progress]);
-
-  // Keep the expanded reasoning scrolled to the newest line.
-  useEffect(() => {
-    if (expanded && thoughtsRef.current) {
-      thoughtsRef.current.scrollTop = thoughtsRef.current.scrollHeight;
-    }
-  }, [expanded, thoughts]);
 
   const stage = progress?.stage ?? null;
   let stageLine: string;
@@ -132,28 +128,12 @@ export function ExtractionActivity({
           )}
         </div>
       </div>
-      {thoughts && (
-        <div>
-          <button
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-primary-700 hover:underline dark:text-primary-300"
-            data-testid="extraction-thoughts-toggle"
-          >
-            {expanded ? t('hideThoughts') : t('showThoughts')}
-          </button>
-          {expanded && (
-            <div
-              ref={thoughtsRef}
-              className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md bg-white/60 p-3 text-xs text-gray-600 dark:bg-gray-900/40 dark:text-gray-300"
-              data-testid="extraction-thoughts-full"
-            >
-              {thoughts}
-            </div>
-          )}
-        </div>
-      )}
+      <ReasoningDisclosure
+        text={thoughts}
+        follow
+        onExpandedChange={setExpanded}
+        testIdPrefix="extraction-thoughts"
+      />
     </div>
   );
 }
