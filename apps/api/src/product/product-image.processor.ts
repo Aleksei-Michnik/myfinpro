@@ -46,6 +46,13 @@ export class ProductImageProcessor extends WorkerHost {
       if (data.kind === 'staged' && (succeeded || isFinalAttempt)) {
         await this.images.delete(data.stagedRef);
       }
+      // A terminally failed encode would leave a row no rendition will ever
+      // back: a permanent placeholder that also holds a slot against the
+      // image cap. Drop it so a re-upload starts clean. (regen rows keep
+      // serving their detail WebP — never dropped here.)
+      if (!succeeded && isFinalAttempt && data.kind !== 'regen') {
+        await this.images.removeDeadRow(row.id);
+      }
     }
   }
 }

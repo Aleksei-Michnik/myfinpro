@@ -35,6 +35,13 @@ const URL_FETCH_TIMEOUT_MS = 15_000;
 /** Stagger for the bootstrap rendition-backfill sweep (design §3.4). */
 const BACKFILL_STAGGER_MS = 2_000;
 
+/**
+ * A row younger than this may have its encode job still in flight (blue/green
+ * deploy overlap) — the sweep never touches it. Anything older with no
+ * rendition on disk and no detail WebP to regen from is unservable forever.
+ */
+const BACKFILL_MIN_ROW_AGE_MS = 60 * 60 * 1000;
+
 export type ProductImageJob =
   /** New upload, staged raw on disk. */
   | { productImageId: string; kind: 'staged'; stagedRef: string }
@@ -121,10 +128,27 @@ export class ProductImageService implements OnApplicationBootstrap {
       });
     }
 
+    // Same HEIC handling as receipts — sharp's prebuilt libvips has no HEIF
+    // codec, so staging HEIC raw would make every encode job fail. Converting
+    // here also surfaces an unreadable file as an immediate 400 instead of a
+    // silent async failure.
+    let bytes = buffer;
+    if (mimeType === 'image/heic') {
+      try {
+        bytes = await ReceiptStorageService.convertHeicToJpeg(buffer);
+      } catch (err) {
+        this.logger.warn(`HEIC conversion failed: ${(err as Error).message}`);
+        throw new BadRequestException({
+          message: 'Could not read this HEIC image — please upload a JPEG, PNG, or WebP',
+          errorCode: PRODUCT_ERRORS.PRODUCT_INVALID_IMAGE,
+        });
+      }
+    }
+
     const stagedRef = path.posix.join('incoming', `${randomUUID()}`);
     const absolute = this.resolveRef(stagedRef);
     await mkdir(path.dirname(absolute), { recursive: true });
-    await writeFile(absolute, buffer);
+    await writeFile(absolute, bytes);
 
     const row = await this.createRow(productId);
     await this.enqueue({ productImageId: row.id, kind: 'staged', stagedRef });
@@ -223,10 +247,14 @@ export class ProductImageService implements OnApplicationBootstrap {
     // rotate() applies EXIF orientation; re-encoding drops all metadata
     // (EXIF/GPS). The detail WebP is written first — it is the one
     // rendition serving falls back on and regen derives from.
-    const detail = sharp(source)
+    // failOn 'none': real phone JPEGs trip libvips' strict decoder ("Invalid
+    // SOS parameters for sequential JPEG" — seen in production); decode what
+    // is decodable instead of failing the whole job.
+    const decodeOpts = { failOn: 'none' as const };
+    const detail = sharp(source, decodeOpts)
       .rotate()
       .resize(DETAIL_MAX_EDGE, DETAIL_MAX_EDGE, { fit: 'inside', withoutEnlargement: true });
-    const thumb = sharp(source)
+    const thumb = sharp(source, decodeOpts)
       .rotate()
       .resize(THUMB_MAX_EDGE, THUMB_MAX_EDGE, { fit: 'inside', withoutEnlargement: true });
 
@@ -297,13 +325,32 @@ export class ProductImageService implements OnApplicationBootstrap {
     });
   }
 
-  /** Best-effort delete of a staged original. */
+  /** Best-effort delete of a staged original; a missing file is a no-op. */
   async delete(ref: string): Promise<void> {
     try {
-      await rm(this.resolveRef(ref));
+      await rm(this.resolveRef(ref), { force: true });
     } catch (err) {
       this.logger.warn(`Failed to delete product image ${ref}: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * Drop a row whose renditions can never be produced — the encode failed
+   * terminally, or the files were lost before the persistent volume existed.
+   * The row would otherwise render a permanent placeholder and hold a slot
+   * against {@link PRODUCT_IMAGE_MAX_COUNT}; dropping it lets the user simply
+   * upload the picture again.
+   */
+  async removeDeadRow(imageId: string): Promise<void> {
+    const row = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+    if (!row) return;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productImage.delete({ where: { id: row.id } });
+      await this.renumber(tx, row.productId);
+    });
+    // Partial writes are possible (e.g. detail WebP landed, thumb crashed).
+    await this.deleteRenditions(row.baseRef);
+    this.logger.warn(`Dropped unservable product image ${imageId} (${row.baseRef})`);
   }
 
   /** Best-effort delete of all four renditions of a removed row. */
@@ -362,14 +409,16 @@ export class ProductImageService implements OnApplicationBootstrap {
 
   private async enqueueRenditionBackfill(): Promise<void> {
     const rows = await this.prisma.productImage.findMany({
-      select: { id: true, baseRef: true },
+      select: { id: true, baseRef: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
+    const inFlightCutoff = new Date(Date.now() - BACKFILL_MIN_ROW_AGE_MS);
     let enqueued = 0;
+    let dropped = 0;
     for (const row of rows) {
-      try {
-        await stat(this.resolveRef(renditionRefs(row.baseRef).thumbWebp));
-      } catch {
+      const refs = renditionRefs(row.baseRef);
+      if (await this.exists(refs.thumbWebp)) continue;
+      if (await this.exists(refs.webp)) {
         await this.queue.add(
           'process',
           { productImageId: row.id, kind: 'regen' },
@@ -385,9 +434,25 @@ export class ProductImageService implements OnApplicationBootstrap {
           },
         );
         enqueued++;
+      } else if (row.createdAt < inFlightCutoff) {
+        // No rendition to serve and no detail WebP to regen from — the row
+        // is dead weight (terminal encode failure, or files lost before the
+        // persistent volume). Self-heal by dropping it.
+        await this.removeDeadRow(row.id);
+        dropped++;
       }
     }
     if (enqueued > 0) this.logger.log(`Rendition backfill: ${enqueued} product image(s) enqueued`);
+    if (dropped > 0) this.logger.warn(`Rendition backfill: ${dropped} unservable row(s) dropped`);
+  }
+
+  private async exists(ref: string): Promise<boolean> {
+    try {
+      await stat(this.resolveRef(ref));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async enqueue(job: ProductImageJob): Promise<void> {
