@@ -106,12 +106,12 @@ describe('seedSystemCategories', () => {
     });
   });
 
-  it('seeds the expected 22 defaults (15 OUT + 7 IN)', async () => {
+  it('seeds the expected 25 defaults (18 OUT + 7 IN)', async () => {
     const outCount = DEFAULT_CATEGORIES.filter((c) => c.direction === 'OUT').length;
     const inCount = DEFAULT_CATEGORIES.filter((c) => c.direction === 'IN').length;
 
-    expect(outCount).toBe(15);
+    expect(outCount).toBe(18);
     expect(inCount).toBe(7);
-    expect(DEFAULT_CATEGORIES.length).toBe(22);
+    expect(DEFAULT_CATEGORIES.length).toBe(25);
   });
 });
