@@ -924,6 +924,12 @@
         "actionFailed": "פעולת התזמון נכשלה"
       }
     },
+    "status": {
+      "PENDING": "ממתין",
+      "POSTED": "נרשם",
+      "DUE": "לתשלום",
+      "CANCELLED": "בוטל"
+    },
     "plan": {
       "kind": {
         "INSTALLMENT": "תוכנית תנועות",
@@ -940,12 +946,6 @@
         "total": "תנועה",
         "remaining": "יתרה",
         "status": "סטטוס"
-      },
-      "rowStatus": {
-        "PENDING": "ממתין",
-        "POSTED": "נרשם",
-        "DUE": "לתשלום",
-        "CANCELLED": "בוטל"
       },
       "cancelAction": "ביטול תוכנית",
       "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תנועות עתידיות יסומנו כמבוטלות; דבר לא יימחק.",

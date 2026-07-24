@@ -18,7 +18,12 @@ import {
   formatScopeLabel,
   formatSignedAmount,
 } from '@/lib/transaction/formatters';
-import { canEditTransaction, cannotEditReason } from '@/lib/transaction/types';
+import {
+  canEditTransaction,
+  cannotEditReason,
+  TRANSACTION_STATUSES,
+  TRANSACTION_TYPES,
+} from '@/lib/transaction/types';
 import type { TransactionSummary } from '@/lib/transaction/types';
 import { useStarToggle } from '@/lib/transaction/use-star-toggle';
 
@@ -57,6 +62,15 @@ export function TransactionDetailHeader({
       ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
       : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
   const directionLabel = transaction.direction === 'IN' ? t('directions.in') : t('directions.out');
+  // Guard before translating (same convention as GroupCard's isKnownType):
+  // `type`/`status` are forward-compat plain strings — an unknown value falls
+  // back to the raw enum instead of a broken translation key.
+  const typeLabel = (TRANSACTION_TYPES as readonly string[]).includes(transaction.type)
+    ? t(`types.options.${transaction.type}`)
+    : transaction.type;
+  const statusLabel = (TRANSACTION_STATUSES as readonly string[]).includes(transaction.status)
+    ? t(`status.${transaction.status}`)
+    : transaction.status;
 
   const tFn = (key: string) => t(key);
 
@@ -105,13 +119,13 @@ export function TransactionDetailHeader({
           className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
           data-testid="detail-type"
         >
-          {transaction.type}
+          {typeLabel}
         </span>
         <span
           className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
           data-testid="detail-status"
         >
-          {transaction.status}
+          {statusLabel}
         </span>
       </div>
 

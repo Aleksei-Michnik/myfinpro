@@ -924,6 +924,12 @@
         "actionFailed": "Schedule action failed"
       }
     },
+    "status": {
+      "PENDING": "Pending",
+      "POSTED": "Posted",
+      "DUE": "Due",
+      "CANCELLED": "Cancelled"
+    },
     "plan": {
       "kind": {
         "INSTALLMENT": "Installment plan",
@@ -940,12 +946,6 @@
         "total": "Transaction",
         "remaining": "Remaining",
         "status": "Status"
-      },
-      "rowStatus": {
-        "PENDING": "Pending",
-        "POSTED": "Posted",
-        "DUE": "Due",
-        "CANCELLED": "Cancelled"
       },
       "cancelAction": "Cancel plan",
       "cancelConfirmBody": "Cancel this plan permanently? Remaining pending transactions will be marked cancelled; nothing is deleted.",
