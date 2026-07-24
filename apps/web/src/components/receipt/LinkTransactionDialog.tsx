@@ -88,7 +88,7 @@ export function LinkTransactionDialog({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-              {tx.note || tx.category.name}
+              {tx.note || tx.categories[0].name}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {formatOccurredDate(tx.occurredAt, locale)}

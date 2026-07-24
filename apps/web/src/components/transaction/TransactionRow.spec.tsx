@@ -49,13 +49,15 @@ function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummar
     currency: 'USD',
     occurredAt: '2026-04-25T00:00:00Z',
     status: 'POSTED',
-    category: p.category ?? {
-      id: 'c-1',
-      slug: 'misc',
-      name: 'Misc',
-      icon: null,
-      color: null,
-    },
+    categories: p.categories ?? [
+      {
+        id: 'c-1',
+        slug: 'misc',
+        name: 'Misc',
+        icon: null,
+        color: null,
+      },
+    ],
     attributions: p.attributions ?? [
       {
         scope: 'personal',
@@ -252,6 +254,33 @@ describe('TransactionRow', () => {
     });
     renderDesktop({ transaction });
     expect(screen.getByTestId('row-scopes-p-1').textContent).toBe('Family');
+  });
+
+  // Multi-category — all names render as a compact list, primary first.
+  it('renders all category names comma-separated, primary first', () => {
+    const transaction = makeTransaction({
+      categories: [
+        { id: 'c-1', slug: 'food', name: 'Food', icon: null, color: null },
+        { id: 'c-2', slug: 'travel', name: 'Travel', icon: null, color: null },
+      ],
+    });
+    renderDesktop({ transaction });
+    const tr = screen.getByTestId(`transaction-row-${transaction.id}`);
+    // The category cell is the fifth `<td>` (star, date, direction, amount).
+    const categoryCell = tr.querySelectorAll('td')[4] as HTMLTableCellElement;
+    expect(categoryCell.textContent).toBe('Food, Travel');
+  });
+
+  it('card variant renders the category list next to the date', () => {
+    const transaction = makeTransaction({
+      categories: [
+        { id: 'c-1', slug: 'food', name: 'Food', icon: null, color: null },
+        { id: 'c-2', slug: 'travel', name: 'Travel', icon: null, color: null },
+      ],
+    });
+    renderCard({ transaction });
+    const li = screen.getByTestId(`transaction-row-${transaction.id}`);
+    expect(li.textContent).toContain('Food, Travel');
   });
 
   it('note is truncated and the title attribute carries the full text', () => {

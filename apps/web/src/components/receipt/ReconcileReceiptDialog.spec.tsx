@@ -65,7 +65,7 @@ function receipt(over: Partial<ReceiptSummary> = {}): ReceiptSummary {
   } as ReceiptSummary;
 }
 
-const cat = (id: string, name: string): TransactionSummary['category'] => ({
+const cat = (id: string, name: string): TransactionSummary['categories'][number] => ({
   id,
   name,
   slug: id,
@@ -78,7 +78,7 @@ function transaction(over: Partial<TransactionSummary> = {}): TransactionSummary
     id: 'pay-1',
     amountCents: 1000,
     currency: 'USD',
-    category: cat('cat-food', 'Food'),
+    categories: [cat('cat-food', 'Food')],
     ...over,
   } as TransactionSummary;
 }
@@ -139,7 +139,11 @@ describe('ReconcileReceiptDialog (8.15)', () => {
 
   it('shows the no-differences state when the receipt matches the transaction', async () => {
     getTransactionMock.mockResolvedValue(
-      transaction({ amountCents: 4200, currency: 'USD', category: cat('cat-dining', 'Dining') }),
+      transaction({
+        amountCents: 4200,
+        currency: 'USD',
+        categories: [cat('cat-dining', 'Dining')],
+      }),
     );
     renderDialog();
 

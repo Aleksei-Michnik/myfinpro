@@ -3,7 +3,7 @@ import { defaultFilters, transactionMatchesFilters, type FilterableTransaction }
 
 const make = (over: Partial<FilterableTransaction> = {}): FilterableTransaction => ({
   direction: 'OUT',
-  category: { id: 'cat-1' },
+  categories: [{ id: 'cat-1' }],
   occurredAt: '2026-04-25T00:00:00Z',
   starredByMe: false,
   note: null,
@@ -41,6 +41,15 @@ describe('transactionMatchesFilters', () => {
     const f = { ...defaultFilters(), direction: 'IN' as const };
     expect(transactionMatchesFilters(make({ direction: 'IN' }), f)).toBe(true);
     expect(transactionMatchesFilters(make({ direction: 'OUT' }), f)).toBe(false);
+  });
+
+  it('categoryId filter any-matches primary and additional categories', () => {
+    const f = { ...defaultFilters(), categoryId: 'cat-2' };
+    expect(
+      transactionMatchesFilters(make({ categories: [{ id: 'cat-1' }, { id: 'cat-2' }] }), f),
+    ).toBe(true);
+    expect(transactionMatchesFilters(make({ categories: [{ id: 'cat-2' }] }), f)).toBe(true);
+    expect(transactionMatchesFilters(make({ categories: [{ id: 'cat-1' }] }), f)).toBe(false);
   });
 
   it('starred filter only allows starred transactions', () => {

@@ -37,7 +37,7 @@ const tx = (over: Partial<TransactionSummary> = {}): TransactionSummary =>
     currency: 'USD',
     occurredAt: '2026-04-25T00:00:00Z',
     status: 'POSTED',
-    category: { id: 'c1', slug: 'groceries', name: 'Groceries', icon: null, color: null },
+    categories: [{ id: 'c1', slug: 'groceries', name: 'Groceries', icon: null, color: null }],
     attributions: [],
     note: 'Weekly shop',
     commentCount: 0,

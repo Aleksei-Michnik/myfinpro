@@ -60,7 +60,8 @@ export interface TransactionSummary {
   /** ISO-8601 UTC timestamp. */
   occurredAt: string;
   status: string;
-  category: TransactionCategorySummary;
+  /** Multi-category: always non-empty; element 0 is the primary category. */
+  categories: TransactionCategorySummary[];
   attributions: TransactionAttribution[];
   note: string | null;
   commentCount: number;
@@ -139,7 +140,8 @@ export interface CreateTransactionInput {
   amountCents: number;
   currency: string;
   occurredAt: string;
-  categoryId: string;
+  /** Multi-category: 1–5 unique ids; the first is the primary category. */
+  categoryIds: string[];
   note?: string;
   attributions: AttributionScope[];
   schedule?: never;
@@ -290,7 +292,8 @@ export interface UpdateTransactionInput {
   amountCents?: number;
   currency?: string;
   occurredAt?: string;
-  categoryId?: string;
+  /** Multi-category: replaces the whole set; min 1 id, first = primary. */
+  categoryIds?: string[];
   note?: string | null;
   attributions?: AttributionScope[];
 }

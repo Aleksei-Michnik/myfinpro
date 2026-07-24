@@ -95,14 +95,14 @@ describe('useTransactions', () => {
       amountCents: 1000,
       currency: 'USD',
       occurredAt: '2026-01-01T00:00:00Z',
-      categoryId: 'cat-1',
+      categoryIds: ['cat-1'],
       attributions: [{ scope: 'personal' }],
     });
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toMatchObject({
       direction: 'OUT',
-      categoryId: 'cat-1',
+      categoryIds: ['cat-1'],
     });
   });
 

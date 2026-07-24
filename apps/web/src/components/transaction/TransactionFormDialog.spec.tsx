@@ -111,13 +111,15 @@ function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummar
     currency: p.currency ?? 'USD',
     occurredAt: p.occurredAt ?? '2026-04-25T00:00:00Z',
     status: 'POSTED',
-    category: p.category ?? {
-      id: 'c-out',
-      slug: 'food',
-      name: 'Food',
-      icon: null,
-      color: null,
-    },
+    categories: p.categories ?? [
+      {
+        id: 'c-out',
+        slug: 'food',
+        name: 'Food',
+        icon: null,
+        color: null,
+      },
+    ],
     attributions: p.attributions ?? [
       { scope: 'personal', userId: 'me', groupId: null, groupName: null },
     ],
@@ -350,14 +352,22 @@ describe('TransactionFormDialog', () => {
     expect(await screen.findByTestId('form-error-category')).toBeInTheDocument();
   });
 
-  it('create: validation — category direction mismatch', async () => {
-    renderCreate();
-    // OUT direction by default
-    fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '10.00' } });
-    fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
-    fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: 'c-in' } });
+  // Multi-category — the direction check runs over EVERY selected category,
+  // so a single mismatched selection blocks the save. Reachable in edit mode
+  // (the picker/direction-switch keep create-mode selections consistent).
+  it('edit: validation — direction mismatch on any selected category', async () => {
+    renderEdit(
+      makeTransaction({
+        direction: 'OUT',
+        categories: [
+          { id: 'c-out', slug: 'food', name: 'Food', icon: null, color: null },
+          { id: 'c-in', slug: 'salary', name: 'Salary', icon: null, color: null },
+        ],
+      }),
+    );
     fireEvent.click(screen.getByTestId('form-save'));
     expect(await screen.findByTestId('form-error-category')).toBeInTheDocument();
+    expect(updateTransactionMock).not.toHaveBeenCalled();
   });
 
   it('create: validation — scopes required', async () => {
@@ -393,7 +403,7 @@ describe('TransactionFormDialog', () => {
     expect(payload.amountCents).toBe(1250);
     expect(payload.currency).toBe('USD');
     expect(payload.type).toBe('ONE_TIME');
-    expect(payload.categoryId).toBe('c-out');
+    expect(payload.categoryIds).toEqual(['c-out']);
     expect(payload.attributions).toEqual([{ scope: 'personal' }]);
     // Phase 6 · Iteration 6.18.1.2 — datetime-local → UTC ISO conversion
     // now goes through `Date.prototype.toISOString()`, which always emits
@@ -444,6 +454,89 @@ describe('TransactionFormDialog', () => {
     expect(dateInput.type).toBe('datetime-local');
     // Default value follows the YYYY-MM-DDTHH:mm shape (current local time).
     expect(dateInput.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+
+  // ── Multi-category selection ──────────────────────────────────────────────
+
+  describe('multi-category', () => {
+    function pickCategory(id: string) {
+      fireEvent.change(screen.getByTestId('category-picker-select'), { target: { value: id } });
+    }
+
+    it('adding two categories renders two chips with the first marked primary', () => {
+      renderCreate();
+      pickCategory('c-out');
+      pickCategory('c-both');
+      expect(screen.getByTestId('form-category-chip-c-out')).toHaveTextContent('Food');
+      expect(screen.getByTestId('form-category-chip-c-both')).toHaveTextContent('Misc');
+      expect(screen.getByTestId('form-category-primary-c-out')).toBeInTheDocument();
+      expect(screen.queryByTestId('form-category-primary-c-both')).not.toBeInTheDocument();
+    });
+
+    it('removing the primary chip promotes the next selection to primary', () => {
+      renderCreate();
+      pickCategory('c-out');
+      pickCategory('c-both');
+      fireEvent.click(screen.getByTestId('form-category-remove-c-out'));
+      expect(screen.queryByTestId('form-category-chip-c-out')).not.toBeInTheDocument();
+      expect(screen.getByTestId('form-category-primary-c-both')).toBeInTheDocument();
+    });
+
+    it('create: submit sends categoryIds in chip order', async () => {
+      createTransactionMock.mockResolvedValueOnce(makeTransaction({ id: 'new-1' }));
+      renderCreate();
+      fireEvent.change(screen.getByTestId('form-amount'), { target: { value: '10.00' } });
+      fireEvent.change(screen.getByTestId('form-date'), { target: { value: '2026-04-25T00:00' } });
+      pickCategory('c-out');
+      pickCategory('c-both');
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(createTransactionMock).toHaveBeenCalled());
+      expect(createTransactionMock.mock.calls[0][0].categoryIds).toEqual(['c-out', 'c-both']);
+    });
+
+    it('switching direction drops selections that no longer match', () => {
+      renderCreate(); // OUT by default
+      pickCategory('c-out');
+      pickCategory('c-both');
+      fireEvent.click(screen.getByTestId('form-direction-in'));
+      expect(screen.queryByTestId('form-category-chip-c-out')).not.toBeInTheDocument();
+      // The surviving BOTH category is promoted to primary.
+      expect(screen.getByTestId('form-category-primary-c-both')).toBeInTheDocument();
+    });
+
+    it('edit: adding a category emits ordered categoryIds in the diff', async () => {
+      updateTransactionMock.mockResolvedValueOnce(makeTransaction());
+      renderEdit(makeTransaction()); // categories: [c-out]
+      pickCategory('c-both');
+      fireEvent.click(screen.getByTestId('form-save'));
+      await waitFor(() => expect(updateTransactionMock).toHaveBeenCalled());
+      expect(updateTransactionMock.mock.calls[0][1]).toEqual({
+        categoryIds: ['c-out', 'c-both'],
+      });
+    });
+
+    // Dialog-owned fetch — when the host passes no list, the dialog loads it
+    // itself (the picker never self-fetches here) so chips resolve names.
+    it('without a categories prop the dialog fetches the list and chips show names', async () => {
+      render(<TransactionFormDialog open mode="create" onClose={vi.fn()} onSaved={vi.fn()} />);
+      await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(screen.getByTestId('category-picker-select')).toHaveTextContent('Food'),
+      );
+      pickCategory('c-out');
+      expect(screen.getByTestId('form-category-chip-c-out')).toHaveTextContent('Food');
+    });
+
+    it('failed dialog-owned category fetch shows an inline error whose retry refetches', async () => {
+      listCategoriesMock.mockRejectedValueOnce(new Error('boom'));
+      render(<TransactionFormDialog open mode="create" onClose={vi.fn()} onSaved={vi.fn()} />);
+      await screen.findByTestId('form-categories-load-error');
+      fireEvent.click(screen.getByTestId('form-categories-load-error-retry'));
+      await waitFor(() => expect(listCategoriesMock).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(screen.getByTestId('category-picker-select')).toHaveTextContent('Food'),
+      );
+    });
   });
 
   // ── Edit mode ─────────────────────────────────────────────────────────────

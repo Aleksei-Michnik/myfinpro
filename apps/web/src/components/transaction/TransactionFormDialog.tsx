@@ -7,8 +7,11 @@
 // in-flight op. Network/timeout/HTTP failures shown via inline banner
 // with Retry. Domain errors (TRANSACTION_INVALID_*) still map to per-field
 // errors.
+// Multi-category — a transaction carries 1–5 ordered categories (first =
+// primary); the single-select picker acts as an "add" control over
+// removable chips.
 
-import { CURRENCY_CODES, isPlanKind } from '@myfinpro/shared';
+import { CURRENCY_CODES, isPlanKind, TRANSACTION_MAX_CATEGORIES } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PropagationChoiceDialog } from './PropagationChoiceDialog';
@@ -34,6 +37,7 @@ import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -77,7 +81,8 @@ export interface TransactionFormDialogProps {
   defaults?: Partial<{
     direction: TransactionDirection;
     scope: AttributionScope[];
-    categoryId: string;
+    /** Multi-category: ordered, first id = primary. */
+    categoryIds: string[];
     currency: string;
   }>;
   onClose(): void;
@@ -97,7 +102,8 @@ interface FormState {
    * day on `occurredAt`.
    */
   occurredAt: string;
-  categoryId: string | null;
+  /** Multi-category: ordered selection, first id = primary. */
+  categoryIds: string[];
   scopes: AttributionScope[];
   note: string;
   type: TransactionType;
@@ -118,7 +124,7 @@ function transactionToState(p: TransactionSummary): FormState {
     amountStr: (p.amountCents / 100).toFixed(2),
     currency: p.currency,
     occurredAt: isoToLocalInput(p.occurredAt),
-    categoryId: p.category.id,
+    categoryIds: p.categories.map((c) => c.id),
     scopes: p.attributions.map((a) =>
       a.scope === 'personal'
         ? ({ scope: 'personal' } as AttributionScope)
@@ -178,8 +184,14 @@ export function computeDiff(
   if (Number.isFinite(draftMs) && Number.isFinite(originalMs) && draftMs !== originalMs) {
     diff.occurredAt = draftOccurredAt;
   }
-  if (draft.categoryId && draft.categoryId !== original.category.id) {
-    diff.categoryId = draft.categoryId;
+  // Multi-category: compare as ordered arrays — reordering changes the
+  // primary, so it is a real edit.
+  const originalCategoryIds = original.categories.map((c) => c.id);
+  const categoriesMatch =
+    draft.categoryIds.length === originalCategoryIds.length &&
+    draft.categoryIds.every((id, i) => id === originalCategoryIds[i]);
+  if (!categoriesMatch) {
+    diff.categoryIds = draft.categoryIds;
   }
 
   const normalizedDraftNote = draft.note.length === 0 ? null : draft.note;
@@ -219,10 +231,11 @@ export function TransactionFormDialog({
   defaults,
   onClose,
   onSaved,
-  categories,
+  categories: categoriesProp,
 }: TransactionFormDialogProps) {
   const t = useTranslations('transactions.form');
   const tValidation = useTranslations('transactions.form.validation');
+  const tCategoryPicker = useTranslations('transactions.categoryPicker');
   const tSchedule = useTranslations('transactions.schedule.form');
   const tScheduleValidation = useTranslations('transactions.schedule.form.validation');
   const tPropagate = useTranslations('transactions.propagate');
@@ -238,8 +251,24 @@ export function TransactionFormDialog({
     createSchedule,
     replaceSchedule,
     getTransaction,
+    listCategories,
     listOccurrences,
   } = useTransactions();
+
+  // Multi-category — the dialog owns the category list: chip labels need
+  // names and the direction switch needs directions, so relying on the
+  // picker's self-fetch would leave chips showing raw ids. When the host
+  // didn't supply a list, fetch the full one (both directions — the picker
+  // filters internally) once per open; the picker then always receives it
+  // via its existing `categories` prop and never self-fetches here.
+  const categoriesOp = useAsyncOperation<CategoryDto[]>({ scope: 'container' });
+  const useOwnCategories = categoriesProp === undefined || categoriesProp === null;
+  useEffect(() => {
+    if (!open || !useOwnCategories) return;
+    void categoriesOp.run((signal) => listCategories({}, signal));
+    // categoriesOp / listCategories identities are stable across renders.
+  }, [open, useOwnCategories, listCategories]);
+  const categories = useOwnCategories ? (categoriesOp.data ?? null) : categoriesProp;
 
   // Phase 7.13 — transaction-first receipt intake: a receipt is the transaction's
   // proving document, so its upload starts here. Phase 8.13 turns the single
@@ -318,7 +347,7 @@ export function TransactionFormDialog({
       amountStr: '',
       currency: defaults?.currency ?? user?.defaultCurrency ?? 'USD',
       occurredAt: nowLocalIso(),
-      categoryId: defaults?.categoryId ?? null,
+      categoryIds: defaults?.categoryIds ?? [],
       scopes,
       note: '',
       type: 'ONE_TIME',
@@ -342,6 +371,54 @@ export function TransactionFormDialog({
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const initialStateRef = useRef(initialState);
   const initialScheduleStateRef = useRef(initialScheduleState);
+
+  // ── Multi-category selection ─────────────────────────────────────────────
+  // The picker stays a single-select control used as "add a category": every
+  // pick appends a chip (primary first). Already-selected ids are filtered
+  // out of its options; the guard below is a belt-and-braces against races.
+
+  const addCategory = (id: string) => {
+    if (!id) return;
+    setState((s) =>
+      s.categoryIds.includes(id) || s.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
+        ? s
+        : { ...s, categoryIds: [...s.categoryIds, id] },
+    );
+  };
+
+  const removeCategory = (id: string) =>
+    setState((s) => ({ ...s, categoryIds: s.categoryIds.filter((x) => x !== id) }));
+
+  // Changing direction drops selected categories that no longer fit (when a
+  // list is available to tell); otherwise selections are kept — the server
+  // re-validates on save.
+  const setDirection = (direction: TransactionDirection) =>
+    setState((s) => ({
+      ...s,
+      direction,
+      categoryIds: categories
+        ? s.categoryIds.filter((id) => {
+            const cat = categories.find((c) => c.id === id);
+            return !cat || cat.direction === 'BOTH' || cat.direction === direction;
+          })
+        : s.categoryIds,
+    }));
+
+  // Always an array — the dialog owns the fetch, so the picker must never
+  // fall back to its own (it would duplicate the request).
+  const availableCategories = useMemo(
+    () => (categories ?? []).filter((c) => !state.categoryIds.includes(c.id)),
+    [categories, state.categoryIds],
+  );
+
+  // Chip labels — resolved from the shared list plus the edit-mode
+  // transaction's own category summaries; the raw id is a last resort.
+  const categoryNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of effectiveTransaction?.categories ?? []) map.set(c.id, c.name);
+    for (const c of categories ?? []) map.set(c.id, c.name);
+    return map;
+  }, [categories, effectiveTransaction]);
 
   // Save flow runs through the universal control-scope async hook.
   const saveOp = useAsyncOperation<TransactionSummary | null>({ scope: 'control' });
@@ -493,11 +570,15 @@ export function TransactionFormDialog({
       }
     }
 
-    if (!s.categoryId) {
+    if (s.categoryIds.length === 0) {
       next.category = tValidation('categoryRequired');
     } else if (cats && cats.length > 0) {
-      const cat = cats.find((c) => c.id === s.categoryId);
-      if (cat && cat.direction !== 'BOTH' && cat.direction !== s.direction) {
+      // Multi-category: every selected category must fit the direction.
+      const mismatched = s.categoryIds.some((id) => {
+        const cat = cats.find((c) => c.id === id);
+        return !!cat && cat.direction !== 'BOTH' && cat.direction !== s.direction;
+      });
+      if (mismatched) {
         next.category = tValidation('categoryDirectionMismatch');
       }
     }
@@ -638,7 +719,7 @@ export function TransactionFormDialog({
               amountCents,
               currency: state.currency,
               occurredAt: occurredAtIso,
-              categoryId: state.categoryId!,
+              categoryIds: state.categoryIds,
               note: state.note.length > 0 ? state.note : undefined,
               attributions: state.scopes,
             };
@@ -779,7 +860,7 @@ export function TransactionFormDialog({
       a.amountStr !== b.amountStr ||
       a.currency !== b.currency ||
       a.occurredAt !== b.occurredAt ||
-      a.categoryId !== b.categoryId ||
+      JSON.stringify(a.categoryIds) !== JSON.stringify(b.categoryIds) ||
       a.note !== b.note ||
       a.type !== b.type ||
       JSON.stringify(a.scopes) !== JSON.stringify(b.scopes)
@@ -1030,7 +1111,7 @@ export function TransactionFormDialog({
               <button
                 ref={directionRef}
                 type="button"
-                onClick={() => setState((s) => ({ ...s, direction: 'IN' }))}
+                onClick={() => setDirection('IN')}
                 disabled={allInputsDisabled}
                 aria-pressed={state.direction === 'IN'}
                 data-testid="form-direction-in"
@@ -1044,7 +1125,7 @@ export function TransactionFormDialog({
               </button>
               <button
                 type="button"
-                onClick={() => setState((s) => ({ ...s, direction: 'OUT' }))}
+                onClick={() => setDirection('OUT')}
                 disabled={allInputsDisabled}
                 aria-pressed={state.direction === 'OUT'}
                 data-testid="form-direction-out"
@@ -1122,21 +1203,75 @@ export function TransactionFormDialog({
             </label>
           </div>
 
-          {/* Category */}
-          <div className="mb-3">
+          {/* Categories — multi-category: the picker appends, the chips list
+              the selection in order with the first marked as primary. The
+              dialog-owned fetch surfaces via the standard container overlay. */}
+          <div className="relative mb-3">
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('category')}</span>
+              <span>{t('categories')}</span>
               <div className="mt-1">
                 <TransactionCategoryPicker
                   direction={state.direction}
-                  value={state.categoryId}
-                  onChange={(id) => setState((s) => ({ ...s, categoryId: id }))}
-                  categories={categories}
-                  disabled={allInputsDisabled}
+                  value={null}
+                  onChange={addCategory}
+                  categories={availableCategories}
+                  disabled={
+                    allInputsDisabled ||
+                    categoriesOp.isLoading ||
+                    state.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
+                  }
                   testId="form-category-picker"
                 />
               </div>
             </label>
+            <LoadingOverlay active={categoriesOp.isLoading} />
+            {categoriesOp.isError && categoriesOp.error && (
+              <InlineErrorBanner
+                className="mt-1"
+                reason={categoriesOp.error.reason}
+                httpStatus={categoriesOp.error.httpStatus}
+                message={tCategoryPicker('errorLoading', {
+                  message: categoriesOp.error.message ?? '',
+                })}
+                onRetry={() => void categoriesOp.retry()}
+                retrying={categoriesOp.isLoading}
+                data-testid="form-categories-load-error"
+              />
+            )}
+            {state.categoryIds.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="form-category-chips">
+                {state.categoryIds.map((id, idx) => {
+                  const name = categoryNameById.get(id) ?? id;
+                  return (
+                    <li
+                      key={id}
+                      data-testid={`form-category-chip-${id}`}
+                      className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                    >
+                      <span>{name}</span>
+                      {idx === 0 && (
+                        <span
+                          className="rounded-full bg-primary-100 px-1.5 py-px text-[10px] font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
+                          data-testid={`form-category-primary-${id}`}
+                        >
+                          {t('categoryPrimary')}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeCategory(id)}
+                        disabled={allInputsDisabled}
+                        aria-label={t('categoryRemove', { name })}
+                        data-testid={`form-category-remove-${id}`}
+                        className="rounded-full px-0.5 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:text-gray-100"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {errors.category && (
               <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
                 {errors.category}

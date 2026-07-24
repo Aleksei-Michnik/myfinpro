@@ -143,7 +143,10 @@ export function TransactionDetailHeader({
         </div>
         <div className="flex gap-2">
           <dt className="text-gray-500 dark:text-gray-400">{tDetail('categoryLabel')}:</dt>
-          <dd data-testid="detail-category">{transaction.category.name}</dd>
+          {/* Multi-category: comma-separated, primary first. */}
+          <dd data-testid="detail-category">
+            {transaction.categories.map((c) => c.name).join(', ')}
+          </dd>
         </div>
         <div className="flex gap-2 sm:col-span-2">
           <dt className="text-gray-500 dark:text-gray-400">{tDetail('attributionsLabel')}:</dt>

@@ -150,7 +150,8 @@ export function clearFilters(scope: FiltersScope = 'all'): TransactionFilters {
  */
 export interface FilterableTransaction {
   direction: 'IN' | 'OUT';
-  category: { id: string };
+  /** Multi-category: primary first, additional categories after. */
+  categories: Array<{ id: string }>;
   occurredAt: string;
   starredByMe: boolean;
   note?: string | null;
@@ -193,7 +194,8 @@ export function transactionMatchesFilters(
   if (childScope === 'occurrences' && !p.parentTransactionId) return false;
 
   if (f.direction && p.direction !== f.direction) return false;
-  if (f.categoryId && p.category.id !== f.categoryId) return false;
+  // Multi-category: any-match, mirroring the server's ?categoryId= semantics.
+  if (f.categoryId && !p.categories.some((c) => c.id === f.categoryId)) return false;
   if (f.starred && !p.starredByMe) return false;
 
   if (f.from) {

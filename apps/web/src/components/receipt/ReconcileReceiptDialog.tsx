@@ -140,7 +140,8 @@ export function ReconcileReceiptDialog({
           receipt.totalCents !== null &&
           (receipt.totalCents !== p.amountCents ||
             (!!receipt.currency && receipt.currency !== p.currency));
-        const catDiffers = !!receiptCategoryId && receiptCategoryId !== p.category.id;
+        // Multi-category: reconcile compares against the PRIMARY category.
+        const catDiffers = !!receiptCategoryId && receiptCategoryId !== p.categories[0].id;
         setApplyTotal(totalDiffers);
         setApplyCategory(catDiffers);
       });
@@ -173,7 +174,7 @@ export function ReconcileReceiptDialog({
     (receipt.totalCents !== transaction.amountCents ||
       (!!receipt.currency && receipt.currency !== transaction.currency));
   const categoryDiffers =
-    !!transaction && !!receiptCategoryId && receiptCategoryId !== transaction.category.id;
+    !!transaction && !!receiptCategoryId && receiptCategoryId !== transaction.categories[0].id;
 
   const submit = () => {
     void submitOp
@@ -264,7 +265,7 @@ export function ReconcileReceiptDialog({
                   <ChoiceRow
                     name="category"
                     label={t('categoryLabel')}
-                    current={categoryName(transaction.category.id)}
+                    current={categoryName(transaction.categories[0].id)}
                     proposed={categoryName(receiptCategoryId)}
                     apply={applyCategory}
                     onChange={setApplyCategory}
