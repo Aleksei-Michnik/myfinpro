@@ -1,5 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
+import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_ENRICHMENTS_QUEUE } from '../queue/queue.constants';
 import { OpenFoodFactsService } from './open-food-facts.service';

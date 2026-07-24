@@ -1,8 +1,8 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { getQueueToken } from '@nestjs/bullmq';
 import { INestApplication } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PrismaService } from '../../src/prisma/prisma.service';
