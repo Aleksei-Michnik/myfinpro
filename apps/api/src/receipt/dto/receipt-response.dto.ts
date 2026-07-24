@@ -129,6 +129,14 @@ export class ReceiptResponseDto {
   @ApiPropertyOptional({ nullable: true, type: Number, description: 'Receipt-level discount.' })
   discountCents!: number | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Full model reasoning transcript from the last extraction run (success or failure).',
+  })
+  extractionReasoning!: string | null;
+
   @ApiPropertyOptional({ nullable: true, type: String })
   failureReason!: string | null;
 
@@ -215,6 +223,7 @@ export function mapReceiptToDto(row: ReceiptWithRelations): ReceiptResponseDto {
     currency: row.currency,
     totalCents: row.totalCents,
     discountCents: row.discountCents,
+    extractionReasoning: row.extractionReasoning,
     failureReason: row.failureReason,
     transactionId: row.transactionId,
     itemsSumCents,

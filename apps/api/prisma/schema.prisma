@@ -460,6 +460,9 @@ model Receipt {
   totalCents            Int?      @map("total_cents")
   discountCents         Int?      @map("discount_cents")
   rawExtraction         Json?     @map("raw_extraction")
+  // Full model reasoning transcript from the last extraction run (success or
+  // failure) — MEDIUMTEXT because chunked continuations can exceed TEXT's 64KB.
+  extractionReasoning   String?   @map("extraction_reasoning") @db.MediumText
   failureReason         String?   @map("failure_reason") @db.VarChar(500)
 
   // Ownership + linkage. transactionId is set on confirm; deleting the transaction

@@ -263,9 +263,11 @@ export function computeTotalsMismatch(result: {
 }
 
 /**
- * Phase 8.26 — live extraction progress stages (design §4.1). Ephemeral by
- * construction: events ride the in-memory SSE bus, feed no DTO and no DB
- * column, and thought text is never logged or persisted.
+ * Phase 8.26 — live extraction progress stages (design §4.1). The events
+ * themselves are ephemeral (in-memory SSE bus, throttled, thought text
+ * capped for transport); the worker separately accumulates the FULL
+ * reasoning transcript and persists it on the receipt at either terminal
+ * state (`Receipt.extractionReasoning`).
  */
 export const RECEIPT_EXTRACTION_STAGES = [
   'preparing', // worker: reading pages / resolving the URL

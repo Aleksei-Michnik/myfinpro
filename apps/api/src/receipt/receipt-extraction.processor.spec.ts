@@ -187,6 +187,8 @@ describe('ReceiptExtractionProcessor', () => {
       (c) => c[0].data.status === 'REVIEW',
     );
     expect(reviewUpdate[0].data.extractedMerchantName).toBe('Store');
+    // No thinking streamed → no transcript row noise.
+    expect(reviewUpdate[0].data.extractionReasoning).toBeNull();
     const created = prismaMock.receiptItem.createMany.mock.calls[0][0].data;
     expect(created[0]).toMatchObject({ position: 1, categoryId: 'cat-1', matchStatus: 'PENDING' });
     expect(created[1]).toMatchObject({ position: 2, categoryId: null, productId: null });
@@ -386,6 +388,49 @@ describe('ReceiptExtractionProcessor', () => {
     const publishCount = eventBusMock.publish.mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(eventBusMock.publish.mock.calls.length).toBe(publishCount);
+  });
+
+  it('persists the FULL reasoning transcript on REVIEW — beyond the SSE cap, passes separated', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    // Longer than the emitter's 400-char transport cap — persistence must not
+    // ride the throttled stream.
+    const longThought = 'x'.repeat(600);
+    providerMock.extract.mockImplementation(
+      async (_input: unknown, ctx: { onProgress?: (u: Record<string, unknown>) => void }) => {
+        ctx.onProgress?.({ stage: 'thinking', thought: 'first pass. ' });
+        ctx.onProgress?.({ stage: 'thinking', thought: longThought });
+        ctx.onProgress?.({ stage: 'continuing', pass: 1, itemsSoFar: 1 });
+        ctx.onProgress?.({ stage: 'thinking', thought: 'second pass.' });
+        return okResult();
+      },
+    );
+
+    await processor.process(makeJob());
+
+    const reviewUpdate = prismaMock.receipt.update.mock.calls.find(
+      (c) => c[0].data.status === 'REVIEW',
+    );
+    expect(reviewUpdate[0].data.extractionReasoning).toBe(
+      `first pass. ${longThought}\n\nsecond pass.`,
+    );
+  });
+
+  it('keeps the reasoning streamed before a permanent failure on the FAILED row', async () => {
+    prismaMock.receipt.findUnique.mockResolvedValue(makeReceipt());
+    providerMock.extract.mockImplementation(
+      async (_input: unknown, ctx: { onProgress?: (u: Record<string, unknown>) => void }) => {
+        ctx.onProgress?.({ stage: 'thinking', thought: 'this scan is unreadable' });
+        throw new ExtractionFailedError('unreadable document');
+      },
+    );
+
+    const outcome = await processor.process(makeJob());
+
+    expect(outcome).toEqual({ extracted: false, reason: 'permanent_failure' });
+    const failUpdate = prismaMock.receipt.update.mock.calls.find(
+      (c) => c[0].data.status === 'FAILED',
+    );
+    expect(failUpdate[0].data.extractionReasoning).toBe('this scan is unreadable');
   });
 
   it('duplicate fires are no-ops for REVIEW / CONFIRMED / FAILED receipts', async () => {
