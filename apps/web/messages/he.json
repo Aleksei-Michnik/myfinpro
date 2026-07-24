@@ -1288,6 +1288,10 @@
     "card": {
       "timesPurchased": "{count, plural, =1 {נרכש פעם אחת} other {נרכש # פעמים}}"
     },
+    "lookup": {
+      "checking": "מחפש את הברקוד…",
+      "imported": "“{name}” נוסף מ‏Open Food Facts"
+    },
     "scanner": {
       "title": "סריקת ברקוד",
       "close": "סגירת הסורק",
@@ -1316,7 +1320,6 @@
       "saveFailed": "לא ניתן לשמור את המוצר",
       "createdToast": "המוצר נוצר",
       "updatedToast": "המוצר עודכן",
-      "offChecking": "מחפש את הברקוד…",
       "offFilled": "הפרטים מולאו מ‏Open Food Facts — נא לבדוק.",
       "barcodeExists": "הברקוד הזה כבר שייך ל‏“{name}”.",
       "picturesLabel": "תמונות",

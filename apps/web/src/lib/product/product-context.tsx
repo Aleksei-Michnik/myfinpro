@@ -38,8 +38,16 @@ interface ProductContextValue {
     input: { name: string; locale?: string },
     signal?: AbortSignal,
   ): Promise<ProductSummary>;
-  /** Local registry → Open Food Facts prefill → manual entry. */
-  lookupBarcode(code: string, signal?: AbortSignal): Promise<BarcodeLookupResponse>;
+  /**
+   * Local registry → Open Food Facts → manual entry. `options.import`
+   * (scan-driven flows) auto-adds a named OFF hit to the registry
+   * (offStatus 'imported'); without it a hit stays a form prefill.
+   */
+  lookupBarcode(
+    code: string,
+    options?: { import?: boolean },
+    signal?: AbortSignal,
+  ): Promise<BarcodeLookupResponse>;
   /** Multipart upload; renditions land in the background (≤5 per product). */
   uploadImage(id: string, file: File, signal?: AbortSignal): Promise<ProductImageInfo>;
   /** Remove one picture; the survivors renumber contiguously. */
@@ -189,11 +197,16 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   );
 
   const lookupBarcode = useCallback(
-    async (code: string, signal?: AbortSignal): Promise<BarcodeLookupResponse> => {
-      const res = await fetch(`${API_BASE}/products/barcode/${encodeURIComponent(code)}`, {
-        headers: authHeaders(),
-        signal,
-      });
+    async (
+      code: string,
+      options?: { import?: boolean },
+      signal?: AbortSignal,
+    ): Promise<BarcodeLookupResponse> => {
+      const res = await fetch(
+        `${API_BASE}/products/barcode/${encodeURIComponent(code)}` +
+          buildQuery({ import: options?.import ? 'true' : undefined }),
+        { headers: authHeaders(), signal },
+      );
       if (!res.ok) await throwApiError(res, 'Failed to look up barcode');
       return (await res.json()) as BarcodeLookupResponse;
     },

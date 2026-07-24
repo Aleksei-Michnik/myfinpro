@@ -217,6 +217,15 @@ describe('Products & walkthrough (integration)', () => {
       .set(auth(alice.accessToken))
       .expect(200);
     expect(miss.body).toMatchObject({ found: false, offStatus: 'disabled' });
+
+    // The scan flows ask for an auto-import (?import=true) — with OFF
+    // disabled that still degrades to manual entry and mints no row.
+    const missImport = await request(app.getHttpServer())
+      .get('/api/v1/products/barcode/4006381333931')
+      .query({ import: true })
+      .set(auth(alice.accessToken))
+      .expect(200);
+    expect(missImport.body).toMatchObject({ found: false, offStatus: 'disabled' });
   });
 
   it('3. walkthrough: create-and-link → CONFIRMED item + confirmation alias; skip stays resumable', async () => {

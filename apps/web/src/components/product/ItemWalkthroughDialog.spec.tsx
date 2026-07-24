@@ -225,10 +225,36 @@ describe('ItemWalkthroughDialog', () => {
     renderDialog(makeReceipt([makeItem({ barcode: '7290119381043' })]));
 
     expect(screen.getByTestId('walkthrough-barcode')).toHaveTextContent('7290119381043');
-    await waitFor(() => expect(lookupBarcodeMock).toHaveBeenCalledWith('7290119381043'));
+    await waitFor(() =>
+      expect(lookupBarcodeMock).toHaveBeenCalledWith(
+        '7290119381043',
+        { import: true },
+        expect.anything(),
+      ),
+    );
     await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(3));
     expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('Registry Owner');
     expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('100%');
+  });
+
+  it('announces an OFF auto-import and leads with the new product at 100%', async () => {
+    lookupBarcodeMock.mockResolvedValue({
+      found: true,
+      product: { id: 'p-off', name: 'Tapuchips Salt', brand: 'Elite' },
+      offStatus: 'imported',
+    });
+    renderDialog(makeReceipt([makeItem({ barcode: '7290119381043' })]));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('walkthrough-code-imported')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('walkthrough-code-imported')).toHaveTextContent('Tapuchips Salt');
+    // The freshly imported product is a regular registry owner: leading
+    // candidate at 100%, no create & link offer needed.
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('Tapuchips Salt');
+    expect(screen.getByTestId('walkthrough-candidate-0')).toHaveTextContent('100%');
+    expect(screen.queryByTestId('walkthrough-code-offer')).not.toBeInTheDocument();
   });
 
   it('offers one-click create & link when the code is only known to OFF', async () => {

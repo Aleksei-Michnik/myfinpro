@@ -93,6 +93,7 @@ export function ManualReceiptDialog({
   onCreated,
 }: ManualReceiptDialogProps) {
   const t = useTranslations('receipts.manual');
+  const tLookup = useTranslations('products.lookup');
   const locale = useLocale();
   const { lookupBarcode, fetchPurchases } = useProducts();
   const { createManual } = useReceipts();
@@ -108,6 +109,7 @@ export function ManualReceiptDialog({
   const [announce, setAnnounce] = useState('');
 
   const createOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
+  const scanLookupOp = useAsyncOperation<void>({ scope: 'control' });
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   // Reset every time the dialog opens.
@@ -182,18 +184,28 @@ export function ManualReceiptDialog({
   const onScanDetected = (code: string) => {
     const gtin = normalizeGtin(code);
     if (!isValidGtin(gtin)) return;
-    void lookupBarcode(gtin)
-      .then((res) => {
-        if (res.found && res.product) {
-          addProduct(res.product);
-          return;
+    void scanLookupOp.run(async (signal) => {
+      const res = await lookupBarcode(gtin, { import: true }, signal);
+      if (res.found && res.product) {
+        // Registry hit or a fresh Open Food Facts import — either way the
+        // product exists now and becomes a line (import gets a toast).
+        if (res.offStatus === 'imported') {
+          addToast('success', tLookup('imported', { name: res.product.name }));
         }
-        // Unknown barcode → create it (OFF prefill / manual entry inside).
-        setPendingBarcode(gtin);
-        setCreateOpen(true);
-      })
-      .catch(() => addToast('error', t('lookupFailed')));
+        addProduct(res.product);
+        return;
+      }
+      // Unknown everywhere → create it (manual entry / prefill inside).
+      setPendingBarcode(gtin);
+      setCreateOpen(true);
+    });
   };
+
+  useEffect(() => {
+    if (scanLookupOp.error && scanLookupOp.error.reason !== 'aborted') {
+      addToast('error', t('lookupFailed'));
+    }
+  }, [scanLookupOp.error, addToast, t]);
 
   const updateLine = (productId: string, patch: Partial<ManualLine>) =>
     setLines((prev) => prev.map((l) => (l.productId === productId ? { ...l, ...patch } : l)));
@@ -425,6 +437,18 @@ export function ManualReceiptDialog({
           {announce}
         </p>
 
+        {/* Scanned code being resolved against the registry / open databases. */}
+        {scanLookupOp.isLoading && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-xs text-gray-500 dark:text-gray-400"
+            data-testid="manual-receipt-scan-checking"
+          >
+            {tLookup('checking')}
+          </p>
+        )}
+
         {/* Add products */}
         <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
           <Button
@@ -432,6 +456,7 @@ export function ManualReceiptDialog({
             variant="outline"
             size="sm"
             onClick={() => setScannerOpen(true)}
+            disabled={scanLookupOp.isLoading}
             data-testid="manual-receipt-scan"
           >
             {t('scan')}
