@@ -176,7 +176,8 @@ export class TransactionController {
   @ApiOperation({
     summary: 'Update scalar fields and/or attribution subset of a transaction (creator only)',
     description:
-      'Editable scalars: direction, amountCents, currency, occurredAt, categoryId, note. ' +
+      'Editable scalars: direction, amountCents, currency, occurredAt, categoryIds (replaces ' +
+      'the whole set; first element = primary), note. ' +
       'The optional `attributions` array replaces the caller-accessible subset; other users\u2019 ' +
       'personal attributions and non-member groups are never touched. An empty array clears all ' +
       'accessible attributions \u2014 if that leaves the transaction with zero attributions, the ' +

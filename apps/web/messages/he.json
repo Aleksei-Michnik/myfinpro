@@ -686,7 +686,9 @@
       "amountPlaceholder": "0.00",
       "currency": "מטבע",
       "date": "תאריך",
-      "category": "קטגוריה",
+      "categories": "קטגוריות",
+      "categoryPrimary": "ראשית",
+      "categoryRemove": "הסר את {name}",
       "noteLabel": "הערה (לא חובה)",
       "notePlaceholder": "תיאור קצר…",
       "attributedTo": "משויך ל-",
@@ -705,7 +707,7 @@
         "currencyInvalid": "בחר מטבע.",
         "dateInvalid": "הזן תאריך תקין.",
         "dateFuture": "התאריך לא יכול להיות יותר מיום אחד בעתיד.",
-        "categoryRequired": "בחר קטגוריה.",
+        "categoryRequired": "בחר לפחות קטגוריה אחת.",
         "categoryDirectionMismatch": "הקטגוריה הזו לא תואמת לכיוון שנבחר.",
         "scopesRequired": "בחר לפחות היקף אחד.",
         "noteTooLong": "ההערה יכולה להכיל עד 2000 תווים."
@@ -924,6 +926,12 @@
         "actionFailed": "פעולת התזמון נכשלה"
       }
     },
+    "status": {
+      "PENDING": "ממתין",
+      "POSTED": "נרשם",
+      "DUE": "לתשלום",
+      "CANCELLED": "בוטל"
+    },
     "plan": {
       "kind": {
         "INSTALLMENT": "תוכנית תנועות",
@@ -940,12 +948,6 @@
         "total": "תנועה",
         "remaining": "יתרה",
         "status": "סטטוס"
-      },
-      "rowStatus": {
-        "PENDING": "ממתין",
-        "POSTED": "נרשם",
-        "DUE": "לתשלום",
-        "CANCELLED": "בוטל"
       },
       "cancelAction": "ביטול תוכנית",
       "cancelConfirmBody": "לבטל את התוכנית לצמיתות? תנועות עתידיות יסומנו כמבוטלות; דבר לא יימחק.",

@@ -77,7 +77,7 @@ describe('TransactionPlanSection', () => {
     expect(screen.getByTestId('plan-status-pill').textContent).toBe('statusActive');
     expect(screen.getByTestId('plan-table')).toBeInTheDocument();
     expect(screen.getAllByTestId(/^plan-row-\d+$/)).toHaveLength(3);
-    expect(screen.getByTestId('plan-row-status-1').textContent).toBe('rowStatus.PENDING');
+    expect(screen.getByTestId('plan-row-status-1').textContent).toBe('PENDING');
     // Money formatted in the transaction's currency.
     expect(screen.getByTestId('plan-row-1').textContent).toContain('$400.00');
   });
@@ -111,7 +111,7 @@ describe('TransactionPlanSection', () => {
     );
     // Terminal → actions row gone; row statuses flipped.
     expect(screen.queryByTestId('plan-actions')).not.toBeInTheDocument();
-    expect(screen.getByTestId('plan-row-status-1').textContent).toBe('rowStatus.CANCELLED');
+    expect(screen.getByTestId('plan-row-status-1').textContent).toBe('CANCELLED');
     expect(addToastMock).toHaveBeenCalledWith('success', 'cancelledToast');
   });
 

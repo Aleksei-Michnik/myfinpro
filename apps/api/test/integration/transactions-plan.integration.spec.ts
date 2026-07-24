@@ -60,7 +60,7 @@ describe('POST /transactions + /transactions/:id/plan (plans, integration)', () 
     amountCents: 120_000,
     currency: 'USD',
     occurredAt: new Date().toISOString(),
-    categoryId: outCategoryId,
+    categoryIds: [outCategoryId],
     attributions: [{ scope: 'personal' }],
     plan: {
       interestRate: 0,

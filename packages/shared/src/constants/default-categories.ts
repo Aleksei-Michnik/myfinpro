@@ -43,6 +43,9 @@ export const DEFAULT_OUT_CATEGORIES: readonly DefaultCategoryDef[] = [
   { slug: 'fees', name: 'Fees', direction: 'OUT', icon: 'receipt' },
   { slug: 'insurance', name: 'Insurance', direction: 'OUT', icon: 'shield' },
   { slug: 'gifts', name: 'Gifts', direction: 'OUT', icon: 'gift' },
+  { slug: 'pets', name: 'Pets', direction: 'OUT', icon: 'paw-print' },
+  { slug: 'pharmacy', name: 'Pharmacy', direction: 'OUT', icon: 'pill' },
+  { slug: 'sport', name: 'Sport', direction: 'OUT', icon: 'dumbbell' },
   { slug: 'other_out', name: 'Other', direction: 'OUT', icon: 'more-horizontal' },
 ] as const;
 

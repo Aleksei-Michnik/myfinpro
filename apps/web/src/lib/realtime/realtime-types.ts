@@ -20,13 +20,14 @@ export interface TransactionSummary {
   currency: string;
   occurredAt: string;
   status: string;
-  category: {
+  /** Multi-category: always non-empty; element 0 is the primary category. */
+  categories: Array<{
     id: string;
     slug: string;
     name: string;
     icon: string | null;
     color: string | null;
-  };
+  }>;
   attributions: Array<{
     scope: 'personal' | 'group';
     userId: string | null;

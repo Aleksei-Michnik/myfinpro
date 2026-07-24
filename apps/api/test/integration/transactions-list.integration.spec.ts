@@ -19,6 +19,7 @@ describe('GET /transactions (integration)', () => {
   let carol: Awaited<ReturnType<typeof registerUser>>;
   let groupId: string;
   let outCategoryId: string;
+  let altOutCategoryId: string;
   let inCategoryId: string;
 
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
@@ -83,10 +84,14 @@ describe('GET /transactions (integration)', () => {
     const outCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'OUT', slug: 'groceries' },
     });
+    const altOutCat = await prisma.category.findFirst({
+      where: { ownerType: 'system', direction: 'OUT', slug: { not: 'groceries' } },
+    });
     const inCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'IN' },
     });
     outCategoryId = outCat!.id;
+    altOutCategoryId = altOutCat!.id;
     inCategoryId = inCat!.id;
   });
 
@@ -107,7 +112,7 @@ describe('GET /transactions (integration)', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: outCategoryId,
+    categoryIds: [outCategoryId],
     attributions: [{ scope: 'personal' }],
     ...over,
   });
@@ -205,7 +210,7 @@ describe('GET /transactions (integration)', () => {
     await createTransaction(alice.accessToken, basePayload({ direction: 'OUT' }));
     await createTransaction(
       alice.accessToken,
-      basePayload({ direction: 'IN', categoryId: inCategoryId }),
+      basePayload({ direction: 'IN', categoryIds: [inCategoryId] }),
     );
 
     const { body } = await listTransactions(alice.accessToken, { direction: 'IN' });
@@ -227,15 +232,32 @@ describe('GET /transactions (integration)', () => {
   });
 
   it('9. categoryId filter', async () => {
-    await createTransaction(alice.accessToken, basePayload({ categoryId: outCategoryId }));
+    await createTransaction(alice.accessToken, basePayload({ categoryIds: [outCategoryId] }));
     await createTransaction(
       alice.accessToken,
-      basePayload({ direction: 'IN', categoryId: inCategoryId }),
+      basePayload({ direction: 'IN', categoryIds: [inCategoryId] }),
     );
 
     const { body } = await listTransactions(alice.accessToken, { categoryId: outCategoryId });
     expect(body.data).toHaveLength(1);
-    expect((body.data[0].category as { id: string }).id).toBe(outCategoryId);
+    expect((body.data[0].categories as Array<{ id: string }>)[0].id).toBe(outCategoryId);
+  });
+
+  it('9b. categoryId filter matches transactions where the id is only an ADDITIONAL category', async () => {
+    const withAdditional = await createTransaction(
+      alice.accessToken,
+      basePayload({ categoryIds: [outCategoryId, altOutCategoryId] }),
+    );
+    await createTransaction(alice.accessToken, basePayload({ categoryIds: [outCategoryId] }));
+
+    const { body } = await listTransactions(alice.accessToken, { categoryId: altOutCategoryId });
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe(withAdditional.id);
+    // The match is on the additional category — the primary stays first in the embed.
+    expect((body.data[0].categories as Array<{ id: string }>).map((c) => c.id)).toEqual([
+      outCategoryId,
+      altOutCategoryId,
+    ]);
   });
 
   it('10. type=ONE_TIME filter (only type currently supported)', async () => {

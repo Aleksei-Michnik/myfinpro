@@ -99,6 +99,30 @@ export class AccountMergeService {
             where: { categoryId: sourceCategory.id },
             data: { categoryId: duplicate.id },
           });
+          // Additional-category rows (unique on transactionId+categoryId; the
+          // primary is never duplicated in the join table). Drop rows the
+          // primary remap above made redundant, then rows that would collide
+          // with an existing row for the target category, then remap the rest.
+          await tx.transactionCategory.deleteMany({
+            where: {
+              categoryId: { in: [sourceCategory.id, duplicate.id] },
+              transaction: { categoryId: duplicate.id },
+            },
+          });
+          const targetJoins = await tx.transactionCategory.findMany({
+            where: { categoryId: duplicate.id },
+            select: { transactionId: true },
+          });
+          await tx.transactionCategory.deleteMany({
+            where: {
+              categoryId: sourceCategory.id,
+              transactionId: { in: targetJoins.map((j) => j.transactionId) },
+            },
+          });
+          await tx.transactionCategory.updateMany({
+            where: { categoryId: sourceCategory.id },
+            data: { categoryId: duplicate.id },
+          });
           await tx.receiptItem.updateMany({
             where: { categoryId: sourceCategory.id },
             data: { categoryId: duplicate.id },

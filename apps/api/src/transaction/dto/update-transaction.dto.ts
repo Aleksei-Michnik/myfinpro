@@ -1,9 +1,14 @@
-import { TRANSACTION_DIRECTIONS, TRANSACTION_TYPES } from '@myfinpro/shared';
+import {
+  TRANSACTION_DIRECTIONS,
+  TRANSACTION_MAX_CATEGORIES,
+  TRANSACTION_TYPES,
+} from '@myfinpro/shared';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsInt,
@@ -62,10 +67,19 @@ export class UpdateTransactionDto {
   @IsISO8601()
   occurredAt?: string;
 
-  @ApiPropertyOptional()
+  /**
+   * When present, REPLACES the whole category set (like `attributions`):
+   * first element becomes the primary category, the rest the additional
+   * categories in order. Every category must match the effective direction.
+   */
+  @ApiPropertyOptional({ type: [String], description: 'First element is the primary category.' })
   @IsOptional()
-  @IsUUID()
-  categoryId?: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TRANSACTION_MAX_CATEGORIES)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  categoryIds?: string[];
 
   @ApiPropertyOptional({ description: 'Pass empty string to clear.' })
   @IsOptional()

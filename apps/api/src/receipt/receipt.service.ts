@@ -774,7 +774,20 @@ export class ReceiptService {
       const categoryId = dominantReceiptCategoryId(
         row.items.map((i) => ({ categoryId: i.categoryId, totalCents: i.totalCents })),
       );
-      if (categoryId) patch.categoryId = categoryId;
+      if (categoryId) {
+        // `categoryIds` replaces the whole set: the dominant receipt category
+        // becomes the primary; the transaction's additional categories survive.
+        const current = await this.prisma.transaction.findUnique({
+          where: { id: row.transactionId },
+          select: {
+            transactionCategories: { select: { categoryId: true }, orderBy: { position: 'asc' } },
+          },
+        });
+        const additional = (current?.transactionCategories ?? [])
+          .map((tc) => tc.categoryId)
+          .filter((id) => id !== categoryId);
+        patch.categoryIds = [categoryId, ...additional];
+      }
     }
 
     // Apply the chosen transaction changes first (validates + audits + publishes).
@@ -811,7 +824,7 @@ export class ReceiptService {
       appliedCategory: dto.applyCategory,
       ...(patch.amountCents !== undefined ? { amountCents: patch.amountCents } : {}),
       ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
-      ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
+      ...(patch.categoryIds !== undefined ? { categoryIds: patch.categoryIds } : {}),
     });
     this.logger.log(
       `Receipt ${row.id} reconciled by user ${userId} → transaction ${row.transactionId} ` +

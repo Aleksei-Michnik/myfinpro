@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRODUCT_IMAGES_QUEUE } from '../queue/queue.constants';
+import { ReceiptStorageService } from '../receipt/receipt-storage.service';
 import { ProductImageService, renditionRefs } from './product-image.service';
 
 const codeOf = (err: unknown): string | undefined =>
@@ -30,10 +31,17 @@ describe('ProductImageService (8.25)', () => {
 
   const queueMock = { add: jest.fn().mockResolvedValue({}) };
   const txMock = {
-    productImage: { count: jest.fn(), create: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    productImage: {
+      count: jest.fn(),
+      create: jest.fn(),
+      delete: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
   };
   const prismaMock = {
-    productImage: { findMany: jest.fn().mockResolvedValue([]) },
+    productImage: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
     $transaction: jest.fn(async (fn: (tx: typeof txMock) => Promise<unknown>) => fn(txMock)),
   };
 
@@ -106,14 +114,57 @@ describe('ProductImageService (8.25)', () => {
         expect(codeOf(err)).toBe('PRODUCT_INVALID_IMAGE');
       }
     });
+
+    // Minimal ISO-BMFF header with the 'heic' brand — enough for the sniffer.
+    const heicBytes = () =>
+      Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypheic'), Buffer.alloc(16)]);
+
+    it('converts HEIC to JPEG before staging (sharp cannot decode HEIF)', async () => {
+      const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123' } })
+        .jpeg()
+        .toBuffer();
+      const heicSpy = jest
+        .spyOn(ReceiptStorageService, 'convertHeicToJpeg')
+        .mockResolvedValueOnce(jpeg);
+      txMock.productImage.count.mockResolvedValue(0);
+      txMock.productImage.create.mockImplementation(({ data }: { data: object }) =>
+        Promise.resolve({ id: 'img-h', ...data }),
+      );
+
+      await service.addFromUpload('p-1', heicBytes());
+
+      expect(heicSpy).toHaveBeenCalled();
+      // The staged file holds the converted JPEG bytes, not the raw HEIC.
+      const { stagedRef } = queueMock.add.mock.calls[0][1] as { stagedRef: string };
+      await expect(readFile(path.join(root, stagedRef))).resolves.toEqual(jpeg);
+      heicSpy.mockRestore();
+    });
+
+    it('rejects an unreadable HEIC with PRODUCT_INVALID_IMAGE instead of failing async', async () => {
+      const heicSpy = jest
+        .spyOn(ReceiptStorageService, 'convertHeicToJpeg')
+        .mockRejectedValueOnce(new Error('bad heif payload'));
+      try {
+        await service.addFromUpload('p-1', heicBytes());
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe('PRODUCT_INVALID_IMAGE');
+      }
+      expect(queueMock.add).not.toHaveBeenCalled();
+      heicSpy.mockRestore();
+    });
   });
 
   describe('rendition backfill', () => {
+    const hourAgo = () => new Date(Date.now() - 2 * 60 * 60 * 1000);
+
     it('enqueues a colon-free stable regen jobId for rows missing thumbs', async () => {
       // The boot sweep died on its very first add when the jobId carried a
       // ':' (8.25-hotfix-2) — BullMQ rejects colons in custom job ids.
+      await mkdir(path.join(root, '2026/06'), { recursive: true });
+      await writeFile(path.join(root, renditionRefs('2026/06/legacy').webp), 'webp-bytes');
       prismaMock.productImage.findMany.mockResolvedValueOnce([
-        { id: 'img-old', baseRef: '2026/06/legacy' },
+        { id: 'img-old', baseRef: '2026/06/legacy', createdAt: hourAgo() },
       ]);
       await service['enqueueRenditionBackfill']();
       expect(queueMock.add).toHaveBeenCalledWith(
@@ -121,6 +172,58 @@ describe('ProductImageService (8.25)', () => {
         { productImageId: 'img-old', kind: 'regen' },
         expect.objectContaining({ jobId: 'product-image-regen-img-old' }),
       );
+    });
+
+    it('drops an old row with no rendition at all (terminal encode failure)', async () => {
+      prismaMock.productImage.findMany.mockResolvedValueOnce([
+        { id: 'img-dead', baseRef: '2026/06/dead', createdAt: hourAgo() },
+      ]);
+      prismaMock.productImage.findUnique.mockResolvedValueOnce({
+        id: 'img-dead',
+        productId: 'p-1',
+        baseRef: '2026/06/dead',
+        position: 1,
+      });
+      txMock.productImage.findMany.mockResolvedValueOnce([]);
+      await service['enqueueRenditionBackfill']();
+      expect(queueMock.add).not.toHaveBeenCalled();
+      expect(txMock.productImage.delete).toHaveBeenCalledWith({ where: { id: 'img-dead' } });
+    });
+
+    it('leaves a fresh renditionless row alone — its encode may be in flight', async () => {
+      prismaMock.productImage.findMany.mockResolvedValueOnce([
+        { id: 'img-fresh', baseRef: '2026/07/fresh', createdAt: new Date() },
+      ]);
+      await service['enqueueRenditionBackfill']();
+      expect(queueMock.add).not.toHaveBeenCalled();
+      expect(txMock.productImage.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeDeadRow', () => {
+    it('deletes the row, renumbers survivors, and sweeps rendition files', async () => {
+      prismaMock.productImage.findUnique.mockResolvedValueOnce({
+        id: 'img-x',
+        productId: 'p-1',
+        baseRef: '2026/07/x',
+        position: 1,
+      });
+      txMock.productImage.findMany.mockResolvedValueOnce([{ id: 'img-y', position: 2 }]);
+      txMock.productImage.findUnique.mockResolvedValueOnce({ position: 3 });
+      txMock.productImage.update.mockResolvedValue({});
+      await service.removeDeadRow('img-x');
+      expect(txMock.productImage.delete).toHaveBeenCalledWith({ where: { id: 'img-x' } });
+      // Survivor renumbered into the freed position 1.
+      expect(txMock.productImage.update).toHaveBeenCalledWith({
+        where: { id: 'img-y' },
+        data: { position: 1 },
+      });
+    });
+
+    it('is a no-op when the row is already gone', async () => {
+      prismaMock.productImage.findUnique.mockResolvedValueOnce(null);
+      await service.removeDeadRow('img-gone');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
     });
   });
 
@@ -152,6 +255,29 @@ describe('ProductImageService (8.25)', () => {
       // AVIF pair is best-effort but sharp ^0.35 encodes it in CI.
       await expect(readFile(path.join(root, refs.avif))).resolves.toBeInstanceOf(Buffer);
       await expect(readFile(path.join(root, refs.thumbAvif))).resolves.toBeInstanceOf(Buffer);
+    });
+
+    it('tolerates a corrupt-but-decodable JPEG (production VipsJpeg failure class)', async () => {
+      const staged = path.join(root, 'incoming', 'stage-corrupt');
+      await mkdir(path.dirname(staged), { recursive: true });
+      const jpeg = await sharp({
+        create: { width: 600, height: 400, channels: 3, background: '#a52' },
+      })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+      // Truncate the tail — the strict decoder rejects this class of
+      // real-world phone JPEGs ("Invalid SOS parameters for sequential
+      // JPEG" in production); failOn 'none' must still produce renditions.
+      await writeFile(staged, jpeg.subarray(0, Math.floor(jpeg.length * 0.7)));
+
+      await service.process(
+        { productImageId: 'img-c', kind: 'staged', stagedRef: 'incoming/stage-corrupt' },
+        '2026/07/base-corrupt',
+      );
+
+      const refs = renditionRefs('2026/07/base-corrupt');
+      await expect(readFile(path.join(root, refs.webp))).resolves.toBeInstanceOf(Buffer);
+      await expect(readFile(path.join(root, refs.thumbWebp))).resolves.toBeInstanceOf(Buffer);
     });
 
     it('regen derives missing renditions from the stored detail WebP', async () => {

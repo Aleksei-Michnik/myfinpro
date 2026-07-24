@@ -33,7 +33,9 @@ export class TransactionSummaryDto {
   @ApiProperty() currency!: string;
   @ApiProperty() occurredAt!: string;
   @ApiProperty() status!: string;
-  @ApiProperty({ type: () => TransactionCategorySummary }) category!: TransactionCategorySummary;
+  /** All categories — the primary first, then additional categories by position. */
+  @ApiProperty({ type: [TransactionCategorySummary] })
+  categories!: TransactionCategorySummary[];
   @ApiProperty({ type: [TransactionAttributionSummary] })
   attributions!: TransactionAttributionSummary[];
   @ApiPropertyOptional({ nullable: true }) note?: string | null;

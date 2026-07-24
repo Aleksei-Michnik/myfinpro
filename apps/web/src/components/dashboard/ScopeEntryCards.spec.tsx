@@ -44,7 +44,7 @@ function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummar
     currency: p.currency ?? 'USD',
     occurredAt: '2026-04-25T00:00:00Z',
     status: 'POSTED',
-    category: { id: 'c', slug: 'misc', name: 'Misc', icon: null, color: null },
+    categories: [{ id: 'c', slug: 'misc', name: 'Misc', icon: null, color: null }],
     attributions: p.attributions ?? [
       { scope: 'personal', userId: 'me', groupId: null, groupName: null },
     ],

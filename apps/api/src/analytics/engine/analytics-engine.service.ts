@@ -206,7 +206,15 @@ export class AnalyticsEngineService {
 
     const rowFilters: Prisma.Sql[] = [];
     if (filters.categoryIds?.length) {
-      rowFilters.push(Prisma.sql`p.category_id IN (${Prisma.join(filters.categoryIds)})`);
+      // Any-match: the row's effective category (primary, with item-level
+      // override) OR any of the transaction's additional categories. The
+      // category DIMENSION stays primary-only (see dimension-sql.ts).
+      rowFilters.push(
+        Prisma.sql`(p.category_id IN (${Prisma.join(filters.categoryIds)}) OR EXISTS (
+          SELECT 1 FROM transaction_categories tc
+          WHERE tc.transaction_id = p.txn_id AND tc.category_id IN (${Prisma.join(filters.categoryIds)})
+        ))`,
+      );
     }
     if (filters.merchantIds?.length) {
       rowFilters.push(Prisma.sql`p.merchant_id IN (${Prisma.join(filters.merchantIds)})`);

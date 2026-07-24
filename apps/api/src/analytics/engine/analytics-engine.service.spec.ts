@@ -147,6 +147,19 @@ describe('AnalyticsEngineService', () => {
     });
   });
 
+  describe('filter SQL', () => {
+    it('categoryIds any-matches the primary column OR an additional-category row', async () => {
+      await service.runQuery('u1', query({ filters: { categoryIds: ['c1'] } }));
+
+      const sql = prisma.$queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+      expect(sql.sql).toContain('p.category_id IN');
+      expect(sql.sql).toContain('EXISTS');
+      expect(sql.sql).toContain('FROM transaction_categories tc');
+      // The id is bound twice — once per side of the OR.
+      expect(sql.values.filter((v) => v === 'c1')).toHaveLength(2);
+    });
+  });
+
   describe('row mapping', () => {
     it('maps raw buckets: BigInt metrics, name resolution, null buckets', async () => {
       prisma.$queryRaw.mockResolvedValue([

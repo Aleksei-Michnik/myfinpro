@@ -81,7 +81,10 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
       where: { id: scheduleId },
       include: {
         transaction: {
-          include: { attributions: true },
+          include: {
+            attributions: true,
+            transactionCategories: { select: { categoryId: true, position: true } },
+          },
         },
       },
     });
@@ -147,6 +150,13 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
             occurredAt: firedAt,
             status: 'POSTED',
             categoryId: parent.categoryId,
+            // Clone the full additional-category set from the template.
+            transactionCategories: {
+              create: parent.transactionCategories.map((tc) => ({
+                categoryId: tc.categoryId,
+                position: tc.position,
+              })),
+            },
             parentTransactionId: parent.id,
             note: parent.note,
             createdById: parent.createdById,
@@ -217,6 +227,7 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
         where: { id: occurrenceId },
         include: {
           category: TRANSACTION_DETAIL_INCLUDE.category,
+          transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
           attributions: TRANSACTION_DETAIL_INCLUDE.attributions,
         },
       });

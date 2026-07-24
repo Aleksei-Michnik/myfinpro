@@ -46,6 +46,9 @@ const ICON_EMOJI: Record<string, string> = {
   rent: '🏠',
   groceries: '🛒',
   car: '🚗',
+  'paw-print': '🐾',
+  pill: '💊',
+  dumbbell: '🏋️',
 };
 
 function iconFor(icon: string | null): string {

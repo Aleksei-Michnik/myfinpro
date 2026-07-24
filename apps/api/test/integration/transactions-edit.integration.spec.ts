@@ -20,6 +20,7 @@ describe('GET + PATCH /transactions/:id (integration)', () => {
   let carol: Awaited<ReturnType<typeof registerUser>>;
   let groupId: string;
   let outCategoryId: string;
+  let altOutCategoryId: string;
   let inCategoryId: string;
 
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
@@ -75,10 +76,14 @@ describe('GET + PATCH /transactions/:id (integration)', () => {
     const outCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'OUT', slug: 'groceries' },
     });
+    const altOutCat = await prisma.category.findFirst({
+      where: { ownerType: 'system', direction: 'OUT', slug: { not: 'groceries' } },
+    });
     const inCat = await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'IN' },
     });
     outCategoryId = outCat!.id;
+    altOutCategoryId = altOutCat!.id;
     inCategoryId = inCat!.id;
   });
 
@@ -100,7 +105,7 @@ describe('GET + PATCH /transactions/:id (integration)', () => {
     amountCents: 1250,
     currency: 'USD',
     occurredAt: '2026-04-25',
-    categoryId: outCategoryId,
+    categoryIds: [outCategoryId],
     attributions: [{ scope: 'personal' }],
     ...over,
   });
@@ -184,15 +189,53 @@ describe('GET + PATCH /transactions/:id (integration)', () => {
   });
 
   // 9. Direction + category together
-  it('9. PATCH {direction: "IN", categoryId: <IN>} → 200 with both updated', async () => {
+  it('9. PATCH {direction: "IN", categoryIds: [<IN>]} → 200 with both updated', async () => {
     const created = await createTransaction(alice.accessToken, basePayload());
     const { status, body } = await patchOne(alice.accessToken, created.id, {
       direction: 'IN',
-      categoryId: inCategoryId,
+      categoryIds: [inCategoryId],
     });
     expect(status).toBe(200);
     expect(body.direction).toBe('IN');
-    expect(body.category.id).toBe(inCategoryId);
+    expect(body.categories[0].id).toBe(inCategoryId);
+  });
+
+  // 9b. categoryIds replaces the whole set (order = primary first)
+  it('9b. PATCH {categoryIds} replaces the category set and reorders the primary', async () => {
+    const created = await createTransaction(
+      alice.accessToken,
+      basePayload({ categoryIds: [outCategoryId, altOutCategoryId] }),
+    );
+    const { status, body } = await patchOne(alice.accessToken, created.id, {
+      categoryIds: [altOutCategoryId, outCategoryId],
+    });
+    expect(status).toBe(200);
+    expect((body.categories as Array<{ id: string }>).map((c) => c.id)).toEqual([
+      altOutCategoryId,
+      outCategoryId,
+    ]);
+
+    const row = await prisma.transaction.findUnique({
+      where: { id: created.id },
+      include: { transactionCategories: { orderBy: { position: 'asc' } } },
+    });
+    expect(row!.categoryId).toBe(altOutCategoryId);
+    expect(row!.transactionCategories.map((tc) => tc.categoryId)).toEqual([outCategoryId]);
+  });
+
+  // 9c. Direction flip validates the ADDITIONAL categories too
+  it('9c. PATCH direction flip with a direction-mismatched additional category → 400', async () => {
+    const created = await createTransaction(
+      alice.accessToken,
+      basePayload({ categoryIds: [outCategoryId, altOutCategoryId] }),
+    );
+    // Primary becomes IN-compatible, but the additional category stays OUT.
+    const { status, body } = await patchOne(alice.accessToken, created.id, {
+      direction: 'IN',
+      categoryIds: [inCategoryId, altOutCategoryId],
+    });
+    expect(status).toBe(400);
+    expect(body.errorCode).toBe('TRANSACTION_CATEGORY_DIRECTION_MISMATCH');
   });
 
   // 10. Future date > 1 day

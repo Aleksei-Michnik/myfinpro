@@ -83,6 +83,21 @@ export class ReceiptStorageService {
   }
 
   /**
+   * HEIC → JPEG. Shared by receipts and product images: vision LLM APIs
+   * reject `image/heic`, browsers can't render it, and the prebuilt libvips
+   * behind sharp ships without a HEIF codec. Throws the raw conversion
+   * error — callers wrap it in their own structured 400.
+   */
+  static async convertHeicToJpeg(buffer: Buffer): Promise<Buffer> {
+    const converted = await heicConvert({
+      buffer,
+      format: 'JPEG',
+      quality: HEIC_JPEG_QUALITY,
+    });
+    return Buffer.from(converted);
+  }
+
+  /**
    * Validate + persist an uploaded buffer. Throws structured 400s for
    * oversize and non-whitelisted content. Returns the relative `fileRef`
    * stored on the receipt row.
@@ -116,15 +131,11 @@ export class ReceiptStorageService {
     // review preview, and the TransactionDocument in one place.
     if (mimeType === 'image/heic') {
       try {
-        const converted = await heicConvert({
-          buffer,
-          format: 'JPEG',
-          quality: HEIC_JPEG_QUALITY,
-        });
+        const converted = await ReceiptStorageService.convertHeicToJpeg(buffer);
         this.logger.log(
-          `Converted HEIC upload to JPEG (${buffer.length} → ${converted.byteLength} bytes)`,
+          `Converted HEIC upload to JPEG (${buffer.length} → ${converted.length} bytes)`,
         );
-        buffer = Buffer.from(converted);
+        buffer = converted;
         mimeType = 'image/jpeg';
       } catch (err) {
         this.logger.warn(`HEIC conversion failed: ${(err as Error).message}`);

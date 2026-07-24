@@ -34,6 +34,9 @@ export type CategoryOwnerType = (typeof CATEGORY_OWNER_TYPES)[number];
 export const CATEGORY_DIRECTIONS = ['IN', 'OUT', 'BOTH'] as const;
 export type CategoryDirection = (typeof CATEGORY_DIRECTIONS)[number];
 
+/** Cap on categories per transaction (primary + additional) — API DTO + web form. */
+export const TRANSACTION_MAX_CATEGORIES = 5;
+
 export const ATTRIBUTION_SCOPE_TYPES = ['personal', 'group'] as const;
 export type AttributionScopeType = (typeof ATTRIBUTION_SCOPE_TYPES)[number];
 

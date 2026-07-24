@@ -36,6 +36,9 @@ describe('CategoryService', () => {
       count: jest.fn(),
       updateMany: jest.fn(),
     },
+    transactionCategory: {
+      count: jest.fn(),
+    },
     auditLog: {
       create: jest.fn().mockResolvedValue({}),
     },
@@ -66,6 +69,7 @@ describe('CategoryService', () => {
     service = mod.get(CategoryService);
     jest.clearAllMocks();
     prismaMock.auditLog.create.mockResolvedValue({});
+    prismaMock.transactionCategory.count.mockResolvedValue(0);
   });
 
   // ── list() ──
@@ -372,6 +376,19 @@ describe('CategoryService', () => {
       }
     });
 
+    it('rejects direction change when the category is in use only as an additional category', async () => {
+      prismaMock.category.findUnique.mockResolvedValue(makeCat({ direction: 'OUT' }));
+      prismaMock.transaction.count.mockResolvedValue(0);
+      prismaMock.transactionCategory.count.mockResolvedValue(2);
+
+      try {
+        await service.update('user-1', 'cat-1', { direction: 'IN' });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe(CATEGORY_ERRORS.CATEGORY_IN_USE);
+      }
+    });
+
     it('allows direction change when category is unused', async () => {
       prismaMock.category.findUnique.mockResolvedValue(makeCat({ direction: 'OUT' }));
       prismaMock.transaction.count.mockResolvedValue(0);
@@ -418,6 +435,11 @@ describe('CategoryService', () => {
       prismaMock.$transaction.mockImplementation(async (cb) => {
         const tx = {
           transaction: { updateMany: jest.fn().mockResolvedValue({ count: 4 }) },
+          transactionCategory: {
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+            findMany: jest.fn().mockResolvedValue([]),
+            updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          },
           category: { delete: jest.fn().mockResolvedValue({}) },
         };
         return cb(tx);
@@ -426,6 +448,58 @@ describe('CategoryService', () => {
       const r = await service.remove('user-1', 'cat-1', { replaceWithCategoryId: 'cat-2' });
 
       expect(r).toEqual({ deleted: true, reassigned: 4 });
+    });
+
+    it('counts additional-category rows as usage (409 without replacement)', async () => {
+      prismaMock.category.findUnique.mockResolvedValue(makeCat());
+      prismaMock.transaction.count.mockResolvedValue(0);
+      prismaMock.transactionCategory.count.mockResolvedValue(2);
+
+      try {
+        await service.remove('user-1', 'cat-1', {});
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect(codeOf(err)).toBe(CATEGORY_ERRORS.CATEGORY_IN_USE);
+      }
+      expect(prismaMock.category.delete).not.toHaveBeenCalled();
+    });
+
+    it('remaps additional-category rows to the replacement with dedup', async () => {
+      const source = makeCat({ id: 'cat-1', direction: 'OUT' });
+      const target = makeCat({ id: 'cat-2', direction: 'OUT' });
+      prismaMock.category.findUnique.mockResolvedValueOnce(source).mockResolvedValueOnce(target);
+      prismaMock.transaction.count.mockResolvedValue(1);
+      prismaMock.transactionCategory.count.mockResolvedValue(3);
+
+      const txCategoryMock = {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findMany: jest.fn().mockResolvedValue([{ transactionId: 'txn-9' }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 2 }),
+      };
+      prismaMock.$transaction.mockImplementation(async (cb) => {
+        const tx = {
+          transaction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          transactionCategory: txCategoryMock,
+          category: { delete: jest.fn().mockResolvedValue({}) },
+        };
+        return cb(tx);
+      });
+
+      const r = await service.remove('user-1', 'cat-1', { replaceWithCategoryId: 'cat-2' });
+
+      // Dedup pass 1: rows whose transaction now has cat-2 as primary.
+      expect(txCategoryMock.deleteMany).toHaveBeenNthCalledWith(1, {
+        where: { categoryId: 'cat-1', transaction: { categoryId: 'cat-2' } },
+      });
+      // Dedup pass 2: rows colliding with an existing (txn, cat-2) row.
+      expect(txCategoryMock.deleteMany).toHaveBeenNthCalledWith(2, {
+        where: { categoryId: 'cat-1', transactionId: { in: ['txn-9'] } },
+      });
+      expect(txCategoryMock.updateMany).toHaveBeenCalledWith({
+        where: { categoryId: 'cat-1' },
+        data: { categoryId: 'cat-2' },
+      });
+      expect(r).toEqual({ deleted: true, reassigned: 3 });
     });
 
     it('rejects replacement with incompatible direction', async () => {
@@ -455,6 +529,11 @@ describe('CategoryService', () => {
       prismaMock.$transaction.mockImplementation(async (cb) => {
         const tx = {
           transaction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          transactionCategory: {
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+            findMany: jest.fn().mockResolvedValue([]),
+            updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          },
           category: { delete: jest.fn().mockResolvedValue({}) },
         };
         return cb(tx);

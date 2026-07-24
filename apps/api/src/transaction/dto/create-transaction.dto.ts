@@ -1,9 +1,14 @@
-import { TRANSACTION_DIRECTIONS, TRANSACTION_TYPES } from '@myfinpro/shared';
+import {
+  TRANSACTION_DIRECTIONS,
+  TRANSACTION_MAX_CATEGORIES,
+  TRANSACTION_TYPES,
+} from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsIn,
   IsInt,
@@ -49,9 +54,18 @@ export class CreateTransactionDto {
   @IsISO8601()
   occurredAt!: string;
 
-  @ApiProperty()
-  @IsUUID()
-  categoryId!: string;
+  /**
+   * Category ids in display order — the FIRST element is the primary category
+   * (stored on `transactions.category_id`), the rest are additional categories.
+   * Every category must match the transaction direction.
+   */
+  @ApiProperty({ type: [String], description: 'First element is the primary category.' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TRANSACTION_MAX_CATEGORIES)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  categoryIds!: string[];
 
   @ApiPropertyOptional({ description: 'Optional free-text note.' })
   @IsOptional()

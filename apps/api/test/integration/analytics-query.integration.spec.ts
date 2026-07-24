@@ -152,14 +152,14 @@ describe('POST /analytics/query (integration)', () => {
     await createTransaction(alice.accessToken, {
       amountCents: 400000,
       occurredAt: '2026-06-05T12:00:00.000Z',
-      categoryId: catHome,
+      categoryIds: [catHome],
     });
 
     // T2 — receipted, items sum exactly (3 item rows, no balancing row).
     const t2 = await createTransaction(alice.accessToken, {
       amountCents: 35000,
       occurredAt: '2026-06-10T12:00:00.000Z',
-      categoryId: catGroceries,
+      categoryIds: [catGroceries],
     });
     const r2 = await prisma.receipt.create({
       data: {
@@ -211,7 +211,7 @@ describe('POST /analytics/query (integration)', () => {
     const t3 = await createTransaction(alice.accessToken, {
       amountCents: 10000,
       occurredAt: '2026-06-12T12:00:00.000Z',
-      categoryId: catGroceries,
+      categoryIds: [catGroceries],
     });
     const r3 = await prisma.receipt.create({
       data: {
@@ -241,7 +241,7 @@ describe('POST /analytics/query (integration)', () => {
     await createTransaction(bob.accessToken, {
       amountCents: 20000,
       occurredAt: '2026-06-15T12:00:00.000Z',
-      categoryId: catRestaurants,
+      categoryIds: [catRestaurants],
       attributions: [{ scope: 'group', groupId }],
     });
 
@@ -249,7 +249,7 @@ describe('POST /analytics/query (integration)', () => {
     await createTransaction(alice.accessToken, {
       amountCents: 5000,
       occurredAt: '2026-06-20T12:00:00.000Z',
-      categoryId: catRestaurants,
+      categoryIds: [catRestaurants],
       attributions: [{ scope: 'personal' }, { scope: 'group', groupId }],
     });
 
@@ -258,7 +258,7 @@ describe('POST /analytics/query (integration)', () => {
       amountCents: 3000,
       currency: 'EUR',
       occurredAt: '2026-06-21T12:00:00.000Z',
-      categoryId: catRestaurants,
+      categoryIds: [catRestaurants],
     });
 
     // T7 — income.
@@ -266,14 +266,14 @@ describe('POST /analytics/query (integration)', () => {
       direction: 'IN',
       amountCents: 500000,
       occurredAt: '2026-06-25T12:00:00.000Z',
-      categoryId: catIn,
+      categoryIds: [catIn],
     });
 
     // T8 — Carol's spend, invisible to Alice/Bob.
     await createTransaction(carol.accessToken, {
       amountCents: 99900,
       occurredAt: '2026-06-18T12:00:00.000Z',
-      categoryId: catGroceries,
+      categoryIds: [catGroceries],
     });
 
     // T9 — recurring template (excluded) + POSTED occurrence (counted) +
@@ -325,7 +325,7 @@ describe('POST /analytics/query (integration)', () => {
     await createTransaction(alice.accessToken, {
       amountCents: 6000,
       occurredAt: '2026-05-10T12:00:00.000Z',
-      categoryId: catHome,
+      categoryIds: [catHome],
     });
   }, 120_000);
 

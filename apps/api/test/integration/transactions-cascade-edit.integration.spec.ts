@@ -197,11 +197,11 @@ describe('PATCH /transactions/:id (cascade edit, integration)', () => {
     expect(await amountOf(childIds[1])).toBe(1500);
   });
 
-  it('propagate=all cascades a categoryId change to controllable children', async () => {
+  it('propagate=all cascades a categoryIds change to controllable children', async () => {
     const { parentId, childIds } = await seedTree({ childCount: 2 });
 
     const { status, body } = await patch(alice.accessToken, parentId, 'all', {
-      categoryId: altOutCategoryId,
+      categoryIds: [altOutCategoryId],
     });
 
     expect(status).toBe(200);

@@ -57,6 +57,7 @@ export function TransactionPlanSection({
   currency,
 }: TransactionPlanSectionProps) {
   const t = useTranslations('transactions.plan');
+  const tStatus = useTranslations('transactions.status');
   const locale = useLocale();
   const { user } = useAuth();
   const { getPlan, cancelPlan } = useTransactions();
@@ -203,7 +204,7 @@ export function TransactionPlanSection({
                       }`}
                       data-testid={`plan-row-status-${row.index}`}
                     >
-                      {t(`rowStatus.${row.status}`)}
+                      {tStatus(row.status)}
                     </span>
                   ) : (
                     <span className="text-xs text-gray-400 dark:text-gray-500">—</span>

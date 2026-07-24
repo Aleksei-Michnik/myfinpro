@@ -114,6 +114,8 @@ export function TransactionRow({
   const tFn = (key: string) => t(key);
   const scopeLabels = transaction.attributions.map((a) => formatScopeLabel(a, tFn));
   const scopes = truncateScopeList(scopeLabels);
+  // Multi-category: compact comma-separated list, primary first.
+  const categoryNames = transaction.categories.map((c) => c.name).join(', ');
   const note = transaction.note ?? '';
   const starGlyph = starred ? '★' : '☆';
   const starAria = starred ? t('row.starRemove') : t('row.starAdd');
@@ -215,7 +217,7 @@ export function TransactionRow({
           {amountText}
         </td>
         <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
-          {transaction.category.name}
+          {categoryNames}
         </td>
         <td
           className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300"
@@ -261,7 +263,7 @@ export function TransactionRow({
         {controlsMenu}
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400">
-        {dateText} · {transaction.category.name}
+        {dateText} · {categoryNames}
       </div>
       <div
         className="text-xs text-gray-700 dark:text-gray-300"
