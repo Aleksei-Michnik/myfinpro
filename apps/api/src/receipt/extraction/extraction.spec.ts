@@ -103,6 +103,11 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('DIFFERENT language');
     expect(prompt).toContain('INTEGER cents');
     expect(prompt).toContain('he-IL');
+    // A printed minus line is a discount, not a purchase — the rule that
+    // keeps promo lines out of `items` in the first place.
+    expect(prompt).toContain('NEVER return a negative number');
+    expect(prompt).toContain('MINUS amount is a discount, not a purchase');
+    expect(prompt).toContain('receipt-level discountCents');
   });
 
   it('degrades to null-candidate guidance without candidates', () => {
@@ -283,6 +288,88 @@ describe('AnthropicExtractionProvider', () => {
     parsed.totalCents = 8.8; // float cents — schema drift
     (bad.content[0] as { text: string }).text = JSON.stringify(parsed);
     anthropicCreateMock.mockResolvedValueOnce(bad);
+    await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(/failed validation/);
+  });
+
+  it('rescues printed credit lines without spending a repair call', async () => {
+    // The production failure mode: promo/rebate lines transcribed as items
+    // with a negative total. Normalization folds them into the receipt
+    // discount, so the extraction succeeds on the FIRST call.
+    const withCredits = validPayload();
+    const parsed = JSON.parse((withCredits.content[0] as { text: string }).text);
+    parsed.items.push({
+      rawName: 'מבצע כפול',
+      quantity: 4,
+      unitPriceCents: null,
+      discountCents: 0,
+      totalCents: -210,
+      suggestedCategoryId: null,
+      suggestedProductId: null,
+    });
+    (withCredits.content[0] as { text: string }).text = JSON.stringify(parsed);
+    anthropicCreateMock.mockResolvedValueOnce(withCredits);
+
+    const result = await makeProvider().extract(IMAGE_INPUT, CTX);
+
+    expect(result.items.map((i) => i.rawName)).toEqual(['חלב 3%']);
+    expect(result.discountCents).toBe(210);
+    expect(result.notes).toContain('מבצע כפול');
+    expect(anthropicCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the model to repair output normalization cannot rescue, without re-sending the document', async () => {
+    const broken = validPayload();
+    const parsed = JSON.parse((broken.content[0] as { text: string }).text);
+    parsed.items[0].totalCents = 8.8; // fractional cents — ambiguous, never guessed
+    (broken.content[0] as { text: string }).text = JSON.stringify(parsed);
+    anthropicCreateMock.mockResolvedValueOnce(broken).mockResolvedValueOnce(validPayload());
+
+    const updates: { stage: string }[] = [];
+    const result = await makeProvider().extract(IMAGE_INPUT, {
+      ...CTX,
+      onProgress: (u) => updates.push(u),
+    });
+
+    expect(result.items[0].totalCents).toBe(880);
+    expect(anthropicCreateMock).toHaveBeenCalledTimes(2);
+    // The repair carries only the rejected JSON + its errors: re-sending the
+    // photos would double the cost of the most expensive part of the request.
+    const repairContent = anthropicCreateMock.mock.calls[1][0].messages[0].content as {
+      type: string;
+      text?: string;
+    }[];
+    expect(repairContent).toHaveLength(1);
+    expect(repairContent[0].type).toBe('text');
+    expect(repairContent[0].text).toContain('items[0].totalCents: must be non-negative integer');
+    expect(repairContent[0].text).toContain('REJECTED');
+    expect(updates).toContainEqual({ stage: 'repairing' });
+  });
+
+  it('reports the original validation errors when the repair does not help', async () => {
+    const broken = () => {
+      const payload = validPayload();
+      const parsed = JSON.parse((payload.content[0] as { text: string }).text);
+      parsed.items[0].totalCents = 8.8;
+      (payload.content[0] as { text: string }).text = JSON.stringify(parsed);
+      return payload;
+    };
+    anthropicCreateMock.mockResolvedValueOnce(broken()).mockResolvedValueOnce(broken());
+
+    await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(
+      /failed validation.*items\[0\]\.totalCents/,
+    );
+    expect(anthropicCreateMock).toHaveBeenCalledTimes(2); // exactly one repair
+  });
+
+  it('falls back to the original errors when the repair call itself throws', async () => {
+    const broken = validPayload();
+    const parsed = JSON.parse((broken.content[0] as { text: string }).text);
+    parsed.items[0].totalCents = 8.8;
+    (broken.content[0] as { text: string }).text = JSON.stringify(parsed);
+    anthropicCreateMock
+      .mockResolvedValueOnce(broken)
+      .mockRejectedValueOnce(new Error('overloaded_error'));
+
     await expect(makeProvider().extract(IMAGE_INPUT, CTX)).rejects.toThrow(/failed validation/);
   });
 

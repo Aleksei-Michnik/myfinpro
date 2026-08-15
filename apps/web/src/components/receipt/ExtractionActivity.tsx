@@ -27,7 +27,13 @@ const VERBS_PER_STAGE = 3;
 const THOUGHTS_MAX_CHARS = 200_000;
 
 /** Stages rendered as rotating verb sets (the rest have data-driven lines). */
-type RotatingStage = 'waiting' | 'preparing' | 'processing' | 'thinking' | 'generating';
+type RotatingStage =
+  | 'waiting'
+  | 'preparing'
+  | 'processing'
+  | 'thinking'
+  | 'generating'
+  | 'repairing';
 
 export function ExtractionActivity({
   receiptId,

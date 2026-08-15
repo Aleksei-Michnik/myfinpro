@@ -44,11 +44,14 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
     },
     totalCents: {
       type: ['integer', 'null'],
-      description: 'Grand total paid, in integer cents/agorot. 45.90 → 4590.',
+      description: 'Grand total paid, in integer cents/agorot. 45.90 → 4590. Never negative.',
     },
     discountCents: {
       type: ['integer', 'null'],
-      description: 'Receipt-level discount total in integer cents (NOT per-line), ≥ 0, or null.',
+      description:
+        'Receipt-level discount total in integer cents (NOT per-line), as a POSITIVE number, ' +
+        'or null. Basket-wide rebates printed as a minus line (e.g. "spend over 90 −1.90") ' +
+        'belong here as +190.',
     },
     items: {
       type: 'array',
@@ -87,11 +90,15 @@ export const EXTRACTION_RESULT_JSON_SCHEMA = {
           },
           discountCents: {
             type: 'integer',
-            description: 'Line-level discount in integer cents, 0 when none.',
+            description:
+              'Line-level discount in integer cents as a POSITIVE number, 0 when none. ' +
+              'A promotion printed under the line it discounts belongs here.',
           },
           totalCents: {
             type: 'integer',
-            description: 'Line total AFTER discount, integer cents.',
+            description:
+              'Line total AFTER discount, integer cents. NEVER negative: a printed minus line ' +
+              '(promotion, credit, deposit return) is not an item — fold it into a discount.',
           },
           suggestedCategoryId: {
             type: ['string', 'null'],
@@ -141,6 +148,13 @@ export function buildExtractionPrompt(ctx: {
     '- Several attached photos are consecutive segments of ONE long receipt, in order,',
     '  possibly overlapping at the seams — extract each line item exactly once.',
     '- All money values are INTEGER cents (45.90 → 4590). Never use floats for money.',
+    '- NEVER return a negative number. Every amount is zero or greater.',
+    '- A line printed with a MINUS amount is a discount, not a purchase: promotions',
+    '  ("מבצע", "הנחה", "2 for 20"), credits, refunds and deposit returns. Do NOT emit it as its',
+    '  own item. Subtract it instead: add its magnitude to the discountCents of the item(s) it',
+    '  applies to and lower their totalCents to match. When it applies to the whole basket',
+    '  (e.g. "spend over 90"), add the magnitude to the receipt-level discountCents.',
+    '- Weighed goods (0.825 kg × 7.90): round the line total to the nearest whole cent.',
     '- Keep item names exactly as printed, in their original language.',
     '- Many receipts print a product barcode (EAN/UPC, 8–14 digits) next to each line — return',
     '  it in barcode. Short internal store codes (1–7 digits) are not barcodes; use null.',
@@ -161,5 +175,37 @@ export function buildExtractionPrompt(ctx: {
     '',
     'Known products:',
     productList,
+  ].join('\n');
+}
+
+/**
+ * Last-resort repair round-trip: the model is shown the validation errors its
+ * own output produced and asked to correct them. Costs a second call, so it
+ * only runs after deterministic normalization has failed to rescue the
+ * payload. The document is deliberately NOT re-sent — this is a formatting
+ * fix on text the model already produced, not a re-read.
+ */
+export function buildRepairPrompt(
+  invalidJson: string,
+  errors: { path: string; message: string }[],
+): string {
+  return [
+    'The JSON you returned for this receipt was REJECTED by our validator.',
+    '',
+    'Problems found:',
+    ...errors.map((e) => `- ${e.path || '(root)'}: ${e.message}`),
+    '',
+    'Return the COMPLETE corrected JSON in the same schema. Fix only the listed problems and',
+    'keep everything else byte-identical — do not drop, reorder or re-word any other line item.',
+    '',
+    'Reminders:',
+    '- Money is INTEGER cents: 8.80 shekels → 880, never 8.8 and never a fraction.',
+    '- No amount may be negative. A minus-signed line (promotion, credit, deposit return) is not',
+    '  an item: put its magnitude in the discountCents of the item it applies to, or in the',
+    '  receipt-level discountCents when it applies to the whole basket.',
+    '- quantity must be greater than zero.',
+    '',
+    'The rejected JSON:',
+    invalidJson,
   ].join('\n');
 }
