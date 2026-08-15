@@ -1095,6 +1095,11 @@
           "0": "Writing out the items…",
           "1": "Extracting line items…",
           "2": "Almost there…"
+        },
+        "repairing": {
+          "0": "Fixing up the details…",
+          "1": "Tidying the numbers…",
+          "2": "Correcting a few lines…"
         }
       }
     },

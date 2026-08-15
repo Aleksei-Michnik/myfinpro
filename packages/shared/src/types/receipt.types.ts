@@ -276,6 +276,7 @@ export const RECEIPT_EXTRACTION_STAGES = [
   'thinking', // reasoning-summary deltas arriving (capability-gated)
   'generating', // output tokens arriving
   'continuing', // chunked continuation pass (8.21)
+  'repairing', // output failed validation; model asked to fix its own JSON
 ] as const;
 export type ReceiptExtractionStage = (typeof RECEIPT_EXTRACTION_STAGES)[number];
 

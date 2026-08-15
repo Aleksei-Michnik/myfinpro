@@ -1,12 +1,12 @@
-import { validateExtractionResult, type ExtractionResult } from '@myfinpro/shared';
+import type { ExtractionResult } from '@myfinpro/shared';
 import { Logger } from '@nestjs/common';
 import {
   buildContinuationPrompt,
   lastSalvagedName,
   MAX_EXTRACTION_CONTINUATIONS,
-  mergeContinuationItems,
   salvageCompleteItems,
 } from './extraction-continuation.util';
+import { finalizeExtraction } from './extraction-finalize.util';
 import { RawNameCounter } from './extraction-progress.util';
 import {
   ExtractionFailedError,
@@ -116,26 +116,32 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
         continue;
       }
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(outcome.content);
-      } catch (err) {
-        throw new ExtractionFailedError('Provider returned non-JSON output', err);
-      }
-      const validated = validateExtractionResult(mergeContinuationItems(parsed, salvaged));
-      if (!validated.ok) {
-        throw new ExtractionFailedError(
-          `Provider output failed validation: ${validated.errors
-            .map((e) => `${e.path}: ${e.message}`)
-            .join('; ')}`,
-        );
-      }
-      return validated.result!;
+      return finalizeExtraction({
+        text: outcome.content,
+        salvaged,
+        logger: this.logger,
+        providerName: this.name,
+        repair: (repairPrompt) => this.repairCall(repairPrompt, ctx.onProgress),
+      });
     }
 
     throw new ExtractionFailedError(
       'Provider output was cut off repeatedly — the document is too long to extract',
     );
+  }
+
+  /**
+   * Last-resort repair round-trip (see extraction-finalize.util.ts) — the
+   * rejected JSON and its errors only, without the images.
+   */
+  private async repairCall(
+    prompt: string,
+    onProgress: ((update: ExtractionProgressUpdate) => void) | undefined,
+  ): Promise<string | null> {
+    onProgress?.({ stage: 'repairing' });
+    const outcome = await this.callModel([{ type: 'text', text: prompt }], undefined, 0);
+    if (outcome.finishReason === 'length') return null;
+    return outcome.content ?? null;
   }
 
   /** One streamed chat-completions call; 4xx (except 429) fails permanently. */
