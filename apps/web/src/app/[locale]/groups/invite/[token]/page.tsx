@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
@@ -178,12 +179,9 @@ function InvitePageInner() {
           >
             {invite.groupName}
           </h2>
-          <span
-            className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
-            data-testid="invite-group-type"
-          >
+          <Badge tone="primary" size="md" data-testid="invite-group-type">
             {typeLabel}
-          </span>
+          </Badge>
         </div>
 
         <p className="mb-6 text-sm text-gray-600 dark:text-gray-400" data-testid="invite-inviter">

@@ -34,6 +34,7 @@ import {
 import { TransactionScopeSelector } from './TransactionScopeSelector';
 import { TransactionTypeSelector } from './TransactionTypeSelector';
 import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Dialog } from '@/components/ui/Dialog';
@@ -1235,12 +1236,13 @@ export function TransactionFormDialog({
                   >
                     <span>{name}</span>
                     {idx === 0 && (
-                      <span
-                        className="rounded-full bg-primary-100 px-1.5 py-px text-[10px] font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
+                      <Badge
+                        tone="primary"
+                        className="px-1.5 py-px text-[10px]"
                         data-testid={`form-category-primary-${id}`}
                       >
                         {t('categoryPrimary')}
-                      </span>
+                      </Badge>
                     )}
                     <button
                       type="button"

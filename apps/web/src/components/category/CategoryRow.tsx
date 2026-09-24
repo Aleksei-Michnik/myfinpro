@@ -5,6 +5,7 @@
 // expose Edit / Delete via the shared <RowActionsMenu>.
 
 import { useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import type { CategoryDto } from '@/lib/category/types';
 
@@ -56,13 +57,9 @@ export function CategoryRow({ category, onEdit, onDelete }: CategoryRowProps) {
       </div>
       <div className="flex flex-shrink-0 items-center gap-2">
         {!isCustom && (
-          <span
-            className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-            data-testid={`category-row-system-badge-${category.id}`}
-            title={t('system.hint')}
-          >
+          <Badge data-testid={`category-row-system-badge-${category.id}`} title={t('system.hint')}>
             {t('system.badge')}
-          </span>
+          </Badge>
         )}
         {isCustom && (onEdit || onDelete) && (
           <RowActionsMenu

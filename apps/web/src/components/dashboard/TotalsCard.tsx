@@ -8,6 +8,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { computeMonthRange } from './date-range';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -126,13 +127,13 @@ export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
           {t('title')}
         </h2>
         {hasMore && (
-          <span
-            className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+          <Badge
+            tone="warning"
             data-testid="totals-card-partial"
             title={t('partial', { count: FETCH_LIMIT })}
           >
             {t('partial', { count: FETCH_LIMIT })}
-          </span>
+          </Badge>
         )}
       </header>
 

@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GroupTransactionsTab } from '@/components/group/GroupTransactionsTab';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
@@ -186,18 +187,12 @@ function GroupDashboardInner() {
               {group.name}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
-                data-testid="group-dashboard-type-badge"
-              >
+              <Badge tone="primary" size="md" data-testid="group-dashboard-type-badge">
                 {typeLabel}
-              </span>
-              <span
-                className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 font-mono text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                data-testid="group-dashboard-currency-badge"
-              >
+              </Badge>
+              <Badge size="md" className="font-mono" data-testid="group-dashboard-currency-badge">
                 {group.defaultCurrency}
-              </span>
+              </Badge>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -317,12 +312,9 @@ function GroupDashboardInner() {
                 </div>
                 <div className="flex flex-shrink-0 flex-col items-end gap-1">
                   {member.role === 'admin' && (
-                    <span
-                      className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
-                      data-testid={`group-member-admin-badge-${member.id}`}
-                    >
+                    <Badge tone="primary" data-testid={`group-member-admin-badge-${member.id}`}>
                       {roleLabel}
-                    </span>
+                    </Badge>
                   )}
                   <span
                     className="text-xs text-gray-500 dark:text-gray-400"

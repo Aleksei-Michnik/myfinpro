@@ -8,6 +8,7 @@
 // optimistic flip + revert logic is DRY with `<TransactionRow>`.
 
 import { useLocale, useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Card } from '@/components/ui/Card';
@@ -113,18 +114,10 @@ export function TransactionDetailHeader({
         >
           {directionLabel}
         </span>
-        <span
-          className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-          data-testid="detail-type"
-        >
-          {typeLabel}
-        </span>
-        <span
-          className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
-          data-testid="detail-status"
-        >
+        <Badge data-testid="detail-type">{typeLabel}</Badge>
+        <Badge tone="primary" data-testid="detail-status">
           {statusLabel}
-        </span>
+        </Badge>
       </div>
 
       <div

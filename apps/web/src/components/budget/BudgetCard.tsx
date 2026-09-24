@@ -8,6 +8,7 @@
 // the progress API ships (10.5, wired in 10.6) — nothing is faked here.
 
 import { useLocale, useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
 import type { BudgetSummary } from '@/lib/budget/types';
 import { formatAmount, formatOccurredDate, formatScopeLabel } from '@/lib/transaction/formatters';
@@ -107,22 +108,16 @@ export function BudgetCard({
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-        <span
-          className="inline-flex rounded-full bg-primary-50 px-2 py-0.5 font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
-          data-testid={`budget-scope-${budget.id}`}
-        >
+        <Badge tone="primary" data-testid={`budget-scope-${budget.id}`}>
           {formatScopeLabel({ scope: budget.scopeType, groupName: group?.name ?? null }, (key) =>
             tTransactions(key),
           )}
-        </span>
-        <span
-          className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-          data-testid={`budget-category-${budget.id}`}
-        >
+        </Badge>
+        <Badge data-testid={`budget-category-${budget.id}`}>
           {budget.category
             ? `${budget.category.icon ? `${budget.category.icon} ` : ''}${budget.category.name}`
             : t('form.categoryAll')}
-        </span>
+        </Badge>
         <span
           className="text-gray-500 dark:text-gray-400"
           data-testid={`budget-period-${budget.id}`}
@@ -130,12 +125,9 @@ export function BudgetCard({
           {periodLabel}
         </span>
         {archived && (
-          <span
-            className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
-            data-testid={`budget-archived-${budget.id}`}
-          >
+          <Badge tone="warning" data-testid={`budget-archived-${budget.id}`}>
             {t('list.archivedChip')}
-          </span>
+          </Badge>
         )}
       </div>
 

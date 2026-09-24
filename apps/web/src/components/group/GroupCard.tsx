@@ -2,6 +2,7 @@
 
 import { GROUP_ROLES, GROUP_TYPES, type GroupRole, type GroupType } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
 import { cardClass } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
 import type { GroupSummary } from '@/lib/group/types';
@@ -38,12 +39,9 @@ export function GroupCard({ group }: GroupCardProps) {
         >
           {group.name}
         </h3>
-        <span
-          className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
-          data-testid="group-type"
-        >
+        <Badge tone="primary" size="md" data-testid="group-type">
           {typeLabel}
-        </span>
+        </Badge>
       </div>
 
       <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">

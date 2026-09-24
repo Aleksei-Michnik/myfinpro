@@ -8,6 +8,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { computeMonthRange } from './date-range';
+import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -230,14 +231,7 @@ function ScopeCard({
       <header className="mb-2">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-          {roleBadge && (
-            <span
-              className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-              data-testid={`${testId}-role`}
-            >
-              {roleBadge}
-            </span>
-          )}
+          {roleBadge && <Badge data-testid={`${testId}-role`}>{roleBadge}</Badge>}
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
       </header>
