@@ -94,9 +94,9 @@ export function DeleteAccountDialog({ isOpen, onClose }: DeleteAccountDialogProp
           </Button>
           <Button
             type="submit"
-            variant="primary"
+            variant="danger"
             size="md"
-            className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+            className="flex-1"
             disabled={!emailMatches || isLoading}
             data-testid="confirm-delete-btn"
           >

@@ -488,9 +488,8 @@ export const TransactionCommentList = forwardRef<
                   <div className="flex gap-2">
                     <Button
                       type="button"
-                      variant="primary"
+                      variant="danger"
                       size="sm"
-                      className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
                       onClick={() => confirmDelete(c)}
                       disabled={deletingThisRow}
                       aria-busy={deletingThisRow}

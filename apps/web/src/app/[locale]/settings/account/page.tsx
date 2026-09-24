@@ -243,9 +243,8 @@ export default function AccountSettingsPage() {
             </h2>
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">{t('deleteWarning')}</p>
             <Button
-              variant="primary"
+              variant="danger"
               size="md"
-              className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
               onClick={() => setIsDialogOpen(true)}
               data-testid="open-delete-dialog-btn"
             >

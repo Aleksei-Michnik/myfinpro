@@ -1431,11 +1431,10 @@ export function TransactionFormDialog({
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="danger"
               size="sm"
               onClick={onClose}
               data-testid="form-discard-confirm"
-              className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
             >
               {t('discard')}
             </Button>

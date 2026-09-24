@@ -260,9 +260,9 @@ export function DeleteTransactionDialog({
         </Button>
         <Button
           type="button"
-          variant="primary"
+          variant="danger"
           size="md"
-          className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+          className="flex-1"
           onClick={runDelete}
           disabled={isLoading || effectiveNoAccess}
           aria-busy={isLoading}

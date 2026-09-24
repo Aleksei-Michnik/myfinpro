@@ -214,9 +214,9 @@ export function MemberManagement({ group, currentUserId, onChanged }: MemberMana
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="danger"
               size="md"
-              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+              className="flex-1"
               onClick={handleConfirmRemove}
               disabled={pendingRemoveUserId === confirmTarget.id}
               data-testid="remove-member-confirm-btn"

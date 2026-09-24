@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { Select } from '@/components/ui/Select';
+import { focusRing } from '@/components/ui/styles';
 import { Link } from '@/i18n/navigation';
 import { locales, type Locale } from '@/i18n/routing';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -12,10 +13,6 @@ const localeNames: Record<Locale, string> = {
   en: 'English',
   he: 'עברית',
 };
-
-/** Shared focus ring for keyboard navigation visibility. */
-const focusRing =
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600';
 
 interface HeaderProps {
   /** Mobile drawer state, mirrored on the hamburger's aria-expanded. */

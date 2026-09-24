@@ -355,9 +355,9 @@ function GroupDashboardInner() {
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="danger"
               size="md"
-              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+              className="flex-1"
               onClick={handleConfirmLeave}
               disabled={isLeaving}
               data-testid="group-dashboard-leave-confirm-btn"

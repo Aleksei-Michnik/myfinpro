@@ -315,9 +315,8 @@ function GroupSettingsInner() {
         </p>
         <Button
           type="button"
-          variant="primary"
+          variant="danger"
           size="md"
-          className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
           onClick={handleOpenDeleteDialog}
           data-testid="group-settings-open-delete-btn"
         >
@@ -373,9 +372,9 @@ function GroupSettingsInner() {
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="danger"
               size="md"
-              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+              className="flex-1"
               onClick={handleConfirmDelete}
               disabled={!deleteNameMatches || isDeleting}
               data-testid="group-settings-delete-confirm-btn"

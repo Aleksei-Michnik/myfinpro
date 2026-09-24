@@ -156,12 +156,11 @@ export function DeleteCategoryDialog({
         </Button>
         <Button
           type="button"
-          variant="primary"
+          variant="danger"
           size="md"
           onClick={runDelete}
           disabled={isLoading || (usage !== null && !replaceWithId)}
           aria-busy={isLoading}
-          className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
           data-testid="delete-category-confirm"
         >
           {isLoading ? (
