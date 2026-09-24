@@ -2,293 +2,274 @@
 
 ## Overview
 
-MyFinPro uses automated MySQL database backups with verification, retention policies, and age-based alerting. Backups are created as compressed SQL dumps (`mysqldump | gzip`) and stored locally with configurable retention.
+The production and staging databases are dumped daily by a scheduled GitHub Actions workflow,
+[`backup.yml`](../.github/workflows/backup.yml). The dump runs **inside the environment's MySQL
+container with the container's own credentials**: no credentials file exists on the server, no
+password appears on a host command line, and the workflow itself holds only the SSH host, user and
+key secrets. Backups are compressed SQL dumps (`mysqldump | gzip`) kept on the server under
+`/opt/myfinpro/backups/<environment>/`.
 
 **Key parameters:**
 
-| Parameter        | Default       | Description                       |
-| ---------------- | ------------- | --------------------------------- |
-| Daily retention  | 7             | Number of daily backups to keep   |
-| Weekly retention | 4             | Number of weekly backups to keep  |
-| Max backup age   | 26 hours      | Alert threshold for stale backups |
-| Schedule         | 2:00 AM daily | Cron-based backup schedule        |
+| Parameter        | Value                                | Description                                          |
+| ---------------- | ------------------------------------ | ---------------------------------------------------- |
+| Schedule         | daily, 02:17 UTC                     | `backup.yml` cron; also runnable by dispatch         |
+| Environments     | production, staging                  | one job each, run one after the other                |
+| Daily retention  | 7                                    | newest daily backups kept                            |
+| Weekly retention | 4                                    | first backup of each of the last 4 ISO weeks kept    |
+| Max backup age   | 26 hours                             | the run fails when the newest backup is older        |
+| Restore drill    | Sundays, or `drill=true` on dispatch | newest backup restored into `<db>_verify`, then drop |
+| Pre-deploy dump  | every production deploy              | `pre-deploy-<stamp>.sql.gz`, five kept               |
 
 ## Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Cron Job    │────▶│  backup.sh   │────▶│  MySQL (Docker)  │
-│  (daily 2AM) │     │              │     │  mysqldump       │
-└──────────────┘     └──────┬───────┘     └──────────────────┘
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │  /var/backups│
-                     │  /myfinpro/  │
-                     │  *.sql.gz    │
-                     └──────┬───────┘
-                            │
-              ┌─────────────┼─────────────┐
-              ▼             ▼             ▼
-     ┌──────────────┐ ┌──────────┐ ┌─────────────┐
-     │ verify-      │ │ check-   │ │ CI workflow │
-     │ backup.sh    │ │ backup-  │ │ (weekly)    │
-     │              │ │ age.sh   │ │             │
-     └──────────────┘ └──────────┘ └─────────────┘
+┌────────────────────┐  ssh   ┌───────────────────────────────┐
+│ backup.yml         │───────▶│ /opt/myfinpro/backups/scripts │
+│ schedule/dispatch  │  scp   │  backup.sh <env>              │
+└────────────────────┘        │  verify-backup.sh <env>       │
+                              │  check-backup-age.sh <env>    │
+                              └──────────────┬────────────────┘
+                                             │ docker exec <env mysql container>
+                                             │ sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" … "$MYSQL_DATABASE"'
+                                             ▼
+                              ┌───────────────────────────────┐
+                              │ /opt/myfinpro/backups/<env>/  │
+                              │  myfinpro_<date>_<time>.sql.gz│  ← scheduled (retention 7 + 4)
+                              │  pre-deploy-<stamp>.sql.gz    │  ← deploy-production.yml (5 kept)
+                              └───────────────────────────────┘
 ```
 
-## Setup
+Every scheduled run, per environment:
 
-### 1. Configure Environment
+1. `scripts/backup.sh <env>` — dump inside the container, `gunzip -t` the new file, apply retention.
+2. `scripts/verify-backup.sh <env>` — newest file exists, is non-empty, passes `gunzip -t`, is
+   younger than 26 h. On Sundays or with the `drill` input: `--test-restore` restores it into
+   `<database>_verify`, counts tables and rows, drops the schema.
+3. `scripts/check-backup-age.sh <env> --max-age 26` — exits 1 when the newest backup is older
+   than 26 hours, which fails the run. **A failed scheduled run is the alert**: GitHub e-mails the
+   repository owner about failed scheduled workflows; check **Actions → Backup**.
+
+The scripts are copied to `/opt/myfinpro/backups/scripts/` by the workflow on every run, so the
+server always executes the version on the branch the run was started from.
+
+## Running a backup by hand
+
+From the repository, with the GitHub CLI:
 
 ```bash
-cp infrastructure/backup/backup.env.example infrastructure/backup/backup.env
-# Edit backup.env with your MySQL credentials and paths
+gh workflow run backup.yml                 # both environments
+gh workflow run backup.yml -f drill=true   # …plus the restore drill
+gh run watch $(gh run list --workflow=backup.yml --limit=1 --json databaseId --jq '.[0].databaseId')
 ```
 
-### 2. Create Backup Directory
+On the server (after at least one workflow run has placed the scripts):
 
 ```bash
-sudo mkdir -p /var/backups/myfinpro
-sudo chown $(whoami):$(whoami) /var/backups/myfinpro
+cd /opt/myfinpro/backups/scripts
+./backup.sh production                      # or staging
+./verify-backup.sh production --test-restore
+./check-backup-age.sh production --max-age 26
 ```
 
-### 3. Create Log Directory
+Any other MySQL container whose environment carries `MYSQL_ROOT_PASSWORD` and `MYSQL_DATABASE`
+(the local `docker-compose.yml` one, for instance) works with `--container NAME --output-dir DIR`.
 
-```bash
-sudo mkdir -p /var/log/myfinpro
-sudo chown $(whoami):$(whoami) /var/log/myfinpro
-```
+## Pre-deploy dump
 
-### 4. Install Cron Jobs
-
-```bash
-crontab infrastructure/backup/crontab
-```
-
-Or append to your existing crontab:
-
-```bash
-crontab -l | cat - infrastructure/backup/crontab | crontab -
-```
-
-### 5. Make Scripts Executable
-
-```bash
-chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
-```
-
-## Manual Backup
-
-### Using Docker (production)
-
-```bash
-./scripts/backup.sh --docker
-```
-
-### Using Direct MySQL Connection
-
-```bash
-./scripts/backup.sh --host localhost --port 3306 --user myfinpro --database myfinpro
-```
-
-### Custom Output Directory
-
-```bash
-./scripts/backup.sh --docker --output-dir /path/to/backups
-```
+[`deploy-production.yml`](../.github/workflows/deploy-production.yml) dumps the production
+database before it copies anything to the server (step "Back up the production database"), into
+`/opt/myfinpro/backups/production/pre-deploy-<UTC stamp>.sql.gz`, and keeps the five newest. A
+blue/green rollback switches traffic back to the previous slot but does **not** roll the database
+back: when a release changed the schema, restore this dump first, then `scripts/rollback.sh`. The
+step skips cleanly when the container does not exist yet (first deploy).
 
 ## Restore from Backup
 
-### Interactive Restore (with confirmation prompt)
+`scripts/restore.sh` takes the same targets as the other scripts. It verifies the file
+(`.sql.gz`, non-empty, `gunzip -t`) and asks for confirmation unless `--force` is given.
 
 ```bash
-./scripts/restore.sh /var/backups/myfinpro/myfinpro_2025-01-15_02-00-00.sql.gz --docker
-```
+cd /opt/myfinpro/backups/scripts
 
-### Automated Restore (skip confirmation)
+# Into the environment's own database, inside its container
+./restore.sh ../production/myfinpro_2026-09-25_02-17-03.sql.gz production
 
-```bash
-./scripts/restore.sh /var/backups/myfinpro/myfinpro_2025-01-15_02-00-00.sql.gz --docker --force
-```
+# Unattended
+./restore.sh ../production/pre-deploy-20260925-101500.sql.gz production --force
 
-### Restore to Different Database
+# Into another database in the same container (a copy to inspect, say)
+./restore.sh ../production/myfinpro_2026-09-25_02-17-03.sql.gz production --database myfinpro_copy
 
-```bash
-./scripts/restore.sh backup.sql.gz --host localhost --database myfinpro_staging
+# Over a direct connection (CI, a local MySQL); password from MYSQL_PASSWORD, passed as MYSQL_PWD
+MYSQL_PASSWORD=… ./restore.sh backup.sql.gz --host 127.0.0.1 --user root --database myfinpro
 ```
 
 ## Backup Verification
 
-### Basic Verification
-
-Checks that a recent backup exists, is non-empty, and has valid gzip format:
-
 ```bash
-./scripts/verify-backup.sh --backup-dir /var/backups/myfinpro --max-age-hours 26
+# Existence, size, gzip integrity, age
+./verify-backup.sh production --max-age-hours 26
+
+# …plus the restore drill (into <db>_verify, dropped afterwards)
+./verify-backup.sh production --test-restore
 ```
 
-### Verification with Test Restore
-
-Performs a full test restore to a temporary database and verifies tables exist:
-
-```bash
-./scripts/verify-backup.sh --test-restore --docker
-```
-
-### JSON Output
-
-The verify script outputs JSON status for monitoring integration:
+The verify script prints JSON on stdout (logs go to stderr):
 
 ```json
 {
   "status": "ok",
   "message": "Backup is valid and recent",
-  "timestamp": "2025-01-15T03:00:00Z",
-  "backup_file": "myfinpro_2025-01-15_02-00-00.sql.gz",
-  "backup_age_hours": 1,
-  "backup_size_bytes": 15234567,
+  "timestamp": "2026-09-25T02:18:10Z",
+  "backup_file": "myfinpro_2026-09-25_02-17-03.sql.gz",
+  "backup_age_hours": 0,
+  "backup_size_bytes": 427127,
   "max_age_hours": 26,
   "test_restore": true,
-  "table_count": 12,
-  "backup_dir": "/var/backups/myfinpro"
+  "table_count": 31,
+  "row_count": 4812,
+  "backup_dir": "/opt/myfinpro/backups/production"
 }
 ```
 
 ## Monitoring & Alerting
 
-### Backup Age Check
+### Backup age check
 
-The `check-backup-age.sh` script is designed to be run periodically (every 6 hours by default) to ensure backups remain fresh:
-
-```bash
-./scripts/check-backup-age.sh --max-age 26
-```
-
-**Exit codes:**
-
-- `0` — Backup is within the acceptable age threshold
-- `1` — Backup is too old or missing
-
-### Webhook Alerts
-
-Send alerts to a monitoring system via webhook:
+`check-backup-age.sh` compares the newest scheduled backup's age (in seconds) with the threshold:
 
 ```bash
-./scripts/check-backup-age.sh --max-age 26 --alert-webhook https://hooks.slack.com/services/...
+./check-backup-age.sh production --max-age 26
 ```
 
-The webhook receives a JSON payload:
+**Exit codes:** `0` within the threshold, `1` too old or missing. Pre-deploy dumps are not
+counted: only `myfinpro_*.sql.gz` files satisfy the check, so a stalled schedule is noticed even
+while deploys keep producing dumps.
+
+### Where the alert lands
+
+The workflow runs the age check last, so a missing or stale backup fails the run. GitHub notifies
+the repository owner of failed scheduled workflow runs (Settings → Notifications → Actions). An
+optional webhook is still supported: `--alert-webhook URL` (or `ALERT_WEBHOOK_URL`) posts
 
 ```json
 {
-  "text": "ALERT: Backup 'myfinpro_2025-01-14_02-00-00.sql.gz' is 28h old (threshold: 26h)",
+  "text": "ALERT: Backup 'myfinpro_2026-09-24_02-17-03.sql.gz' is 28h old (threshold: 26h)",
   "status": "warning",
   "service": "myfinpro-backup",
-  "timestamp": "2025-01-15T06:00:00Z",
-  "hostname": "prod-server-01"
+  "timestamp": "2026-09-25T06:00:00Z",
+  "hostname": "…"
 }
 ```
 
-### CI Verification
+### CI drill
 
-A GitHub Actions workflow (`.github/workflows/backup-verify.yml`) runs weekly to:
-
-1. Spin up a MySQL 8.4 container
-2. Create sample data
-3. Run the backup script
-4. Verify the backup file integrity
-5. Restore to a fresh database
-6. Verify restored data matches original
-7. Test the backup age check script
+[`backup-verify.yml`](../.github/workflows/backup-verify.yml) runs weekly (Sunday 03:00 UTC) and
+on dispatch against a throwaway `mysql:9.7` service in CI, not against the server. It creates
+sample tables, runs `backup.sh`, verifies the file, runs `verify-backup.sh --test-restore`,
+restores with `restore.sh`, compares row counts, and checks both outcomes of
+`check-backup-age.sh`. It proves the scripts; `backup.yml` proves the server.
 
 ## Disaster Recovery Procedure
 
-### Step 1: Identify the Backup to Restore
+All commands run on the server as the deploy user.
+
+### Step 1: Identify the backup to restore
 
 ```bash
-ls -lt /var/backups/myfinpro/
+ls -lt /opt/myfinpro/backups/production/
 ```
 
-### Step 2: Verify Backup Integrity
+### Step 2: Verify its integrity
 
 ```bash
-gzip -t /var/backups/myfinpro/myfinpro_YYYY-MM-DD_HH-MM-SS.sql.gz
-echo $?  # Should be 0
+gunzip -t /opt/myfinpro/backups/production/<file>.sql.gz && echo ok
 ```
 
-### Step 3: Stop Application Services
+### Step 3: Stop the application slot
+
+Find the active slot, then stop its api and web containers (the infra stack with MySQL stays up):
 
 ```bash
-docker compose -f docker-compose.production.yml stop api bot web
+cat /opt/myfinpro/production/.active-slot
+docker stop myfinpro-prod-api-<slot> myfinpro-prod-web-<slot>
 ```
 
-### Step 4: Restore the Database
+### Step 4: Restore the database
 
 ```bash
-./scripts/restore.sh /var/backups/myfinpro/myfinpro_YYYY-MM-DD_HH-MM-SS.sql.gz --docker --force
+cd /opt/myfinpro/backups/scripts
+./restore.sh /opt/myfinpro/backups/production/<file>.sql.gz production
 ```
 
-### Step 5: Verify the Restore
+### Step 5: Verify the restore
 
 ```bash
-docker exec myfinpro-mysql-1 mysql -u myfinpro -p myfinpro -e "SHOW TABLES;"
+docker exec myfinpro-prod-mysql sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SHOW TABLES;"'
 ```
 
-### Step 6: Restart Application Services
+### Step 6: Start the application slot
 
 ```bash
-docker compose -f docker-compose.production.yml up -d api bot web
+docker start myfinpro-prod-api-<slot> myfinpro-prod-web-<slot>
 ```
 
-### Step 7: Verify Application Health
+If the restore accompanies a rollback across a schema change, run `scripts/rollback.sh production`
+from `/opt/myfinpro/production` instead (it starts the previous slot itself).
+
+### Step 7: Verify application health
 
 ```bash
-curl -s http://localhost:3000/api/health | jq .
+curl -sf https://<production domain>/api/v1/health | jq .
 ```
 
 ## Retention Policy
 
-Backups follow a tiered retention policy:
+| Tier       | Retention | Description                                               |
+| ---------- | --------- | --------------------------------------------------------- |
+| Daily      | 7 files   | the 7 newest scheduled backups                            |
+| Weekly     | 4 files   | the first backup of each of the last 4 ISO weeks          |
+| Pre-deploy | 5 files   | newest pre-deploy dumps, swept by `deploy-production.yml` |
 
-| Tier   | Retention | Description                                      |
-| ------ | --------- | ------------------------------------------------ |
-| Daily  | 7 backups | The 7 most recent backups are always kept        |
-| Weekly | 4 backups | One backup per week is kept for the last 4 weeks |
+`backup.sh` applies the daily/weekly sweep after every successful dump; a file that fits neither
+tier is deleted. Pre-deploy dumps are named differently and never touched by that sweep.
 
-The cleanup runs automatically after each backup. Backups that don't fall within either retention tier are deleted.
+## Off-box copies — the owner's decision
 
-**Example timeline:**
+Everything above lives on the same disk as the database. A host loss loses the backups too. The
+dumps contain **personal financial data** (transactions, receipts, e-mail addresses), so any copy
+off the server needs the same care as the database itself: encryption at rest, a destination the
+owner controls, and a documented deletion path. Options, none implemented:
 
-```
-Day 1-7:   All daily backups kept (7 files)
-Week 2-5:  One backup per week kept (4 files)
-Older:     Automatically deleted
-```
+| Option                                           | Notes                                                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Object storage (S3-compatible, Backblaze B2, R2) | cheapest and simplest; encrypt before upload (`age`, `gpg`) or use a bucket with SSE; needs a write-only credential as a GitHub secret                 |
+| The workflow uploads the dump as a run artifact  | no new infrastructure, but the artifact is stored by GitHub (public repository, private artifacts still leave the owner's control); 90-day default TTL |
+| `rsync`/`scp` to a second machine the owner runs | full control; needs a reachable host and a key, and the same retention logic there                                                                     |
+| Provider-level snapshots of the server disk      | one click at the hosting provider; whole-disk, not per-database; restore granularity is the whole server                                               |
 
 ## Configuration Reference
 
-All configuration is done via environment variables. See [`backup.env.example`](../infrastructure/backup/backup.env.example) for the full template.
+Everything is a script argument or an environment variable; there is no configuration file.
 
-| Variable                  | Default                 | Description              |
-| ------------------------- | ----------------------- | ------------------------ |
-| `BACKUP_DIR`              | `/var/backups/myfinpro` | Backup storage directory |
-| `BACKUP_RETENTION_DAILY`  | `7`                     | Daily backups to retain  |
-| `BACKUP_RETENTION_WEEKLY` | `4`                     | Weekly backups to retain |
-| `BACKUP_MAX_AGE_HOURS`    | `26`                    | Alert threshold in hours |
-| `MYSQL_HOST`              | `localhost`             | MySQL host               |
-| `MYSQL_PORT`              | `3306`                  | MySQL port               |
-| `MYSQL_USER`              | `myfinpro`              | MySQL user               |
-| `MYSQL_PASSWORD`          | —                       | MySQL password           |
-| `MYSQL_DATABASE`          | `myfinpro`              | MySQL database name      |
-| `DOCKER_CONTAINER_NAME`   | `myfinpro-mysql-1`      | Docker container name    |
-| `ALERT_WEBHOOK_URL`       | —                       | Webhook URL for alerts   |
+| Variable                                                   | Default                 | Description                                                      |
+| ---------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------- |
+| `BACKUP_ROOT`                                              | `/opt/myfinpro/backups` | parent of the per-environment directories                        |
+| `BACKUP_DIR`                                               | `$BACKUP_ROOT/<env>`    | overrides the directory (`--output-dir` / `--backup-dir`)        |
+| `BACKUP_RETENTION_DAILY`                                   | `7`                     | daily backups to retain                                          |
+| `BACKUP_RETENTION_WEEKLY`                                  | `4`                     | weekly backups to retain                                         |
+| `BACKUP_MAX_AGE_HOURS`                                     | `26`                    | age threshold                                                    |
+| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | —                       | direct-connection mode only                                      |
+| `MYSQL_PASSWORD`                                           | —                       | direct-connection mode only; handed to the client as `MYSQL_PWD` |
+| `ALERT_WEBHOOK_URL`                                        | —                       | optional webhook for `check-backup-age.sh`                       |
 
 ## Script Reference
 
-| Script                                                          | Purpose                               |
-| --------------------------------------------------------------- | ------------------------------------- |
-| [`scripts/backup.sh`](../scripts/backup.sh)                     | Create compressed database backup     |
-| [`scripts/restore.sh`](../scripts/restore.sh)                   | Restore database from backup          |
-| [`scripts/verify-backup.sh`](../scripts/verify-backup.sh)       | Verify backup existence and integrity |
-| [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) | Check backup age and alert            |
+| Script                                                          | Purpose                                                    |
+| --------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`scripts/backup-common.sh`](../scripts/backup-common.sh)       | shared helpers: environment → container/directory, clients |
+| [`scripts/backup.sh`](../scripts/backup.sh)                     | dump, gzip-test, retention                                 |
+| [`scripts/verify-backup.sh`](../scripts/verify-backup.sh)       | existence, age, integrity, restore drill                   |
+| [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) | age gate (the alert)                                       |
+| [`scripts/restore.sh`](../scripts/restore.sh)                   | restore a dump into a database                             |

@@ -3,20 +3,15 @@ set -euo pipefail
 
 # =============================================================================
 # MyFinPro Backup Age Check / Alert Script
-# Checks backup recency and optionally sends webhook alerts
+# Exits 1 when the newest backup is older than the threshold (or missing).
+# The scheduled backup workflow runs it last, so its failure is the alert.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../infrastructure/backup/backup.env"
+# shellcheck source=scripts/backup-common.sh
+source "${SCRIPT_DIR}/backup-common.sh"
 
-# Load environment file if it exists
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-fi
-
-# Configuration with defaults
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/myfinpro}"
+BACKUP_DIR="${BACKUP_DIR:-}"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-26}"
 ALERT_WEBHOOK_URL="${ALERT_WEBHOOK_URL:-}"
 LOG_PREFIX="[check-backup-age]"
@@ -26,24 +21,24 @@ LOG_PREFIX="[check-backup-age]"
 # =============================================================================
 
 usage() {
-  cat <<EOF
-Usage: $(basename "$0") [OPTIONS]
+  cat <<USAGE
+Usage: $(basename "$0") [production|staging] [OPTIONS]
 
 Checks the age of the most recent backup and alerts if it is too old.
 
 Options:
   --max-age N           Maximum backup age in hours (default: $BACKUP_MAX_AGE_HOURS)
-  --backup-dir DIR      Backup directory (default: $BACKUP_DIR)
+  --backup-dir DIR      Backup directory (default: ${BACKUP_ROOT}/<env>)
   --alert-webhook URL   Webhook URL for sending alerts (optional)
   --help                Show this help message
 
 Environment variables:
-  BACKUP_DIR, BACKUP_MAX_AGE_HOURS, ALERT_WEBHOOK_URL
+  BACKUP_ROOT, BACKUP_DIR, BACKUP_MAX_AGE_HOURS, ALERT_WEBHOOK_URL
 
 Exit codes:
   0  Backup is recent (within threshold)
   1  Backup is too old or missing
-EOF
+USAGE
   exit 0
 }
 
@@ -55,10 +50,13 @@ log_error() {
   echo "$LOG_PREFIX $(date '+%Y-%m-%d %H:%M:%S') ERROR: $*" >&2
 }
 
-# Parse command-line arguments
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      production | staging)
+        BACKUP_DIR="${BACKUP_DIR:-$(backup_env_dir "$1")}"
+        shift
+        ;;
       --max-age)
         BACKUP_MAX_AGE_HOURS="$2"
         shift 2
@@ -80,37 +78,24 @@ parse_args() {
         ;;
     esac
   done
+
+  if [[ -z "$BACKUP_DIR" ]]; then
+    log_error "Give an environment name or --backup-dir DIR. Use --help."
+    exit 1
+  fi
 }
 
-# Find the most recent backup file
-find_latest_backup() {
-  find "$BACKUP_DIR" -name 'myfinpro_*.sql.gz' -type f 2>/dev/null | sort -r | head -1
-}
-
-# Calculate age of a file in hours
-file_age_hours() {
-  local file="$1"
-  local now
-  now=$(date +%s)
-  local file_time
-  file_time=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null)
-  local age_seconds=$(( now - file_time ))
-  echo $(( age_seconds / 3600 ))
-}
-
-# Send alert via webhook
 send_webhook_alert() {
   local message="$1"
   local status="$2"
 
-  if [[ -z "$ALERT_WEBHOOK_URL" ]]; then
-    return
-  fi
+  [[ -n "$ALERT_WEBHOOK_URL" ]] || return 0
 
   log "Sending alert to webhook..."
 
   local payload
-  payload=$(cat <<EOF
+  payload=$(
+    cat <<JSON
 {
   "text": "$message",
   "status": "$status",
@@ -118,13 +103,13 @@ send_webhook_alert() {
   "timestamp": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
   "hostname": "$(hostname)"
 }
-EOF
-)
+JSON
+  )
 
   curl -s -X POST \
     -H "Content-Type: application/json" \
     -d "$payload" \
-    "$ALERT_WEBHOOK_URL" >/dev/null 2>&1 || {
+    "$ALERT_WEBHOOK_URL" > /dev/null 2>&1 || {
     log_error "Failed to send webhook alert"
   }
 }
@@ -136,7 +121,6 @@ EOF
 main() {
   parse_args "$@"
 
-  # Check backup directory
   if [[ ! -d "$BACKUP_DIR" ]]; then
     local msg="ALERT: Backup directory does not exist: $BACKUP_DIR"
     log_error "$msg"
@@ -144,9 +128,8 @@ main() {
     exit 1
   fi
 
-  # Find latest backup
   local latest_backup
-  latest_backup=$(find_latest_backup)
+  latest_backup=$(find_latest_backup "$BACKUP_DIR")
 
   if [[ -z "$latest_backup" ]]; then
     local msg="ALERT: No backup files found in $BACKUP_DIR"
@@ -155,14 +138,11 @@ main() {
     exit 1
   fi
 
-  local filename
+  local filename age_hours
   filename=$(basename "$latest_backup")
-
-  # Check backup age
-  local age_hours
   age_hours=$(file_age_hours "$latest_backup")
 
-  if [[ $age_hours -gt $BACKUP_MAX_AGE_HOURS ]]; then
+  if file_older_than_hours "$latest_backup" "$BACKUP_MAX_AGE_HOURS"; then
     local msg="ALERT: Backup '$filename' is ${age_hours}h old (threshold: ${BACKUP_MAX_AGE_HOURS}h)"
     log "$msg"
     send_webhook_alert "$msg" "warning"

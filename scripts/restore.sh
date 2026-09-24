@@ -7,23 +7,16 @@ set -euo pipefail
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../infrastructure/backup/backup.env"
+# shellcheck source=scripts/backup-common.sh
+source "${SCRIPT_DIR}/backup-common.sh"
 
-# Load environment file if it exists
-if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-fi
-
-# Configuration with defaults
-MYSQL_HOST="${MYSQL_HOST:-localhost}"
+MYSQL_HOST="${MYSQL_HOST:-}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
-MYSQL_USER="${MYSQL_USER:-myfinpro}"
-MYSQL_PASSWORD="${MYSQL_PASSWORD:-}"
-MYSQL_DATABASE="${MYSQL_DATABASE:-myfinpro}"
-DOCKER_CONTAINER_NAME="${DOCKER_CONTAINER_NAME:-myfinpro-mysql-1}"
+MYSQL_USER="${MYSQL_USER:-root}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-}"
 
-USE_DOCKER=false
+ENVIRONMENT=""
+CONTAINER=""
 FORCE=false
 BACKUP_FILE=""
 LOG_PREFIX="[restore]"
@@ -33,33 +26,37 @@ LOG_PREFIX="[restore]"
 # =============================================================================
 
 usage() {
-  cat <<EOF
-Usage: $(basename "$0") <backup-file> [OPTIONS]
+  cat <<USAGE
+Usage: $(basename "$0") <backup-file> <production|staging> [OPTIONS]
+       $(basename "$0") <backup-file> --container NAME [OPTIONS]
+       $(basename "$0") <backup-file> --host HOST --database DB [OPTIONS]
 
-Restores a MySQL database from a .sql.gz backup file.
+Restores a MySQL database from a .sql.gz backup file. With an environment
+name the restore runs inside that environment's MySQL container with the
+container's own credentials, into the database the container was created for.
 
 Arguments:
   backup-file           Path to the .sql.gz backup file to restore
 
 Options:
-  --docker              Use Docker container for mysql client
   --force               Skip confirmation prompt
-  --container NAME      Docker container name (default: $DOCKER_CONTAINER_NAME)
-  --host HOST           MySQL host (default: $MYSQL_HOST)
+  --container NAME      Any MySQL container whose environment carries
+                        MYSQL_ROOT_PASSWORD and MYSQL_DATABASE
+  --host HOST           Direct connection instead of a container
   --port PORT           MySQL port (default: $MYSQL_PORT)
   --user USER           MySQL user (default: $MYSQL_USER)
-  --database DB         MySQL database (default: $MYSQL_DATABASE)
+  --database DB         Target database (direct connection; overrides the
+                        container's own database when given with a container)
   --help                Show this help message
 
 Environment variables:
-  MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE,
-  DOCKER_CONTAINER_NAME
+  MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD (direct only), MYSQL_DATABASE
 
 Exit codes:
   0  Restore completed successfully
   1  Restore failed
   2  Invalid arguments
-EOF
+USAGE
   exit 0
 }
 
@@ -72,16 +69,15 @@ log_error() {
 }
 
 die() {
-  log_error "$@"
-  exit 1
+  log_error "$1"
+  exit "${2:-1}"
 }
 
-# Parse command-line arguments
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --docker)
-        USE_DOCKER=true
+      production | staging)
+        ENVIRONMENT="$1"
         shift
         ;;
       --force)
@@ -89,7 +85,7 @@ parse_args() {
         shift
         ;;
       --container)
-        DOCKER_CONTAINER_NAME="$2"
+        CONTAINER="$2"
         shift 2
         ;;
       --host)
@@ -112,60 +108,51 @@ parse_args() {
         usage
         ;;
       -*)
-        die "Unknown option: $1. Use --help for usage information."
+        die "Unknown option: $1. Use --help for usage information." 2
         ;;
       *)
         if [[ -z "$BACKUP_FILE" ]]; then
           BACKUP_FILE="$1"
         else
-          die "Unexpected argument: $1. Use --help for usage information."
+          die "Unexpected argument: $1. Use --help for usage information." 2
         fi
         shift
         ;;
     esac
   done
 
-  if [[ -z "$BACKUP_FILE" ]]; then
-    die "Backup file argument is required. Use --help for usage information."
+  [[ -n "$BACKUP_FILE" ]] || die "Backup file argument is required. Use --help for usage information." 2
+
+  if [[ -n "$ENVIRONMENT" ]]; then
+    CONTAINER="${CONTAINER:-$(backup_env_container "$ENVIRONMENT")}"
   fi
+  if [[ -z "$CONTAINER" && -z "$MYSQL_HOST" ]]; then
+    die "Give an environment name, --container NAME or --host HOST. Use --help." 2
+  fi
+  if [[ -n "$CONTAINER" ]]; then
+    container_running "$CONTAINER" || die "Container '$CONTAINER' is not running"
+    MYSQL_DATABASE="${MYSQL_DATABASE:-$(container_database "$CONTAINER")}"
+  fi
+  [[ -n "$MYSQL_DATABASE" ]] || die "No target database: pass --database DB." 2
 }
 
-# Verify backup file before restoring
 verify_backup_file() {
   log "Verifying backup file: $BACKUP_FILE"
 
-  if [[ ! -f "$BACKUP_FILE" ]]; then
-    die "Backup file not found: $BACKUP_FILE"
-  fi
+  [[ -f "$BACKUP_FILE" ]] || die "Backup file not found: $BACKUP_FILE"
+  [[ -r "$BACKUP_FILE" ]] || die "Backup file is not readable: $BACKUP_FILE"
+  [[ -s "$BACKUP_FILE" ]] || die "Backup file is empty: $BACKUP_FILE"
+  [[ "$BACKUP_FILE" == *.sql.gz ]] || die "Backup file must have .sql.gz extension: $BACKUP_FILE"
 
-  if [[ ! -r "$BACKUP_FILE" ]]; then
-    die "Backup file is not readable: $BACKUP_FILE"
-  fi
-
-  if [[ ! -s "$BACKUP_FILE" ]]; then
-    die "Backup file is empty: $BACKUP_FILE"
-  fi
-
-  # Check file extension
-  if [[ "$BACKUP_FILE" != *.sql.gz ]]; then
-    die "Backup file must have .sql.gz extension: $BACKUP_FILE"
-  fi
-
-  # Verify gzip integrity
-  if ! gzip -t "$BACKUP_FILE" 2>/dev/null; then
+  if ! gunzip -t "$BACKUP_FILE" 2>/dev/null; then
     die "Backup file failed gzip integrity check: $BACKUP_FILE"
   fi
 
-  local size
-  size=$(du -h "$BACKUP_FILE" | cut -f1)
-  log "Backup file verified: $size"
+  log "Backup file verified: $(du -h "$BACKUP_FILE" | cut -f1)"
 }
 
-# Prompt for confirmation
 confirm_restore() {
-  if [[ "$FORCE" == "true" ]]; then
-    return 0
-  fi
+  [[ "$FORCE" == "true" ]] && return 0
 
   local size
   size=$(du -h "$BACKUP_FILE" | cut -f1)
@@ -188,25 +175,15 @@ confirm_restore() {
   fi
 }
 
-# Perform the restore
 perform_restore() {
   log "Starting restore of database '$MYSQL_DATABASE' from $(basename "$BACKUP_FILE")..."
 
-  if [[ "$USE_DOCKER" == "true" ]]; then
-    log "Using Docker container: $DOCKER_CONTAINER_NAME"
-    gunzip -c "$BACKUP_FILE" | docker exec -i "$DOCKER_CONTAINER_NAME" \
-      mysql \
-        --user="$MYSQL_USER" \
-        --password="$MYSQL_PASSWORD" \
-        "$MYSQL_DATABASE" 2>/dev/null
+  if [[ -n "$CONTAINER" ]]; then
+    log "Using container: $CONTAINER"
+    gunzip -c "$BACKUP_FILE" | container_mysql "$CONTAINER" mysql "$MYSQL_DATABASE"
   else
     log "Using direct MySQL connection: $MYSQL_HOST:$MYSQL_PORT"
-    gunzip -c "$BACKUP_FILE" | mysql \
-      --host="$MYSQL_HOST" \
-      --port="$MYSQL_PORT" \
-      --user="$MYSQL_USER" \
-      --password="$MYSQL_PASSWORD" \
-      "$MYSQL_DATABASE" 2>/dev/null
+    gunzip -c "$BACKUP_FILE" | direct_mysql mysql "$MYSQL_DATABASE"
   fi
 
   log "Restore completed successfully"

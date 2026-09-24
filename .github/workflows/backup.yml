@@ -1,0 +1,101 @@
+# .github/workflows/backup.yml
+# Scheduled database backups — the replacement for the cron job that docs/backup.md
+# used to describe and that was never installed on the server.
+#
+# Every run, per environment: copy the backup scripts to the server, dump the database
+# inside its MySQL container with the container's own credentials, gzip-test the file,
+# apply retention (7 daily + 4 weekly), verify the newest file, and fail the run when
+# the newest backup is older than 26 hours. On Sundays (or with the `drill` input) the
+# newest backup is also restored into a throwaway <db>_verify schema, counted and dropped.
+#
+# The workflow needs only the SSH host/user/key secrets: no database credential leaves
+# the container. A failed scheduled run is the alert — GitHub notifies the repo owner.
+
+name: Backup
+
+on:
+  schedule:
+    # Daily at 02:17 UTC — a quiet hour for both environments.
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: 'Also run the restore drill now (otherwise it runs on Sundays)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Back up ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - environment: production
+            secret_prefix: PRODUCTION
+          - environment: staging
+            secret_prefix: STAGING
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Copy backup scripts to the server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.secret_prefix)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.secret_prefix)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.secret_prefix)] }}
+          source: >-
+            scripts/backup-common.sh,
+            scripts/backup.sh,
+            scripts/verify-backup.sh,
+            scripts/check-backup-age.sh,
+            scripts/restore.sh
+          target: /opt/myfinpro/backups
+          overwrite: true
+
+      - name: Back up, verify, check age
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+          DRILL: ${{ inputs.drill }}
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.secret_prefix)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.secret_prefix)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.secret_prefix)] }}
+          command_timeout: 15m
+          envs: ENVIRONMENT,DRILL
+          script: |
+            set -euo pipefail
+            cd /opt/myfinpro/backups/scripts
+            chmod +x ./*.sh
+
+            echo "── Backup ($ENVIRONMENT) ──"
+            ./backup.sh "$ENVIRONMENT"
+
+            if [ "${DRILL:-false}" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
+              echo "── Verify + restore drill ──"
+              ./verify-backup.sh "$ENVIRONMENT" --test-restore
+            else
+              echo "── Verify ──"
+              ./verify-backup.sh "$ENVIRONMENT"
+            fi
+
+            echo "── Age check (fails the run when the newest backup is older than 26 h) ──"
+            ./check-backup-age.sh "$ENVIRONMENT" --max-age 26
+
+            echo "── Backups on disk ──"
+            ls -lh "/opt/myfinpro/backups/$ENVIRONMENT"
+            df -h /opt | tail -1
