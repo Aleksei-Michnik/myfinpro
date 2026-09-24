@@ -18,19 +18,34 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
   /** Secondary line under the label. */
   description?: ReactNode;
   error?: string;
+  /** Vertical alignment of the box against the label (`start` for wrapping text). */
+  align?: 'start' | 'center';
   /** Classes on the wrapping `<label>`. */
   wrapperClassName?: string;
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ label, description, error, className = '', wrapperClassName = '', id, ...props }, ref) => {
+  (
+    {
+      label,
+      description,
+      error,
+      align = 'start',
+      className = '',
+      wrapperClassName = '',
+      id,
+      ...props
+    },
+    ref,
+  ) => {
     const checkboxId = id || props.name;
     const describedBy = error && checkboxId ? `${checkboxId}-error` : undefined;
     return (
       <div>
         <label
           className={cx(
-            'flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200',
+            'flex gap-2 text-sm text-gray-700 dark:text-gray-200',
+            align === 'start' ? 'items-start' : 'items-center',
             !props.disabled && 'cursor-pointer',
             wrapperClassName,
           )}
@@ -39,7 +54,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             ref={ref}
             id={checkboxId}
             type="checkbox"
-            className={cx('mt-0.5', checkboxControlClass, className)}
+            className={cx(align === 'start' && 'mt-0.5', checkboxControlClass, className)}
             aria-invalid={error ? 'true' : undefined}
             aria-describedby={describedBy}
             {...props}

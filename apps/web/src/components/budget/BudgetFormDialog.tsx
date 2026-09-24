@@ -15,6 +15,7 @@ import { TransactionCategoryPicker } from '@/components/transaction/TransactionC
 import { TransactionScopeSelector } from '@/components/transaction/TransactionScopeSelector';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Select } from '@/components/ui/Select';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -753,17 +754,14 @@ export function BudgetFormDialog({
                   </span>
                 )}
               </label>
-              <label className="flex items-start gap-2 pt-4 text-sm text-gray-700 dark:text-gray-200">
-                <input
-                  type="checkbox"
-                  checked={state.alertOverspend}
-                  onChange={(e) => setState((s) => ({ ...s, alertOverspend: e.target.checked }))}
-                  disabled={allInputsDisabled}
-                  data-testid="budget-form-overspend"
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span>{t('alertOverspend')}</span>
-              </label>
+              <Checkbox
+                checked={state.alertOverspend}
+                onChange={(e) => setState((s) => ({ ...s, alertOverspend: e.target.checked }))}
+                disabled={allInputsDisabled}
+                data-testid="budget-form-overspend"
+                wrapperClassName="pt-4"
+                label={t('alertOverspend')}
+              />
             </div>
           </div>
 

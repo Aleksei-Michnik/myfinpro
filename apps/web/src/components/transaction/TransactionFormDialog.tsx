@@ -39,6 +39,7 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
+import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -1313,7 +1314,7 @@ export function TransactionFormDialog({
           <div className="mb-3">
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('noteLabel')}</span>
-              <textarea
+              <Textarea
                 value={state.note}
                 onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
                 placeholder={t('notePlaceholder')}
@@ -1321,7 +1322,10 @@ export function TransactionFormDialog({
                 maxLength={2000}
                 disabled={allInputsDisabled}
                 data-testid="form-note"
-                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                size="sm"
+                fullWidth={false}
+                className="mt-1"
+                wrapperClassName="contents"
               />
             </label>
             {errors.note && (

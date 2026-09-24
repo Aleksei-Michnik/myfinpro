@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { TransactionCategoryPicker } from '@/components/transaction/TransactionCategoryPicker';
 import { TransactionScopeSelector } from '@/components/transaction/TransactionScopeSelector';
 import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import { getLastUsedScopes, setLastUsedScopes } from '@/lib/transaction/remember';
@@ -160,14 +161,15 @@ export function ReceiptConfirmDialog({
           >
             {t('noteLabel')}
           </label>
-          <textarea
+          <Textarea
             id="receipt-confirm-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder={t('notePlaceholder')}
             rows={2}
             data-testid="receipt-confirm-note"
-            className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            size="sm"
+            wrapperClassName="contents"
           />
         </div>
 

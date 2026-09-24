@@ -13,6 +13,12 @@ describe('Checkbox (20.1)', () => {
     expect(box).toHaveAttribute('type', 'checkbox');
   });
 
+  it('aligns the box with the label text on demand', () => {
+    const { container } = render(<Checkbox name="scope" label="Personal" align="center" />);
+    expect(container.querySelector('label')!.className).toContain('items-center');
+    expect(screen.getByRole('checkbox').className).not.toContain('mt-0.5');
+  });
+
   it('renders an optional description', () => {
     render(<Checkbox name="alerts" label="Alert me" description="When the budget overruns" />);
     expect(screen.getByText('When the budget overruns')).toBeInTheDocument();
