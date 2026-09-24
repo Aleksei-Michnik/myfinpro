@@ -145,8 +145,9 @@ secrets they control; the finance app only receives the resulting rows.**
 
 ### 3.3 Manual exports
 
-Every institution in scope offers a spreadsheet export from its web site or app (XLSX; some
-legacy XLS/CSV; Hebrew headers; `dd/mm/yyyy` dates; debit/credit columns on bank statements, a
+Every institution in scope offers a spreadsheet export from its web site or app (XLSX; Leumi an
+HTML table named `.xls`; CSV at some; Hebrew headers — the verbatim column lists per institution
+are in the research notes §3; `dd/mm/yyyy` dates; debit/credit columns on bank statements, a
 charged-vs-original amount pair and an installment marker on card statements; a running balance
 column on bank statements; no OFX/QIF/CAMT). Exports carry no stable row identifier that survives
 re-export at every institution, which is why dedup is a computed fingerprint (§4.2).
@@ -250,7 +251,8 @@ and English), date formats, sign conventions, amount-pair semantics — one engi
 paths. Header auto-detection picks the preset; a `generic_csv` preset maps by common column names
 and lets the web fall back to a manual column picker. Spreadsheet decoding to `string[][]` is a web
 concern (`apps/web/src/lib/statement/decode.ts`: CSV with `windows-1255` / UTF-8 detection via
-`TextDecoder`, XLSX/XLS via a browser-side library chosen in 20.4).
+`TextDecoder`, XLSX/XLS — including Leumi's HTML-table-as-`.xls` — via SheetJS ≥ 0.20.3 from the SheetJS CDN
+tarball, web-only; see `docs/notes/bank-sync-research-2026-09.md` §6 for why not the npm `xlsx`).
 
 ### 4.2 Prisma (expand-only migration `20260925120000_phase20_2_accounts`)
 
