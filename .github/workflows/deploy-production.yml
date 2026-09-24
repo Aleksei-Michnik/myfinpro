@@ -248,7 +248,7 @@ jobs:
             fi
 
             FILE="$BACKUP_DIR/pre-deploy-$STAMP.sql.gz"
-            docker exec myfinpro-prod-mysql sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --no-tablespaces --routines --triggers "$MYSQL_DATABASE"' \
+            docker exec myfinpro-prod-mysql sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --no-tablespaces --routines --triggers --set-gtid-purged=OFF "$MYSQL_DATABASE"' \
               2> >(grep -v 'Using a password on the command line' >&2 || true) \
               | gzip > "$FILE"
             gunzip -t "$FILE"

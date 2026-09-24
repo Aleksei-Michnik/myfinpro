@@ -149,7 +149,10 @@ ensure_backup_dir() {
 perform_dump() {
   local backup_file="$1"
   local tmp_file="${backup_file}.tmp"
-  local dump_flags=(--single-transaction --no-tablespaces --routines --triggers)
+  # --set-gtid-purged=OFF: the servers run with GTIDs on, and a dump that carries
+  # SET @@GLOBAL.GTID_PURGED cannot be restored into the same server (error 3546),
+  # which is exactly what the restore drill and a disaster recovery do.
+  local dump_flags=(--single-transaction --no-tablespaces --routines --triggers --set-gtid-purged=OFF)
 
   if [[ -n "$CONTAINER" ]]; then
     container_running "$CONTAINER" || die "Container '$CONTAINER' is not running"
