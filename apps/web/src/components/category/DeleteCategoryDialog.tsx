@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { Select } from '@/components/ui/Select';
 import { useCategories } from '@/lib/category/category-context';
 import type { CategoryApiError, CategoryDto, DeleteCategoryResult } from '@/lib/category/types';
 import { useAsyncOperation } from '@/lib/ui';
@@ -117,12 +118,12 @@ export function DeleteCategoryDialog({
               <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('replaceLabel')}
               </span>
-              <select
+              <Select
                 value={replaceWithId}
                 onChange={(e) => setReplaceWithId(e.target.value)}
                 disabled={isLoading}
                 data-testid="delete-category-replace-select"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 <option value="">—</option>
                 {compatibleCandidates.map((c) => (
@@ -130,7 +131,7 @@ export function DeleteCategoryDialog({
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
         )}

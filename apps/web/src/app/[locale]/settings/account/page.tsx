@@ -10,6 +10,7 @@ import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -123,19 +124,19 @@ export default function AccountSettingsPage() {
               >
                 {t('language')}
               </label>
-              <select
+              <Select
                 id="language-select"
                 data-testid="language-select"
                 value={selectedLocale}
                 onChange={(e) => setSelectedLocale(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {LOCALES.map((loc) => (
                   <option key={loc} value={loc}>
                     {localeNames[loc] || loc}
                   </option>
                 ))}
-              </select>
+              </Select>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {t('languageDescription')}
               </p>
@@ -147,19 +148,19 @@ export default function AccountSettingsPage() {
               >
                 {t('defaultCurrency')}
               </label>
-              <select
+              <Select
                 id="currency-select"
                 data-testid="currency-select"
                 value={selectedCurrency}
                 onChange={(e) => setSelectedCurrency(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {CURRENCY_CODES.map((code) => (
                   <option key={code} value={code}>
                     {CURRENCIES[code].symbol} {code} — {CURRENCIES[code].name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label
@@ -168,19 +169,19 @@ export default function AccountSettingsPage() {
               >
                 {t('timezone')}
               </label>
-              <select
+              <Select
                 id="timezone-select"
                 data-testid="timezone-select"
                 value={selectedTimezone}
                 onChange={(e) => setSelectedTimezone(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {timezones.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <Button
               variant="primary"

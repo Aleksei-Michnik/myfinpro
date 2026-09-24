@@ -23,6 +23,7 @@ import { createPortal } from 'react-dom';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog';
 import { Button } from '@/components/ui/Button';
 import { FileCaptureButtons } from '@/components/ui/FileCaptureButtons';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { useProducts } from '@/lib/product/product-context';
 import type { ProductSummary } from '@/lib/product/types';
@@ -428,12 +429,13 @@ export function ProductFormDialog({
             >
               {t('categoryLabel')}
             </label>
-            <select
+            <Select
               id="product-form-category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               data-testid="product-form-category"
-              className={inputClass}
+              size="sm"
+              wrapperClassName="contents"
             >
               <option value="">{t('noCategory')}</option>
               {systemCategories.map((c) => (
@@ -441,7 +443,7 @@ export function ProductFormDialog({
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <p className="text-xs text-gray-400 dark:text-gray-500">{t('categoryHint')}</p>
           </div>
 

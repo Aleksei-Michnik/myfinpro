@@ -9,6 +9,7 @@ import { InviteLink } from '@/components/group/InviteLink';
 import { MemberManagement } from '@/components/group/MemberManagement';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -234,20 +235,20 @@ function GroupSettingsInner() {
             >
               {t('info.typeLabel')}
             </label>
-            <select
+            <Select
               id="group-settings-type-select"
               data-testid="group-settings-type-select"
               value={type}
               onChange={(e) => setType(e.target.value)}
               disabled={isSaving}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              wrapperClassName="contents"
             >
               {GROUP_TYPES.map((groupType) => (
                 <option key={groupType} value={groupType}>
                   {tGroups(`type.${groupType}`)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div>
@@ -257,20 +258,20 @@ function GroupSettingsInner() {
             >
               {t('info.currencyLabel')}
             </label>
-            <select
+            <Select
               id="group-settings-currency-select"
               data-testid="group-settings-currency-select"
               value={defaultCurrency}
               onChange={(e) => setDefaultCurrency(e.target.value)}
               disabled={isSaving}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              wrapperClassName="contents"
             >
               {CURRENCY_CODES.map((code) => (
                 <option key={code} value={code}>
                   {CURRENCIES[code].symbol} {code} — {CURRENCIES[code].name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Button

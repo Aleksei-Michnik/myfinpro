@@ -16,6 +16,7 @@ import { TransactionScopeSelector } from '@/components/transaction/TransactionSc
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { Select } from '@/components/ui/Select';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useBudgets } from '@/lib/budget/budget-context';
 import { getLastUsedBudgetScope, setLastUsedBudgetScope } from '@/lib/budget/remember';
@@ -563,7 +564,7 @@ export function BudgetFormDialog({
 
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('currency')}</span>
-              <select
+              <Select
                 value={state.currency}
                 onChange={(e) => {
                   currencyTouchedRef.current = true;
@@ -571,14 +572,15 @@ export function BudgetFormDialog({
                 }}
                 disabled={allInputsDisabled}
                 data-testid="budget-form-currency"
-                className={inputClass}
+                size="sm"
+                wrapperClassName="contents"
               >
                 {sortedCurrencies.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
-              </select>
+              </Select>
               {errors.currency && (
                 <span
                   className="mt-1 text-xs text-red-600"
@@ -642,21 +644,22 @@ export function BudgetFormDialog({
           <div className="mb-3">
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('period')}</span>
-              <select
+              <Select
                 value={state.period}
                 onChange={(e) =>
                   setState((s) => ({ ...s, period: e.target.value as BudgetPeriod }))
                 }
                 disabled={allInputsDisabled}
                 data-testid="budget-form-period"
-                className={inputClass}
+                size="sm"
+                wrapperClassName="contents"
               >
                 {BUDGET_PERIODS.map((p) => (
                   <option key={p} value={p}>
                     {t(`periods.${p}`)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {errors.period && (
               <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-period">

@@ -8,6 +8,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect } from 'react';
+import { Select } from '@/components/ui/Select';
 import { useGroups } from '@/lib/group/group-context';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type { CategoryDto } from '@/lib/transaction/types';
@@ -124,13 +125,13 @@ export function TransactionCategoryPicker({
 
   return (
     <div data-testid={testId ?? 'transaction-category-picker'}>
-      <select
+      <Select
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled || loading}
         data-testid="category-picker-select"
         aria-busy={loading}
-        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        size="sm"
       >
         <option value="" disabled={!emptyOptionLabel}>
           {loading ? t('loading') : (emptyOptionLabel ?? t('placeholder'))}
@@ -151,7 +152,7 @@ export function TransactionCategoryPicker({
               </optgroup>
             );
           })}
-      </select>
+      </Select>
       {error && (
         <p
           className="mt-1 text-xs text-red-600 dark:text-red-400"

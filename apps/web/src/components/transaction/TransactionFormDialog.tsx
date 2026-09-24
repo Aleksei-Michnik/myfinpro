@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -1164,19 +1165,22 @@ export function TransactionFormDialog({
 
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('currency')}</span>
-              <select
+              <Select
                 value={state.currency}
                 onChange={(e) => setState((s) => ({ ...s, currency: e.target.value }))}
                 disabled={allInputsDisabled}
                 data-testid="form-currency"
-                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                size="sm"
+                fullWidth={false}
+                className="mt-1"
+                wrapperClassName="contents"
               >
                 {sortedCurrencies.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
-              </select>
+              </Select>
               {errors.currency && (
                 <span className="mt-1 text-xs text-red-600" data-testid="form-error-currency">
                   {errors.currency}

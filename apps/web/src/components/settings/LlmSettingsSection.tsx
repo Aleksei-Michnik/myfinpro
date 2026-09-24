@@ -11,6 +11,7 @@ import { LLM_PROVIDERS, type LlmProvider } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import type { LlmCatalogResponse, LlmCredentialHint } from '@/lib/llm/types';
 import { useLlmApi } from '@/lib/llm/use-llm-api';
@@ -119,13 +120,14 @@ export function LlmSettingsSection() {
             >
               {t('modelLabel')}
             </label>
-            <select
+            <Select
               id="llm-model-select"
               data-testid="llm-model-select"
               value={selectedValue}
               onChange={(e) => setSelectedValue(e.target.value)}
               aria-describedby="llm-model-hint"
-              className={inputClass}
+              size="sm"
+              wrapperClassName="contents"
             >
               <option value="">{t('defaultOption')}</option>
               {LLM_PROVIDERS.map((provider) => (
@@ -140,7 +142,7 @@ export function LlmSettingsSection() {
                     ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
             <p id="llm-model-hint" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {t('modelHint')}
             </p>

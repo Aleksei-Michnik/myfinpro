@@ -21,6 +21,7 @@ import { BarcodeScannerDialog } from '../product/BarcodeScannerDialog';
 import { ProductFormDialog } from '../product/ProductFormDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { localInputToIso, nowLocalIso } from '@/lib/datetime';
 import { useProducts } from '@/lib/product/product-context';
@@ -299,18 +300,20 @@ export function ManualReceiptDialog({
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
             <span>{t('currency')}</span>
-            <select
+            <Select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               data-testid="manual-receipt-currency"
-              className={`mt-1 ${inputClass}`}
+              size="sm"
+              className="mt-1"
+              wrapperClassName="contents"
             >
               {sortedCurrencies.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
             <span>{t('purchasedAt')}</span>

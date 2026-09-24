@@ -4,6 +4,7 @@ import { GROUP_ROLES, type GroupRole } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { useGroups } from '@/lib/group/group-context';
 import type { GroupDetail, GroupMember } from '@/lib/group/types';
@@ -140,20 +141,22 @@ export function MemberManagement({ group, currentUserId, onChanged }: MemberMana
                 <label className="sr-only" htmlFor={`role-select-${member.id}`}>
                   {t('roleLabel')}
                 </label>
-                <select
+                <Select
                   id={`role-select-${member.id}`}
                   data-testid={`role-select-${member.id}`}
                   value={member.role}
                   disabled={isCurrentUser || isRolePending}
                   onChange={(e) => handleRoleChange(member, e.target.value as GroupRole)}
-                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  size="sm"
+                  fullWidth={false}
+                  wrapperClassName="contents"
                 >
                   {GROUP_ROLES.map((roleOption) => (
                     <option key={roleOption} value={roleOption}>
                       {t(roleOption)}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <button
                   type="button"
                   onClick={() => handleOpenConfirm(member)}

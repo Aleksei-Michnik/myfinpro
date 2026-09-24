@@ -13,13 +13,29 @@ describe('Badge (20.1)', () => {
   });
 
   it('carries a colour per tone', () => {
-    const { rerender } = render(<Badge data-testid="chip" tone="success" />);
+    const { rerender } = render(
+      <Badge data-testid="chip" tone="success">
+        chip
+      </Badge>,
+    );
     expect(screen.getByTestId('chip').className).toContain('bg-green-100');
-    rerender(<Badge data-testid="chip" tone="danger" />);
+    rerender(
+      <Badge data-testid="chip" tone="danger">
+        chip
+      </Badge>,
+    );
     expect(screen.getByTestId('chip').className).toContain('bg-red-100');
-    rerender(<Badge data-testid="chip" tone="warning" />);
+    rerender(
+      <Badge data-testid="chip" tone="warning">
+        chip
+      </Badge>,
+    );
     expect(screen.getByTestId('chip').className).toContain('bg-amber-100');
-    rerender(<Badge data-testid="chip" tone="primary" />);
+    rerender(
+      <Badge data-testid="chip" tone="primary">
+        chip
+      </Badge>,
+    );
     expect(screen.getByTestId('chip').className).toContain('bg-primary-100');
   });
 

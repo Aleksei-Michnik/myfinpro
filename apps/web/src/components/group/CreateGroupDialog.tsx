@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { useGroups } from '@/lib/group/group-context';
 
@@ -98,20 +99,20 @@ export function CreateGroupDialog({ isOpen, onClose }: CreateGroupDialogProps) {
             >
               {t('create.type')}
             </label>
-            <select
+            <Select
               id="group-type-select"
               data-testid="group-type-select"
               value={type}
               onChange={(e) => setType(e.target.value)}
               disabled={isLoading}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              wrapperClassName="contents"
             >
               {GROUP_TYPES.map((groupType) => (
                 <option key={groupType} value={groupType}>
                   {t(`type.${groupType}`)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div>
@@ -121,20 +122,20 @@ export function CreateGroupDialog({ isOpen, onClose }: CreateGroupDialogProps) {
             >
               {t('create.currency')}
             </label>
-            <select
+            <Select
               id="group-currency-select"
               data-testid="group-currency-select"
               value={defaultCurrency}
               onChange={(e) => setDefaultCurrency(e.target.value)}
               disabled={isLoading}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              wrapperClassName="contents"
             >
               {CURRENCY_CODES.map((code) => (
                 <option key={code} value={code}>
                   {CURRENCIES[code].symbol} {code} — {CURRENCIES[code].name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div className="flex gap-3 pt-2">
