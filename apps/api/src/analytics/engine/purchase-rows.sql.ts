@@ -18,6 +18,11 @@ export interface PurchaseRowsParams {
  *
  * - `base`: countable (`POSTED` + `ONE_TIME`), visible, filter-matching
  *   transactions. Recurring/plan parents are templates and never match.
+ *   The same countable rule is expressed as a Prisma filter in
+ *   [`transaction/utils/countable.ts`](../../transaction/utils/countable.ts)
+ *   (ledger balances) — the two must not drift. Transfers between the user's
+ *   own accounts (`transfer_account_id IS NOT NULL`, design §2.4) are money
+ *   moving, not spending, and are excluded here.
  * - `item_totals`: Σ item cents per base transaction with a CONFIRMED
  *   receipt (receipts.transaction_id is unique — no fan-out).
  * - `purchase_rows`: three UNION ALL arms — item rows, balancing rows
@@ -51,6 +56,7 @@ export function purchaseRowsCte(params: PurchaseRowsParams): Prisma.Sql {
   SELECT t.id, t.amount_cents, t.currency, t.occurred_at, t.category_id, t.created_by_id
   FROM transactions t
   WHERE t.status = 'POSTED' AND t.type = 'ONE_TIME'
+    AND t.transfer_account_id IS NULL
     AND t.direction = ${params.direction}
     ${dateFromClause}
     ${dateToClause}

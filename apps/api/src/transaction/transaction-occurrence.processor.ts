@@ -158,6 +158,10 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
               })),
             },
             parentTransactionId: parent.id,
+            // Phase 20.2 — occurrences inherit the template's account. A
+            // RECURRING parent can never be a transfer, so there is no
+            // transferAccountId to clone.
+            accountId: parent.accountId,
             note: parent.note,
             createdById: parent.createdById,
             idempotencyKey,

@@ -119,6 +119,25 @@ export class ListTransactionsQueryDto {
   @IsBooleanString()
   createdByMe?: string;
 
+  /**
+   * Phase 20.2 — narrow to one account. Matches rows placed on it
+   * (`accountId`) **or** transfers into it (`transferAccountId`), so an
+   * account's page shows both sides of its money movement.
+   */
+  @ApiPropertyOptional({ description: 'Matches accountId or transferAccountId.' })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+
+  /**
+   * Phase 20.2 — `true` hides transfers between the user's own accounts
+   * (`transferAccountId IS NOT NULL`), which are money moving, not spending.
+   */
+  @ApiPropertyOptional({ example: 'true' })
+  @IsOptional()
+  @IsBooleanString()
+  excludeTransfers?: string;
+
   /** Free-text search against note (case-insensitive substring match). */
   @ApiPropertyOptional()
   @IsOptional()
