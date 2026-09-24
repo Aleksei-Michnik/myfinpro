@@ -46,8 +46,9 @@ export class AccountResponseDto {
 
   @ApiProperty({
     description:
-      'openingBalanceCents + every countable transaction on this account since the anchor ' +
-      '(POSTED one-time rows, signed by direction) + every incoming transfer.',
+      'openingBalanceCents + every countable transaction on this account in ' +
+      '[openingBalanceAt, ledgerBalanceAt) — POSTED one-time rows, signed by direction — ' +
+      'plus every incoming transfer. Future-dated rows are not money yet and do not count.',
   })
   ledgerBalanceCents!: number;
 

@@ -299,7 +299,8 @@ describe('AccountService', () => {
 
       expect(res.ledgerBalanceCents).toBe(100_00 + 50_00 - 30_00 + 20_00);
       expect(prisma.transaction.groupBy).toHaveBeenCalledTimes(2);
-      // Countable rule: POSTED + ONE_TIME, from the anchor onwards.
+      // Countable rule: POSTED + ONE_TIME, over the half-open window
+      // [openingBalanceAt, ledgerBalanceAt) — design §2.2.
       expect(prisma.transaction.groupBy).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
@@ -307,14 +308,45 @@ describe('AccountService', () => {
           where: expect.objectContaining({
             status: 'POSTED',
             type: 'ONE_TIME',
-            OR: [{ accountId: 'a1', occurredAt: { gte: anchor } }],
+            OR: [{ accountId: 'a1', occurredAt: { gte: anchor, lt: expect.any(Date) } }],
           }),
         }),
       );
+      const window = (
+        prisma.transaction.groupBy.mock.calls[0][0] as {
+          where: { OR: Array<{ occurredAt: { lt: Date } }> };
+        }
+      ).where.OR[0].occurredAt;
+      expect(window.lt.toISOString()).toBe(res.ledgerBalanceAt);
       expect(prisma.transaction.groupBy).toHaveBeenNthCalledWith(
         2,
         expect.objectContaining({ by: ['transferAccountId'] }),
       );
+    });
+
+    it('stops at the computation instant, so future-dated rows are not money yet', async () => {
+      prisma.account.findFirst.mockResolvedValue(accountRow());
+      const before = Date.now();
+
+      const res = await service.findById('u1', 'a1');
+
+      const bound = (
+        prisma.transaction.groupBy.mock.calls[0][0] as {
+          where: { OR: Array<{ occurredAt: { gte: Date; lt: Date } }> };
+        }
+      ).where.OR[0].occurredAt;
+      // Half-open: the anchor is included, the instant of measurement is not.
+      expect(bound.gte).toBe(anchor);
+      expect(bound.lt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(bound.lt.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(res.ledgerBalanceAt).toBe(bound.lt.toISOString());
+      // The transfer-side aggregate uses the same window.
+      const incoming = (
+        prisma.transaction.groupBy.mock.calls[1][0] as {
+          where: { OR: Array<{ occurredAt: { gte: Date; lt: Date } }> };
+        }
+      ).where.OR[0].occurredAt;
+      expect(incoming).toEqual(bound);
     });
 
     it('handles a negative opening balance (a card that owes money)', async () => {

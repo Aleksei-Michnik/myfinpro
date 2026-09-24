@@ -504,7 +504,8 @@ describe('Accounts API (integration)', () => {
       accountId: checking.id,
       transferAccountId: savings.id,
     });
-    // Not counted: before the anchor, not POSTED, and a recurring template.
+    // Not counted: before the anchor, not POSTED, a recurring template, and
+    // a future-dated row — the window is [openingBalanceAt, ledgerBalanceAt).
     await seedTransaction({
       amountCents: 999_00,
       accountId: checking.id,
@@ -512,6 +513,11 @@ describe('Accounts API (integration)', () => {
     });
     await seedTransaction({ amountCents: 888_00, accountId: checking.id, status: 'PENDING' });
     await seedTransaction({ amountCents: 777_00, accountId: checking.id, type: 'RECURRING' });
+    await seedTransaction({
+      amountCents: 666_00,
+      accountId: checking.id,
+      occurredAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    });
 
     const res = await request(app.getHttpServer())
       .get('/api/v1/accounts')
@@ -523,6 +529,29 @@ describe('Accounts API (integration)', () => {
     );
     expect(byId.get(checking.id)!.ledgerBalanceCents).toBe(1_000_00 - 150_00 + 40_00 - 300_00);
     expect(byId.get(savings.id)!.ledgerBalanceCents).toBe(300_00);
+  });
+
+  // Design §2.2 — the ledger is measured as of `ledgerBalanceAt`; a row dated
+  // inside the create endpoint's timezone grace window is not money yet.
+  it('excludes future-dated rows until their date arrives', async () => {
+    const account = await seedAccount({
+      name: 'Future',
+      openingBalanceCents: 100_00,
+      openingBalanceAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
+    await seedTransaction({
+      direction: 'IN',
+      amountCents: 70_00,
+      accountId: account.id,
+      occurredAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+    });
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/accounts/${account.id}`)
+      .set(auth(owner.accessToken))
+      .expect(200);
+    expect(res.body.ledgerBalanceCents).toBe(100_00);
+    expect(new Date(res.body.ledgerBalanceAt).getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it('supports a negative opening balance (a card that owes money)', async () => {

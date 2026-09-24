@@ -36,12 +36,17 @@ export interface DerivedAccountFigures {
   reconciliationGapCents: number | null;
 }
 
-/** Half-open `occurredAt` window a ledger sum is taken over. */
+/**
+ * Half-open `occurredAt` window a ledger sum is taken over:
+ * `[from, to)` — design §2.2 sums transactions with
+ * `occurredAt ∈ [openingBalanceAt, at)`, so a row dated in the future (the
+ * create endpoint allows up to a day of timezone grace) is not money yet.
+ */
 interface LedgerWindow {
   accountId: string;
   from: Date;
-  /** Exclusive upper bound; `null` = everything from `from` onwards. */
-  to: Date | null;
+  /** Exclusive upper bound. */
+  to: Date;
 }
 
 /** Serialize an Account row + its derived figures into the API response. */
@@ -591,9 +596,9 @@ export class AccountService {
   /**
    * Compute the ledger balance, pending-line count and reconciliation gap for
    * a page of accounts. Fixed query count regardless of page size: two
-   * `groupBy` aggregates for the ledger, two more only when some account
-   * carries a bank figure (the gap is measured as of `reportedBalanceAt`),
-   * and one count of pending statement lines.
+   * `groupBy` aggregates for the ledger (measured as of `ledgerBalanceAt`),
+   * two more only when some account carries a bank figure (the gap is measured
+   * as of `reportedBalanceAt`), and one count of pending statement lines.
    */
   private async deriveFigures(rows: AccountRow[]): Promise<Map<string, DerivedAccountFigures>> {
     const result = new Map<string, DerivedAccountFigures>();
@@ -602,8 +607,10 @@ export class AccountService {
     const at = new Date();
     const ids = rows.map((r) => r.id);
 
+    // The ledger is measured as of `at` — `ledgerBalanceAt` in the response —
+    // so the figure a client shows always names the instant it is true for.
     const ledgerDeltas = await this.sumCountableDeltas(
-      rows.map((r) => ({ accountId: r.id, from: r.openingBalanceAt, to: null })),
+      rows.map((r) => ({ accountId: r.id, from: r.openingBalanceAt, to: at })),
     );
 
     const gapRows = rows.filter((r) => r.reportedBalanceCents !== null);
@@ -652,8 +659,7 @@ export class AccountService {
     const deltas = new Map<string, number>();
     if (windows.length === 0) return deltas;
 
-    const occurredAt = (w: LedgerWindow): Prisma.DateTimeFilter =>
-      w.to ? { gte: w.from, lt: w.to } : { gte: w.from };
+    const occurredAt = (w: LedgerWindow): Prisma.DateTimeFilter => ({ gte: w.from, lt: w.to });
 
     const own = await this.prisma.transaction.groupBy({
       by: ['accountId', 'direction'],
