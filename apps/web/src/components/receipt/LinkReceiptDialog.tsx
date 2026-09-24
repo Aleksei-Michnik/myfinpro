@@ -71,7 +71,6 @@ export function LinkReceiptDialog({
       searchPlaceholder=""
       emptyLabel={t('noReceipts')}
       loadingLabel={t('loading')}
-      closeLabel={t('close')}
       searchable={false}
       fetchCandidates={fetchCandidates}
       getKey={(r) => r.id}

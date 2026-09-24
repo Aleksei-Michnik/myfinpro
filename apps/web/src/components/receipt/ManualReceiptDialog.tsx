@@ -15,12 +15,12 @@
 
 import { CURRENCY_CODES, isValidGtin, normalizeGtin } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { BarcodeScannerDialog } from '../product/BarcodeScannerDialog';
 import { ProductFormDialog } from '../product/ProductFormDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Dialog } from '@/components/ui/Dialog';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { localInputToIso, nowLocalIso } from '@/lib/datetime';
@@ -111,7 +111,6 @@ export function ManualReceiptDialog({
 
   const createOp = useAsyncOperation<ReceiptSummary>({ scope: 'control' });
   const scanLookupOp = useAsyncOperation<void>({ scope: 'control' });
-  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   // Reset every time the dialog opens.
   useEffect(() => {
@@ -124,7 +123,6 @@ export function ManualReceiptDialog({
     setCreateOpen(false);
     setPendingBarcode(undefined);
     setAnnounce('');
-    setTimeout(() => dialogRef.current?.focus(), 0);
   }, [open, defaultCurrency]);
 
   useEffect(() => {
@@ -250,256 +248,223 @@ export function ManualReceiptDialog({
 
   if (!open || typeof document === 'undefined') return null;
 
-  const node = (
-    <div
-      data-testid="manual-receipt-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/60 sm:items-center sm:p-4"
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      variant="sheet"
+      size="lg"
+      title={t('title')}
+      titleId="manual-receipt-title"
+      testId="manual-receipt-dialog"
+      backdropTestId="manual-receipt-backdrop"
+      closeTestId="manual-receipt-close"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="manual-receipt-title"
-        tabIndex={-1}
-        data-testid="manual-receipt-dialog"
-        className="flex max-h-[92vh] w-full max-w-lg flex-col gap-3 rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl outline-none sm:rounded-2xl dark:border-gray-700 dark:bg-gray-800"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h2
-            id="manual-receipt-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+      <p className="text-xs text-gray-500 dark:text-gray-400">{t('hint')}</p>
+
+      {/* Header fields */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+          <span>{t('currency')}</span>
+          <Select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            data-testid="manual-receipt-currency"
+            size="sm"
+            className="mt-1"
+            wrapperClassName="contents"
           >
-            {t('title')}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('close')}
-            data-testid="manual-receipt-close"
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+            {sortedCurrencies.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+          <span>{t('purchasedAt')}</span>
+          <input
+            type="datetime-local"
+            value={purchasedAt}
+            onChange={(e) => setPurchasedAt(e.target.value)}
+            data-testid="manual-receipt-date"
+            className={`mt-1 ${inputClass}`}
+          />
+        </label>
+        <label className="col-span-2 flex flex-col text-xs text-gray-500 dark:text-gray-400">
+          <span>{t('merchant')}</span>
+          <input
+            type="text"
+            value={merchantName}
+            onChange={(e) => setMerchantName(e.target.value)}
+            maxLength={200}
+            placeholder={t('merchantPlaceholder')}
+            data-testid="manual-receipt-merchant"
+            className={`mt-1 ${inputClass}`}
+          />
+        </label>
+      </div>
 
-        <p className="text-xs text-gray-500 dark:text-gray-400">{t('hint')}</p>
-
-        {/* Header fields */}
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('currency')}</span>
-            <Select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              data-testid="manual-receipt-currency"
-              size="sm"
-              className="mt-1"
-              wrapperClassName="contents"
-            >
-              {sortedCurrencies.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('purchasedAt')}</span>
-            <input
-              type="datetime-local"
-              value={purchasedAt}
-              onChange={(e) => setPurchasedAt(e.target.value)}
-              data-testid="manual-receipt-date"
-              className={`mt-1 ${inputClass}`}
-            />
-          </label>
-          <label className="col-span-2 flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('merchant')}</span>
-            <input
-              type="text"
-              value={merchantName}
-              onChange={(e) => setMerchantName(e.target.value)}
-              maxLength={200}
-              placeholder={t('merchantPlaceholder')}
-              data-testid="manual-receipt-merchant"
-              className={`mt-1 ${inputClass}`}
-            />
-          </label>
-        </div>
-
-        {/* Lines */}
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-          {lines.length === 0 ? (
-            <p
-              className="py-6 text-center text-sm text-gray-500 dark:text-gray-400"
-              data-testid="manual-receipt-empty"
-            >
-              {t('empty')}
-            </p>
-          ) : (
-            <ul className="space-y-2" data-testid="manual-receipt-lines">
-              {lines.map((line) => {
-                const total = lineTotalCents(line);
-                return (
-                  <li
-                    key={line.productId}
-                    className="rounded-lg border border-gray-200 p-2.5 dark:border-gray-700"
-                    data-testid={`manual-receipt-line-${line.productId}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-gray-900 dark:text-gray-100">
-                          {line.name}
-                        </p>
-                        {line.brand && (
-                          <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                            {line.brand}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeLine(line.productId)}
-                        aria-label={t('removeLine', { name: line.name })}
-                        data-testid={`manual-receipt-remove-${line.productId}`}
-                        className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:hover:bg-gray-700"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={2}
-                          stroke="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-end gap-2">
-                      <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-                        <span>{t('quantity')}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.001"
-                          inputMode="decimal"
-                          value={line.quantityStr}
-                          onChange={(e) =>
-                            updateLine(line.productId, { quantityStr: e.target.value })
-                          }
-                          aria-label={t('quantityFor', { name: line.name })}
-                          data-testid={`manual-receipt-qty-${line.productId}`}
-                          className={`mt-1 w-20 ${inputClass}`}
-                        />
-                      </label>
-                      <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-                        <span>{t('unitPrice')}</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={line.unitPriceStr}
-                          onChange={(e) =>
-                            updateLine(line.productId, { unitPriceStr: e.target.value })
-                          }
-                          aria-label={t('unitPriceFor', { name: line.name })}
-                          data-testid={`manual-receipt-price-${line.productId}`}
-                          className={`mt-1 w-24 ${inputClass}`}
-                        />
-                      </label>
-                      <span className="ml-auto pb-1.5 text-sm font-medium text-gray-900 tabular-nums dark:text-gray-100">
-                        {total === null ? '—' : formatAmount(total, currency, locale)}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <p aria-live="polite" className="sr-only" data-testid="manual-receipt-announce">
-          {announce}
-        </p>
-
-        {/* Scanned code being resolved against the registry / open databases. */}
-        {scanLookupOp.isLoading && (
+      {/* Lines */}
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+        {lines.length === 0 ? (
           <p
-            role="status"
-            aria-live="polite"
-            className="text-xs text-gray-500 dark:text-gray-400"
-            data-testid="manual-receipt-scan-checking"
+            className="py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+            data-testid="manual-receipt-empty"
           >
-            {tLookup('checking')}
+            {t('empty')}
           </p>
+        ) : (
+          <ul className="space-y-2" data-testid="manual-receipt-lines">
+            {lines.map((line) => {
+              const total = lineTotalCents(line);
+              return (
+                <li
+                  key={line.productId}
+                  className="rounded-lg border border-gray-200 p-2.5 dark:border-gray-700"
+                  data-testid={`manual-receipt-line-${line.productId}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                        {line.name}
+                      </p>
+                      {line.brand && (
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                          {line.brand}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(line.productId)}
+                      aria-label={t('removeLine', { name: line.name })}
+                      data-testid={`manual-receipt-remove-${line.productId}`}
+                      className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:hover:bg-gray-700"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+                      <span>{t('quantity')}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        inputMode="decimal"
+                        value={line.quantityStr}
+                        onChange={(e) =>
+                          updateLine(line.productId, { quantityStr: e.target.value })
+                        }
+                        aria-label={t('quantityFor', { name: line.name })}
+                        data-testid={`manual-receipt-qty-${line.productId}`}
+                        className={`mt-1 w-20 ${inputClass}`}
+                      />
+                    </label>
+                    <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+                      <span>{t('unitPrice')}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={line.unitPriceStr}
+                        onChange={(e) =>
+                          updateLine(line.productId, { unitPriceStr: e.target.value })
+                        }
+                        aria-label={t('unitPriceFor', { name: line.name })}
+                        data-testid={`manual-receipt-price-${line.productId}`}
+                        className={`mt-1 w-24 ${inputClass}`}
+                      />
+                    </label>
+                    <span className="ml-auto pb-1.5 text-sm font-medium text-gray-900 tabular-nums dark:text-gray-100">
+                      {total === null ? '—' : formatAmount(total, currency, locale)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
+      </div>
 
-        {/* Add products */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setScannerOpen(true)}
-            disabled={scanLookupOp.isLoading}
-            data-testid="manual-receipt-scan"
-          >
-            {t('scan')}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setPendingBarcode(undefined);
-              setCreateOpen(true);
-            }}
-            data-testid="manual-receipt-add-product"
-          >
-            {t('addProduct')}
-          </Button>
-          <span className="ml-auto text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {t('total')}{' '}
-            <span data-testid="manual-receipt-total" className="tabular-nums">
-              {formatAmount(totalCents, currency, locale)}
-            </span>
+      <p aria-live="polite" className="sr-only" data-testid="manual-receipt-announce">
+        {announce}
+      </p>
+
+      {/* Scanned code being resolved against the registry / open databases. */}
+      {scanLookupOp.isLoading && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-xs text-gray-500 dark:text-gray-400"
+          data-testid="manual-receipt-scan-checking"
+        >
+          {tLookup('checking')}
+        </p>
+      )}
+
+      {/* Add products */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setScannerOpen(true)}
+          disabled={scanLookupOp.isLoading}
+          data-testid="manual-receipt-scan"
+        >
+          {t('scan')}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPendingBarcode(undefined);
+            setCreateOpen(true);
+          }}
+          data-testid="manual-receipt-add-product"
+        >
+          {t('addProduct')}
+        </Button>
+        <span className="ml-auto text-sm font-semibold text-gray-900 dark:text-gray-100">
+          {t('total')}{' '}
+          <span data-testid="manual-receipt-total" className="tabular-nums">
+            {formatAmount(totalCents, currency, locale)}
           </span>
-        </div>
+        </span>
+      </div>
 
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={submit}
-            disabled={!allLinesValid || createOp.isLoading}
-            data-testid="manual-receipt-submit"
-          >
-            {createOp.isLoading ? <ButtonSpinner /> : null}
-            {t('submit')}
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          onClick={submit}
+          disabled={!allLinesValid || createOp.isLoading}
+          data-testid="manual-receipt-submit"
+        >
+          {createOp.isLoading ? <ButtonSpinner /> : null}
+          {t('submit')}
+        </Button>
       </div>
 
       <BarcodeScannerDialog
@@ -517,8 +482,6 @@ export function ManualReceiptDialog({
           addProduct(product);
         }}
       />
-    </div>
+    </Dialog>
   );
-
-  return createPortal(node, document.body);
 }

@@ -14,7 +14,7 @@
 // `BarcodeScannerDialog`) use `useDialogBehaviour` directly — never a second
 // copy of the effects.
 
-import type { ReactNode, RefObject } from 'react';
+import type { KeyboardEventHandler, ReactNode, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogCloseButton } from './DialogCloseButton';
 import { cx } from './styles';
@@ -51,6 +51,10 @@ export interface DialogProps {
   busy?: boolean;
   /** `data-testid` of the dialog; the backdrop gets `<testId>-backdrop`. */
   testId: string;
+  /** Override for the backdrop's `data-testid`. */
+  backdropTestId?: string;
+  /** Override for the ✕'s `data-testid`. */
+  closeTestId?: string;
   /** Rendered under the body, separated from it by the caller's own spacing. */
   footer?: ReactNode;
   /** Close on a backdrop press (default `true`). */
@@ -65,6 +69,8 @@ export interface DialogProps {
   className?: string;
   /** Extra classes on the heading row. */
   headerClassName?: string;
+  /** Key handling owned by the surface (keyboard-first dialogs). */
+  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   children: ReactNode;
 }
 
@@ -81,6 +87,8 @@ export function Dialog({
   danger = false,
   busy = false,
   testId,
+  backdropTestId,
+  closeTestId,
   footer,
   closeOnBackdrop = true,
   initialFocusRef,
@@ -88,6 +96,7 @@ export function Dialog({
   stacked = false,
   className = '',
   headerClassName = '',
+  onKeyDown,
   children,
 }: DialogProps) {
   const { dialogRef } = useDialogBehaviour<HTMLDivElement>({ open, onClose, initialFocusRef });
@@ -121,7 +130,7 @@ export function Dialog({
 
   const node = (
     <div
-      data-testid={`${testId}-backdrop`}
+      data-testid={backdropTestId ?? `${testId}-backdrop`}
       className={backdropClass}
       onMouseDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) onClose();
@@ -136,6 +145,7 @@ export function Dialog({
         aria-describedby={describedBy}
         aria-busy={busy || undefined}
         tabIndex={-1}
+        onKeyDown={onKeyDown}
         data-testid={testId}
         className={panelClass}
       >
@@ -160,7 +170,9 @@ export function Dialog({
             ) : (
               <span />
             )}
-            {withClose && <DialogCloseButton onClick={onClose} testId={`${testId}-close`} />}
+            {withClose && (
+              <DialogCloseButton onClick={onClose} testId={closeTestId ?? `${testId}-close`} />
+            )}
           </div>
         )}
         {children}

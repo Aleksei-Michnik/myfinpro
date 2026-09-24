@@ -7,11 +7,11 @@
 // transaction. Portal-mounted, ESC + backdrop close.
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { TransactionCategoryPicker } from '@/components/transaction/TransactionCategoryPicker';
 import { TransactionScopeSelector } from '@/components/transaction/TransactionScopeSelector';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -48,7 +48,6 @@ export function ReceiptConfirmDialog({
   const [note, setNote] = useState('');
 
   const confirmOp = useAsyncOperation<string>({ scope: 'control' });
-  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   // Reset the form each time the dialog opens; seed scopes from last-used.
   useEffect(() => {
@@ -57,19 +56,6 @@ export function ReceiptConfirmDialog({
     setScopes(getLastUsedScopes());
     setNote('');
   }, [open, defaultCategoryId]);
-
-  // ESC to cancel.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
 
   useEffect(() => {
     if (confirmOp.error && confirmOp.error.reason !== 'aborted') {
@@ -108,96 +94,80 @@ export function ReceiptConfirmDialog({
   if (!open) return null;
   if (typeof document === 'undefined') return null;
 
-  const node = (
-    <div
-      data-testid="receipt-confirm-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4"
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      title={t('title')}
+      titleId="receipt-confirm-title"
+      testId="receipt-confirm-dialog"
+      backdropTestId="receipt-confirm-backdrop"
+      className="space-y-4"
+      headerClassName="mb-1"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="receipt-confirm-title"
-        data-testid="receipt-confirm-dialog"
-        className="w-full max-w-md space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-xl dark:border-gray-700 dark:bg-gray-800"
-      >
-        <div>
-          <h2
-            id="receipt-confirm-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-          >
-            {t('title')}
-          </h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
-        </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('categoryLabel')}
-          </label>
-          <TransactionCategoryPicker
-            direction="OUT"
-            value={categoryId}
-            onChange={setCategoryId}
-            categories={categories}
-            testId="receipt-confirm-category"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('scopeLabel')}
-          </span>
-          <TransactionScopeSelector value={scopes} onChange={setScopes} />
-        </div>
-
-        <div className="space-y-1">
-          <label
-            htmlFor="receipt-confirm-note"
-            className="text-xs font-medium text-gray-500 dark:text-gray-400"
-          >
-            {t('noteLabel')}
-          </label>
-          <Textarea
-            id="receipt-confirm-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={t('notePlaceholder')}
-            rows={2}
-            data-testid="receipt-confirm-note"
-            size="sm"
-            wrapperClassName="contents"
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={onCancel}
-            disabled={confirmOp.isLoading}
-            data-testid="receipt-confirm-cancel"
-          >
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            onClick={submit}
-            disabled={confirmOp.isLoading}
-            data-testid="receipt-confirm-submit"
-          >
-            {t('submit')}
-          </Button>
-        </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          {t('categoryLabel')}
+        </label>
+        <TransactionCategoryPicker
+          direction="OUT"
+          value={categoryId}
+          onChange={setCategoryId}
+          categories={categories}
+          testId="receipt-confirm-category"
+        />
       </div>
-    </div>
-  );
 
-  return createPortal(node, document.body);
+      <div className="space-y-1">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          {t('scopeLabel')}
+        </span>
+        <TransactionScopeSelector value={scopes} onChange={setScopes} />
+      </div>
+
+      <div className="space-y-1">
+        <label
+          htmlFor="receipt-confirm-note"
+          className="text-xs font-medium text-gray-500 dark:text-gray-400"
+        >
+          {t('noteLabel')}
+        </label>
+        <Textarea
+          id="receipt-confirm-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('notePlaceholder')}
+          rows={2}
+          data-testid="receipt-confirm-note"
+          size="sm"
+          wrapperClassName="contents"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          onClick={onCancel}
+          disabled={confirmOp.isLoading}
+          data-testid="receipt-confirm-cancel"
+        >
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          size="md"
+          onClick={submit}
+          disabled={confirmOp.isLoading}
+          data-testid="receipt-confirm-submit"
+        >
+          {t('submit')}
+        </Button>
+      </div>
+    </Dialog>
+  );
 }
