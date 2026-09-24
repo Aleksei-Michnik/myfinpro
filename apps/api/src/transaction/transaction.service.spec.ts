@@ -63,6 +63,11 @@ describe('TransactionService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    // Phase 20.2 — the visibility + currency lookup behind accountId /
+    // transferAccountId. Defaults to "no visible account" in beforeEach.
+    account: {
+      findMany: jest.fn(),
+    },
     transactionSchedule: {
       findUnique: jest.fn().mockResolvedValue(null),
       delete: jest.fn().mockResolvedValue({}),
@@ -106,6 +111,8 @@ describe('TransactionService', () => {
     status: 'POSTED',
     note: null,
     parentTransactionId: null,
+    accountId: null,
+    transferAccountId: null,
     createdById: 'user-1',
     createdAt: now,
     updatedAt: now,
@@ -178,6 +185,7 @@ describe('TransactionService', () => {
     );
     // Remaining-count default: transaction still has attributions after remove.
     prismaMock.transactionAttribution.count.mockResolvedValue(1);
+    prismaMock.account.findMany.mockResolvedValue([]);
   });
 
   // ── type guard ──
@@ -3228,6 +3236,136 @@ describe('TransactionService', () => {
         );
         expect(summary.id).toBe('pay-1');
       });
+    });
+  });
+
+  // ── Phase 20.2 — accounts and transfers (design §6.3) ──
+
+  describe('account placement', () => {
+    const visibleAccount = (over: Record<string, unknown> = {}) => ({
+      id: 'acct-1',
+      currency: 'USD',
+      ...over,
+    });
+
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.transaction.create.mockResolvedValue(makePersistedTransaction());
+    });
+
+    it('persists a visible, same-currency account on create', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount()]);
+
+      await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+
+      const arg = prismaMock.transaction.create.mock.calls[0][0] as {
+        data: { accountId: string | null; transferAccountId: string | null };
+      };
+      expect(arg.data.accountId).toBe('acct-1');
+      expect(arg.data.transferAccountId).toBeNull();
+      // The lookup is scoped to accounts the caller can see AND that are active.
+      const where = prismaMock.account.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(where.where.AND[0]).toEqual({ id: { in: ['acct-1'] }, archivedAt: null });
+    });
+
+    it('404s an account that is missing, invisible or archived — one code, no leak', async () => {
+      prismaMock.account.findMany.mockResolvedValue([]);
+      await expect(service.create('user-1', baseDto({ accountId: 'acct-1' }))).rejects.toThrow(
+        NotFoundException,
+      );
+      try {
+        await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+      } catch (e) {
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND);
+      }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an account whose currency differs from the transaction', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ currency: 'ILS' })]);
+      try {
+        await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH);
+      }
+    });
+
+    it('accepts a well-formed transfer between two own accounts', async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+
+      await service.create('user-1', baseDto({ accountId: 'acct-1', transferAccountId: 'acct-2' }));
+
+      const arg = prismaMock.transaction.create.mock.calls[0][0] as {
+        data: { accountId: string | null; transferAccountId: string | null };
+      };
+      expect(arg.data).toMatchObject({ accountId: 'acct-1', transferAccountId: 'acct-2' });
+    });
+
+    it.each([
+      ['an IN direction', { direction: 'IN' as const, accountId: 'acct-1' }],
+      ['no source account', { accountId: undefined }],
+      ['the same account twice', { accountId: 'acct-2' }],
+      ['a RECURRING parent', { type: 'RECURRING' as const, accountId: 'acct-1' }],
+    ])('rejects a transfer with %s', async (_label, over) => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      try {
+        await service.create(
+          'user-1',
+          baseDto({ transferAccountId: 'acct-2', ...over } as Partial<CreateTransactionDto>),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('does not touch the accounts table when no account is given', async () => {
+      await service.create('user-1', baseDto());
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('list() account filters', () => {
+    beforeEach(() => {
+      prismaMock.transaction.findMany.mockResolvedValue([]);
+    });
+
+    it('accountId matches both sides of a movement', async () => {
+      await service.list('user-1', { accountId: 'acct-1' } as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).toContainEqual({
+        OR: [{ accountId: 'acct-1' }, { transferAccountId: 'acct-1' }],
+      });
+    });
+
+    it('excludeTransfers=true drops transfer rows', async () => {
+      await service.list('user-1', { excludeTransfers: 'true' } as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).toContainEqual({ transferAccountId: null });
+    });
+
+    it('leaves transfers in when excludeTransfers is absent', async () => {
+      await service.list('user-1', {} as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).not.toContainEqual({ transferAccountId: null });
     });
   });
 });

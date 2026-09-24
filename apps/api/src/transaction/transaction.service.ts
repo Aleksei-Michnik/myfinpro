@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
+import { buildAccountVisibilityWhere } from '../account/utils/account-visibility';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TRANSACTION_OCCURRENCES_QUEUE } from '../queue/queue.constants';
@@ -83,6 +84,8 @@ export const TRANSACTION_DETAIL_INCLUDE = {
   // Back-link to the source receipt when the transaction came from confirming
   // one (7.13) — a receipt is the transaction's proving document.
   receipt: { select: { id: true } },
+  // Phase 20.2 — the statement line that bank-confirmed this row (20.4 links it).
+  statementLine: { select: { id: true } },
 } as const;
 
 /** Build the include with the `stars.where.userId` set to the viewer. */
@@ -94,6 +97,7 @@ function buildDetailInclude(userId: string) {
     stars: { where: { userId }, select: { id: true } },
     _count: TRANSACTION_DETAIL_INCLUDE._count,
     receipt: TRANSACTION_DETAIL_INCLUDE.receipt,
+    statementLine: TRANSACTION_DETAIL_INCLUDE.statementLine,
   } satisfies Prisma.TransactionInclude;
 }
 
@@ -119,6 +123,9 @@ export type TransactionWithRelations = {
   status: string;
   note: string | null;
   parentTransactionId: string | null;
+  /** Phase 20.2 — the account the money moved on / into (design §6.3). */
+  accountId: string | null;
+  transferAccountId: string | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -148,6 +155,8 @@ export type TransactionWithRelations = {
   }>;
   /** Loaded by the detail include only; undefined on list rows. */
   receipt?: { id: string } | null;
+  /** Loaded by the detail include only; undefined on freshly-created rows. */
+  statementLine?: { id: string } | null;
 };
 
 /**
@@ -188,6 +197,9 @@ export function mapTransactionToSummary(
     hasDocuments: opts.hasDocuments ?? false,
     receiptId: transaction.receipt?.id ?? null,
     parentTransactionId: transaction.parentTransactionId,
+    accountId: transaction.accountId,
+    transferAccountId: transaction.transferAccountId,
+    statementLineId: transaction.statementLine?.id ?? null,
     createdById: transaction.createdById,
     createdAt: transaction.createdAt.toISOString(),
     updatedAt: transaction.updatedAt.toISOString(),
@@ -320,6 +332,15 @@ export class TransactionService {
     // 5. Date — reject occurredAt more than 1 day in the future (timezone grace).
     const occurredAt = this.parseAndValidateOccurredAt(dto.occurredAt);
 
+    // 5b. Accounts (Phase 20.2, design §6.3) — placement + transfer rules.
+    await this.validateAccountPlacement(userId, {
+      accountId: dto.accountId ?? null,
+      transferAccountId: dto.transferAccountId ?? null,
+      direction: dto.direction,
+      currency: dto.currency,
+      type: dto.type,
+    });
+
     // 6. Categories — every id passes the visibility + direction checks. The
     //    first id is the primary (stored on `categoryId`), the rest become
     //    position-ordered `TransactionCategory` rows.
@@ -355,6 +376,8 @@ export class TransactionService {
             categoryId: dto.categoryIds[0],
             transactionCategories: { create: additionalCategoriesCreate(dto.categoryIds) },
             note: dto.note ?? null,
+            accountId: dto.accountId ?? null,
+            transferAccountId: dto.transferAccountId ?? null,
             createdById: userId,
             attributions: {
               create: dto.attributions.map((a) => ({
@@ -386,6 +409,8 @@ export class TransactionService {
       currency: dto.currency,
       categoryIds: dto.categoryIds,
       attributions: dto.attributions,
+      accountId: dto.accountId ?? null,
+      transferAccountId: dto.transferAccountId ?? null,
       ...(planComputed
         ? {
             plan: {
@@ -662,6 +687,19 @@ export class TransactionService {
       andClauses.push({ createdById: userId });
     }
 
+    // ── 2c. Account filters (Phase 20.2) ──
+    // `accountId` matches both sides of a movement: rows placed on the
+    // account and transfers into it. `excludeTransfers` drops transfer rows,
+    // which are money moving between own accounts, never spending.
+    if (q.accountId) {
+      andClauses.push({
+        OR: [{ accountId: q.accountId }, { transferAccountId: q.accountId }],
+      });
+    }
+    if (q.excludeTransfers === 'true') {
+      andClauses.push({ transferAccountId: null });
+    }
+
     if (q.starred === 'true') {
       andClauses.push({ stars: { some: { userId } } });
     } else if (q.starred === 'false') {
@@ -777,7 +815,9 @@ export class TransactionService {
       dto.occurredAt !== undefined ||
       dto.categoryIds !== undefined ||
       dto.note !== undefined ||
-      dto.type !== undefined;
+      dto.type !== undefined ||
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     if (!hasScalarField && !hasAttributionField) {
@@ -845,6 +885,31 @@ export class TransactionService {
           errorCode: TRANSACTION_ERRORS.TRANSACTION_INVALID_CURRENCY,
         });
       }
+    }
+
+    // 9b. Accounts (Phase 20.2) — validate against the merged state so a
+    //     partial patch can't leave a transfer without a source, or an
+    //     account whose currency no longer matches the transaction's.
+    const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
+    const effectiveTransferAccountId =
+      dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
+    const accountInputsChanged =
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined ||
+      dto.direction !== undefined ||
+      dto.currency !== undefined ||
+      dto.type !== undefined;
+    if (
+      accountInputsChanged &&
+      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
+    ) {
+      await this.validateAccountPlacement(userId, {
+        accountId: effectiveAccountId,
+        transferAccountId: effectiveTransferAccountId,
+        direction: effectiveDirection,
+        currency: dto.currency ?? existing.currency,
+        type: dto.type ?? existing.type,
+      });
     }
 
     // 10. Attribution diff (when dto.attributions present).
@@ -934,6 +999,14 @@ export class TransactionService {
     }
     if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
     if (dto.type !== undefined) data.type = dto.type;
+    if (dto.accountId !== undefined) {
+      data.account = dto.accountId ? { connect: { id: dto.accountId } } : { disconnect: true };
+    }
+    if (dto.transferAccountId !== undefined) {
+      data.transferAccount = dto.transferAccountId
+        ? { connect: { id: dto.transferAccountId } }
+        : { disconnect: true };
+    }
 
     // Cascade trigger: parent transitioning out of RECURRING tears down its
     // schedule + scheduler in the same transaction. ONE_TIME → RECURRING is
@@ -1743,6 +1816,83 @@ export class TransactionService {
     for (const categoryId of categoryIds) {
       const category = await this.loadCategoryOrThrow(userId, categoryId);
       this.ensureCategoryDirectionMatches(category, direction);
+    }
+  }
+
+  /**
+   * Phase 20.2 — account placement + transfer guard (design §6.3).
+   *
+   * A transaction may only be placed on an account the caller can see
+   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses),
+   * that is not archived, and whose currency equals the transaction's.
+   * "Missing", "not visible" and "archived" all collapse into
+   * `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing about another user's accounts
+   * leaks.
+   *
+   * A transfer (design §2.4) is one OUT row carrying both a source
+   * (`accountId`) and a destination (`transferAccountId`): the two must
+   * differ, share the currency, and the row must be a plain ONE_TIME
+   * movement — a transfer is never a recurring or plan parent, because its
+   * children would each claim to move the same money again.
+   */
+  private async validateAccountPlacement(
+    userId: string,
+    input: {
+      accountId: string | null;
+      transferAccountId: string | null;
+      direction: 'IN' | 'OUT';
+      currency: string;
+      type: string;
+    },
+  ): Promise<void> {
+    const transferInvalid = (message: string): never => {
+      throw new BadRequestException({
+        message,
+        errorCode: TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID,
+      });
+    };
+
+    if (input.transferAccountId !== null) {
+      if (input.type !== 'ONE_TIME') {
+        transferInvalid('Transfers must be ONE_TIME transactions');
+      }
+      if (input.direction !== 'OUT') {
+        transferInvalid('Transfers leave the source account — direction must be OUT');
+      }
+      if (input.accountId === null) {
+        transferInvalid('Transfers require a source accountId');
+      }
+      if (input.accountId === input.transferAccountId) {
+        transferInvalid('Transfer source and destination must be different accounts');
+      }
+    }
+
+    const ids = [input.accountId, input.transferAccountId].filter(
+      (id): id is string => id !== null,
+    );
+    if (ids.length === 0) return;
+
+    const rows = await this.prisma.account.findMany({
+      where: {
+        AND: [{ id: { in: ids }, archivedAt: null }, buildAccountVisibilityWhere(userId)],
+      },
+      select: { id: true, currency: true },
+    });
+
+    for (const id of ids) {
+      const account = rows.find((r) => r.id === id);
+      if (!account) {
+        throw new NotFoundException({
+          message: 'Account not found, not visible or archived',
+          errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND,
+        });
+      }
+      if (account.currency !== input.currency) {
+        throw new BadRequestException({
+          message: `Account currency '${account.currency}' does not match the transaction currency '${input.currency}'`,
+          errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH,
+        });
+      }
     }
   }
 

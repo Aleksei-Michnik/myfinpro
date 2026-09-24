@@ -38,6 +38,9 @@ function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummar
     starredByMe: false,
     hasDocuments: false,
     parentTransactionId: null,
+    accountId: p.accountId ?? null,
+    transferAccountId: p.transferAccountId ?? null,
+    statementLineId: null,
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
@@ -91,6 +94,30 @@ describe('TotalsCard', () => {
     expect(screen.getByTestId('totals-card-in-USD').textContent).toContain('50.00');
     expect(screen.getByTestId('totals-card-out-USD').textContent).toContain('20.00');
     expect(screen.getByTestId('totals-card-net-USD').textContent).toContain('30.00');
+  });
+
+  // Phase 20 §2.4 — a transfer moves money between the user's own accounts;
+  // it is neither income nor spending and must not enter any total.
+  it('skips transfers between own accounts', async () => {
+    mockFetchList.mockResolvedValueOnce(
+      listResp([
+        makeTransaction({ id: 'a', direction: 'IN', amountCents: 5000, currency: 'USD' }),
+        makeTransaction({ id: 'b', direction: 'OUT', amountCents: 1500, currency: 'USD' }),
+        makeTransaction({
+          id: 'transfer',
+          direction: 'OUT',
+          amountCents: 90000,
+          currency: 'USD',
+          accountId: 'acct-1',
+          transferAccountId: 'acct-2',
+        }),
+      ]),
+    );
+    render(<TotalsCard fromIso="2026-05-01T00:00:00Z" toIso="2026-06-01T00:00:00Z" />);
+    await waitFor(() => expect(screen.getByTestId('totals-card-row-USD')).toBeInTheDocument());
+    expect(screen.getByTestId('totals-card-in-USD').textContent).toContain('50.00');
+    expect(screen.getByTestId('totals-card-out-USD').textContent).toContain('15.00');
+    expect(screen.getByTestId('totals-card-net-USD').textContent).toContain('35.00');
   });
 
   it('renders one row per currency for multi-currency totals', async () => {

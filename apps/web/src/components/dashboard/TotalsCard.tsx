@@ -38,6 +38,9 @@ const FETCH_LIMIT = 100;
 function aggregate(rows: TransactionSummary[]): CurrencyTotals[] {
   const map = new Map<string, CurrencyTotals>();
   for (const r of rows) {
+    // Phase 20 §2.4 — a transfer moves money between the user's own accounts.
+    // It is spending in neither direction, so it never enters a total.
+    if (r.transferAccountId) continue;
     const cur = r.currency;
     const entry = map.get(cur) ?? { currency: cur, inCents: 0, outCents: 0 };
     if (r.direction === 'IN') entry.inCents += r.amountCents;
