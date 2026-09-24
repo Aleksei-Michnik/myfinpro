@@ -16,6 +16,7 @@ noted on the page.
 | [receipts-and-llm.md](receipts-and-llm.md)           | Receipt intake, extraction pipeline, LLM providers and BYOK                          |
 | [products-catalog.md](products-catalog.md)           | Product registry, aliases, matcher, barcode, Open Food Facts, images                 |
 | [analytics-and-budgets.md](analytics-and-budgets.md) | Analytics engine and query API; budgets, periods, alerts                             |
+| [accounts-and-sync.md](accounts-and-sync.md)         | Accounts, balances, transfers, statement import and reconciliation, the connector    |
 | [ui-design-system.md](ui-design-system.md)           | Designing or building any page or component; async, realtime, i18n, themes           |
 | [testing.md](testing.md)                             | Writing or running tests; what CI gates; verdict standard                            |
 | [deployment-and-ops.md](deployment-and-ops.md)       | Compose, workflows, blue/green, backups, the shared edge, secrets policy             |

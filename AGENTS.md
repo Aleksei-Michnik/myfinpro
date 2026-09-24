@@ -17,9 +17,11 @@ MySQL 9.7, BullMQ on Redis 8, SSE realtime, Anthropic-SDK receipt extraction), `
 
 ## Non-negotiables
 
-- **Minimal and DRY.** Reuse before writing; a type used by API and web lives in
+- **Minimal and DRY.** Search before you write: grep for an existing helper, component, DTO,
+  type or query by name and by behaviour, and extend it; a type used by API and web lives in
   `packages/shared`; never two constants that must hold the same value — derive one from the
-  other. **No legacy paths**: replacing something removes the old one.
+  other. No abstraction, option or configurability nobody asked for. **No legacy paths**:
+  replacing something removes the old one.
 - **Verify before you claim.** Facts come from files or commands in this session; tests are run,
   not assumed; failures are reported with output. Design against the code, not the plan's ideal.
 - **UI async goes through `useAsyncOperation()`** (`docs/ui-async-conventions.md`); realtime per
@@ -63,6 +65,8 @@ Load exactly what the row says; the wiki page is mandatory for the role, not opt
 | Change under `apps/web`                                              | `web-coder`                        | `ui-conventions`, `i18n`, `testing` | `ui-design-system`, domain page              |
 | Receipt extraction, LLM providers, prompts, BYOK                     | `api-coder`                        | `llm-extraction`                    | `receipts-and-llm`                           |
 | Verify an iteration; gate a merge; raise coverage                    | `qa-tester`                        | `testing`, `local-stack`            | `testing`                                    |
+| Usability or exploratory check of a user-visible flow                | `qa-tester`                        | `playwright-qa`, `local-stack`      | `ui-design-system`                           |
+| Accounts, balances, transfers, statement import, connector           | `api-coder` / `web-coder`          | `testing`                           | `accounts-and-sync`                          |
 | Change touches auth, scoping, uploads, LLM credentials, CI/deploy    | `security-reviewer` (after coding) | —                                   | `auth-and-groups`                            |
 | Bug with unclear cause; staging/production incident                  | `debugger`                         | `local-stack`, `testing`            | `gotchas`                                    |
 | Compose, Dockerfile, nginx, workflows, scripts, Mdock                | `devops`                           | `infra-sync`, `local-stack`         | `deployment-and-ops`, `infra-context`        |
@@ -77,7 +81,7 @@ Load exactly what the row says; the wiki page is mandatory for the role, not opt
 | Orienting in the repo                                                | —                                  | —                                   | `architecture-map`, `conventions`            |
 
 Domain pages: `transactions`, `receipts-and-llm`, `products-catalog`, `analytics-and-budgets`,
-`auth-and-groups`.
+`auth-and-groups`, `accounts-and-sync`.
 
 ## Model policy — by complexity and blast radius
 

@@ -34,9 +34,11 @@ provided — do not add a second EventSource.
 
 ## Reuse
 
-`components/ui/*` first (Button, Input, ConfirmDialog, RowActionsMenu, DocumentViewer,
-FileCaptureButtons, Toast, …), then the domain folder. A new visual pattern needs a
-`ui-designer` spec, not an ad-hoc component.
+`components/ui/*` first (Button, Input, Select, Textarea, Checkbox, Dialog, ConfirmDialog, Card,
+Badge, PageHeader, EmptyState, Tabs, Stat, RowActionsMenu, DocumentViewer, FileCaptureButtons,
+Toast, …), then the domain folder. No hand-rolled dialog shell, raw `<select>` or card shell —
+the kit (Phase 20.1) owns them. A new visual pattern needs a `ui-designer` spec, not an ad-hoc
+component.
 
 ## Done means
 

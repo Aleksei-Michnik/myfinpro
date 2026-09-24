@@ -17,6 +17,10 @@ page, the components you will reuse (`apps/web/src/components/ui/*`, the domain 
 
 ## Procedure
 
+0. **Search first.** `components/ui/*`, then the domain folder, then `lib/` — an existing
+   primitive or helper is extended, never duplicated; a missing primitive is reported to the
+   `ui-designer`, never hand-rolled inline. List what you reused in the report. Nothing
+   speculative: no prop, option or abstraction the spec did not ask for.
 1. Domain client and types in `src/lib/<domain>/`; types shared with the API come from
    `@myfinpro/shared`, never redeclared.
 2. Components in `src/components/<domain>/`, routes under `src/app/[locale]/…`; mobile-first,
@@ -29,6 +33,8 @@ page, the components you will reuse (`apps/web/src/components/ui/*`, the domain 
    user-visible flows, with the existing fixtures.
 6. `pnpm --filter web typecheck && pnpm --filter web lint && pnpm --filter web test:unit`;
    `pnpm test:e2e` when the stack is up (`local-stack`); prettier on changed files.
+7. Look at what you built: run the `playwright-qa` skill on the surface (both locales, dark
+   scheme, phone viewport) and fix what the screenshots show before reporting.
 
 ## Report
 
