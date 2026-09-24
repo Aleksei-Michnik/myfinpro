@@ -3,9 +3,11 @@
 // Phase 6 · Iteration 6.16 — horizontal scope-tab strip for the /transactions page.
 // Phase 6 · Iteration 6.16.2 — converted from <Link>-based tabs to controlled
 // <button> tabs. The orchestrator owns URL writes (only emitted on commit).
-// Tabs accept a `disabled` prop that cascades from the in-flight container op.
+// Phase 20 · Iteration 20.1 — a thin wrapper that builds the items for the
+// kit's <Tabs>; the strip itself lives in components/ui/Tabs.tsx.
 
 import { useTranslations } from 'next-intl';
+import { Tabs } from '@/components/ui/Tabs';
 
 export interface TransactionsScopeTabsProps {
   /** `'all'` | `'personal'` | `'group:<id>'`. */
@@ -25,46 +27,24 @@ export function TransactionsScopeTabs({
 }: TransactionsScopeTabsProps) {
   const t = useTranslations('transactions.page.scopeTabs');
 
-  const tabs: { key: string; label: string }[] = [
-    { key: 'all', label: t('all') },
-    { key: 'personal', label: t('personal') },
-    ...groups.map((g) => ({ key: `group:${g.id}`, label: g.name })),
+  const items = [
+    { key: 'all', label: t('all'), testId: 'scope-tab-all' },
+    { key: 'personal', label: t('personal'), testId: 'scope-tab-personal' },
+    ...groups.map((g) => ({
+      key: `group:${g.id}`,
+      label: g.name,
+      testId: `scope-tab-group:${g.id}`,
+    })),
   ];
 
   return (
-    <div
-      role="tablist"
-      aria-label={t('all')}
-      className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-700"
+    <Tabs
+      items={items}
+      current={current}
+      onChange={onChange}
+      disabled={disabled}
+      ariaLabel={t('all')}
       data-testid="transactions-scope-tabs"
-    >
-      {tabs.map((tab) => {
-        const isActive = current === tab.key;
-        return (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-current={isActive ? 'page' : undefined}
-            aria-selected={isActive}
-            aria-disabled={disabled || undefined}
-            disabled={disabled}
-            onClick={() => {
-              if (disabled) return;
-              if (isActive) return;
-              onChange(tab.key);
-            }}
-            data-testid={`scope-tab-${tab.key}`}
-            className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              isActive
-                ? 'border-primary-600 text-primary-700 dark:text-primary-300'
-                : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
-            }`}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
-    </div>
+    />
   );
 }

@@ -25,6 +25,7 @@ import {
 } from '@/components/transaction/TransactionsList';
 import { TransactionsScopeTabs } from '@/components/transaction/TransactionsScopeTabs';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { Link, useRouter, usePathname } from '@/i18n/navigation';
 import { useGroups } from '@/lib/group/group-context';
@@ -231,10 +232,7 @@ export function TransactionsListClient() {
 
   return (
     <main className="container mx-auto space-y-4 px-4 py-6" data-testid="transactions-page">
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
-      </header>
+      <PageHeader title={t('title')} description={t('subtitle')} />
 
       <TransactionsScopeTabs
         current={scope}

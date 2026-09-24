@@ -25,6 +25,7 @@ import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { ScopeEntryCards } from '@/components/dashboard/ScopeEntryCards';
 import { StarredTransactions } from '@/components/dashboard/StarredTransactions';
 import { TotalsCard } from '@/components/dashboard/TotalsCard';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
@@ -82,13 +83,13 @@ export function DashboardClient() {
     <main className="container mx-auto space-y-6 px-4 py-6" data-testid="dashboard-main">
       {user?.scheduledDeletionAt && <DeletionBanner />}
 
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
-        </div>
-        <QuickAddTransactionButton onTransactionCreated={() => setRefreshKey((k) => k + 1)} />
-      </header>
+      <PageHeader
+        title={t('title')}
+        description={t('subtitle')}
+        actions={
+          <QuickAddTransactionButton onTransactionCreated={() => setRefreshKey((k) => k + 1)} />
+        }
+      />
 
       <TotalsCard key={`totals-${refreshKey}`} fromIso={range.fromIso} toIso={range.toIso} />
 

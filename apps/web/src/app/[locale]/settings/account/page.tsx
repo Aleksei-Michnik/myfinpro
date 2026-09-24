@@ -11,6 +11,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
@@ -77,7 +78,7 @@ export default function AccountSettingsPage() {
   return (
     <ProtectedRoute>
       <div className="container mx-auto max-w-2xl px-4 py-8">
-        <h1 className="mb-6 text-2xl font-bold">{t('title')}</h1>
+        <PageHeader className="mb-6" title={t('title')} />
 
         {user?.scheduledDeletionAt && <DeletionBanner />}
 

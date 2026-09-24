@@ -10,6 +10,7 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
 import { CategoryListSection } from '@/components/category/CategoryListSection';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { useRouter } from '@/i18n/navigation';
 import { useCategories } from '@/lib/category/category-context';
@@ -48,10 +49,7 @@ export function CategoriesClient() {
       data-testid="categories-page"
       aria-busy={isInitialLoading || undefined}
     >
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('page.title')}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('page.subtitle')}</p>
-      </header>
+      <PageHeader title={t('page.title')} description={t('page.subtitle')} />
 
       <CategoryListSection
         title={tScope('personal')}

@@ -11,6 +11,8 @@ import { computeMonthRange } from './date-range';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Stat } from '@/components/ui/Stat';
 import { useAuth } from '@/lib/auth/auth-context';
 import { formatAmount } from '@/lib/transaction/formatters';
 import { useTransactions } from '@/lib/transaction/transaction-context';
@@ -168,12 +170,12 @@ export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
       )}
 
       {!loading && !error && totals.length === 0 && (
-        <p
-          className="py-4 text-sm text-gray-500 dark:text-gray-400"
+        <EmptyState
+          bordered={false}
+          className="py-4 text-start"
+          title={t('noActivity')}
           data-testid="totals-card-empty"
-        >
-          {t('noActivity')}
-        </p>
+        />
       )}
 
       {!loading && !error && totals.length > 0 && (
@@ -183,36 +185,33 @@ export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
             return (
               <li
                 key={row.currency}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+                className="flex flex-wrap items-baseline gap-x-6 gap-y-1"
                 data-testid={`totals-card-row-${row.currency}`}
               >
                 <span className="min-w-[3rem] font-mono text-xs text-gray-500 dark:text-gray-400">
                   {row.currency}
                 </span>
-                <span className="text-green-700 dark:text-green-400">
-                  {t('in')}{' '}
-                  <span data-testid={`totals-card-in-${row.currency}`}>
-                    {formatAmount(row.inCents, row.currency, locale)}
-                  </span>
-                </span>
-                <span className="text-red-700 dark:text-red-400">
-                  {t('out')}{' '}
-                  <span data-testid={`totals-card-out-${row.currency}`}>
-                    {formatAmount(row.outCents, row.currency, locale)}
-                  </span>
-                </span>
-                <span
-                  className={
-                    net >= 0
-                      ? 'font-medium text-gray-900 dark:text-gray-100'
-                      : 'font-medium text-red-700 dark:text-red-400'
-                  }
-                >
-                  {t('net')}{' '}
-                  <span data-testid={`totals-card-net-${row.currency}`}>
-                    {formatAmount(net, row.currency, locale)}
-                  </span>
-                </span>
+                <Stat
+                  size="sm"
+                  tone="positive"
+                  label={t('in')}
+                  value={formatAmount(row.inCents, row.currency, locale)}
+                  valueTestId={`totals-card-in-${row.currency}`}
+                />
+                <Stat
+                  size="sm"
+                  tone="negative"
+                  label={t('out')}
+                  value={formatAmount(row.outCents, row.currency, locale)}
+                  valueTestId={`totals-card-out-${row.currency}`}
+                />
+                <Stat
+                  size="sm"
+                  tone={net >= 0 ? 'neutral' : 'negative'}
+                  label={t('net')}
+                  value={formatAmount(net, row.currency, locale)}
+                  valueTestId={`totals-card-net-${row.currency}`}
+                />
               </li>
             );
           })}

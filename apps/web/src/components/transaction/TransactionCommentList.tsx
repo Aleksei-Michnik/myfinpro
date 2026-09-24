@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
@@ -360,12 +361,12 @@ export const TransactionCommentList = forwardRef<
       )}
 
       {!listOp.isLoading && !listOp.isError && visible.length === 0 && hasLoadedOnce && (
-        <p
-          className="py-4 text-center text-sm text-gray-500 dark:text-gray-400"
+        <EmptyState
+          bordered={false}
+          className="py-4"
+          title={t('empty')}
           data-testid="comment-list-empty"
-        >
-          {t('empty')}
-        </p>
+        />
       )}
 
       <ul className="space-y-3">

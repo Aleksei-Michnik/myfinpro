@@ -13,6 +13,7 @@ import { ProductGallery } from '@/components/product/ProductGallery';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
 import { useProducts } from '@/lib/product/product-context';
@@ -183,14 +184,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
 
         {/* ── Registry data ──────────────────────────────────────────── */}
         <section className="space-y-3">
-          <div>
-            {product.brand && (
-              <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {product.brand}
-              </p>
-            )}
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{product.name}</h1>
-          </div>
+          <PageHeader eyebrow={product.brand ?? undefined} title={product.name} />
 
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>

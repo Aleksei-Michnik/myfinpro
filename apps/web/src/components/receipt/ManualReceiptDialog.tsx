@@ -21,6 +21,7 @@ import { ProductFormDialog } from '../product/ProductFormDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Dialog } from '@/components/ui/Dialog';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { localInputToIso, nowLocalIso } from '@/lib/datetime';
@@ -308,12 +309,12 @@ export function ManualReceiptDialog({
       {/* Lines */}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {lines.length === 0 ? (
-          <p
-            className="py-6 text-center text-sm text-gray-500 dark:text-gray-400"
+          <EmptyState
+            bordered={false}
+            className="py-6"
+            title={t('empty')}
             data-testid="manual-receipt-empty"
-          >
-            {t('empty')}
-          </p>
+          />
         ) : (
           <ul className="space-y-2" data-testid="manual-receipt-lines">
             {lines.map((line) => {
