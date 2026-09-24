@@ -17,6 +17,9 @@ services:
   web:
     environment:
       NEXT_PUBLIC_API_URL: ${MDOCK_PUBLIC_API_URL:-http://localhost/api}
+      # Hot reload behind the proxy: Next 16 blocks /_next dev requests (assets, HMR socket) from
+      # an origin it does not know. The production hostname, from your local .env, never from git.
+      MDOCK_DEV_ORIGINS: ${MDOCK_DEV_ORIGINS:-}
 
 networks:
   mdock_net:

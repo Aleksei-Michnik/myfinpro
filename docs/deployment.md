@@ -20,6 +20,18 @@ MyFinPro deploys to a dedicated Ubuntu server using Docker Compose with **blue-g
 
 > Domain values are stored as GitHub Secrets (`CLOUDFLARE_STAGING_SUBDOMAIN`, `CLOUDFLARE_PRODUCTION_SUBDOMAIN`).
 
+### Local development
+
+`docker compose up -d` (or `scripts/dev.sh`) runs the whole stack from the development image
+targets: `nest start --watch` and `next dev` over the bind-mounted `apps/*`, so every edit
+hot-reloads. The page is `http://localhost` through nginx (set `NGINX_PORT` if 80 is taken on your
+machine). To browse the stack at its **production hostname** over TLS, opt in to the shared local
+proxy from the private infra repo (`mdock/`) with `docker-compose.mdock.yml`; the two knobs are
+`MDOCK_PUBLIC_API_URL` and `MDOCK_DEV_ORIGINS` in your local `.env` (see `.env.example`).
+
+The cross-project view — how every project reaches local, staging and production, and the gaps —
+is the private infra repo's `docs/13-deploy-runbook.md`.
+
 ### Pipeline Flow
 
 ```mermaid
