@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Dialog } from '@/components/ui/Dialog';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useCategories } from '@/lib/category/category-context';
 import type { CategoryApiError, CategoryDto } from '@/lib/category/types';
@@ -147,25 +148,15 @@ export function CategoryFormDialog({
   const showBanner = saveOp.isError && saveOp.error !== null && saveOp.error.reason !== 'aborted';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="category-form-dialog-title"
-      data-testid="category-form-dialog"
+    <Dialog
+      open
+      onClose={handleCancel}
+      title={t(`title.${mode}`)}
+      titleId="category-form-dialog-title"
+      testId="category-form-dialog"
+      busy={isLoading}
     >
-      <form
-        onSubmit={handleSubmit}
-        aria-busy={isLoading || undefined}
-        className="w-full max-w-md space-y-4 rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
-      >
-        <h2
-          id="category-form-dialog-title"
-          className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-        >
-          {t(`title.${mode}`)}
-        </h2>
-
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Name */}
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -325,6 +316,6 @@ export function CategoryFormDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </Dialog>
   );
 }

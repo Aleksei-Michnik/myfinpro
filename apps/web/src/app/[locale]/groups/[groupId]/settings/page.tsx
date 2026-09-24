@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { InviteLink } from '@/components/group/InviteLink';
 import { MemberManagement } from '@/components/group/MemberManagement';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
@@ -339,70 +340,64 @@ function GroupSettingsInner() {
       </section>
 
       {isDeleteDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-group-dialog-title"
-          data-testid="group-settings-delete-dialog"
+        <Dialog
+          open
+          onClose={handleCloseDeleteDialog}
+          title={t('dangerZone.dialogTitle', { name: group.name })}
+          titleId="delete-group-dialog-title"
+          testId="group-settings-delete-dialog"
+          danger
+          busy={isDeleting}
         >
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-            <h2
-              id="delete-group-dialog-title"
-              className="mb-4 text-lg font-semibold text-red-600 dark:text-red-400"
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            {t('dangerZone.dialogMessage')}
+          </p>
+
+          <Input
+            name="confirm-group-name"
+            type="text"
+            placeholder={t('dangerZone.dialogInputPlaceholder')}
+            value={deleteConfirmName}
+            onChange={(e) => setDeleteConfirmName(e.target.value)}
+            disabled={isDeleting}
+            autoComplete="off"
+            data-testid="group-settings-delete-confirm-input"
+          />
+
+          {deleteConfirmName.length > 0 && !deleteNameMatches && (
+            <p
+              className="mt-2 text-xs text-red-600 dark:text-red-400"
+              data-testid="group-settings-delete-mismatch"
             >
-              {t('dangerZone.dialogTitle', { name: group.name })}
-            </h2>
-            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              {t('dangerZone.dialogMessage')}
+              {t('dangerZone.mismatchError')}
             </p>
+          )}
 
-            <Input
-              name="confirm-group-name"
-              type="text"
-              placeholder={t('dangerZone.dialogInputPlaceholder')}
-              value={deleteConfirmName}
-              onChange={(e) => setDeleteConfirmName(e.target.value)}
+          <div className="mt-6 flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={handleCloseDeleteDialog}
               disabled={isDeleting}
-              autoComplete="off"
-              data-testid="group-settings-delete-confirm-input"
-            />
-
-            {deleteConfirmName.length > 0 && !deleteNameMatches && (
-              <p
-                className="mt-2 text-xs text-red-600 dark:text-red-400"
-                data-testid="group-settings-delete-mismatch"
-              >
-                {t('dangerZone.mismatchError')}
-              </p>
-            )}
-
-            <div className="mt-6 flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                className="flex-1"
-                onClick={handleCloseDeleteDialog}
-                disabled={isDeleting}
-                data-testid="group-settings-delete-cancel-btn"
-              >
-                {t('dangerZone.dialogCancelButton')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-                onClick={handleConfirmDelete}
-                disabled={!deleteNameMatches || isDeleting}
-                data-testid="group-settings-delete-confirm-btn"
-              >
-                {isDeleting ? '...' : t('dangerZone.dialogConfirmButton')}
-              </Button>
-            </div>
+              data-testid="group-settings-delete-cancel-btn"
+            >
+              {t('dangerZone.dialogCancelButton')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+              onClick={handleConfirmDelete}
+              disabled={!deleteNameMatches || isDeleting}
+              data-testid="group-settings-delete-confirm-btn"
+            >
+              {isDeleting ? '...' : t('dangerZone.dialogConfirmButton')}
+            </Button>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

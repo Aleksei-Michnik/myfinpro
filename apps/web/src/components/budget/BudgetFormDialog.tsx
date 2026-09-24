@@ -16,6 +16,7 @@ import { TransactionScopeSelector } from '@/components/transaction/TransactionSc
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { Dialog } from '@/components/ui/Dialog';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Select } from '@/components/ui/Select';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -444,26 +445,12 @@ export function BudgetFormDialog({
     return JSON.stringify(initialStateRef.current) !== JSON.stringify(state);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (isDirty()) setConfirmDiscard(true);
-        else handleCancel();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, state]);
-
   if (!open) return null;
 
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      if (isDirty()) setConfirmDiscard(true);
-      else handleCancel();
-    }
+  // ESC, the backdrop and the ✕ all ask to close; a dirty draft asks first.
+  const requestClose = () => {
+    if (isDirty()) setConfirmDiscard(true);
+    else handleCancel();
   };
 
   // Build currency list: current selection first, rest alphabetical.
@@ -479,367 +466,357 @@ export function BudgetFormDialog({
     'mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="budget-form-title"
-      data-testid="budget-form-dialog"
-      onMouseDown={handleBackdrop}
+    <Dialog
+      open
+      onClose={requestClose}
+      labelledBy="budget-form-title"
+      testId="budget-form-dialog"
+      size="lg"
     >
-      <div className="mx-4 max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-        <div className="mb-4 flex items-center justify-between">
-          <h3
-            id="budget-form-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-          >
-            {mode === 'create' ? t('createTitle') : t('editTitle')}
-          </h3>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
-            aria-label={t('close')}
-            data-testid="budget-form-close"
-          >
-            ✕
-          </button>
+      <div className="mb-4 flex items-center justify-between">
+        <h3
+          id="budget-form-title"
+          className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+        >
+          {mode === 'create' ? t('createTitle') : t('editTitle')}
+        </h3>
+        <button
+          type="button"
+          onClick={requestClose}
+          className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
+          aria-label={t('close')}
+          data-testid="budget-form-close"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form
+        // Native constraint validation (the threshold's min/max) would
+        // block submit with unlocalized browser bubbles — our validate()
+        // owns the UX with translated, per-field messages instead.
+        noValidate
+        aria-busy={isLoading || undefined}
+        onSubmit={(e) => {
+          e.preventDefault();
+          runSave();
+        }}
+      >
+        {/* Name */}
+        <div className="mb-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('name')}</span>
+            <input
+              ref={nameRef}
+              type="text"
+              value={state.name}
+              onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
+              placeholder={t('namePlaceholder')}
+              maxLength={100}
+              disabled={allInputsDisabled}
+              data-testid="budget-form-name"
+              aria-invalid={!!errors.name}
+              className={inputClass}
+            />
+          </label>
+          {errors.name && (
+            <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-name">
+              {errors.name}
+            </span>
+          )}
         </div>
 
-        <form
-          // Native constraint validation (the threshold's min/max) would
-          // block submit with unlocalized browser bubbles — our validate()
-          // owns the UX with translated, per-field messages instead.
-          noValidate
-          aria-busy={isLoading || undefined}
-          onSubmit={(e) => {
-            e.preventDefault();
-            runSave();
-          }}
-        >
-          {/* Name */}
-          <div className="mb-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('name')}</span>
-              <input
-                ref={nameRef}
-                type="text"
-                value={state.name}
-                onChange={(e) => setState((s) => ({ ...s, name: e.target.value }))}
-                placeholder={t('namePlaceholder')}
-                maxLength={100}
-                disabled={allInputsDisabled}
-                data-testid="budget-form-name"
-                aria-invalid={!!errors.name}
-                className={inputClass}
-              />
-            </label>
-            {errors.name && (
-              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-name">
-                {errors.name}
-              </span>
-            )}
-          </div>
-
-          {/* Amount + Currency */}
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('amount')}</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={state.amountStr}
-                onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
-                placeholder={t('amountPlaceholder')}
-                disabled={allInputsDisabled}
-                data-testid="budget-form-amount"
-                aria-invalid={!!errors.amount}
-                className={inputClass}
-              />
-              {errors.amount && (
-                <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-amount">
-                  {errors.amount}
-                </span>
-              )}
-            </label>
-
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('currency')}</span>
-              <Select
-                value={state.currency}
-                onChange={(e) => {
-                  currencyTouchedRef.current = true;
-                  setState((s) => ({ ...s, currency: e.target.value }));
-                }}
-                disabled={allInputsDisabled}
-                data-testid="budget-form-currency"
-                size="sm"
-                wrapperClassName="contents"
-              >
-                {sortedCurrencies.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-              {errors.currency && (
-                <span
-                  className="mt-1 text-xs text-red-600"
-                  data-testid="budget-form-error-currency"
-                >
-                  {errors.currency}
-                </span>
-              )}
-            </label>
-          </div>
-
-          {/* Scope */}
-          <div className="mb-3">
-            <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-              {t('scope')}
-            </div>
-            <TransactionScopeSelector
-              value={state.scope ? [state.scope] : []}
-              onChange={handleScopeChange}
-              disabled={allInputsDisabled || scopeLocked}
+        {/* Amount + Currency */}
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('amount')}</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={state.amountStr}
+              onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
+              placeholder={t('amountPlaceholder')}
+              disabled={allInputsDisabled}
+              data-testid="budget-form-amount"
+              aria-invalid={!!errors.amount}
+              className={inputClass}
             />
-            {scopeLocked && (
-              <p
-                className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
-                data-testid="budget-form-scope-locked"
-              >
-                {t('scopeImmutable')}
-              </p>
-            )}
-            {errors.scope && (
-              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-scope">
-                {errors.scope}
+            {errors.amount && (
+              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-amount">
+                {errors.amount}
               </span>
             )}
-          </div>
+          </label>
 
-          {/* Category (optional) */}
-          <div className="mb-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('category')}</span>
-              <div className="mt-1">
-                <TransactionCategoryPicker
-                  direction="OUT"
-                  value={state.categoryId}
-                  onChange={(id) => setState((s) => ({ ...s, categoryId: id || null }))}
-                  categories={scopedCategories}
-                  disabled={allInputsDisabled}
-                  emptyOptionLabel={t('categoryAll')}
-                  testId="budget-form-category-picker"
-                />
-              </div>
-            </label>
-            {errors.category && (
-              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-category">
-                {errors.category}
-              </span>
-            )}
-          </div>
-
-          {/* Period */}
-          <div className="mb-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('period')}</span>
-              <Select
-                value={state.period}
-                onChange={(e) =>
-                  setState((s) => ({ ...s, period: e.target.value as BudgetPeriod }))
-                }
-                disabled={allInputsDisabled}
-                data-testid="budget-form-period"
-                size="sm"
-                wrapperClassName="contents"
-              >
-                {BUDGET_PERIODS.map((p) => (
-                  <option key={p} value={p}>
-                    {t(`periods.${p}`)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            {errors.period && (
-              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-period">
-                {errors.period}
-              </span>
-            )}
-          </div>
-
-          {/* Custom date range — disclosed only for CUSTOM (one-off targets). */}
-          {state.period === 'CUSTOM' && (
-            <div
-              className="mb-3 rounded-md border border-gray-200 p-3 dark:border-gray-700"
-              data-testid="budget-form-custom-range"
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('currency')}</span>
+            <Select
+              value={state.currency}
+              onChange={(e) => {
+                currencyTouchedRef.current = true;
+                setState((s) => ({ ...s, currency: e.target.value }));
+              }}
+              disabled={allInputsDisabled}
+              data-testid="budget-form-currency"
+              size="sm"
+              wrapperClassName="contents"
             >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-                  <span>{t('customStart')}</span>
-                  <input
-                    type="date"
-                    value={state.startsAt}
-                    onChange={(e) => setState((s) => ({ ...s, startsAt: e.target.value }))}
-                    disabled={allInputsDisabled}
-                    data-testid="budget-form-starts-at"
-                    aria-invalid={!!errors.startsAt}
-                    className={inputClass}
-                  />
-                  {errors.startsAt && (
-                    <span
-                      className="mt-1 text-xs text-red-600"
-                      data-testid="budget-form-error-starts-at"
-                    >
-                      {errors.startsAt}
-                    </span>
-                  )}
-                </label>
-                <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-                  <span>{t('customEnd')}</span>
-                  <input
-                    type="date"
-                    value={state.endsAt}
-                    onChange={(e) => setState((s) => ({ ...s, endsAt: e.target.value }))}
-                    disabled={allInputsDisabled}
-                    data-testid="budget-form-ends-at"
-                    aria-invalid={!!errors.endsAt}
-                    className={inputClass}
-                  />
-                  {errors.endsAt && (
-                    <span
-                      className="mt-1 text-xs text-red-600"
-                      data-testid="budget-form-error-ends-at"
-                    >
-                      {errors.endsAt}
-                    </span>
-                  )}
-                </label>
-              </div>
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {t('customRangeHint')}
-              </p>
-            </div>
-          )}
+              {sortedCurrencies.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+            {errors.currency && (
+              <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-currency">
+                {errors.currency}
+              </span>
+            )}
+          </label>
+        </div>
 
-          {/* Alerts */}
-          <div className="mb-4 rounded-md border border-gray-200 p-3 dark:border-gray-700">
+        {/* Scope */}
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {t('scope')}
+          </div>
+          <TransactionScopeSelector
+            value={state.scope ? [state.scope] : []}
+            onChange={handleScopeChange}
+            disabled={allInputsDisabled || scopeLocked}
+          />
+          {scopeLocked && (
+            <p
+              className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
+              data-testid="budget-form-scope-locked"
+            >
+              {t('scopeImmutable')}
+            </p>
+          )}
+          {errors.scope && (
+            <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-scope">
+              {errors.scope}
+            </span>
+          )}
+        </div>
+
+        {/* Category (optional) */}
+        <div className="mb-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('category')}</span>
+            <div className="mt-1">
+              <TransactionCategoryPicker
+                direction="OUT"
+                value={state.categoryId}
+                onChange={(id) => setState((s) => ({ ...s, categoryId: id || null }))}
+                categories={scopedCategories}
+                disabled={allInputsDisabled}
+                emptyOptionLabel={t('categoryAll')}
+                testId="budget-form-category-picker"
+              />
+            </div>
+          </label>
+          {errors.category && (
+            <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-category">
+              {errors.category}
+            </span>
+          )}
+        </div>
+
+        {/* Period */}
+        <div className="mb-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('period')}</span>
+            <Select
+              value={state.period}
+              onChange={(e) => setState((s) => ({ ...s, period: e.target.value as BudgetPeriod }))}
+              disabled={allInputsDisabled}
+              data-testid="budget-form-period"
+              size="sm"
+              wrapperClassName="contents"
+            >
+              {BUDGET_PERIODS.map((p) => (
+                <option key={p} value={p}>
+                  {t(`periods.${p}`)}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {errors.period && (
+            <span className="mt-1 text-xs text-red-600" data-testid="budget-form-error-period">
+              {errors.period}
+            </span>
+          )}
+        </div>
+
+        {/* Custom date range — disclosed only for CUSTOM (one-off targets). */}
+        {state.period === 'CUSTOM' && (
+          <div
+            className="mb-3 rounded-md border border-gray-200 p-3 dark:border-gray-700"
+            data-testid="budget-form-custom-range"
+          >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-                <span>{t('alertThreshold')}</span>
+                <span>{t('customStart')}</span>
                 <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={state.alertThresholdStr}
-                  onChange={(e) => setState((s) => ({ ...s, alertThresholdStr: e.target.value }))}
-                  placeholder={t('alertThresholdPlaceholder')}
+                  type="date"
+                  value={state.startsAt}
+                  onChange={(e) => setState((s) => ({ ...s, startsAt: e.target.value }))}
                   disabled={allInputsDisabled}
-                  data-testid="budget-form-threshold"
-                  aria-invalid={!!errors.threshold}
+                  data-testid="budget-form-starts-at"
+                  aria-invalid={!!errors.startsAt}
                   className={inputClass}
                 />
-                <span className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                  {t('alertThresholdHint')}
-                </span>
-                {errors.threshold && (
+                {errors.startsAt && (
                   <span
                     className="mt-1 text-xs text-red-600"
-                    data-testid="budget-form-error-threshold"
+                    data-testid="budget-form-error-starts-at"
                   >
-                    {errors.threshold}
+                    {errors.startsAt}
                   </span>
                 )}
               </label>
-              <Checkbox
-                checked={state.alertOverspend}
-                onChange={(e) => setState((s) => ({ ...s, alertOverspend: e.target.checked }))}
-                disabled={allInputsDisabled}
-                data-testid="budget-form-overspend"
-                wrapperClassName="pt-4"
-                label={t('alertOverspend')}
-              />
+              <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+                <span>{t('customEnd')}</span>
+                <input
+                  type="date"
+                  value={state.endsAt}
+                  onChange={(e) => setState((s) => ({ ...s, endsAt: e.target.value }))}
+                  disabled={allInputsDisabled}
+                  data-testid="budget-form-ends-at"
+                  aria-invalid={!!errors.endsAt}
+                  className={inputClass}
+                />
+                {errors.endsAt && (
+                  <span
+                    className="mt-1 text-xs text-red-600"
+                    data-testid="budget-form-error-ends-at"
+                  >
+                    {errors.endsAt}
+                  </span>
+                )}
+              </label>
             </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t('customRangeHint')}</p>
           </div>
+        )}
 
-          {showBanner && saveOp.error && (
-            <div className="mb-3" data-testid="budget-form-api-error">
-              <InlineErrorBanner
-                reason={saveOp.error.reason}
-                httpStatus={saveOp.error.httpStatus}
-                message={t('errorGeneric', { message: saveOp.error.message ?? '' })}
-                onRetry={() => void saveOp.retry()}
-                retrying={isLoading}
-                data-testid="budget-form-api-error-banner"
+        {/* Alerts */}
+        <div className="mb-4 rounded-md border border-gray-200 p-3 dark:border-gray-700">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              <span>{t('alertThreshold')}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={100}
+                step={1}
+                value={state.alertThresholdStr}
+                onChange={(e) => setState((s) => ({ ...s, alertThresholdStr: e.target.value }))}
+                placeholder={t('alertThresholdPlaceholder')}
+                disabled={allInputsDisabled}
+                data-testid="budget-form-threshold"
+                aria-invalid={!!errors.threshold}
+                className={inputClass}
               />
-            </div>
-          )}
+              <span className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                {t('alertThresholdHint')}
+              </span>
+              {errors.threshold && (
+                <span
+                  className="mt-1 text-xs text-red-600"
+                  data-testid="budget-form-error-threshold"
+                >
+                  {errors.threshold}
+                </span>
+              )}
+            </label>
+            <Checkbox
+              checked={state.alertOverspend}
+              onChange={(e) => setState((s) => ({ ...s, alertOverspend: e.target.checked }))}
+              disabled={allInputsDisabled}
+              data-testid="budget-form-overspend"
+              wrapperClassName="pt-4"
+              label={t('alertOverspend')}
+            />
+          </div>
+        </div>
 
-          <div className="flex gap-3">
+        {showBanner && saveOp.error && (
+          <div className="mb-3" data-testid="budget-form-api-error">
+            <InlineErrorBanner
+              reason={saveOp.error.reason}
+              httpStatus={saveOp.error.httpStatus}
+              message={t('errorGeneric', { message: saveOp.error.message ?? '' })}
+              onRetry={() => void saveOp.retry()}
+              retrying={isLoading}
+              data-testid="budget-form-api-error-banner"
+            />
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            className="flex-1"
+            onClick={handleCancel}
+            data-testid="budget-form-cancel"
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            className="flex-1"
+            disabled={isLoading}
+            aria-busy={isLoading}
+            data-testid="budget-form-save"
+          >
+            {isLoading ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <ButtonSpinner />
+                <span>{t('saving')}</span>
+              </span>
+            ) : (
+              t('save')
+            )}
+          </Button>
+        </div>
+      </form>
+
+      {confirmDiscard && (
+        <div
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+          role="alert"
+          data-testid="budget-form-discard-prompt"
+        >
+          <p className="mb-2">{t('discardChanges')}</p>
+          <div className="flex gap-2">
             <Button
               type="button"
               variant="secondary"
-              size="md"
-              className="flex-1"
-              onClick={handleCancel}
-              data-testid="budget-form-cancel"
+              size="sm"
+              onClick={() => setConfirmDiscard(false)}
+              data-testid="budget-form-discard-keep"
             >
-              {t('cancel')}
+              {t('keepEditing')}
             </Button>
             <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              className="flex-1"
-              disabled={isLoading}
-              aria-busy={isLoading}
-              data-testid="budget-form-save"
+              type="button"
+              variant="danger"
+              size="sm"
+              onClick={onClose}
+              data-testid="budget-form-discard-confirm"
             >
-              {isLoading ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <ButtonSpinner />
-                  <span>{t('saving')}</span>
-                </span>
-              ) : (
-                t('save')
-              )}
+              {t('discard')}
             </Button>
           </div>
-        </form>
-
-        {confirmDiscard && (
-          <div
-            className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-            role="alert"
-            data-testid="budget-form-discard-prompt"
-          >
-            <p className="mb-2">{t('discardChanges')}</p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setConfirmDiscard(false)}
-                data-testid="budget-form-discard-keep"
-              >
-                {t('keepEditing')}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={onClose}
-                data-testid="budget-form-discard-confirm"
-              >
-                {t('discard')}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </Dialog>
   );
 }

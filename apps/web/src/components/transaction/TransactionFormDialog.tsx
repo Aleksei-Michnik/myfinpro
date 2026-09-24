@@ -36,6 +36,7 @@ import { TransactionTypeSelector } from './TransactionTypeSelector';
 import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Dialog } from '@/components/ui/Dialog';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
@@ -873,29 +874,12 @@ export function TransactionFormDialog({
     return JSON.stringify(initialScheduleStateRef.current) !== JSON.stringify(scheduleState);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (isDirty()) {
-          setConfirmDiscard(true);
-        } else {
-          handleCancel();
-        }
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, state, scheduleState]);
-
   if (!open) return null;
 
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      if (isDirty()) setConfirmDiscard(true);
-      else handleCancel();
-    }
+  // ESC, the backdrop and the ✕ all ask to close; a dirty draft asks first.
+  const requestClose = () => {
+    if (isDirty()) setConfirmDiscard(true);
+    else handleCancel();
   };
 
   // Build currency list: user's default first, rest alphabetical (unique).
@@ -912,556 +896,550 @@ export function TransactionFormDialog({
   const allInputsDisabled = isGeneratedOccurrence || isLoading || isInitialLoad;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="transaction-form-title"
-      data-testid="transaction-form-dialog"
-      onMouseDown={handleBackdrop}
+    <Dialog
+      open
+      onClose={requestClose}
+      labelledBy="transaction-form-title"
+      testId="transaction-form-dialog"
+      size="lg"
     >
-      <div className="mx-4 max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800">
-        <div className="mb-4 flex items-center justify-between">
-          <h3
-            id="transaction-form-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-          >
-            {mode === 'create' ? t('createTitle') : t('editTitle')}
-          </h3>
-          <button
-            type="button"
-            onClick={() => (isDirty() ? setConfirmDiscard(true) : handleCancel())}
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
-            aria-label={t('close')}
-            data-testid="transaction-form-close"
-          >
-            ✕
-          </button>
-        </div>
-
-        {mode === 'create' && (
-          <div
-            className="mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
-            data-testid="transaction-form-from-receipt"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-gray-600 dark:text-gray-300">
-                {t('fromReceiptHint')}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  ref={receiptFileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    handleReceiptFile(e.target.files?.[0]);
-                    e.target.value = '';
-                  }}
-                  data-testid="transaction-form-receipt-input"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={receiptOp.isLoading}
-                  onClick={() => receiptFileRef.current?.click()}
-                  data-testid="transaction-form-receipt-button"
-                >
-                  {receiptOp.isLoading ? <ButtonSpinner /> : null}
-                  {t('fromReceiptDevice')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={receiptOp.isLoading}
-                  aria-expanded={receiptUrlOpen}
-                  aria-controls="transaction-form-receipt-url-row"
-                  onClick={() => {
-                    setReceiptUrlOpen((v) => !v);
-                    setTimeout(() => receiptUrlInputRef.current?.focus(), 0);
-                  }}
-                  data-testid="transaction-form-receipt-url-toggle"
-                >
-                  {t('fromReceiptUrl')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={receiptOp.isLoading}
-                  onClick={() => setManualReceiptOpen(true)}
-                  data-testid="transaction-form-receipt-barcodes"
-                >
-                  {t('fromReceiptBarcodes')}
-                </Button>
-              </div>
-            </div>
-            {receiptUrlOpen && (
-              <div id="transaction-form-receipt-url-row" className="mt-2 flex gap-2">
-                <label htmlFor="transaction-form-receipt-url" className="sr-only">
-                  {t('fromReceiptUrlLabel')}
-                </label>
-                <input
-                  id="transaction-form-receipt-url"
-                  ref={receiptUrlInputRef}
-                  type="url"
-                  inputMode="url"
-                  value={receiptUrl}
-                  onChange={(e) => setReceiptUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter adds the receipt; never submits the transaction form.
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleReceiptUrl();
-                    }
-                  }}
-                  placeholder={t('fromReceiptUrlPlaceholder')}
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                  data-testid="transaction-form-receipt-url-input"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={receiptOp.isLoading || receiptUrl.trim().length === 0}
-                  onClick={handleReceiptUrl}
-                  data-testid="transaction-form-receipt-url-submit"
-                >
-                  {receiptOp.isLoading ? <ButtonSpinner /> : null}
-                  {t('fromReceiptUrlSubmit')}
-                </Button>
-              </div>
-            )}
-            {/* Mounted only while open so its product/receipt hooks (and their
-                providers) aren't required by every transaction-form host. */}
-            {manualReceiptOpen && (
-              <ManualReceiptDialog
-                open
-                defaultCurrency={user?.defaultCurrency ?? 'USD'}
-                categories={categories ?? []}
-                onClose={() => setManualReceiptOpen(false)}
-                onCreated={(receipt) => {
-                  setManualReceiptOpen(false);
-                  routeToReview(receipt.id);
-                }}
-              />
-            )}
-          </div>
-        )}
-
-        {isGeneratedOccurrence && (
-          <div
-            className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200"
-            role="alert"
-            data-testid="transaction-form-occurrence-banner"
-          >
-            {t('occurrenceNotEditable')}
-          </div>
-        )}
-
-        {isInitialLoad && (
-          <div
-            className="mb-3 rounded-md bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-700/40 dark:text-gray-300"
-            role="status"
-            aria-live="polite"
-            data-testid="transaction-form-loading"
-          >
-            <span className="inline-flex items-center gap-2">
-              <ButtonSpinner />
-              <span>{t('loading')}</span>
-            </span>
-          </div>
-        )}
-
-        {/* Phase 6 · 6.18.1.4-hotfix — surface a soft warning when the
-            edit-mode refetch failed: we fall back to the prop's stale
-            copy so the user can still proceed, but they should know the
-            data may not reflect concurrent changes. */}
-        {mode === 'edit' &&
-          !!transaction &&
-          !refetchOp.isLoading &&
-          refetchedTransaction === null &&
-          !!refetchOp.error && (
-            <div
-              className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-              role="alert"
-              data-testid="transaction-form-load-error"
-            >
-              {t('loadError')}
-            </div>
-          )}
-
-        <form
-          aria-busy={isLoading || undefined}
-          onSubmit={(e) => {
-            e.preventDefault();
-            runSave();
-          }}
+      <div className="mb-4 flex items-center justify-between">
+        <h3
+          id="transaction-form-title"
+          className="text-lg font-semibold text-gray-900 dark:text-gray-100"
         >
-          {/* Direction */}
-          <div className="mb-3">
-            <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-              {t('direction')}
-            </div>
-            <div
-              className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
-              role="group"
-              aria-label={t('direction')}
-            >
-              <button
-                ref={directionRef}
-                type="button"
-                onClick={() => setDirection('IN')}
-                disabled={allInputsDisabled}
-                aria-pressed={state.direction === 'IN'}
-                data-testid="form-direction-in"
-                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                  state.direction === 'IN'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                {t('directionIn')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDirection('OUT')}
-                disabled={allInputsDisabled}
-                aria-pressed={state.direction === 'OUT'}
-                data-testid="form-direction-out"
-                className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
-                  state.direction === 'OUT'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                {t('directionOut')}
-              </button>
-            </div>
-          </div>
+          {mode === 'create' ? t('createTitle') : t('editTitle')}
+        </h3>
+        <button
+          type="button"
+          onClick={requestClose}
+          className="rounded p-1 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:bg-gray-700"
+          aria-label={t('close')}
+          data-testid="transaction-form-close"
+        >
+          ✕
+        </button>
+      </div>
 
-          {/* Amount + Currency + Date */}
-          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('amount')}</span>
+      {mode === 'create' && (
+        <div
+          className="mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
+          data-testid="transaction-form-from-receipt"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-gray-600 dark:text-gray-300">{t('fromReceiptHint')}</span>
+            <div className="flex flex-wrap gap-2">
               <input
-                type="text"
-                inputMode="decimal"
-                value={state.amountStr}
-                onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
-                placeholder={t('amountPlaceholder')}
-                disabled={allInputsDisabled}
-                data-testid="form-amount"
-                aria-invalid={!!errors.amount}
-                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                ref={receiptFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  handleReceiptFile(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+                data-testid="transaction-form-receipt-input"
               />
-              {errors.amount && (
-                <span className="mt-1 text-xs text-red-600" data-testid="form-error-amount">
-                  {errors.amount}
-                </span>
-              )}
-            </label>
-
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('currency')}</span>
-              <Select
-                value={state.currency}
-                onChange={(e) => setState((s) => ({ ...s, currency: e.target.value }))}
-                disabled={allInputsDisabled}
-                data-testid="form-currency"
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
-                fullWidth={false}
-                className="mt-1"
-                wrapperClassName="contents"
+                disabled={receiptOp.isLoading}
+                onClick={() => receiptFileRef.current?.click()}
+                data-testid="transaction-form-receipt-button"
               >
-                {sortedCurrencies.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-              {errors.currency && (
-                <span className="mt-1 text-xs text-red-600" data-testid="form-error-currency">
-                  {errors.currency}
-                </span>
-              )}
-            </label>
-
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('date')}</span>
-              <input
-                type="datetime-local"
-                value={state.occurredAt}
-                onChange={(e) => setState((s) => ({ ...s, occurredAt: e.target.value }))}
-                disabled={allInputsDisabled}
-                data-testid="form-date"
-                aria-invalid={!!errors.date}
-                className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-              {errors.date && (
-                <span className="mt-1 text-xs text-red-600" data-testid="form-error-date">
-                  {errors.date}
-                </span>
-              )}
-            </label>
+                {receiptOp.isLoading ? <ButtonSpinner /> : null}
+                {t('fromReceiptDevice')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={receiptOp.isLoading}
+                aria-expanded={receiptUrlOpen}
+                aria-controls="transaction-form-receipt-url-row"
+                onClick={() => {
+                  setReceiptUrlOpen((v) => !v);
+                  setTimeout(() => receiptUrlInputRef.current?.focus(), 0);
+                }}
+                data-testid="transaction-form-receipt-url-toggle"
+              >
+                {t('fromReceiptUrl')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={receiptOp.isLoading}
+                onClick={() => setManualReceiptOpen(true)}
+                data-testid="transaction-form-receipt-barcodes"
+              >
+                {t('fromReceiptBarcodes')}
+              </Button>
+            </div>
           </div>
-
-          {/* Categories — multi-category: the picker appends, the chips list
-              the selection in order with the first marked as primary. The
-              dialog-owned fetch surfaces via the standard container overlay. */}
-          <div className="relative mb-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('categories')}</span>
-              <div className="mt-1">
-                <TransactionCategoryPicker
-                  direction={state.direction}
-                  value={null}
-                  onChange={addCategory}
-                  categories={availableCategories}
-                  disabled={
-                    allInputsDisabled ||
-                    categoriesOp.isLoading ||
-                    state.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
+          {receiptUrlOpen && (
+            <div id="transaction-form-receipt-url-row" className="mt-2 flex gap-2">
+              <label htmlFor="transaction-form-receipt-url" className="sr-only">
+                {t('fromReceiptUrlLabel')}
+              </label>
+              <input
+                id="transaction-form-receipt-url"
+                ref={receiptUrlInputRef}
+                type="url"
+                inputMode="url"
+                value={receiptUrl}
+                onChange={(e) => setReceiptUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter adds the receipt; never submits the transaction form.
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleReceiptUrl();
                   }
-                  testId="form-category-picker"
-                />
-              </div>
-            </label>
-            <LoadingOverlay active={categoriesOp.isLoading} />
-            {categoriesOp.isError && categoriesOp.error && (
-              <InlineErrorBanner
-                className="mt-1"
-                reason={categoriesOp.error.reason}
-                httpStatus={categoriesOp.error.httpStatus}
-                message={tCategoryPicker('errorLoading', {
-                  message: categoriesOp.error.message ?? '',
-                })}
-                onRetry={() => void categoriesOp.retry()}
-                retrying={categoriesOp.isLoading}
-                data-testid="form-categories-load-error"
+                }}
+                placeholder={t('fromReceiptUrlPlaceholder')}
+                className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                data-testid="transaction-form-receipt-url-input"
               />
-            )}
-            {state.categoryIds.length > 0 && (
-              <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="form-category-chips">
-                {state.categoryIds.map((id, idx) => {
-                  const name = categoryNameById.get(id) ?? id;
-                  return (
-                    <li
-                      key={id}
-                      data-testid={`form-category-chip-${id}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                    >
-                      <span>{name}</span>
-                      {idx === 0 && (
-                        <span
-                          className="rounded-full bg-primary-100 px-1.5 py-px text-[10px] font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
-                          data-testid={`form-category-primary-${id}`}
-                        >
-                          {t('categoryPrimary')}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeCategory(id)}
-                        disabled={allInputsDisabled}
-                        aria-label={t('categoryRemove', { name })}
-                        data-testid={`form-category-remove-${id}`}
-                        className="rounded-full px-0.5 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:text-gray-100"
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {errors.category && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
-                {errors.category}
-              </span>
-            )}
-          </div>
-
-          {/* Scopes */}
-          <div className="mb-3">
-            <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-              {t('attributedTo')}
-            </div>
-            <TransactionScopeSelector
-              value={state.scopes}
-              onChange={(next) => setState((s) => ({ ...s, scopes: next }))}
-              disabled={allInputsDisabled}
-            />
-            {errors.scopes && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-scopes">
-                {errors.scopes}
-              </span>
-            )}
-            {nonAccessibleAttributions.length > 0 && (
-              <p
-                className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
-                data-testid="form-non-accessible-footnote"
-              >
-                {t('othersCount', { count: nonAccessibleAttributions.length })}{' '}
-                {t('othersPreserved')}
-              </p>
-            )}
-          </div>
-
-          {/* Note */}
-          <div className="mb-3">
-            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-              <span>{t('noteLabel')}</span>
-              <Textarea
-                value={state.note}
-                onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
-                placeholder={t('notePlaceholder')}
-                rows={2}
-                maxLength={2000}
-                disabled={allInputsDisabled}
-                data-testid="form-note"
-                size="sm"
-                fullWidth={false}
-                className="mt-1"
-                wrapperClassName="contents"
-              />
-            </label>
-            {errors.note && (
-              <span className="mt-1 text-xs text-red-600" data-testid="form-error-note">
-                {errors.note}
-              </span>
-            )}
-          </div>
-
-          {/* Type */}
-          <div className="mb-4">
-            <TransactionTypeSelector
-              value={state.type}
-              onChange={(next) => setState((s) => ({ ...s, type: next }))}
-              disabled={allInputsDisabled}
-              planKindsEnabled={mode === 'create'}
-            />
-          </div>
-
-          {/* Type-change warning: RECURRING → ONE_TIME tears down the
-              schedule server-side (cascade audit). Surface the warning so
-              the user is not surprised when they hit Save. */}
-          {mode === 'edit' &&
-            effectiveTransaction?.type === 'RECURRING' &&
-            state.type !== 'RECURRING' && (
-              <div
-                className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-                role="alert"
-                data-testid="schedule-type-change-warning"
-              >
-                {tSchedule('typeChangeWarning')}
-              </div>
-            )}
-
-          {/* Schedule sub-form — only for type=RECURRING. State is owned
-              by the parent so toggling type preserves draft values. */}
-          {state.type === 'RECURRING' && (
-            <div className="mb-4">
-              <TransactionScheduleSubForm
-                state={scheduleState}
-                errors={scheduleErrors}
-                onChange={setScheduleState}
-                disabled={allInputsDisabled}
-              />
-            </div>
-          )}
-
-          {/* Plan sub-form (6.20) — create-only for INSTALLMENT / LOAN /
-              MORTGAGE; plan parents are read-only in edit mode. */}
-          {mode === 'create' && isPlanKind(state.type) && (
-            <div className="mb-4">
-              <TransactionPlanSubForm
-                state={planState}
-                errors={planErrors}
-                onChange={setPlanState}
-                disabled={allInputsDisabled}
-              />
-            </div>
-          )}
-
-          {showBanner && saveOp.error && (
-            <div className="mb-3" data-testid="form-api-error">
-              <InlineErrorBanner
-                reason={saveOp.error.reason}
-                httpStatus={saveOp.error.httpStatus}
-                message={t('errorGeneric', { message: saveOp.error.message ?? '' })}
-                onRetry={() => void saveOp.retry()}
-                retrying={isLoading}
-                data-testid="form-api-error-banner"
-              />
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              className="flex-1"
-              onClick={handleCancel}
-              data-testid="form-cancel"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              className="flex-1"
-              disabled={isLoading || isGeneratedOccurrence}
-              aria-busy={isLoading}
-              data-testid="form-save"
-            >
-              {isLoading ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <ButtonSpinner />
-                  <span>{t('saving')}</span>
-                </span>
-              ) : (
-                t('save')
-              )}
-            </Button>
-          </div>
-        </form>
-
-        {confirmDiscard && (
-          <div
-            className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-            role="alert"
-            data-testid="form-discard-prompt"
-          >
-            <p className="mb-2">{t('discardChanges')}</p>
-            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => setConfirmDiscard(false)}
-                data-testid="form-discard-keep"
+                disabled={receiptOp.isLoading || receiptUrl.trim().length === 0}
+                onClick={handleReceiptUrl}
+                data-testid="transaction-form-receipt-url-submit"
               >
-                {t('keepEditing')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={onClose}
-                data-testid="form-discard-confirm"
-                className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-              >
-                {t('discard')}
+                {receiptOp.isLoading ? <ButtonSpinner /> : null}
+                {t('fromReceiptUrlSubmit')}
               </Button>
             </div>
+          )}
+          {/* Mounted only while open so its product/receipt hooks (and their
+                providers) aren't required by every transaction-form host. */}
+          {manualReceiptOpen && (
+            <ManualReceiptDialog
+              open
+              defaultCurrency={user?.defaultCurrency ?? 'USD'}
+              categories={categories ?? []}
+              onClose={() => setManualReceiptOpen(false)}
+              onCreated={(receipt) => {
+                setManualReceiptOpen(false);
+                routeToReview(receipt.id);
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {isGeneratedOccurrence && (
+        <div
+          className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200"
+          role="alert"
+          data-testid="transaction-form-occurrence-banner"
+        >
+          {t('occurrenceNotEditable')}
+        </div>
+      )}
+
+      {isInitialLoad && (
+        <div
+          className="mb-3 rounded-md bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-700/40 dark:text-gray-300"
+          role="status"
+          aria-live="polite"
+          data-testid="transaction-form-loading"
+        >
+          <span className="inline-flex items-center gap-2">
+            <ButtonSpinner />
+            <span>{t('loading')}</span>
+          </span>
+        </div>
+      )}
+
+      {/* Phase 6 · 6.18.1.4-hotfix — surface a soft warning when the
+            edit-mode refetch failed: we fall back to the prop's stale
+            copy so the user can still proceed, but they should know the
+            data may not reflect concurrent changes. */}
+      {mode === 'edit' &&
+        !!transaction &&
+        !refetchOp.isLoading &&
+        refetchedTransaction === null &&
+        !!refetchOp.error && (
+          <div
+            className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+            role="alert"
+            data-testid="transaction-form-load-error"
+          >
+            {t('loadError')}
           </div>
         )}
-      </div>
+
+      <form
+        aria-busy={isLoading || undefined}
+        onSubmit={(e) => {
+          e.preventDefault();
+          runSave();
+        }}
+      >
+        {/* Direction */}
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {t('direction')}
+          </div>
+          <div
+            className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
+            role="group"
+            aria-label={t('direction')}
+          >
+            <button
+              ref={directionRef}
+              type="button"
+              onClick={() => setDirection('IN')}
+              disabled={allInputsDisabled}
+              aria-pressed={state.direction === 'IN'}
+              data-testid="form-direction-in"
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                state.direction === 'IN'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {t('directionIn')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDirection('OUT')}
+              disabled={allInputsDisabled}
+              aria-pressed={state.direction === 'OUT'}
+              data-testid="form-direction-out"
+              className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
+                state.direction === 'OUT'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {t('directionOut')}
+            </button>
+          </div>
+        </div>
+
+        {/* Amount + Currency + Date */}
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('amount')}</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={state.amountStr}
+              onChange={(e) => setState((s) => ({ ...s, amountStr: e.target.value }))}
+              placeholder={t('amountPlaceholder')}
+              disabled={allInputsDisabled}
+              data-testid="form-amount"
+              aria-invalid={!!errors.amount}
+              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            />
+            {errors.amount && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-amount">
+                {errors.amount}
+              </span>
+            )}
+          </label>
+
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('currency')}</span>
+            <Select
+              value={state.currency}
+              onChange={(e) => setState((s) => ({ ...s, currency: e.target.value }))}
+              disabled={allInputsDisabled}
+              data-testid="form-currency"
+              size="sm"
+              fullWidth={false}
+              className="mt-1"
+              wrapperClassName="contents"
+            >
+              {sortedCurrencies.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+            {errors.currency && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-currency">
+                {errors.currency}
+              </span>
+            )}
+          </label>
+
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('date')}</span>
+            <input
+              type="datetime-local"
+              value={state.occurredAt}
+              onChange={(e) => setState((s) => ({ ...s, occurredAt: e.target.value }))}
+              disabled={allInputsDisabled}
+              data-testid="form-date"
+              aria-invalid={!!errors.date}
+              className="mt-1 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            />
+            {errors.date && (
+              <span className="mt-1 text-xs text-red-600" data-testid="form-error-date">
+                {errors.date}
+              </span>
+            )}
+          </label>
+        </div>
+
+        {/* Categories — multi-category: the picker appends, the chips list
+              the selection in order with the first marked as primary. The
+              dialog-owned fetch surfaces via the standard container overlay. */}
+        <div className="relative mb-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('categories')}</span>
+            <div className="mt-1">
+              <TransactionCategoryPicker
+                direction={state.direction}
+                value={null}
+                onChange={addCategory}
+                categories={availableCategories}
+                disabled={
+                  allInputsDisabled ||
+                  categoriesOp.isLoading ||
+                  state.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
+                }
+                testId="form-category-picker"
+              />
+            </div>
+          </label>
+          <LoadingOverlay active={categoriesOp.isLoading} />
+          {categoriesOp.isError && categoriesOp.error && (
+            <InlineErrorBanner
+              className="mt-1"
+              reason={categoriesOp.error.reason}
+              httpStatus={categoriesOp.error.httpStatus}
+              message={tCategoryPicker('errorLoading', {
+                message: categoriesOp.error.message ?? '',
+              })}
+              onRetry={() => void categoriesOp.retry()}
+              retrying={categoriesOp.isLoading}
+              data-testid="form-categories-load-error"
+            />
+          )}
+          {state.categoryIds.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="form-category-chips">
+              {state.categoryIds.map((id, idx) => {
+                const name = categoryNameById.get(id) ?? id;
+                return (
+                  <li
+                    key={id}
+                    data-testid={`form-category-chip-${id}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                  >
+                    <span>{name}</span>
+                    {idx === 0 && (
+                      <span
+                        className="rounded-full bg-primary-100 px-1.5 py-px text-[10px] font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
+                        data-testid={`form-category-primary-${id}`}
+                      >
+                        {t('categoryPrimary')}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeCategory(id)}
+                      disabled={allInputsDisabled}
+                      aria-label={t('categoryRemove', { name })}
+                      data-testid={`form-category-remove-${id}`}
+                      className="rounded-full px-0.5 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:text-gray-100"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {errors.category && (
+            <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
+              {errors.category}
+            </span>
+          )}
+        </div>
+
+        {/* Scopes */}
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {t('attributedTo')}
+          </div>
+          <TransactionScopeSelector
+            value={state.scopes}
+            onChange={(next) => setState((s) => ({ ...s, scopes: next }))}
+            disabled={allInputsDisabled}
+          />
+          {errors.scopes && (
+            <span className="mt-1 text-xs text-red-600" data-testid="form-error-scopes">
+              {errors.scopes}
+            </span>
+          )}
+          {nonAccessibleAttributions.length > 0 && (
+            <p
+              className="mt-1 text-xs italic text-gray-500 dark:text-gray-400"
+              data-testid="form-non-accessible-footnote"
+            >
+              {t('othersCount', { count: nonAccessibleAttributions.length })} {t('othersPreserved')}
+            </p>
+          )}
+        </div>
+
+        {/* Note */}
+        <div className="mb-3">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            <span>{t('noteLabel')}</span>
+            <Textarea
+              value={state.note}
+              onChange={(e) => setState((s) => ({ ...s, note: e.target.value }))}
+              placeholder={t('notePlaceholder')}
+              rows={2}
+              maxLength={2000}
+              disabled={allInputsDisabled}
+              data-testid="form-note"
+              size="sm"
+              fullWidth={false}
+              className="mt-1"
+              wrapperClassName="contents"
+            />
+          </label>
+          {errors.note && (
+            <span className="mt-1 text-xs text-red-600" data-testid="form-error-note">
+              {errors.note}
+            </span>
+          )}
+        </div>
+
+        {/* Type */}
+        <div className="mb-4">
+          <TransactionTypeSelector
+            value={state.type}
+            onChange={(next) => setState((s) => ({ ...s, type: next }))}
+            disabled={allInputsDisabled}
+            planKindsEnabled={mode === 'create'}
+          />
+        </div>
+
+        {/* Type-change warning: RECURRING → ONE_TIME tears down the
+              schedule server-side (cascade audit). Surface the warning so
+              the user is not surprised when they hit Save. */}
+        {mode === 'edit' &&
+          effectiveTransaction?.type === 'RECURRING' &&
+          state.type !== 'RECURRING' && (
+            <div
+              className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+              role="alert"
+              data-testid="schedule-type-change-warning"
+            >
+              {tSchedule('typeChangeWarning')}
+            </div>
+          )}
+
+        {/* Schedule sub-form — only for type=RECURRING. State is owned
+              by the parent so toggling type preserves draft values. */}
+        {state.type === 'RECURRING' && (
+          <div className="mb-4">
+            <TransactionScheduleSubForm
+              state={scheduleState}
+              errors={scheduleErrors}
+              onChange={setScheduleState}
+              disabled={allInputsDisabled}
+            />
+          </div>
+        )}
+
+        {/* Plan sub-form (6.20) — create-only for INSTALLMENT / LOAN /
+              MORTGAGE; plan parents are read-only in edit mode. */}
+        {mode === 'create' && isPlanKind(state.type) && (
+          <div className="mb-4">
+            <TransactionPlanSubForm
+              state={planState}
+              errors={planErrors}
+              onChange={setPlanState}
+              disabled={allInputsDisabled}
+            />
+          </div>
+        )}
+
+        {showBanner && saveOp.error && (
+          <div className="mb-3" data-testid="form-api-error">
+            <InlineErrorBanner
+              reason={saveOp.error.reason}
+              httpStatus={saveOp.error.httpStatus}
+              message={t('errorGeneric', { message: saveOp.error.message ?? '' })}
+              onRetry={() => void saveOp.retry()}
+              retrying={isLoading}
+              data-testid="form-api-error-banner"
+            />
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            className="flex-1"
+            onClick={handleCancel}
+            data-testid="form-cancel"
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            className="flex-1"
+            disabled={isLoading || isGeneratedOccurrence}
+            aria-busy={isLoading}
+            data-testid="form-save"
+          >
+            {isLoading ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <ButtonSpinner />
+                <span>{t('saving')}</span>
+              </span>
+            ) : (
+              t('save')
+            )}
+          </Button>
+        </div>
+      </form>
+
+      {confirmDiscard && (
+        <div
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+          role="alert"
+          data-testid="form-discard-prompt"
+        >
+          <p className="mb-2">{t('discardChanges')}</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmDiscard(false)}
+              data-testid="form-discard-keep"
+            >
+              {t('keepEditing')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={onClose}
+              data-testid="form-discard-confirm"
+              className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+            >
+              {t('discard')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Phase 6 · 6.18.1.5 — propagation choice for RECURRING-parent edits
           with children. Non-period edits are non-destructive this iteration,
@@ -1474,6 +1452,6 @@ export function TransactionFormDialog({
         onConfirm={submitWithPropagation}
         onCancel={cancelPropagation}
       />
-    </div>
+    </Dialog>
   );
 }

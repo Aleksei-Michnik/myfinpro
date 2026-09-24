@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GroupTransactionsTab } from '@/components/group/GroupTransactionsTab';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -351,49 +352,42 @@ function GroupDashboardInner() {
       </section>
 
       {isLeaveDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="leave-group-dialog-title"
-          data-testid="group-dashboard-leave-dialog"
+        <Dialog
+          open
+          onClose={handleCloseLeaveDialog}
+          title={t('dashboard.leaveConfirmTitle', { name: group.name })}
+          titleId="leave-group-dialog-title"
+          testId="group-dashboard-leave-dialog"
+          busy={isLeaving}
         >
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-            <h2
-              id="leave-group-dialog-title"
-              className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100"
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            {t('dashboard.leaveConfirmMessage')}
+          </p>
+          <div className="mt-6 flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={handleCloseLeaveDialog}
+              disabled={isLeaving}
+              data-testid="group-dashboard-leave-cancel-btn"
             >
-              {t('dashboard.leaveConfirmTitle', { name: group.name })}
-            </h2>
-            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              {t('dashboard.leaveConfirmMessage')}
-            </p>
-            <div className="mt-6 flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                className="flex-1"
-                onClick={handleCloseLeaveDialog}
-                disabled={isLeaving}
-                data-testid="group-dashboard-leave-cancel-btn"
-              >
-                {t('dashboard.leaveCancelButton')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-                onClick={handleConfirmLeave}
-                disabled={isLeaving}
-                data-testid="group-dashboard-leave-confirm-btn"
-              >
-                {isLeaving ? '...' : t('dashboard.leaveConfirmButton')}
-              </Button>
-            </div>
+              {t('dashboard.leaveCancelButton')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
+              onClick={handleConfirmLeave}
+              disabled={isLeaving}
+              data-testid="group-dashboard-leave-confirm-btn"
+            >
+              {isLeaving ? '...' : t('dashboard.leaveConfirmButton')}
+            </Button>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

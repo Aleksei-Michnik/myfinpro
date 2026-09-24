@@ -19,6 +19,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Dialog } from '@/components/ui/Dialog';
 import {
   TRANSACTION_PROPAGATE_MODES,
   type TransactionPropagateMode,
@@ -52,116 +53,90 @@ export function PropagationChoiceDialog({
     if (open) setMode('self');
   }, [open]);
 
-  // ESC cancels (mirrors the other transaction dialogs).
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onCancel]);
-
   if (!open) return null;
 
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onCancel();
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="propagation-choice-title"
-      data-testid="propagation-choice-dialog"
-      onMouseDown={handleBackdrop}
-      aria-busy={pending || undefined}
+    <Dialog
+      open
+      onClose={onCancel}
+      title={t('title')}
+      titleId="propagation-choice-title"
+      testId="propagation-choice-dialog"
+      busy={pending}
+      stacked
     >
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3
-          id="propagation-choice-title"
-          className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100"
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">{t('description')}</p>
+
+      {destructive && (
+        <div
+          className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+          role="alert"
+          data-testid="propagation-destructive-warning"
         >
-          {t('title')}
-        </h3>
-
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">{t('description')}</p>
-
-        {destructive && (
-          <div
-            className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-            role="alert"
-            data-testid="propagation-destructive-warning"
-          >
-            {t('destructiveWarning')}
-          </div>
-        )}
-
-        <div className="mb-5 space-y-3" role="radiogroup" aria-label={t('title')}>
-          {TRANSACTION_PROPAGATE_MODES.map((m) => (
-            <label
-              key={m}
-              className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200"
-            >
-              <input
-                type="radio"
-                name="propagation-mode"
-                value={m}
-                checked={mode === m}
-                onChange={() => setMode(m)}
-                disabled={pending}
-                data-testid={`propagation-mode-${m}`}
-                className="mt-1"
-              />
-              <span>
-                <span className="block font-medium text-gray-900 dark:text-gray-100">
-                  {t(`mode.${m}.label`)}
-                </span>
-                <span className="block text-xs text-gray-500 dark:text-gray-400">
-                  {t(`mode.${m}.description`)}
-                </span>
-              </span>
-            </label>
-          ))}
+          {t('destructiveWarning')}
         </div>
+      )}
 
-        <div className="flex gap-3">
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            className="flex-1"
-            onClick={onCancel}
-            disabled={pending}
-            data-testid="propagation-cancel"
+      <div className="mb-5 space-y-3" role="radiogroup" aria-label={t('title')}>
+        {TRANSACTION_PROPAGATE_MODES.map((m) => (
+          <label
+            key={m}
+            className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200"
           >
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            className="flex-1"
-            onClick={() => onConfirm(mode)}
-            disabled={pending}
-            aria-busy={pending}
-            data-testid="propagation-confirm"
-          >
-            {pending ? (
-              <span className="inline-flex items-center justify-center gap-2">
-                <ButtonSpinner />
-                <span>{t('confirm')}</span>
+            <input
+              type="radio"
+              name="propagation-mode"
+              value={m}
+              checked={mode === m}
+              onChange={() => setMode(m)}
+              disabled={pending}
+              data-testid={`propagation-mode-${m}`}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium text-gray-900 dark:text-gray-100">
+                {t(`mode.${m}.label`)}
               </span>
-            ) : (
-              t('confirm')
-            )}
-          </Button>
-        </div>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">
+                {t(`mode.${m}.description`)}
+              </span>
+            </span>
+          </label>
+        ))}
       </div>
-    </div>
+
+      <div className="flex gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          className="flex-1"
+          onClick={onCancel}
+          disabled={pending}
+          data-testid="propagation-cancel"
+        >
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          size="md"
+          className="flex-1"
+          onClick={() => onConfirm(mode)}
+          disabled={pending}
+          aria-busy={pending}
+          data-testid="propagation-confirm"
+        >
+          {pending ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <ButtonSpinner />
+              <span>{t('confirm')}</span>
+            </span>
+          ) : (
+            t('confirm')
+          )}
+        </Button>
+      </div>
+    </Dialog>
   );
 }
