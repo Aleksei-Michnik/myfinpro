@@ -240,34 +240,70 @@ curl -sf https://<production domain>/api/v1/health | jq .
 `backup.sh` applies the daily/weekly sweep after every successful dump; a file that fits neither
 tier is deleted. Pre-deploy dumps are named differently and never touched by that sweep.
 
-## Off-box copies — the owner's decision
+## Off-box copies
 
-Everything above lives on the same disk as the database. A host loss loses the backups too. The
-dumps contain **personal financial data** (transactions, receipts, e-mail addresses), so any copy
-off the server needs the same care as the database itself: encryption at rest, a destination the
-owner controls, and a documented deletion path. Options, none implemented:
+Everything above lives on the same disk as the database, so a host loss would lose the backups
+too. Decision (2026-09-25): the newest **production** backup is copied off the server on every
+scheduled run, encrypted, into a private GitHub repository named `<repository>-backups` (the
+store). Staging is a copy of the same data and is not copied.
 
-| Option                                           | Notes                                                                                                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Object storage (S3-compatible, Backblaze B2, R2) | cheapest and simplest; encrypt before upload (`age`, `gpg`) or use a bucket with SSE; needs a write-only credential as a GitHub secret                 |
-| The workflow uploads the dump as a run artifact  | no new infrastructure, but the artifact is stored by GitHub (public repository, private artifacts still leave the owner's control); 90-day default TTL |
-| `rsync`/`scp` to a second machine the owner runs | full control; needs a reachable host and a key, and the same retention logic there                                                                     |
-| Provider-level snapshots of the server disk      | one click at the hosting provider; whole-disk, not per-database; restore granularity is the whole server                                               |
+**How it works** ([`scripts/backup-copy.sh`](../scripts/backup-copy.sh), last step of the
+production job in `backup.yml`):
+
+1. The runner fetches the newest `myfinpro_*.sql.gz` from the server over SSH and gzip-tests it.
+2. It encrypts the file with [age](https://age-encryption.org) to the owner's public recipient
+   (`BACKUP_AGE_RECIPIENT`, a repository variable). The plaintext is deleted right after; the
+   identity that decrypts never reaches the workflow or the server.
+3. It clones the store with a write-only deploy key (`BACKUP_STORE_SSH_KEY`), adds the file as
+   `production/<name>.sql.gz.age`, keeps the 14 newest, and force-pushes a **single snapshot
+   commit**, so the store never accumulates history and stays the size of the files it keeps.
+
+The dumps contain personal financial data. The encryption is what makes the store safe to hold
+them: a leaked clone or an accidentally public repository yields nothing without the identity.
+Without the variable and the secret the step prints "not configured" and the run stays green.
+The weekly CI drill (`backup-verify.yml`) proves the round trip with a throwaway key: encrypt,
+publish to a local bare store, decrypt, compare byte for byte, then prune with `STORE_KEEP=1`.
+
+**Owner setup** (once; the store repository already exists):
+
+```bash
+# 1. The encryption identity: keep it in your password manager. It is the only way to read the copies.
+age-keygen -o backup-age-identity.txt
+age-keygen -y backup-age-identity.txt | gh variable set BACKUP_AGE_RECIPIENT -R <owner>/<repository>
+
+# 2. A deploy key that may push to the store; the private half becomes a secret of this repository.
+ssh-keygen -t ed25519 -N '' -C backup-store -f backup-store-key
+gh api -X POST repos/<owner>/<repository>-backups/keys -f title=backup-workflow -F read_only=false -f key="$(cat backup-store-key.pub)"
+gh secret set BACKUP_STORE_SSH_KEY -R <owner>/<repository> < backup-store-key
+shred -u backup-store-key backup-store-key.pub
+
+# 3. Confirm with a run (once backup.yml is on the default branch).
+gh workflow run backup.yml && gh run watch $(gh run list --workflow=backup.yml --limit=1 --json databaseId --jq '.[0].databaseId')
+```
+
+**Restore from the store** (server lost, or the on-server files unusable):
+
+```bash
+git clone git@github.com:<owner>/<repository>-backups.git && cd <repository>-backups
+age -d -i backup-age-identity.txt -o myfinpro_<date>_<time>.sql.gz production/myfinpro_<date>_<time>.sql.gz.age
+# then, on the (new) server, the usual procedure: scripts/restore.sh <file> production
+```
 
 ## Configuration Reference
 
 Everything is a script argument or an environment variable; there is no configuration file.
 
-| Variable                                                   | Default                 | Description                                                      |
-| ---------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `BACKUP_ROOT`                                              | `/opt/myfinpro/backups` | parent of the per-environment directories                        |
-| `BACKUP_DIR`                                               | `$BACKUP_ROOT/<env>`    | overrides the directory (`--output-dir` / `--backup-dir`)        |
-| `BACKUP_RETENTION_DAILY`                                   | `7`                     | daily backups to retain                                          |
-| `BACKUP_RETENTION_WEEKLY`                                  | `4`                     | weekly backups to retain                                         |
-| `BACKUP_MAX_AGE_HOURS`                                     | `26`                    | age threshold                                                    |
-| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE` | —                       | direct-connection mode only                                      |
-| `MYSQL_PASSWORD`                                           | —                       | direct-connection mode only; handed to the client as `MYSQL_PWD` |
-| `ALERT_WEBHOOK_URL`                                        | —                       | optional webhook for `check-backup-age.sh`                       |
+| Variable                                                                                         | Default                 | Description                                                                          |
+| ------------------------------------------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------ |
+| `BACKUP_ROOT`                                                                                    | `/opt/myfinpro/backups` | parent of the per-environment directories                                            |
+| `BACKUP_DIR`                                                                                     | `$BACKUP_ROOT/<env>`    | overrides the directory (`--output-dir` / `--backup-dir`)                            |
+| `BACKUP_RETENTION_DAILY`                                                                         | `7`                     | daily backups to retain                                                              |
+| `BACKUP_RETENTION_WEEKLY`                                                                        | `4`                     | weekly backups to retain                                                             |
+| `BACKUP_MAX_AGE_HOURS`                                                                           | `26`                    | age threshold                                                                        |
+| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_DATABASE`                                       | —                       | direct-connection mode only                                                          |
+| `MYSQL_PASSWORD`                                                                                 | —                       | direct-connection mode only; handed to the client as `MYSQL_PWD`                     |
+| `ALERT_WEBHOOK_URL`                                                                              | —                       | optional webhook for `check-backup-age.sh`                                           |
+| `AGE_RECIPIENT`, `STORE_URL`, `STORE_SSH_KEY_FILE`, `STORE_KEEP` (14), `SOURCE_FILE`, `SERVER_*` | —                       | inputs of `backup-copy.sh`; the workflow sets them from the variable and the secrets |
 
 ## Script Reference
 
@@ -278,3 +314,4 @@ Everything is a script argument or an environment variable; there is no configur
 | [`scripts/verify-backup.sh`](../scripts/verify-backup.sh)       | existence, age, integrity, restore drill                   |
 | [`scripts/check-backup-age.sh`](../scripts/check-backup-age.sh) | age gate (the alert)                                       |
 | [`scripts/restore.sh`](../scripts/restore.sh)                   | restore a dump into a database                             |
+| [`scripts/backup-copy.sh`](../scripts/backup-copy.sh)           | encrypt the newest backup and publish it to the store      |

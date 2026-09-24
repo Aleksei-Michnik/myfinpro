@@ -65,7 +65,7 @@ Shared names to keep aligned: agents `architect`, `orchestrator`, `ui-designer`,
 ## Open items that touch this repo
 
 1. Mdock adoption: PR #51 (`feat/mdock` → `develop`, opt-in overlay `docker-compose.mdock.yml`, `MDOCK_DEV_ORIGINS` for Next dev origins, a "Local development" section in `docs/deployment.md`) is open and mergeable as of 2026-09-24 — owner's review.
-2. Production backups: closed 2026-09-25 — `backup.yml` (daily, in-container dump, age gate) and a pre-deploy dump step in `deploy-production.yml`; the infra runbook §5/§7 still describes the gap and needs updating on the infra side.
+2. Production backups: closed 2026-09-25 — `backup.yml` (daily, in-container dump, age gate, and an encrypted off-box copy into the private `<repository>-backups` store once the owner sets the variable and the secret) and a pre-deploy dump step in `deploy-production.yml`; the infra runbook §5/§7 still describes the gap and needs updating on the infra side.
 3. Production workflow → dispatch-only with confirmed ref (owner decision; `devops`).
 4. `deploy.sh`/`rollback.sh` pipefail verification check.
 5. Infra Phase 5 (edge ownership, resolver fix, shared relay) — after the WordPress cutover; not ours to start.
