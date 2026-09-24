@@ -307,7 +307,10 @@ model Category {
   name      String   @db.VarChar(100)
   icon      String?  @db.VarChar(32)
   color     String?  @db.VarChar(16)
-  direction String   @db.VarChar(3)
+  // IN | OUT | BOTH — widened from VarChar(3) in Phase 20.2: 'BOTH' has been a
+  // legal CategoryDirection since Phase 6, but no seeded or user category used
+  // it until the `transfer` system category, and the column could not hold it.
+  direction String   @db.VarChar(4)
   ownerType String   @map("owner_type") @db.VarChar(10)
   ownerId   String?  @map("owner_id") @db.VarChar(36)
   isSystem  Boolean  @default(false) @map("is_system")
