@@ -223,6 +223,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      # A slot rollback does not roll the database back, and `prisma migrate deploy` runs in
+      # the new slot before traffic switches. Dump first, so a release that changed the schema
+      # has something to restore (docs/backup.md "Disaster Recovery Procedure"). The dump runs
+      # inside the MySQL container with the container's own environment — the single quotes
+      # keep $MYSQL_ROOT_PASSWORD from expanding anywhere but there — so this step needs only
+      # the SSH secrets. Skips cleanly on a first deploy (no container yet).
+      - name: Back up the production database
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            BACKUP_DIR=/opt/myfinpro/backups/production
+            STAMP=$(date -u +%Y%m%d-%H%M%S)
+            mkdir -p "$BACKUP_DIR"
+
+            if ! docker ps --format '{{.Names}}' | grep -qx myfinpro-prod-mysql; then
+              echo "No production database container yet — first deploy, nothing to back up."
+              exit 0
+            fi
+
+            FILE="$BACKUP_DIR/pre-deploy-$STAMP.sql.gz"
+            docker exec myfinpro-prod-mysql sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --no-tablespaces --routines --triggers "$MYSQL_DATABASE"' \
+              2> >(grep -v 'Using a password on the command line' >&2 || true) \
+              | gzip > "$FILE"
+            gunzip -t "$FILE"
+            echo "Pre-deploy dump: $FILE ($(du -h "$FILE" | cut -f1))"
+
+            # Keep the five newest pre-deploy dumps; the scheduled backups have their own retention.
+            ls -t "$BACKUP_DIR"/pre-deploy-*.sql.gz | tail -n +6 | xargs -r rm -f
+            ls -lh "$BACKUP_DIR"
+
       - name: Copy deployment files to production server
         uses: appleboy/scp-action@v0.1.7
         with:
