@@ -53,6 +53,11 @@ Every scheduled run, per environment:
 The scripts are copied to `/opt/myfinpro/backups/scripts/` by the workflow on every run, so the
 server always executes the version on the branch the run was started from.
 
+> GitHub registers a `workflow_dispatch` workflow only once its file is on the default branch
+> (`main`), and the schedule runs from `main` too. Until the next release lands there, run the
+> same steps by hand on the server (next section). The first such run, 2026-09-25, dumped and
+> drilled both environments (31 tables each, ~18 k rows).
+
 ## Running a backup by hand
 
 From the repository, with the GitHub CLI:
