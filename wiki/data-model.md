@@ -142,5 +142,5 @@ categories. Deploys run `migrate deploy` but **not** `db:seed`, so `SystemCatego
 API boot; it is skipped when `NODE_ENV=test` and swallows its own errors so a seed failure can never
 break boot. The seeder uses `findFirst` + `create`/`update` rather than `upsert` because `ownerId` is
 NULL for system rows and MySQL upserts on a composite unique with a NULL member are unreliable.
-Its docblock says "the 22 defaults"; `DEFAULT_CATEGORIES` in `packages/shared` now holds **25**
-(18 OUT + 7 IN), as `transaction/__tests__/seed-system-categories.spec.ts` asserts — stale comment.
+`DEFAULT_CATEGORIES` in `packages/shared` holds **26** (18 OUT + 7 IN + 1 BOTH — the Phase 20
+`transfer` category), as `transaction/__tests__/seed-system-categories.spec.ts` asserts.

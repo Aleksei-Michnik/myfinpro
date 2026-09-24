@@ -6,7 +6,7 @@ import { seedSystemCategories } from './seed-system-categories';
  * Ensures the system-owned default categories exist on every API boot.
  *
  * The deploy script only runs `prisma migrate deploy`, not `prisma db seed`,
- * so this module-init hook is the sole guarantee that the 22 defaults are
+ * so this module-init hook is the sole guarantee that the 26 defaults are
  * present on staging and production. It is fully idempotent (upsert by
  * slug+direction under owner_type='system').
  *

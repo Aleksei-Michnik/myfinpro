@@ -59,8 +59,19 @@ export const DEFAULT_IN_CATEGORIES: readonly DefaultCategoryDef[] = [
   { slug: 'other_in', name: 'Other', direction: 'IN', icon: 'more-horizontal' },
 ] as const;
 
+/**
+ * Direction-agnostic defaults (Phase 20 §2.4). `transfer` is the primary
+ * category of every transfer row — money moving between two of the user's own
+ * accounts, which is spending in neither direction and is excluded from every
+ * spend total by `transfer_account_id IS NULL`.
+ */
+export const DEFAULT_BOTH_CATEGORIES: readonly DefaultCategoryDef[] = [
+  { slug: 'transfer', name: 'Transfer', direction: 'BOTH', icon: 'arrow-right-left' },
+] as const;
+
 /** Flat list of every system category seeded on deploy. */
 export const DEFAULT_CATEGORIES: readonly DefaultCategoryDef[] = [
   ...DEFAULT_OUT_CATEGORIES,
   ...DEFAULT_IN_CATEGORIES,
+  ...DEFAULT_BOTH_CATEGORIES,
 ] as const;
