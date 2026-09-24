@@ -15,9 +15,16 @@ RUN pnpm install --frozen-lockfile
 # ───── Development Stage ─────
 FROM dependencies AS development
 COPY . .
+# The generated Prisma client lives in the root node_modules, which is an anonymous volume at
+# run time (the bind mounts replace apps/api and packages, not node_modules): generate it here
+# or the watcher starts with hundreds of "@prisma/client has no exported member" errors.
+RUN pnpm --filter api exec prisma generate
 WORKDIR /app/apps/api
 EXPOSE 3001
-CMD ["pnpm", "run", "start:dev"]
+# Two host artefacts arrive through the bind mounts and break a fresh container: a stale
+# tsconfig.build.tsbuildinfo makes Nest emit only declarations after it empties dist (then
+# "Cannot find module dist/main"), and a missing packages/shared/dist breaks @myfinpro/shared.
+CMD ["sh", "-c", "rm -f tsconfig.build.tsbuildinfo tsconfig.tsbuildinfo /app/packages/shared/tsconfig.tsbuildinfo && { [ -f /app/packages/shared/dist/index.js ] || pnpm --filter shared run build; } && exec pnpm run start:dev"]
 
 # ───── Build Stage ─────
 FROM dependencies AS build
