@@ -72,6 +72,8 @@ Expand-then-contract only (`IMPLEMENTATION-PLAN.md` §8.3): additive migration f
 
 `scripts/backup.sh` (mysqldump | gzip → `/var/backups/myfinpro`), retention 7 daily + 4 weekly, config from `infrastructure/backup/backup.env` (gitignored; `backup.env.example` lists the names). `infrastructure/backup/crontab` installs an **hourly** backup and a 6-hourly age check (`--max-age 2`); `docs/backup.md` still describes a 2:00 AM daily job and a 26 h threshold — the crontab wins. `backup-verify.yml` re-runs backup → restore → integrity weekly in CI. Restore procedure: `docs/backup.md` "Disaster Recovery Procedure" (stop app slots → `scripts/restore.sh` → verify → start).
 
+**Status reported 2026-09-24 by the infra session (server-side facts, _unverified from this repo_):** no crontab is installed for the deploy user or root, the production and staging backup directories are empty apart from July's pre-MySQL-9.7 dumps, and `deploy-production.yml` has no pre-deploy dump step (that part is verifiable here: the workflow has none). Until this is fixed, treat every production deploy as running without a fresh backup; details in the infra repo's deploy runbook §5 and §7.
+
 ## Secrets
 
 GitHub Actions secrets are the only source; the workflow exports them into the SSH session and compose reads them from the shell. No `.env` is written on a server — except the DKIM private key, which both deploy workflows write to `infrastructure/haraka/dkim-keys/private` (mode 600) on the host. Names referenced by workflows:
