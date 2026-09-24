@@ -40,10 +40,11 @@ flowchart LR
 | `deploy-staging.yml`    | push `develop`, dispatch                                | `ci-check` (polls CI for the same sha) → `build-and-push` → `deploy` (environment `staging`), rollback step `if: failure()`                                                                                         |
 | `test-staging.yml`      | `workflow_run` of Deploy Staging on `develop`, dispatch | API integration (4 suites), Playwright E2E, summary                                                                                                                                                                 |
 | `deploy-production.yml` | push `main`, dispatch                                   | `validate` (confirm text) → `ci-check` → `staging-tests-check` (latest `test-staging` run must be `success` and < 24 h old) → `build-and-push` → `deploy` (environment `production`), rollback step `if: failure()` |
-| `backup-verify.yml`     | cron Sun 03:00 UTC, dispatch                            | backup → restore → integrity checks against a `mysql:9.7` service                                                                                                                                                   |
+| `backup.yml`            | cron daily 02:17 UTC, dispatch (`drill`)                | per environment: scp backup scripts → `backup.sh` → `verify-backup.sh` (restore drill on Sundays) → `check-backup-age.sh --max-age 26`; SSH secrets only                                                            |
+| `backup-verify.yml`     | cron Sun 03:00 UTC, dispatch                            | backup → verify with restore drill → restore → integrity checks against a `mysql:9.7` service                                                                                                                       |
 | `infra-maintenance.yml` | dispatch, `workflow_call`                               | server prune; Cloudflare DNS record upsert                                                                                                                                                                          |
 
-Pinned actions: `actions/checkout@v6` (`@v4` in `backup-verify.yml`), `actions/setup-node@v6`, `pnpm/action-setup@v5`, `actions/upload-artifact@v7`, `actions/github-script@v8`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`, `docker/build-push-action@v7`, `appleboy/scp-action@v0.1.7`, `appleboy/ssh-action@v1.2.2`, `amannn/action-semantic-pull-request@v6`, `tj-actions/changed-files@v47`.
+Pinned actions: `actions/checkout@v6`, `actions/setup-node@v6`, `pnpm/action-setup@v5`, `actions/upload-artifact@v7`, `actions/github-script@v8`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`, `docker/build-push-action@v7`, `appleboy/scp-action@v0.1.7`, `appleboy/ssh-action@v1.2.2`, `amannn/action-semantic-pull-request@v6`, `tj-actions/changed-files@v47`.
 
 ## Blue/green mechanics (`scripts/deploy.sh <env> <tag>`)
 
@@ -70,9 +71,7 @@ Expand-then-contract only (`IMPLEMENTATION-PLAN.md` §8.3): additive migration f
 
 ## Backups
 
-`scripts/backup.sh` (mysqldump | gzip → `/var/backups/myfinpro`), retention 7 daily + 4 weekly, config from `infrastructure/backup/backup.env` (gitignored; `backup.env.example` lists the names). `infrastructure/backup/crontab` installs an **hourly** backup and a 6-hourly age check (`--max-age 2`); `docs/backup.md` still describes a 2:00 AM daily job and a 26 h threshold — the crontab wins. `backup-verify.yml` re-runs backup → restore → integrity weekly in CI. Restore procedure: `docs/backup.md` "Disaster Recovery Procedure" (stop app slots → `scripts/restore.sh` → verify → start).
-
-**Status reported 2026-09-24 by the infra session (server-side facts, _unverified from this repo_):** no crontab is installed for the deploy user or root, the production and staging backup directories are empty apart from July's pre-MySQL-9.7 dumps, and `deploy-production.yml` has no pre-deploy dump step (that part is verifiable here: the workflow has none). Until this is fixed, treat every production deploy as running without a fresh backup; details in the infra repo's deploy runbook §5 and §7.
+Scheduled by `.github/workflows/backup.yml` (daily 02:17 UTC + dispatch, `drill` input): per environment it copies `scripts/backup*.sh`, `verify-backup.sh`, `check-backup-age.sh` and `restore.sh` to `/opt/myfinpro/backups/scripts/` and runs `backup.sh <env>` → `verify-backup.sh <env> [--test-restore on Sundays]` → `check-backup-age.sh <env> --max-age 26`. The dump runs **inside the environment's MySQL container** (`docker exec … sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" … "$MYSQL_DATABASE"'`), so the workflow holds only the SSH secrets and nothing credential-shaped exists on the server. Files: `/opt/myfinpro/backups/<env>/myfinpro_<date>_<time>.sql.gz`, retention 7 daily + 4 weekly. The age check runs last: a stale or missing backup fails the run, and the failed scheduled run is the alert. `deploy-production.yml` additionally dumps production to `pre-deploy-<stamp>.sql.gz` (five kept) before touching the server. `backup-verify.yml` is the CI drill of the same scripts against a throwaway `mysql:9.7` service. Restore: `docs/backup.md` "Disaster Recovery Procedure" (stop the active slot's api/web → `restore.sh <file> <env>` → verify → start). Off-box copies are not implemented — owner's decision, options and the personal-data caveat in `docs/backup.md`.
 
 ## Secrets
 
@@ -97,17 +96,18 @@ Each app signs DKIM itself in `apps/api/src/mail/mail.service.ts` (Nodemailer `d
 
 ## Scripts
 
-| Script                              | Does                                                                           | Needs                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `deploy.sh <env> <tag>`             | blue/green deploy, migrate, switch edge, verify, cleanup                       | all app env vars exported; networks + infra + edge up |
-| `rollback.sh <env>`                 | switch back to the previous slot/image                                         | `.deploy-metadata`, same env vars                     |
-| `cleanup-images.sh <env>`           | prune images/build cache, keep N and N-1                                       | `.deploy-metadata`                                    |
-| `backup.sh [--docker]`              | gzipped mysqldump + retention sweep                                            | `backup.env` or MYSQL\_\* env                         |
-| `verify-backup.sh [--test-restore]` | existence, age, gzip/SQL integrity, optional restore                           | backup dir, MySQL access                              |
-| `check-backup-age.sh --max-age <h>` | alert (optional webhook) when the newest dump is too old                       | `BACKUP_DIR`, `ALERT_WEBHOOK_URL`                     |
-| `restore.sh <file>`                 | restore a dump into a database (`--force` skips the prompt)                    | dump file, MySQL access                               |
-| `seed.sh`                           | `prisma db seed` via the api package                                           | local DB up                                           |
-| `dev.sh`                            | create missing `.env` files, start mysql+redis, migrate, seed, run dev servers | docker, pnpm                                          |
+| Script                                    | Does                                                                           | Needs                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `deploy.sh <env> <tag>`                   | blue/green deploy, migrate, switch edge, verify, cleanup                       | all app env vars exported; networks + infra + edge up |
+| `rollback.sh <env>`                       | switch back to the previous slot/image                                         | `.deploy-metadata`, same env vars                     |
+| `cleanup-images.sh <env>`                 | prune images/build cache, keep N and N-1                                       | `.deploy-metadata`                                    |
+| `backup.sh <env>`                         | gzipped mysqldump inside the env's MySQL container + retention sweep           | `docker`; or `--host …` with `MYSQL_PASSWORD` (CI)    |
+| `verify-backup.sh <env> [--test-restore]` | existence, age, gzip integrity, restore drill into `<db>_verify`               | backup dir, the container                             |
+| `check-backup-age.sh <env> --max-age <h>` | exit 1 (optional webhook) when the newest dump is too old                      | `BACKUP_ROOT`, `ALERT_WEBHOOK_URL`                    |
+| `restore.sh <file> <env> [--force]`       | restore a dump inside the env's MySQL container                                | `docker`                                              |
+| `restore.sh <file>`                       | restore a dump into a database (`--force` skips the prompt)                    | dump file, MySQL access                               |
+| `seed.sh`                                 | `prisma db seed` via the api package                                           | local DB up                                           |
+| `dev.sh`                                  | create missing `.env` files, start mysql+redis, migrate, seed, run dev servers | docker, pnpm                                          |
 
 ## Never
 

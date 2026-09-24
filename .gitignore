@@ -52,10 +52,6 @@ lerna-debug.log*
 # ── Docker ──
 docker-compose.override.yml
 
-# ── Backups ──
-infrastructure/backup/backup.env
-!infrastructure/backup/backup.env.example
-
 # ── DKIM private keys (deployed via GitHub Secrets) ──
 infrastructure/haraka/dkim-keys/private
 

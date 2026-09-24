@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Make scripts executable
         run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
@@ -262,11 +262,18 @@ jobs:
 
           echo "backup_file=$BACKUP_FILE" >> "$GITHUB_ENV"
 
-      - name: Run verify-backup script
+      - name: Run verify-backup script with the restore drill
         run: |
           ./scripts/verify-backup.sh \
             --backup-dir /tmp/myfinpro-backups \
-            --max-age-hours 1
+            --max-age-hours 1 \
+            --test-restore \
+            --host 127.0.0.1 \
+            --port 3306 \
+            --user root \
+            --database "$MYSQL_DATABASE"
+        env:
+          MYSQL_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
 
       - name: Drop original database for restore test
         run: |
@@ -345,7 +352,7 @@ jobs:
 
       - name: Test backup age check script (should fail with low threshold)
         run: |
-          # This should exit 1 because we set max-age to 0 hours
+          # Exits 1 because the age is compared in seconds against a 0-hour threshold
           if ./scripts/check-backup-age.sh --backup-dir /tmp/myfinpro-backups --max-age 0; then
             echo "::error::Expected check-backup-age to fail with 0-hour threshold"
             exit 1
