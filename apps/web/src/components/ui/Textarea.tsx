@@ -1,9 +1,9 @@
 'use client';
 
-// THE text input. Control classes come from `input-styles.ts`, shared with
-// <Select> and <Textarea> since 20.1.
+// Phase 20 · Iteration 20.1 — THE textarea. Same contract as <Input>; control
+// classes shared through `input-styles.ts`.
 
-import { forwardRef, type InputHTMLAttributes } from 'react';
+import { forwardRef, type TextareaHTMLAttributes } from 'react';
 import {
   controlClass,
   controlErrorClass,
@@ -11,9 +11,7 @@ import {
   type ControlSize,
 } from './input-styles';
 
-// `size` is redefined: the native numeric `size` attribute is not used
-// anywhere in this app, the control size is.
-export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
   /** `md` (default) for standalone forms, `sm` for dense editing surfaces. */
@@ -22,7 +20,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   wrapperClassName?: string;
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   (
     {
       label,
@@ -36,24 +34,28 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref,
   ) => {
-    const inputId = id || props.name;
+    const textareaId = id || props.name;
     return (
       <div className={wrapperClassName || (fullWidth ? 'w-full' : undefined)}>
         {label && (
-          <label htmlFor={inputId} className={controlLabelClass}>
+          <label htmlFor={textareaId} className={controlLabelClass}>
             {label}
           </label>
         )}
-        <input
+        <textarea
           ref={ref}
-          id={inputId}
+          id={textareaId}
           className={controlClass({ size, error: !!error, fullWidth, className })}
-          aria-invalid={error ? 'true' : 'false'}
-          aria-describedby={error ? `${inputId}-error` : undefined}
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={error && textareaId ? `${textareaId}-error` : undefined}
           {...props}
         />
         {error && (
-          <p id={`${inputId}-error`} className={controlErrorClass} role="alert">
+          <p
+            id={textareaId ? `${textareaId}-error` : undefined}
+            className={controlErrorClass}
+            role="alert"
+          >
             {error}
           </p>
         )}
@@ -61,4 +63,4 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     );
   },
 );
-Input.displayName = 'Input';
+Textarea.displayName = 'Textarea';

@@ -28,6 +28,9 @@
     }
   },
   "ui": {
+    "dialog": {
+      "close": "Close"
+    },
     "loading": {
       "pageProgressLabel": "Loading",
       "overlayDefault": "Loading…",
