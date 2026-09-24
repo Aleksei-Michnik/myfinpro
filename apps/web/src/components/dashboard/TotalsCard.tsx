@@ -9,6 +9,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { computeMonthRange } from './date-range';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/lib/auth/auth-context';
 import { formatAmount } from '@/lib/transaction/formatters';
 import { useTransactions } from '@/lib/transaction/transaction-context';
@@ -110,8 +111,10 @@ export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
   }, [rows, user?.defaultCurrency]);
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
+      padding="sm"
+      className="shadow-sm"
       data-testid="totals-card"
       aria-labelledby="totals-card-title"
     >
@@ -214,6 +217,6 @@ export function TotalsCard({ fromIso, toIso, transactions }: TotalsCardProps) {
           })}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

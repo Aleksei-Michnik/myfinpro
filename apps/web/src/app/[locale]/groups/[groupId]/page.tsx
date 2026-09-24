@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GroupTransactionsTab } from '@/components/group/GroupTransactionsTab';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -131,10 +132,7 @@ function GroupDashboardInner() {
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-dashboard-loading"
-        >
+        <Card padding="lg" data-testid="group-dashboard-loading">
           <div className="mb-4 h-8 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-2 h-4 w-1/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-6 h-4 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
@@ -144,7 +142,7 @@ function GroupDashboardInner() {
             ))}
           </div>
           <p className="sr-only">{t('dashboard.loading')}</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -152,10 +150,7 @@ function GroupDashboardInner() {
   if (hasError || !group) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-dashboard-error"
-        >
+        <Card padding="lg" data-testid="group-dashboard-error">
           <h1
             className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100"
             data-testid="group-dashboard-error-title"
@@ -171,7 +166,7 @@ function GroupDashboardInner() {
           >
             {t('dashboard.backToGroups')}
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -181,10 +176,7 @@ function GroupDashboardInner() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       {/* Header */}
-      <div
-        className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-header"
-      >
+      <Card padding="lg" className="mb-6" data-testid="group-dashboard-header">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1
@@ -228,13 +220,10 @@ function GroupDashboardInner() {
             </button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Overview */}
-      <section
-        className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-overview"
-      >
+      <Card as="section" padding="lg" className="mb-6" data-testid="group-dashboard-overview">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('dashboard.overviewTitle')}
         </h2>
@@ -260,7 +249,7 @@ function GroupDashboardInner() {
             {t('dashboard.overviewPlaceholder')}
           </p>
         </div>
-      </section>
+      </Card>
 
       {/* Transactions */}
       <div className="mb-6">
@@ -268,10 +257,7 @@ function GroupDashboardInner() {
       </div>
 
       {/* Members */}
-      <section
-        className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-members"
-      >
+      <Card as="section" padding="lg" data-testid="group-dashboard-members">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('dashboard.membersTitle')}{' '}
           <span
@@ -349,7 +335,7 @@ function GroupDashboardInner() {
             );
           })}
         </ul>
-      </section>
+      </Card>
 
       {isLeaveDialogOpen && (
         <Dialog

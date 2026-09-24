@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { InviteLink } from '@/components/group/InviteLink';
 import { MemberManagement } from '@/components/group/MemberManagement';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -138,10 +139,7 @@ function GroupSettingsInner() {
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-3xl px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-settings-loading"
-        >
+        <Card padding="lg" data-testid="group-settings-loading">
           <div className="mb-4 h-8 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="space-y-3">
             <div className="h-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
@@ -149,7 +147,7 @@ function GroupSettingsInner() {
             <div className="h-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           </div>
           <p className="sr-only">{t('loading')}</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -157,10 +155,7 @@ function GroupSettingsInner() {
   if (hasError || !group) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-settings-error"
-        >
+        <Card padding="lg" data-testid="group-settings-error">
           <h1 className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
             {tGroups('dashboard.notFound')}
           </h1>
@@ -173,7 +168,7 @@ function GroupSettingsInner() {
           >
             {t('backToGroups')}
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -210,10 +205,7 @@ function GroupSettingsInner() {
       </h1>
 
       {/* Group Info */}
-      <section
-        className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-settings-info"
-      >
+      <Card as="section" padding="lg" className="mb-8" data-testid="group-settings-info">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('info.title')}
         </h2>
@@ -285,24 +277,18 @@ function GroupSettingsInner() {
             {isSaving ? t('info.saving') : t('info.saveButton')}
           </Button>
         </form>
-      </section>
+      </Card>
 
       {/* Invite */}
-      <section
-        className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-settings-invite-section"
-      >
+      <Card as="section" padding="lg" className="mb-8" data-testid="group-settings-invite-section">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('invite.title')}
         </h2>
         <InviteLink groupId={group.id} />
-      </section>
+      </Card>
 
       {/* Members */}
-      <section
-        className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-settings-members-section"
-      >
+      <Card as="section" padding="lg" className="mb-8" data-testid="group-settings-members-section">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('members.title', { count: group.members.length })}
         </h2>
@@ -311,7 +297,7 @@ function GroupSettingsInner() {
           currentUserId={user?.id ?? ''}
           onChanged={handleRefreshGroup}
         />
-      </section>
+      </Card>
 
       {/* Danger Zone */}
       <section

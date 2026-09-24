@@ -16,11 +16,31 @@ const PADDING: Record<CardPadding, string> = {
   lg: 'p-6',
 };
 
-export interface CardProps extends HTMLAttributes<HTMLElement> {
-  as?: ElementType;
+export interface CardClassOptions {
   padding?: CardPadding;
   /** Page-background surface instead of the raised one (nested blocks). */
   muted?: boolean;
+  className?: string;
+}
+
+/** The shell as a class string — for the few elements `<Card>` cannot be
+ * (`<details>`, a `<Link>`). Everything else uses the component. */
+export function cardClass({
+  padding = 'md',
+  muted = false,
+  className = '',
+}: CardClassOptions = {}) {
+  return cx(
+    'rounded-lg',
+    borderClass,
+    muted ? 'bg-gray-50 dark:bg-gray-900/40' : surfaceClass,
+    PADDING[padding],
+    className,
+  );
+}
+
+export interface CardProps extends HTMLAttributes<HTMLElement>, CardClassOptions {
+  as?: ElementType;
   ref?: Ref<HTMLElement>;
   children?: ReactNode;
 }
@@ -35,16 +55,7 @@ export function Card({
 }: CardProps) {
   const Tag = (as ?? 'div') as ElementType;
   return (
-    <Tag
-      className={cx(
-        'rounded-lg',
-        borderClass,
-        muted ? 'bg-gray-50 dark:bg-gray-900/40' : surfaceClass,
-        PADDING[padding],
-        className,
-      )}
-      {...props}
-    >
+    <Tag className={cardClass({ padding, muted, className })} {...props}>
       {children}
     </Tag>
   );

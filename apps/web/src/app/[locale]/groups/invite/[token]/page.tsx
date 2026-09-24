@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -110,10 +111,7 @@ function InvitePageInner() {
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="invite-loading"
-        >
+        <Card padding="lg" data-testid="invite-loading">
           <div className="mb-4 h-6 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-2 h-8 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-6 h-4 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
@@ -122,7 +120,7 @@ function InvitePageInner() {
             <div className="h-10 flex-1 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           </div>
           <p className="sr-only">{t('invite.loading')}</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -130,10 +128,7 @@ function InvitePageInner() {
   if (errorKind) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="invite-error"
-        >
+        <Card padding="lg" data-testid="invite-error">
           <h1
             className="mb-2 text-xl font-semibold text-gray-900 dark:text-gray-100"
             data-testid="invite-error-title"
@@ -155,7 +150,7 @@ function InvitePageInner() {
           >
             {t('invite.goToGroups')}
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -171,10 +166,7 @@ function InvitePageInner() {
 
   return (
     <div className="container mx-auto max-w-lg px-4 py-8">
-      <div
-        className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="invite-card"
-      >
+      <Card padding="lg" data-testid="invite-card">
         <h1 className="mb-4 text-lg font-medium text-gray-600 dark:text-gray-400">
           {t('invite.joinMessage')}
         </h1>
@@ -222,7 +214,7 @@ function InvitePageInner() {
             {isAccepting ? t('invite.accepting') : t('invite.accept')}
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

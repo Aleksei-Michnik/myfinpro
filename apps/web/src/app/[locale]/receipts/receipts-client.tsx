@@ -13,6 +13,7 @@ import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialo
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -278,11 +279,7 @@ export function ReceiptsClient() {
 
         <ul className="space-y-2">
           {receipts.map((receipt) => (
-            <li
-              key={receipt.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-              data-testid={`receipt-row-${receipt.id}`}
-            >
+            <Card as="li" padding="sm" key={receipt.id} data-testid={`receipt-row-${receipt.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <Link
@@ -383,7 +380,7 @@ export function ReceiptsClient() {
                     ))}
                 </div>
               </div>
-            </li>
+            </Card>
           ))}
         </ul>
 

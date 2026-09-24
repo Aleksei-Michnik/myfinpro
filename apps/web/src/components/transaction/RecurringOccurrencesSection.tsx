@@ -18,6 +18,7 @@
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TransactionsList, type TransactionsListData } from './TransactionsList';
+import { cardClass } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
@@ -104,7 +105,7 @@ export function RecurringOccurrencesSection({ transactionId }: RecurringOccurren
   return (
     <details
       open
-      className="relative rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
+      className={cardClass({ className: 'relative' })}
       data-testid="recurring-occurrences-section"
     >
       <summary

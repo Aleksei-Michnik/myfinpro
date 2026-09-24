@@ -10,6 +10,7 @@ import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
@@ -80,7 +81,7 @@ export default function AccountSettingsPage() {
 
         {user?.scheduledDeletionAt && <DeletionBanner />}
 
-        <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <Card padding="lg" className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('userInfo')}
           </h2>
@@ -106,13 +107,10 @@ export default function AccountSettingsPage() {
               </dd>
             </div>
           </dl>
-        </div>
+        </Card>
 
         {/* Preferences section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="preferences-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="preferences-section">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('preferences')}
           </h2>
@@ -193,16 +191,13 @@ export default function AccountSettingsPage() {
               {isSaving ? '...' : t('savePreferences')}
             </Button>
           </div>
-        </div>
+        </Card>
 
         {/* AI model section (Phase 8.11 — per-user LLM selection + BYOK keys) */}
         <LlmSettingsSection />
 
         {/* Connected Accounts section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="connected-accounts-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="connected-accounts-section">
           <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {tSettings('connectedAccounts')}
           </h2>
@@ -210,13 +205,10 @@ export default function AccountSettingsPage() {
             {tSettings('connectedAccountsDescription')}
           </p>
           <ConnectedAccounts />
-        </div>
+        </Card>
 
         {/* Password section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="password-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="password-section">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('password.title')}
           </h2>
@@ -241,7 +233,7 @@ export default function AccountSettingsPage() {
               </Link>
             </div>
           )}
-        </div>
+        </Card>
 
         {!user?.scheduledDeletionAt && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-800 dark:bg-red-950">

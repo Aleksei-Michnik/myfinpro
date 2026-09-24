@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ProductFormDialog } from '@/components/product/ProductFormDialog';
 import { ProductGallery } from '@/components/product/ProductGallery';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
@@ -107,11 +108,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
     const notFound = loadOp.error.httpStatus === 404;
     return (
       <main className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          role="alert"
-          data-testid="product-detail-error"
-        >
+        <Card padding="lg" role="alert" data-testid="product-detail-error">
           <h1 className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100">
             {notFound ? t('notFound') : t('loadFailed')}
           </h1>
@@ -129,7 +126,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
           >
             ← {t('back')}
           </Link>
-        </div>
+        </Card>
       </main>
     );
   }

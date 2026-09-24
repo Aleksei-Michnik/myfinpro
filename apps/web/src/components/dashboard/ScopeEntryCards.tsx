@@ -8,6 +8,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { computeMonthRange } from './date-range';
+import { Card } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
@@ -220,8 +221,10 @@ function ScopeCard({
   const net = bucket ? bucket.inCents - bucket.outCents : 0;
 
   return (
-    <article
-      className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-primary-400 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="article"
+      padding="sm"
+      className="flex h-full flex-col justify-between shadow-sm hover:border-primary-400"
       data-testid={testId}
     >
       <header className="mb-2">
@@ -279,6 +282,6 @@ function ScopeCard({
           {t('view')} →
         </Link>
       </footer>
-    </article>
+    </Card>
   );
 }

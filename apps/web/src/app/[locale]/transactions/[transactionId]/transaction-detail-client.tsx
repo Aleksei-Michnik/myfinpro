@@ -28,6 +28,7 @@ import { TransactionPlanSection } from '@/components/transaction/TransactionPlan
 import { TransactionPurchaseDetails } from '@/components/transaction/TransactionPurchaseDetails';
 import { TransactionSchedulePlanPlaceholder } from '@/components/transaction/TransactionSchedulePlanPlaceholder';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -305,11 +306,7 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
     const notFound = !!error && (error.status === 404 || error.status === 403);
     return (
       <main className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="transaction-detail-error"
-          role="alert"
-        >
+        <Card padding="lg" data-testid="transaction-detail-error" role="alert">
           <h1
             className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100"
             data-testid="transaction-detail-error-title"
@@ -338,7 +335,7 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
               </Button>
             )}
           </div>
-        </div>
+        </Card>
       </main>
     );
   }
@@ -459,10 +456,7 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
         )
       )}
 
-      <section
-        className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-        aria-labelledby="comments-title"
-      >
+      <Card as="section" aria-labelledby="comments-title">
         <h2
           id="comments-title"
           className="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100"
@@ -476,7 +470,7 @@ export function TransactionDetailClient({ transactionId }: TransactionDetailClie
             onPosted={(c) => commentListRef.current?.appendComment(c)}
           />
         </div>
-      </section>
+      </Card>
 
       {showLegacyPlaceholder && <TransactionSchedulePlanPlaceholder />}
 

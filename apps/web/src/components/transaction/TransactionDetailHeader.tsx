@@ -10,6 +10,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Card } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
@@ -103,10 +104,7 @@ export function TransactionDetailHeader({
   const starColor = starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500';
 
   return (
-    <header
-      data-testid="transaction-detail-header"
-      className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-    >
+    <Card as="header" data-testid="transaction-detail-header">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span
           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${directionClass}`}
@@ -244,6 +242,6 @@ export function TransactionDetailHeader({
           {tDetail('delete')}
         </Button>
       </div>
-    </header>
+    </Card>
   );
 }

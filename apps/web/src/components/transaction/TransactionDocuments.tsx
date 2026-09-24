@@ -7,6 +7,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
+import { Card } from '@/components/ui/Card';
 import { DocumentViewer } from '@/components/ui/DocumentViewer';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -73,8 +74,8 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
     : t('title');
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
       aria-labelledby="transaction-documents-title"
       data-testid="transaction-documents"
     >
@@ -162,6 +163,6 @@ export function TransactionDocuments({ receiptId }: TransactionDocumentsProps) {
           onClose={() => setViewerOpen(false)}
         />
       )}
-    </section>
+    </Card>
   );
 }
