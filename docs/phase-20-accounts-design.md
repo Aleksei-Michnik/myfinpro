@@ -94,7 +94,7 @@ model: each purchase is an `OUT` on the `CARD` account (that is where the receip
 expenses already belong); the bank's monthly "ISRACARD / CAL / MAX …" line is a **transfer**
 bank → card. `CARD` accounts carry `billingAccountId` (the bank account) and `billingDay` (1–28),
 which the matcher uses to recognise the bill line (§5.3). The card's ledger balance is therefore
-"what is owed this cycle" (negative until the bill clears) — displayed as _owed_, not as a debt.
+"what is owed this cycle" — the UI rule is `kind === 'CARD' && ledgerBalanceCents < 0` ⇒ shown as _owed_ (absolute value, neutral tone), never as a red debt.
 
 ### 2.5 Statement lines are the bank truth; transactions are the app's record
 
@@ -478,13 +478,24 @@ and currency; `billingDay` requires it.
 | ------ | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/accounts/:id/imports`                 | `CreateImportDto { source, originalName?, lines: ImportLineDto[] ≤ 2000, statementBalanceCents?, statementBalanceAt?, periodFrom?, periodTo? }` → `AccountImportResponseDto` (201) |
 | GET    | `/accounts/:id/imports`                 | cursor list → `AccountImportResponseDto[]`                                                                                                                                         |
-| GET    | `/accounts/:id/lines`                   | `?status=&importId=&cursor=&limit=` → `StatementLineResponseDto[]` (with `suggestion` resolved)                                                                                    |
+| GET    | `/accounts/:id/lines`                   | `?status=&importId=&suggestion=match\|transfer\|create\|none\|needs_input&cursor=&limit=` → `StatementLineResponseDto[]` (with `suggestion` resolved, below)                       |
 | POST   | `/accounts/:id/lines/:lineId/match`     | `{ transactionId }` → line (+ enriched transaction, §5.5)                                                                                                                          |
 | POST   | `/accounts/:id/lines/:lineId/create`    | `{ categoryIds, note?, attributions? }` → line + created `TransactionSummaryDto`                                                                                                   |
 | POST   | `/accounts/:id/lines/:lineId/transfer`  | `{ transferAccountId }` → line + created transfer                                                                                                                                  |
 | POST   | `/accounts/:id/lines/:lineId/ignore`    | → line                                                                                                                                                                             |
 | DELETE | `/accounts/:id/lines/:lineId/link`      | → line back to `PENDING`                                                                                                                                                           |
 | POST   | `/accounts/:id/lines/apply-suggestions` | `{ lineIds? }` → `{ matched, transferred, created, skipped }` — confident suggestions only                                                                                         |
+
+**Resolved suggestion shape** (`StatementSuggestionDto`, what the review UI renders):
+`{ action: 'match'|'transfer'|'create'|'none', score: number, transaction?: TransactionSummaryDto,`
+`categoryId?: string, category?: TransactionCategorySummary, transferAccountId?: string,`
+`candidates: { transaction: TransactionSummaryDto, score: number }[] /* top 5, best first */ }`.
+The stored `suggestion` JSON holds ids and scores only; the list endpoint resolves them in one
+batched `findMany` per page (never per line). `suggestion=needs_input` selects `none` and `create`
+without a `categoryId`, so the review filters are server-side and pagination-safe. A statement
+longer than `ACCOUNT_IMPORT_MAX_LINES` is submitted by the browser in consecutive chunks of that
+size (one import row per chunk, same `originalName`). Undo is per line (`DELETE …/link`); there is
+no bulk undo, which is why the web guards "apply all" above 20 lines with a confirm.
 
 `POST /imports` is one DB transaction: validate lines, compute fingerprints, insert those not yet
 present (`accountId + fingerprint` unique — duplicates are counted, never errors), then run the
