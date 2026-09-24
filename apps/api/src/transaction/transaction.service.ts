@@ -1,4 +1,10 @@
-import { CURRENCY_CODES, CurrencyCode, isPlanKind, TRANSACTION_PLAN_KINDS } from '@myfinpro/shared';
+import {
+  CURRENCY_CODES,
+  CurrencyCode,
+  isPlanKind,
+  TRANSACTION_PLAN_KINDS,
+  TRANSFER_CATEGORY_SLUG,
+} from '@myfinpro/shared';
 import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
@@ -339,6 +345,7 @@ export class TransactionService {
       direction: dto.direction,
       currency: dto.currency,
       type: dto.type,
+      categoryIds: dto.categoryIds,
     });
 
     // 6. Categories — every id passes the visibility + direction checks. The
@@ -898,7 +905,10 @@ export class TransactionService {
       dto.transferAccountId !== undefined ||
       dto.direction !== undefined ||
       dto.currency !== undefined ||
-      dto.type !== undefined;
+      dto.type !== undefined ||
+      // A category swap on a row that is (or becomes) a transfer must be
+      // re-checked too — the transfer category is part of the contract.
+      dto.categoryIds !== undefined;
     if (
       accountInputsChanged &&
       (effectiveAccountId !== null || effectiveTransferAccountId !== null)
@@ -909,6 +919,7 @@ export class TransactionService {
         direction: effectiveDirection,
         currency: dto.currency ?? existing.currency,
         type: dto.type ?? existing.type,
+        categoryIds: dto.categoryIds ?? existingCategoryIds,
       });
     }
 
@@ -1834,6 +1845,12 @@ export class TransactionService {
    * differ, share the currency, and the row must be a plain ONE_TIME
    * movement — a transfer is never a recurring or plan parent, because its
    * children would each claim to move the same money again.
+   *
+   * A transfer is also filed under exactly one category: the `transfer`
+   * system category (direction BOTH). It is spending in neither direction, so
+   * it carries no spending category and no additional ones — that is what
+   * keeps it out of every category breakdown even before the
+   * `transfer_account_id IS NULL` predicate does its work.
    */
   private async validateAccountPlacement(
     userId: string,
@@ -1843,6 +1860,8 @@ export class TransactionService {
       direction: 'IN' | 'OUT';
       currency: string;
       type: string;
+      /** The effective category set: primary first, then additional ones. */
+      categoryIds: string[];
     },
   ): Promise<void> {
     const transferInvalid = (message: string): never => {
@@ -1864,6 +1883,18 @@ export class TransactionService {
       }
       if (input.accountId === input.transferAccountId) {
         transferInvalid('Transfer source and destination must be different accounts');
+      }
+      if (input.categoryIds.length !== 1) {
+        transferInvalid('A transfer carries exactly one category and no additional ones');
+      }
+      const primary = await this.prisma.category.findFirst({
+        where: { id: input.categoryIds[0], ownerType: 'system', slug: TRANSFER_CATEGORY_SLUG },
+        select: { id: true },
+      });
+      if (!primary) {
+        transferInvalid(
+          `A transfer's category must be the '${TRANSFER_CATEGORY_SLUG}' system category`,
+        );
       }
     }
 

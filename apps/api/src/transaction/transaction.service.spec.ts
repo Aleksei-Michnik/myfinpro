@@ -68,6 +68,10 @@ describe('TransactionService', () => {
     account: {
       findMany: jest.fn(),
     },
+    // Phase 20.2 — the `transfer` system-category lookup a transfer must pass.
+    category: {
+      findFirst: jest.fn(),
+    },
     transactionSchedule: {
       findUnique: jest.fn().mockResolvedValue(null),
       delete: jest.fn().mockResolvedValue({}),
@@ -186,6 +190,9 @@ describe('TransactionService', () => {
     // Remaining-count default: transaction still has attributions after remove.
     prismaMock.transactionAttribution.count.mockResolvedValue(1);
     prismaMock.account.findMany.mockResolvedValue([]);
+    // Default: the primary category IS the `transfer` system category, so the
+    // transfer tests only have to opt out of it.
+    prismaMock.category.findFirst.mockResolvedValue({ id: 'cat-transfer' });
   });
 
   // ── type guard ──
@@ -3329,6 +3336,61 @@ describe('TransactionService', () => {
         expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
       }
       expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it("requires the transfer row's category to be the `transfer` system category", async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      // No system category with slug `transfer` matches the given id.
+      prismaMock.category.findFirst.mockResolvedValue(null);
+
+      try {
+        await service.create(
+          'user-1',
+          baseDto({ accountId: 'acct-1', transferAccountId: 'acct-2' }),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.category.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ ownerType: 'system', slug: 'transfer' }),
+        }),
+      );
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects additional categories on a transfer — it is not spending', async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      try {
+        await service.create(
+          'user-1',
+          baseDto({
+            categoryIds: ['cat-transfer', 'cat-2'],
+            accountId: 'acct-1',
+            transferAccountId: 'acct-2',
+          }),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      // The category set is rejected before any lookup is attempted.
+      expect(prismaMock.category.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('leaves the category of a non-transfer row alone', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount()]);
+      await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+      expect(prismaMock.category.findFirst).not.toHaveBeenCalled();
     });
 
     it('does not touch the accounts table when no account is given', async () => {

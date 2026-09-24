@@ -4,6 +4,7 @@ import {
   DEFAULT_CATEGORIES,
   DEFAULT_IN_CATEGORIES,
   DEFAULT_OUT_CATEGORIES,
+  TRANSFER_CATEGORY_SLUG,
 } from '../constants/default-categories';
 
 describe('default categories', () => {
@@ -27,10 +28,12 @@ describe('default categories', () => {
     for (const c of DEFAULT_BOTH_CATEGORIES) expect(c.direction).toBe('BOTH');
   });
 
-  // Phase 20 §2.4 — transfers need one direction-agnostic system category.
+  // Phase 20 §2.4 — transfers need one direction-agnostic system category,
+  // and the API's transfer guard resolves it by this exact slug.
   it('ships the `transfer` default used by every transfer row', () => {
+    expect(TRANSFER_CATEGORY_SLUG).toBe('transfer');
     expect(DEFAULT_BOTH_CATEGORIES).toContainEqual({
-      slug: 'transfer',
+      slug: TRANSFER_CATEGORY_SLUG,
       name: 'Transfer',
       direction: 'BOTH',
       icon: 'arrow-right-left',

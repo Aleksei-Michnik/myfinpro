@@ -324,7 +324,10 @@ describe('POST /analytics/query (integration)', () => {
     // T11 — Phase 20 §2.4: a transfer between two of Alice's own accounts.
     // It is a POSTED ONE_TIME OUT row of 250000 in June, so it would dominate
     // every USD total if the base CTE did not drop `transfer_account_id IS
-    // NOT NULL`. The totals below are the assertion that it does.
+    // NOT NULL`. The totals below are the assertion that it does. Inserted
+    // straight through Prisma and deliberately filed under a *spending*
+    // category (the API would insist on the `transfer` one) so that the only
+    // thing excluding it is the CTE predicate, not its category.
     const transferFrom = await prisma.account.create({
       data: {
         name: `Analytics checking ${suffix}`,

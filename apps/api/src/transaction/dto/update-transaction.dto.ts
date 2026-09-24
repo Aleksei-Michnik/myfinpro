@@ -96,10 +96,16 @@ export class UpdateTransactionDto {
   @IsUUID()
   accountId?: string | null;
 
-  /** Phase 20.2 — make (or unmake) this row a transfer; `null` clears it. */
+  /**
+   * Phase 20.2 — make (or unmake) this row a transfer; `null` clears it.
+   * Turning a row into a transfer also requires `categoryIds` to be exactly
+   * the `transfer` system category.
+   */
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Destination account of a transfer (OUT, ONE_TIME only); null clears it.',
+    description:
+      'Destination account of a transfer (OUT, ONE_TIME, `transfer` category only); ' +
+      'null clears it.',
   })
   @IsOptional()
   @IsUUID()

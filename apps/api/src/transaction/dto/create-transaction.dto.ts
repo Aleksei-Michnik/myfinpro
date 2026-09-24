@@ -88,12 +88,15 @@ export class CreateTransactionDto {
   /**
    * Phase 20.2 — set only on a transfer between two of the caller's own
    * accounts (design §2.4): `direction` must be OUT, `accountId` must be set,
-   * both accounts must differ and share the currency. A transfer is never
-   * spending and never a recurring / plan parent.
+   * both accounts must differ and share the currency, and `categoryIds` must
+   * be exactly the `transfer` system category. A transfer is never spending
+   * and never a recurring / plan parent.
    */
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Destination account — makes this row a transfer (OUT, ONE_TIME only).',
+    description:
+      'Destination account — makes this row a transfer (OUT, ONE_TIME, the `transfer` ' +
+      'system category only).',
   })
   @IsOptional()
   @IsUUID()

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { TRANSFER_CATEGORY_SLUG } from '@myfinpro/shared';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -22,6 +23,7 @@ describe('Transactions with accounts (integration)', () => {
   let bob: Awaited<ReturnType<typeof registerUser>>;
   let outCategoryId: string;
   let inCategoryId: string;
+  let transferCategoryId: string;
 
   let checkingId: string;
   let savingsId: string;
@@ -46,6 +48,9 @@ describe('Transactions with accounts (integration)', () => {
     }))!.id;
     inCategoryId = (await prisma.category.findFirst({
       where: { ownerType: 'system', direction: 'IN' },
+    }))!.id;
+    transferCategoryId = (await prisma.category.findFirst({
+      where: { ownerType: 'system', slug: TRANSFER_CATEGORY_SLUG },
     }))!.id;
 
     const account = (name: string, over: Record<string, unknown> = {}, ownerUserId?: string) =>
@@ -128,36 +133,82 @@ describe('Transactions with accounts (integration)', () => {
 
   // ── transfers ──
 
+  const transferPayload = (over: Record<string, unknown> = {}) =>
+    payload({
+      categoryIds: [transferCategoryId],
+      accountId: checkingId,
+      transferAccountId: savingsId,
+      ...over,
+    });
+
   it('creates a transfer between two own accounts', async () => {
-    const res = await create(
-      alice.accessToken,
-      payload({ accountId: checkingId, transferAccountId: savingsId }),
-    ).expect(201);
+    const res = await create(alice.accessToken, transferPayload()).expect(201);
     expect(res.body).toMatchObject({
       direction: 'OUT',
       accountId: checkingId,
       transferAccountId: savingsId,
     });
+    expect(res.body.categories).toHaveLength(1);
+    expect(res.body.categories[0].slug).toBe(TRANSFER_CATEGORY_SLUG);
+  });
+
+  it('requires the `transfer` system category and nothing else', async () => {
+    // A spending category on a transfer row.
+    const spending = await create(
+      alice.accessToken,
+      transferPayload({ categoryIds: [outCategoryId] }),
+    ).expect(400);
+    expect(spending.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
+
+    // The right primary category, plus an additional one.
+    const extra = await create(
+      alice.accessToken,
+      transferPayload({ categoryIds: [transferCategoryId, outCategoryId] }),
+    ).expect(400);
+    expect(extra.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
+  });
+
+  it('rejects turning an ordinary transaction into a transfer without recategorising', async () => {
+    const created = await create(alice.accessToken, payload({ accountId: checkingId })).expect(201);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}`)
+      .set(auth(alice.accessToken))
+      .send({ transferAccountId: savingsId })
+      .expect(400);
+    expect(res.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
+
+    const ok = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}`)
+      .set(auth(alice.accessToken))
+      .send({ transferAccountId: savingsId, categoryIds: [transferCategoryId] })
+      .expect(200);
+    expect(ok.body.transferAccountId).toBe(savingsId);
+  });
+
+  it('rejects recategorising an existing transfer to a spending category', async () => {
+    const created = await create(alice.accessToken, transferPayload()).expect(201);
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}`)
+      .set(auth(alice.accessToken))
+      .send({ categoryIds: [outCategoryId] })
+      .expect(400);
+    expect(res.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
   });
 
   it('rejects malformed transfers with TRANSACTION_TRANSFER_INVALID', async () => {
     const cases: Array<Record<string, unknown>> = [
-      // IN direction
-      {
-        direction: 'IN',
-        categoryIds: [inCategoryId],
-        accountId: checkingId,
-        transferAccountId: savingsId,
-      },
+      // IN direction (with an IN category, so only the direction is at fault)
+      { direction: 'IN', categoryIds: [inCategoryId] },
       // no source account
-      { transferAccountId: savingsId },
+      { accountId: undefined },
       // source and destination identical
-      { accountId: checkingId, transferAccountId: checkingId },
+      { transferAccountId: checkingId },
       // recurring parent
-      { type: 'RECURRING', accountId: checkingId, transferAccountId: savingsId },
+      { type: 'RECURRING' },
     ];
     for (const over of cases) {
-      const res = await create(alice.accessToken, payload(over)).expect(400);
+      const res = await create(alice.accessToken, transferPayload(over)).expect(400);
       expect(res.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
     }
   });
@@ -165,7 +216,7 @@ describe('Transactions with accounts (integration)', () => {
   it('rejects a transfer whose destination has another currency', async () => {
     const res = await create(
       alice.accessToken,
-      payload({ accountId: checkingId, transferAccountId: usdAccountId }),
+      transferPayload({ transferAccountId: usdAccountId }),
     ).expect(400);
     expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_CURRENCY_MISMATCH');
   });
@@ -204,10 +255,9 @@ describe('Transactions with accounts (integration)', () => {
 
   it('filters by accountId on both sides and honours excludeTransfers', async () => {
     const plain = await create(alice.accessToken, payload({ accountId: checkingId })).expect(201);
-    const transfer = await create(
-      alice.accessToken,
-      payload({ amountCents: 5000, accountId: checkingId, transferAccountId: savingsId }),
-    ).expect(201);
+    const transfer = await create(alice.accessToken, transferPayload({ amountCents: 5000 })).expect(
+      201,
+    );
     const unplaced = await create(alice.accessToken, payload({ amountCents: 700 })).expect(201);
 
     const onChecking = await request(app.getHttpServer())
