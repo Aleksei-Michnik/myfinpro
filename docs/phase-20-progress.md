@@ -78,3 +78,44 @@ worktree.
 
 **Next** — 20.4 (statement parsing + import API) in parallel with 20.3 (accounts UI, after the
 20.1 UI kit lands).
+
+## 20.4 — Statement parsing + import API (2026-09-25)
+
+Per design §4.1, §5, §6.2. Merged as `6663b77` (track branch `p20/import-api`, eight commits). No
+schema change.
+
+### Scope
+
+- **`packages/shared/src/statement/`** — one parser engine over `string[][]` with preset
+  **data** for `hapoalim`, `leumi`, `discount`, `isracard`, `cal`, `max` and `generic_csv`
+  (header aliases from the research notes, debit/credit vs signed vs charged/original
+  conventions, totals and section skipping, multiple tables per sheet, billing date and card
+  last-4 extraction, installment markers), `detectPreset`, manual column mapping,
+  `normalizeDescription` shared with the API. Synthetic fixtures only.
+- **Import API** — `POST /accounts/:id/imports` (10/min, owner or any member) validates ≤
+  2000 lines, computes the per-account `fingerprint`, inserts atomically with duplicates
+  counted (never errors), updates the reported balance when newer, then runs the matcher
+  outside the insert transaction and stores each suggestion snapshot; `GET` imports and
+  `GET /accounts/:id/lines` with `status` / `importId` / `suggestion` filters and the resolved
+  `StatementSuggestionDto` (one batched lookup per page).
+- **Matcher** (`matching/statement-matcher.ts`, pure) — exact amount gate, ±5-day window,
+  trigram description similarity, same-account bonus, confident ≥ 0.8 with a 0.10 lead
+  (epsilon-safe); card-bill → transfer proposal via `INSTITUTION_META.billTokens` and
+  `billingAccountId`; `create` with the category remembered from earlier lines; `none` when
+  look-alikes exist but none is confident.
+- **Line decisions** — `match` (new `TransactionService.confirmByStatementLine`: sets the
+  account when null, flips PENDING/DUE → POSTED, audits `reason: 'statement_match'`, accepts
+  generated occurrences), `create` and `transfer` through `TransactionService.create`,
+  `ignore`, `DELETE …/link` (back to PENDING, transaction untouched), `apply-suggestions`.
+  Archived accounts refuse new decisions but allow `ignore`/unlink so a queue never sticks.
+- Extracted, not copied: the transaction visibility predicate
+  (`transaction/utils/transaction-visibility.ts`) and the account audit/event side effects
+  (`account/utils/account-side-effects.ts`).
+
+### Tests
+
+shared 209 (14 files) · api unit 1377 (93 suites) · integration `accounts-import` (14) new;
+`accounts-crud`, `transactions-accounts`, `analytics-query` green (71 across the four).
+
+**Next** — 20.5 (import wizard + review UI) once 20.1 and 20.3 land; security review of the
+import intake.
