@@ -3071,6 +3071,122 @@ describe('TransactionService', () => {
       expect(r.affectedChildrenCount).toBe(0);
     });
 
+    // ── Phase 20.2 — the cascade path re-checks the account placement ──
+
+    it('rejects flipping a transfer to IN — both ledgers would gain the amount', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        recurringParent({ type: 'ONE_TIME', accountId: 'acct-1', transferAccountId: 'acct-2' }),
+      );
+      // The transfer category is BOTH, so the direction check that guards
+      // ordinary rows waves this through — only the placement guard catches it.
+      categoryServiceMock.findById.mockResolvedValue(
+        okCategory({ slug: 'transfer', direction: 'BOTH' }),
+      );
+
+      try {
+        await service.editTransactionWithPropagation(
+          'user-1',
+          'pay-1',
+          { direction: 'IN' },
+          'self',
+        );
+        throw new Error('expected a rejection');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a currency change that orphans the placement, cascading or not', async () => {
+      for (const propagate of ['self', 'all'] as const) {
+        jest.clearAllMocks();
+        prismaMock.auditLog.create.mockResolvedValue({});
+        prismaMock.transaction.findFirst.mockResolvedValue(
+          recurringParent({ accountId: 'acct-1' }),
+        );
+        prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
+        categoryServiceMock.findById.mockResolvedValue(okCategory());
+        // The account is visible but denominated in USD.
+        prismaMock.account.findMany.mockResolvedValue([{ id: 'acct-1', currency: 'USD' }]);
+
+        try {
+          await service.editTransactionWithPropagation(
+            'user-1',
+            'pay-1',
+            { currency: 'EUR' },
+            propagate,
+          );
+          throw new Error('expected a rejection');
+        } catch (err) {
+          expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH);
+        }
+        expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+      }
+    });
+
+    it('404s an amount edit on a row placed on an account the editor can no longer use', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent({ accountId: 'acct-1' }));
+      prismaMock.account.findMany.mockResolvedValue([]); // archived, deleted or left the group
+
+      try {
+        await service.editTransactionWithPropagation(
+          'user-1',
+          'pay-1',
+          { amountCents: 9999 },
+          'all',
+        );
+        throw new Error('expected a rejection');
+      } catch (err) {
+        expect(err).toBeInstanceOf(NotFoundException);
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND);
+      }
+      expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('applies and cascades a placement change to the parent and every child', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
+      prismaMock.account.findMany.mockResolvedValue([{ id: 'acct-1', currency: 'USD' }]);
+
+      const r = await service.editTransactionWithPropagation(
+        'user-1',
+        'pay-1',
+        { accountId: 'acct-1' },
+        'all',
+      );
+
+      expect(r.affectedChildrenCount).toBe(1);
+      for (const id of ['pay-1', 'c1']) {
+        expect(prismaMock.transaction.update).toHaveBeenCalledWith({
+          where: { id },
+          data: { account: { connect: { id: 'acct-1' } } },
+        });
+      }
+    });
+
+    it('clears the placement with an explicit null', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent({ accountId: 'acct-1' }));
+
+      await service.editTransactionWithPropagation('user-1', 'pay-1', { accountId: null }, 'self');
+
+      expect(prismaMock.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { account: { disconnect: true } },
+      });
+      // Nothing left to place, so no account lookup was needed.
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+
+    it('leaves an unplaced row alone — no account lookup at all', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.transaction.findMany.mockResolvedValue([]);
+
+      await service.editTransactionWithPropagation('user-1', 'pay-1', { amountCents: 42 }, 'all');
+
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+
     it('emits transaction.updated for the parent AND each updated child, after the transaction commits', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
       prismaMock.transaction.findMany.mockResolvedValue([

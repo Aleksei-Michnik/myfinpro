@@ -900,19 +900,17 @@ export class TransactionService {
     const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
     const effectiveTransferAccountId =
       dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
-    const accountInputsChanged =
-      dto.accountId !== undefined ||
-      dto.transferAccountId !== undefined ||
-      dto.direction !== undefined ||
-      dto.currency !== undefined ||
-      dto.type !== undefined ||
-      // A category swap on a row that is (or becomes) a transfer must be
-      // re-checked too — the transfer category is part of the contract.
-      dto.categoryIds !== undefined;
-    if (
-      accountInputsChanged &&
-      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
-    ) {
+    // Any scalar edit to a row that is (or becomes) placed on an account is
+    // re-checked, not just the fields that name the account: changing
+    // `amountCents` or `occurredAt` moves a shared account's ledger just as
+    // surely as changing its currency does, so an editor who has since lost
+    // access to that account must not be able to do it through the back door.
+    const carriesAccount =
+      existing.accountId !== null ||
+      existing.transferAccountId !== null ||
+      effectiveAccountId !== null ||
+      effectiveTransferAccountId !== null;
+    if (hasScalarField && carriesAccount) {
       await this.validateAccountPlacement(userId, {
         accountId: effectiveAccountId,
         transferAccountId: effectiveTransferAccountId,
@@ -1287,7 +1285,12 @@ export class TransactionService {
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
       dto.categoryIds !== undefined ||
-      dto.note !== undefined;
+      dto.note !== undefined ||
+      // Phase 20.2 — these were accepted by the DTO and silently dropped here,
+      // so the cascade path could change a placed row's direction or currency
+      // without the placement ever being re-checked.
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     // 5. Validate scalar fields (reuse the single-edit validators). Like
@@ -1320,6 +1323,38 @@ export class TransactionService {
       });
     }
 
+    // 5b. Accounts (Phase 20.2, design §6.3) — the same guard update() applies,
+    //     against the merged state. The cascade writes direction, currency and
+    //     category deltas onto the parent AND every child, each of which may be
+    //     placed on an account, so skipping this check here would let an edit
+    //     move money on an account the caller can no longer use — or flip a
+    //     transfer's direction so both ledgers gain the amount.
+    const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
+    const effectiveTransferAccountId =
+      dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
+    const accountInputsPresent =
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined ||
+      dto.direction !== undefined ||
+      dto.currency !== undefined ||
+      dto.type !== undefined ||
+      dto.categoryIds !== undefined ||
+      dto.amountCents !== undefined ||
+      dto.occurredAt !== undefined;
+    if (
+      accountInputsPresent &&
+      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
+    ) {
+      await this.validateAccountPlacement(userId, {
+        accountId: effectiveAccountId,
+        transferAccountId: effectiveTransferAccountId,
+        direction: effectiveDirection,
+        currency: dto.currency ?? existing.currency,
+        type: dto.type ?? existing.type,
+        categoryIds: dto.categoryIds ?? existingCategoryIds,
+      });
+    }
+
     // 6. Validate desired attributions (non-empty, in editor scope).
     const desired = dto.attributions ?? [];
     if (hasAttributionField) {
@@ -1337,6 +1372,16 @@ export class TransactionService {
       scalarData.category = { connect: { id: dto.categoryIds[0] } };
     }
     if (dto.note !== undefined) scalarData.note = dto.note === '' ? null : dto.note;
+    if (dto.accountId !== undefined) {
+      scalarData.account = dto.accountId
+        ? { connect: { id: dto.accountId } }
+        : { disconnect: true };
+    }
+    if (dto.transferAccountId !== undefined) {
+      scalarData.transferAccount = dto.transferAccountId
+        ? { connect: { id: dto.transferAccountId } }
+        : { disconnect: true };
+    }
     const categoryIdsReplace = categoriesChanging && dto.categoryIds ? dto.categoryIds : null;
 
     // Nothing to do — return the current parent summary with zero counts.
