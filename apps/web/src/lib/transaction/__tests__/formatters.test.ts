@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  directionPresentation,
   formatAmount,
   formatOccurredAt,
   formatOccurredAtAbsolute,
@@ -147,5 +148,24 @@ describe('formatScopeLabel', () => {
     for (const call of spy.mock.calls) {
       expect(call[0]).not.toMatch(/^transactions\./);
     }
+  });
+});
+
+describe('directionPresentation', () => {
+  const t = (key: string) => key;
+
+  it('labels a transfer neutrally regardless of its stored direction', () => {
+    const res = directionPresentation({ direction: 'OUT', transferAccountId: 'card' }, t);
+    expect(res.directionLabel).toBe('directions.transfer');
+    expect(res.directionClass).not.toMatch(/red|green/);
+  });
+
+  it('keeps income and expense for ordinary rows', () => {
+    expect(directionPresentation({ direction: 'IN', transferAccountId: null }, t)).toMatchObject({
+      directionLabel: 'directions.in',
+    });
+    expect(directionPresentation({ direction: 'OUT', transferAccountId: null }, t)).toMatchObject({
+      directionLabel: 'directions.out',
+    });
   });
 });

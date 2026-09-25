@@ -10,6 +10,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { AccountSelect } from '@/components/account/AccountSelect';
 import { Select } from '@/components/ui/Select';
 import { useGroups } from '@/lib/group/group-context';
 import { useTransactions } from '@/lib/transaction/transaction-context';
@@ -24,6 +25,8 @@ export interface TransactionsFiltersValue {
   scope?: 'all' | 'personal' | string;
   starred?: boolean;
   categoryId?: string;
+  /** Phase 20 — account filter (matches either side of a transfer). */
+  accountId?: string;
   search?: string;
   /** ISO YYYY-MM-DD (or empty) */
   from?: string;
@@ -82,6 +85,7 @@ export function TransactionsFilters({
   disabled,
 }: TransactionsFiltersProps) {
   const t = useTranslations('transactions.filters');
+  const tAccounts = useTranslations('accounts');
   const { groups } = useGroups();
   const { listCategories } = useTransactions();
 
@@ -149,6 +153,8 @@ export function TransactionsFilters({
 
   const setCategoryId = (categoryId: string) =>
     onChange({ ...value, categoryId: categoryId || undefined });
+  const setAccountId = (accountId: string | null) =>
+    onChange({ ...value, accountId: accountId ?? undefined });
 
   const setFrom = (from: string) => onChange({ ...value, from: from || undefined });
   const setTo = (to: string) => onChange({ ...value, to: to || undefined });
@@ -336,6 +342,17 @@ export function TransactionsFilters({
             })}
         </Select>
       </label>
+
+      {/* Account (Phase 20.3) */}
+      <AccountSelect
+        value={value.accountId ?? null}
+        onChange={setAccountId}
+        includeArchived
+        emptyOptionLabel={tAccounts('filters.anyAccount')}
+        disabled={disabled}
+        testId="filter-account"
+        fullWidth={false}
+      />
 
       {/* Sort */}
       <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">

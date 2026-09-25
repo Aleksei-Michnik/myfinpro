@@ -12,9 +12,12 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { type KeyboardEvent } from 'react';
+import { Badge } from '@/components/ui/Badge';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { RowActionsMenu } from '@/components/ui/RowActionsMenu';
+import { useAccountDirectory } from '@/lib/account/account-context';
 import {
+  directionPresentation,
   formatOccurredAt,
   formatScopeLabel,
   formatSignedAmount,
@@ -63,6 +66,8 @@ export function TransactionRow({
   onStarToggled,
 }: TransactionRowProps) {
   const t = useTranslations('transactions');
+  const tAccounts = useTranslations('accounts');
+  const directory = useAccountDirectory();
   const locale = useLocale();
 
   // Optimistic star state — shared hook provides flip + revert-on-error.
@@ -106,16 +111,46 @@ export function TransactionRow({
   // Prepare derived values shared between variants.
   const dateText = formatOccurredAt(transaction.occurredAt, locale);
   const amountText = formatSignedAmount(transaction, locale);
-  const directionClass =
-    transaction.direction === 'IN'
-      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
-      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
-  const directionLabel = transaction.direction === 'IN' ? t('directions.in') : t('directions.out');
+  const { directionClass, directionLabel } = directionPresentation(transaction, t);
   const tFn = (key: string) => t(key);
   const scopeLabels = transaction.attributions.map((a) => formatScopeLabel(a, tFn));
   const scopes = truncateScopeList(scopeLabels);
   // Multi-category: compact comma-separated list, primary first.
   const categoryNames = transaction.categories.map((c) => c.name).join(', ');
+  // Phase 20.3 — account placement, transfer destination, bank confirmation.
+  const accountName = transaction.accountId
+    ? directory?.get(transaction.accountId)?.name
+    : undefined;
+  const transferName = transaction.transferAccountId
+    ? directory?.get(transaction.transferAccountId)?.name
+    : undefined;
+  const accountBadges = (
+    <>
+      {accountName && (
+        <Badge tone="neutral" size="sm" data-testid={`row-account-${transaction.id}`}>
+          {accountName}
+        </Badge>
+      )}
+      {transaction.transferAccountId && (
+        <Badge tone="neutral" size="sm" data-testid={`row-transfer-${transaction.id}`}>
+          <span aria-hidden="true" className="inline-block rtl:-scale-x-100">
+            →
+          </span>{' '}
+          {transferName ?? '…'}
+        </Badge>
+      )}
+      {transaction.statementLineId && (
+        <Badge
+          tone="success"
+          size="sm"
+          title={tAccounts('row.bankConfirmedHint')}
+          data-testid={`row-bank-confirmed-${transaction.id}`}
+        >
+          {tAccounts('row.bankConfirmed')}
+        </Badge>
+      )}
+    </>
+  );
   const note = transaction.note ?? '';
   const starGlyph = starred ? '★' : '☆';
   const starAria = starred ? t('row.starRemove') : t('row.starAdd');
@@ -217,7 +252,10 @@ export function TransactionRow({
           {amountText}
         </td>
         <td className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300">
-          {categoryNames}
+          <span className="inline-flex flex-wrap items-center gap-1">
+            {categoryNames}
+            {accountBadges}
+          </span>
         </td>
         <td
           className="px-2 py-2 align-middle text-sm text-gray-700 dark:text-gray-300"
@@ -262,8 +300,11 @@ export function TransactionRow({
         {starButton}
         {controlsMenu}
       </div>
-      <div className="text-xs text-gray-500 dark:text-gray-400">
-        {dateText} · {categoryNames}
+      <div className="flex flex-wrap items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <span>
+          {dateText} · {categoryNames}
+        </span>
+        {accountBadges}
       </div>
       <div
         className="text-xs text-gray-700 dark:text-gray-300"

@@ -76,6 +76,7 @@ export function filtersToQuery(filters: TransactionFilters): URLSearchParams {
   if (filters.starred) params.set('starred', '1');
   if (filters.direction) params.set('direction', filters.direction);
   if (filters.categoryId) params.set('categoryId', filters.categoryId);
+  if (filters.accountId) params.set('accountId', filters.accountId);
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
   if (filters.search) params.set('q', filters.search);
@@ -111,6 +112,7 @@ export function filtersFromQuery(searchParams: FilterQueryReader): TransactionFi
     starred: searchParams.get('starred') === '1' ? true : undefined,
     direction: isDirection(rawDirection) ? rawDirection : undefined,
     categoryId: searchParams.get('categoryId') ?? undefined,
+    accountId: searchParams.get('accountId') ?? undefined,
     from: searchParams.get('from') ?? undefined,
     to: searchParams.get('to') ?? undefined,
     search: q ?? undefined,
@@ -128,6 +130,7 @@ export function isFiltersDirty(filters: TransactionFilters): boolean {
     filters.starred ||
     filters.direction ||
     filters.categoryId ||
+    filters.accountId ||
     filters.from ||
     filters.to ||
     (filters.search && filters.search.length > 0) ||
@@ -156,6 +159,9 @@ export interface FilterableTransaction {
   starredByMe: boolean;
   note?: string | null;
   parentTransactionId?: string | null;
+  /** Phase 20 — either side of a transfer satisfies the account filter. */
+  accountId?: string | null;
+  transferAccountId?: string | null;
   attributions: Array<{
     scope: 'personal' | 'group';
     userId?: string | null;
@@ -196,6 +202,9 @@ export function transactionMatchesFilters(
   if (f.direction && p.direction !== f.direction) return false;
   // Multi-category: any-match, mirroring the server's ?categoryId= semantics.
   if (f.categoryId && !p.categories.some((c) => c.id === f.categoryId)) return false;
+  if (f.accountId && p.accountId !== f.accountId && p.transferAccountId !== f.accountId) {
+    return false;
+  }
   if (f.starred && !p.starredByMe) return false;
 
   if (f.from) {
