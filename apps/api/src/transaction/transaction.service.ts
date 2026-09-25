@@ -2,6 +2,7 @@ import {
   CURRENCY_CODES,
   CurrencyCode,
   isPlanKind,
+  MAX_MINOR_UNITS,
   TRANSACTION_PLAN_KINDS,
   TRANSFER_CATEGORY_SLUG,
 } from '@myfinpro/shared';
@@ -45,8 +46,12 @@ import {
   type RecipientAttribution,
 } from './utils/transaction-event-recipients';
 
-/** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
-const MAX_AMOUNT_CENTS = 1e11;
+/**
+ * Ceiling of the `amount_cents` INT column, from the one shared money limit
+ * (`MAX_MINOR_UNITS`). The previous local `1e11` sat *above* the column's own
+ * range, so a large-but-accepted amount would have failed at the database.
+ */
+const MAX_AMOUNT_CENTS = MAX_MINOR_UNITS;
 
 /**
  * Transaction types that the create flow accepts today.
@@ -973,19 +978,17 @@ export class TransactionService {
     const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
     const effectiveTransferAccountId =
       dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
-    const accountInputsChanged =
-      dto.accountId !== undefined ||
-      dto.transferAccountId !== undefined ||
-      dto.direction !== undefined ||
-      dto.currency !== undefined ||
-      dto.type !== undefined ||
-      // A category swap on a row that is (or becomes) a transfer must be
-      // re-checked too — the transfer category is part of the contract.
-      dto.categoryIds !== undefined;
-    if (
-      accountInputsChanged &&
-      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
-    ) {
+    // Any scalar edit to a row that is (or becomes) placed on an account is
+    // re-checked, not just the fields that name the account: changing
+    // `amountCents` or `occurredAt` moves a shared account's ledger just as
+    // surely as changing its currency does, so an editor who has since lost
+    // access to that account must not be able to do it through the back door.
+    const carriesAccount =
+      existing.accountId !== null ||
+      existing.transferAccountId !== null ||
+      effectiveAccountId !== null ||
+      effectiveTransferAccountId !== null;
+    if (hasScalarField && carriesAccount) {
       await this.validateAccountPlacement(userId, {
         accountId: effectiveAccountId,
         transferAccountId: effectiveTransferAccountId,
@@ -993,6 +996,8 @@ export class TransactionService {
         currency: dto.currency ?? existing.currency,
         type: dto.type ?? existing.type,
         categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
       });
     }
 
@@ -1360,7 +1365,12 @@ export class TransactionService {
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
       dto.categoryIds !== undefined ||
-      dto.note !== undefined;
+      dto.note !== undefined ||
+      // Phase 20.2 — these were accepted by the DTO and silently dropped here,
+      // so the cascade path could change a placed row's direction or currency
+      // without the placement ever being re-checked.
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     // 5. Validate scalar fields (reuse the single-edit validators). Like
@@ -1393,6 +1403,40 @@ export class TransactionService {
       });
     }
 
+    // 5b. Accounts (Phase 20.2, design §6.3) — the same guard update() applies,
+    //     against the merged state. The cascade writes direction, currency and
+    //     category deltas onto the parent AND every child, each of which may be
+    //     placed on an account, so skipping this check here would let an edit
+    //     move money on an account the caller can no longer use — or flip a
+    //     transfer's direction so both ledgers gain the amount.
+    const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
+    const effectiveTransferAccountId =
+      dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
+    const accountInputsPresent =
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined ||
+      dto.direction !== undefined ||
+      dto.currency !== undefined ||
+      dto.type !== undefined ||
+      dto.categoryIds !== undefined ||
+      dto.amountCents !== undefined ||
+      dto.occurredAt !== undefined;
+    if (
+      accountInputsPresent &&
+      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
+    ) {
+      await this.validateAccountPlacement(userId, {
+        accountId: effectiveAccountId,
+        transferAccountId: effectiveTransferAccountId,
+        direction: effectiveDirection,
+        currency: dto.currency ?? existing.currency,
+        type: dto.type ?? existing.type,
+        categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
+      });
+    }
+
     // 6. Validate desired attributions (non-empty, in editor scope).
     const desired = dto.attributions ?? [];
     if (hasAttributionField) {
@@ -1410,6 +1454,16 @@ export class TransactionService {
       scalarData.category = { connect: { id: dto.categoryIds[0] } };
     }
     if (dto.note !== undefined) scalarData.note = dto.note === '' ? null : dto.note;
+    if (dto.accountId !== undefined) {
+      scalarData.account = dto.accountId
+        ? { connect: { id: dto.accountId } }
+        : { disconnect: true };
+    }
+    if (dto.transferAccountId !== undefined) {
+      scalarData.transferAccount = dto.transferAccountId
+        ? { connect: { id: dto.transferAccountId } }
+        : { disconnect: true };
+    }
     const categoryIdsReplace = categoriesChanging && dto.categoryIds ? dto.categoryIds : null;
 
     // Nothing to do — return the current parent summary with zero counts.
@@ -1907,11 +1961,17 @@ export class TransactionService {
    * Phase 20.2 — account placement + transfer guard (design §6.3).
    *
    * A transaction may only be placed on an account the caller can see
-   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses),
-   * that is not archived, and whose currency equals the transaction's.
-   * "Missing", "not visible" and "archived" all collapse into
-   * `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing about another user's accounts
-   * leaks.
+   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses) and
+   * whose currency equals the transaction's. "Missing", "not visible" and
+   * "archived" all collapse into `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing
+   * about another user's accounts leaks.
+   *
+   * Archiving stops evaluation, not the past (design §2.1): an account that is
+   * *already* the row's placement stays acceptable, so the history of an
+   * archived account remains editable. Only a NEW placement onto an archived
+   * account is refused. Visibility is required either way — `existingAccountId`
+   * / `existingTransferAccountId` are the row's current placement (both null on
+   * create, where every placement is new).
    *
    * A transfer (design §2.4) is one OUT row carrying both a source
    * (`accountId`) and a destination (`transferAccountId`): the two must
@@ -1935,6 +1995,9 @@ export class TransactionService {
       type: string;
       /** The effective category set: primary first, then additional ones. */
       categoryIds: string[];
+      /** The row's current placement; null on create. */
+      existingAccountId?: string | null;
+      existingTransferAccountId?: string | null;
     },
   ): Promise<void> {
     const transferInvalid = (message: string): never => {
@@ -1976,18 +2039,30 @@ export class TransactionService {
     );
     if (ids.length === 0) return;
 
+    // The ids the row already sits on: archived is tolerated for these, so
+    // history stays editable. Compared per field, so moving a placement onto
+    // an archived account is still a new placement.
+    const unchanged = new Set<string>();
+    if (input.accountId !== null && input.accountId === input.existingAccountId) {
+      unchanged.add(input.accountId);
+    }
+    if (
+      input.transferAccountId !== null &&
+      input.transferAccountId === input.existingTransferAccountId
+    ) {
+      unchanged.add(input.transferAccountId);
+    }
+
     const rows = await this.prisma.account.findMany({
-      where: {
-        AND: [{ id: { in: ids }, archivedAt: null }, buildAccountVisibilityWhere(userId)],
-      },
-      select: { id: true, currency: true },
+      where: { AND: [{ id: { in: ids } }, buildAccountVisibilityWhere(userId)] },
+      select: { id: true, currency: true, archivedAt: true },
     });
 
     for (const id of ids) {
       const account = rows.find((r) => r.id === id);
-      if (!account) {
+      if (!account || (account.archivedAt !== null && !unchanged.has(id))) {
         throw new NotFoundException({
-          message: 'Account not found, not visible or archived',
+          message: 'Account not found, not visible, or archived and not already this placement',
           errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND,
         });
       }

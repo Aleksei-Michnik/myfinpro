@@ -45,7 +45,8 @@ Hard gate: exact `amountCents`, same currency and direction, `occurredAt` within
 2. One dedup fence: `(accountId, fingerprint)`; duplicates are counted, never errors.
 3. Transfers are one row and count in **no** spend total (analytics base CTE, budget progress, dashboard totals share the predicate).
 4. Balances are never stored; the reported balance is never derived.
-5. A line decision is always resumable and reversible (`DELETE …/link`), and nothing prompts modally.
+5. A group account's ledger sums **every** countable row placed on it, whatever the reader can see: a member's personal transaction on a shared account moves the shared balance, so the balance and `GET /transactions?accountId=` need not add up _for a given reader_ — by design (design §2.2), not a bug. Placement is therefore re-checked on every scalar edit of a placed row, so an editor who has lost access to the account cannot keep moving its balance through amount or date edits.
+6. A line decision is always resumable and reversible (`DELETE …/link`), and nothing prompts modally.
 
 ## Tests
 
