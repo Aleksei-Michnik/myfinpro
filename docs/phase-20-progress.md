@@ -308,6 +308,15 @@ build`, `node apps/connector/dist/main.js init|sync`): the package is unpublishe
 - Hebrew: `i18n-translator` pass (`b8fad52`, 13 strings: דף חשבון for "statement" everywhere,
   ביטול תוקף for revoke, imperative buttons, MyFinPro feminine).
 
+### Visual QA (`playwright-qa`, throwaway spec, en light · he dark · Pixel 5)
+
+Token list, create dialog, show-once reveal, account-settings entry cards and the Help section
+shot in all three variants; no console errors. Fixed before the merge: the multi-line copy
+field clipped its third command line (it now sizes to its lines), and the Hebrew Help card
+reordered the long left-to-right commands inside its sentence (commands render as isolated
+`<code dir="ltr">` spans through a rich-text tag) — `15b1ac7`. The page's first load was stuck on
+"Loading…" in dev because of a ran-once ref guard (`2eb1501`, now a rule in `ui-conventions`).
+
 ### Security review (2026-09-25)
 
 Verdict on 20.6 + 20.7 (API, CLI, web): **fix first** — two findings closed before the merge of
