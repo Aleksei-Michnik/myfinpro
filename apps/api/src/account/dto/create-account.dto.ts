@@ -3,6 +3,7 @@ import {
   ACCOUNT_KINDS,
   ACCOUNT_LAST4_PATTERN,
   CURRENCY_CODES,
+  MAX_MINOR_UNITS,
   type AccountInstitution,
   type AccountKind,
 } from '@myfinpro/shared';
@@ -20,8 +21,8 @@ import {
   Min,
 } from 'class-validator';
 
-/** Sanity cap on any balance figure — the same order of magnitude transactions use. */
-export const MAX_ACCOUNT_BALANCE_CENTS = 1e11;
+/** Ceiling of the balance INT columns — the one shared money limit. */
+export const MAX_ACCOUNT_BALANCE_CENTS = MAX_MINOR_UNITS;
 
 /** Billing day of a card, 1..28 so every month has one (design §2.4). */
 export const MAX_BILLING_DAY = 28;

@@ -30,6 +30,8 @@ describe('Transactions with accounts (integration)', () => {
   let usdAccountId: string;
   let archivedAccountId: string;
   let bobAccountId: string;
+  let groupId: string;
+  let groupAccountId: string;
 
   const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -71,12 +73,24 @@ describe('Transactions with accounts (integration)', () => {
     usdAccountId = (await account(`USD ${suffix}`, { currency: 'USD' })).id;
     archivedAccountId = (await account(`Archived ${suffix}`, { archivedAt: new Date() })).id;
     bobAccountId = (await account(`Bob ${suffix}`, {}, bob.user.id)).id;
+
+    // Alice's group + a group account, for the membership-loss case below.
+    const groupRes = await request(app.getHttpServer())
+      .post('/api/v1/groups')
+      .set(auth(alice.accessToken))
+      .send({ name: `Account Fam ${suffix}`, type: 'family' })
+      .expect(201);
+    groupId = groupRes.body.id;
+    groupAccountId = (
+      await account(`Shared ${suffix}`, { scopeType: 'group', ownerId: null, groupId })
+    ).id;
   });
 
   afterAll(async () => {
     const userIds = [alice.user.id, bob.user.id];
     await prisma.transaction.deleteMany({ where: { createdById: { in: userIds } } });
     await prisma.account.deleteMany({ where: { createdById: { in: userIds } } });
+    await prisma.group.deleteMany({ where: { id: groupId } });
     await app.close();
   });
 
@@ -251,6 +265,124 @@ describe('Transactions with accounts (integration)', () => {
     expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_CURRENCY_MISMATCH');
   });
 
+  // ── cascade edit (?propagate=) ──
+
+  it('re-checks the placement on the cascade path, not just on a plain PATCH', async () => {
+    const created = await create(alice.accessToken, transferPayload()).expect(201);
+
+    // The reported hole: flipping a transfer to IN leaves both ledgers richer.
+    // The transfer category is BOTH, so nothing else in the cascade path stops it.
+    for (const propagate of ['self', 'all'] as const) {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/transactions/${created.body.id}?propagate=${propagate}`)
+        .set(auth(alice.accessToken))
+        .send({ direction: 'IN' })
+        .expect(400);
+      expect(res.body.errorCode).toBe('TRANSACTION_TRANSFER_INVALID');
+    }
+
+    const after = await request(app.getHttpServer())
+      .get(`/api/v1/transactions/${created.body.id}`)
+      .set(auth(alice.accessToken))
+      .expect(200);
+    expect(after.body.direction).toBe('OUT');
+  });
+
+  it('applies accountId through the cascade path instead of silently dropping it', async () => {
+    const created = await create(alice.accessToken, payload()).expect(201);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}?propagate=all`)
+      .set(auth(alice.accessToken))
+      .send({ accountId: checkingId })
+      .expect(200);
+    expect(res.body.transaction.accountId).toBe(checkingId);
+
+    const mismatch = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}?propagate=self`)
+      .set(auth(alice.accessToken))
+      .send({ accountId: usdAccountId })
+      .expect(400);
+    expect(mismatch.body.errorCode).toBe('TRANSACTION_ACCOUNT_CURRENCY_MISMATCH');
+  });
+
+  it('404s a cascade edit of a row placed on an account the editor cannot see', async () => {
+    const created = await create(alice.accessToken, payload({ accountId: checkingId })).expect(201);
+    // Simulate losing sight of the account the row sits on: a direct move to
+    // another owner is the cheapest way to reproduce it here.
+    await prisma.account.update({
+      where: { id: checkingId },
+      data: { ownerId: bob.user.id },
+    });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${created.body.id}?propagate=all`)
+      .set(auth(alice.accessToken))
+      .send({ amountCents: 9999 })
+      .expect(404);
+    expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    await prisma.account.update({
+      where: { id: checkingId },
+      data: { ownerId: alice.user.id },
+    });
+  });
+
+  // ── archived accounts: history stays editable (design §2.1) ──
+
+  it("keeps an archived account's history editable but refuses new placements", async () => {
+    const retired = await prisma.account.create({
+      data: {
+        name: `Retired ${suffix}`,
+        kind: 'BANK',
+        currency: 'ILS',
+        scopeType: 'personal',
+        ownerId: alice.user.id,
+        createdById: alice.user.id,
+      },
+    });
+    const historical = await create(alice.accessToken, payload({ accountId: retired.id })).expect(
+      201,
+    );
+    const elsewhere = await create(alice.accessToken, payload({ amountCents: 300 })).expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${retired.id}/archive`)
+      .set(auth(alice.accessToken))
+      .expect(200);
+
+    // The past is still the past: note and amount edits go through, and the
+    // placement survives them.
+    for (const body of [{ note: 'reconciled by hand' }, { amountCents: 1999 }]) {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/transactions/${historical.body.id}`)
+        .set(auth(alice.accessToken))
+        .send(body)
+        .expect(200);
+      expect(res.body.accountId).toBe(retired.id);
+    }
+    // Including through the cascade path.
+    await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${historical.body.id}?propagate=all`)
+      .set(auth(alice.accessToken))
+      .send({ amountCents: 2999 })
+      .expect(200);
+
+    // But nothing new may be moved onto it.
+    const moved = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${elsewhere.body.id}`)
+      .set(auth(alice.accessToken))
+      .send({ accountId: retired.id })
+      .expect(404);
+    expect(moved.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    const fresh = await create(alice.accessToken, payload({ accountId: retired.id })).expect(404);
+    expect(fresh.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    await prisma.transaction.deleteMany({ where: { accountId: retired.id } });
+    await prisma.account.delete({ where: { id: retired.id } });
+  });
+
   // ── list filters ──
 
   it('filters by accountId on both sides and honours excludeTransfers', async () => {
@@ -291,6 +423,41 @@ describe('Transactions with accounts (integration)', () => {
       .set(auth(bob.accessToken))
       .expect(200);
     expect(res.body.data).toEqual([]);
+  });
+
+  // ── losing access to the account the row sits on ──
+
+  // A group account's ledger sums every countable row placed on it. An editor
+  // who has left the group can still SEE their own personally-attributed row,
+  // so without a placement re-check on every scalar edit they could keep
+  // moving the group's balance by editing the amount or the date.
+  it('404s an ex-member editing amount or date on a row placed on a group account', async () => {
+    await prisma.groupMembership.create({
+      data: { groupId, userId: bob.user.id, role: 'member' },
+    });
+
+    const created = await create(bob.accessToken, payload({ accountId: groupAccountId })).expect(
+      201,
+    );
+    expect(created.body.accountId).toBe(groupAccountId);
+
+    await prisma.groupMembership.deleteMany({ where: { groupId, userId: bob.user.id } });
+
+    for (const body of [{ amountCents: 500000 }, { occurredAt: '2026-09-11' }]) {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/transactions/${created.body.id}`)
+        .set(auth(bob.accessToken))
+        .send(body)
+        .expect(404);
+      expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+    }
+
+    // The row itself is still his to see, and untouched.
+    const after = await request(app.getHttpServer())
+      .get(`/api/v1/transactions/${created.body.id}`)
+      .set(auth(bob.accessToken))
+      .expect(200);
+    expect(after.body.amountCents).toBe(1250);
   });
 
   // ── account deletion ──

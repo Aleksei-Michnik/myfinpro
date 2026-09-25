@@ -2,6 +2,7 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Job, Queue } from 'bullmq';
+import { buildAccountVisibilityWhere } from '../account/utils/account-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { TRANSACTION_OCCURRENCES_QUEUE } from '../queue/queue.constants';
 import { EventBus } from '../realtime/event-bus.service';
@@ -141,6 +142,32 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
     let occurrenceId: string;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        // Phase 20.2 — the template's account is re-resolved, never trusted.
+        // A schedule outlives the account it was set up with: it may have been
+        // archived, deleted, or the creator may have left the group that owns
+        // it. An occurrence that cannot be placed is still created — it is
+        // real money — just unplaced, exactly as a deleted account SetNulls
+        // the rows that pointed at it.
+        let accountId: string | null = null;
+        if (parent.accountId) {
+          const account = await tx.account.findFirst({
+            where: {
+              AND: [
+                { id: parent.accountId, archivedAt: null },
+                buildAccountVisibilityWhere(parent.createdById),
+              ],
+            },
+            select: { id: true },
+          });
+          accountId = account?.id ?? null;
+          if (!accountId) {
+            this.logger.warn(
+              `[unplaced] account ${parent.accountId} of parent ${parent.id} is archived, ` +
+                `deleted or no longer visible to its creator — occurrence created without it`,
+            );
+          }
+        }
+
         const child = await tx.transaction.create({
           data: {
             direction: parent.direction,
@@ -158,10 +185,10 @@ export class TransactionOccurrenceProcessor extends WorkerHost {
               })),
             },
             parentTransactionId: parent.id,
-            // Phase 20.2 — occurrences inherit the template's account. A
-            // RECURRING parent can never be a transfer, so there is no
-            // transferAccountId to clone.
-            accountId: parent.accountId,
+            // Phase 20.2 — occurrences inherit the template's account when it
+            // still resolves (see above). A RECURRING parent can never be a
+            // transfer, so there is no transferAccountId to clone.
+            accountId,
             note: parent.note,
             createdById: parent.createdById,
             idempotencyKey,

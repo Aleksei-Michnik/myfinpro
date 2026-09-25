@@ -175,9 +175,9 @@ export class AccountController {
   @ApiOperation({
     summary: 'Soft-archive an account (owner / group admin)',
     description:
-      'Archived accounts keep their history and balances but stop accepting new transactions, ' +
-      'and are listed only with `includeArchived=true`. Archiving twice yields 409 ' +
-      'ACCOUNT_ARCHIVED.',
+      'Archived accounts do not accept new placements: no transaction can be moved onto one. ' +
+      'Their history stays editable and their balances keep being computed, and they are ' +
+      'listed only with `includeArchived=true`. Archiving twice yields 409 ACCOUNT_ARCHIVED.',
   })
   @ApiOkResponse({ description: 'Archived account', type: AccountResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
