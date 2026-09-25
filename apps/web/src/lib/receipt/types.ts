@@ -128,4 +128,6 @@ export interface ConfirmReceiptInput {
   /** Attribution scopes to remember (personal / group), mirrors POST /transactions. */
   attributions: AttributionScope[];
   note?: string;
+  /** Phase 20.6 — place the resulting transaction on an account (auto-links its bank line). */
+  accountId?: string;
 }

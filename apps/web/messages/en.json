@@ -1246,6 +1246,7 @@
       "description": "This creates a transaction from the reviewed receipt.",
       "categoryLabel": "Primary category",
       "scopeLabel": "Attribute to",
+      "accountLabel": "Paid from (optional)",
       "noteLabel": "Note (optional)",
       "notePlaceholder": "Defaults to the merchant name",
       "submit": "Confirm & create transaction",
