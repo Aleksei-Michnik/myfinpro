@@ -37,15 +37,14 @@ export interface AuthResponse {
 }
 
 // Phase 20 · Iteration 20.7 — connector tokens (docs/ui/20.7-connector-tokens.md
-// §0). The only scope a token can carry today. Mirrors the API's
-// `API_TOKEN_SCOPE_ACCOUNTS_IMPORT` — the shared constant is owned by the API
-// track (`packages/shared`) and does not exist yet; this literal is the
-// placeholder until it lands there and this file imports it instead.
-export const API_TOKEN_SCOPE_ACCOUNTS_IMPORT = 'accounts:import' as const;
-export type ApiTokenScope = typeof API_TOKEN_SCOPE_ACCOUNTS_IMPORT;
-
-/** Cap enforced by the API (`409 API_TOKEN_LIMIT_REACHED` past this count). */
-export const API_TOKEN_MAX = 10;
+// §0). The scope and the cap are the API's; one constant each, in the shared
+// package, never a second copy that could drift.
+export {
+  API_TOKEN_SCOPE_ACCOUNTS_IMPORT,
+  API_TOKEN_MAX_ACTIVE as API_TOKEN_MAX,
+} from '@myfinpro/shared';
+export type { ApiTokenScope } from '@myfinpro/shared';
+import type { ApiTokenScope } from '@myfinpro/shared';
 
 /** A connector token as listed — never carries the raw secret. */
 export interface ApiTokenSummary {

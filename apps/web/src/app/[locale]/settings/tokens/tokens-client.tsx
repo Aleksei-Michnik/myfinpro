@@ -59,10 +59,11 @@ export function TokensClient() {
     // loadOp.run is referentially stable.
   }, []);
 
-  const startedRef = useRef(false);
+  // No "ran once" ref guard: React's dev-only unmount/remount aborts the first
+  // run, and a guard would leave the page on "Loading…" for good (the
+  // transactions list learnt this the hard way). `run` aborts a superseded
+  // run itself, so the effect is safe to re-enter.
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     runInitial();
   }, [runInitial]);
 
