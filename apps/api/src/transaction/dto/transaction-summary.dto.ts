@@ -45,6 +45,12 @@ export class TransactionSummaryDto {
   /** Source receipt when the transaction came from confirming one (7.13); loaded on the detail endpoint. */
   @ApiPropertyOptional({ nullable: true }) receiptId?: string | null;
   @ApiPropertyOptional({ nullable: true }) parentTransactionId?: string | null;
+  /** Phase 20.2 — the account this movement is placed on (design §6.3). */
+  @ApiPropertyOptional({ nullable: true }) accountId?: string | null;
+  /** Set only on transfers: the destination account. Never counts as spending. */
+  @ApiPropertyOptional({ nullable: true }) transferAccountId?: string | null;
+  /** The statement line that confirmed this transaction, when one did (20.4). */
+  @ApiPropertyOptional({ nullable: true }) statementLineId?: string | null;
   @ApiProperty() createdById!: string;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;

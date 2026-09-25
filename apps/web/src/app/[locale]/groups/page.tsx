@@ -6,6 +6,8 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { CreateGroupDialog } from '@/components/group/CreateGroupDialog';
 import { GroupCard } from '@/components/group/GroupCard';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useGroups } from '@/lib/group/group-context';
 
 export default function GroupsPage() {
@@ -18,19 +20,22 @@ export default function GroupsPage() {
   return (
     <ProtectedRoute>
       <div className="container mx-auto max-w-5xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          {hasGroups && (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => setIsDialogOpen(true)}
-              data-testid="open-create-group-btn"
-            >
-              {t('createGroup')}
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          className="mb-6"
+          title={t('title')}
+          actions={
+            hasGroups ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setIsDialogOpen(true)}
+                data-testid="open-create-group-btn"
+              >
+                {t('createGroup')}
+              </Button>
+            ) : undefined
+          }
+        />
 
         {isLoading && !hasGroups ? (
           <div
@@ -45,23 +50,21 @@ export default function GroupsPage() {
             ))}
           </div>
         ) : !hasGroups ? (
-          <div
-            className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center dark:border-gray-700 dark:bg-gray-800"
+          <EmptyState
             data-testid="groups-empty-state"
-          >
-            <p className="mb-2 text-lg font-medium text-gray-900 dark:text-gray-100">
-              {t('noGroups')}
-            </p>
-            <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">{t('createFirst')}</p>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => setIsDialogOpen(true)}
-              data-testid="open-create-group-btn-empty"
-            >
-              {t('createGroup')}
-            </Button>
-          </div>
+            title={t('noGroups')}
+            description={t('createFirst')}
+            action={
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => setIsDialogOpen(true)}
+                data-testid="open-create-group-btn-empty"
+              >
+                {t('createGroup')}
+              </Button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="groups-grid">
             {groups.map((group) => (

@@ -4,6 +4,8 @@ import { GROUP_ROLES, type GroupRole } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { useGroups } from '@/lib/group/group-context';
 import type { GroupDetail, GroupMember } from '@/lib/group/types';
@@ -140,20 +142,22 @@ export function MemberManagement({ group, currentUserId, onChanged }: MemberMana
                 <label className="sr-only" htmlFor={`role-select-${member.id}`}>
                   {t('roleLabel')}
                 </label>
-                <select
+                <Select
                   id={`role-select-${member.id}`}
                   data-testid={`role-select-${member.id}`}
                   value={member.role}
                   disabled={isCurrentUser || isRolePending}
                   onChange={(e) => handleRoleChange(member, e.target.value as GroupRole)}
-                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  size="sm"
+                  fullWidth={false}
+                  wrapperClassName="contents"
                 >
                   {GROUP_ROLES.map((roleOption) => (
                     <option key={roleOption} value={roleOption}>
                       {t(roleOption)}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <button
                   type="button"
                   onClick={() => handleOpenConfirm(member)}
@@ -185,49 +189,42 @@ export function MemberManagement({ group, currentUserId, onChanged }: MemberMana
       </ul>
 
       {confirmTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="remove-member-title"
-          data-testid="remove-member-dialog"
+        <Dialog
+          open
+          onClose={() => setConfirmTarget(null)}
+          title={t('removeConfirmTitle')}
+          titleId="remove-member-title"
+          testId="remove-member-dialog"
+          danger
         >
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-            <h3
-              id="remove-member-title"
-              className="mb-4 text-lg font-semibold text-red-600 dark:text-red-400"
+          <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+            {t('removeConfirmMessage', { name: confirmTarget.name })}
+          </p>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={handleCloseConfirm}
+              disabled={pendingRemoveUserId === confirmTarget.id}
+              data-testid="remove-member-cancel-btn"
             >
-              {t('removeConfirmTitle')}
-            </h3>
-            <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
-              {t('removeConfirmMessage', { name: confirmTarget.name })}
-            </p>
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                className="flex-1"
-                onClick={handleCloseConfirm}
-                disabled={pendingRemoveUserId === confirmTarget.id}
-                data-testid="remove-member-cancel-btn"
-              >
-                {t('cancelButton')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-                onClick={handleConfirmRemove}
-                disabled={pendingRemoveUserId === confirmTarget.id}
-                data-testid="remove-member-confirm-btn"
-              >
-                {pendingRemoveUserId === confirmTarget.id ? '...' : t('removeConfirmButton')}
-              </Button>
-            </div>
+              {t('cancelButton')}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              className="flex-1"
+              onClick={handleConfirmRemove}
+              disabled={pendingRemoveUserId === confirmTarget.id}
+              data-testid="remove-member-confirm-btn"
+            >
+              {pendingRemoveUserId === confirmTarget.id ? '...' : t('removeConfirmButton')}
+            </Button>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

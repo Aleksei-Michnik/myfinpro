@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Link } from '@/i18n/navigation';
 
 export default async function TermsPage() {
@@ -6,12 +7,7 @@ export default async function TermsPage() {
 
   return (
     <article className="max-w-3xl mx-auto space-y-8 leading-relaxed text-gray-800 dark:text-gray-200">
-      <header>
-        <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">
-          {t('terms.title')}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('terms.lastUpdated')}</p>
-      </header>
+      <PageHeader size="lg" title={t('terms.title')} description={t('terms.lastUpdated')} />
 
       <p>{t('terms.intro')}</p>
 

@@ -70,6 +70,12 @@ export interface TransactionSummary {
   /** Source receipt when the transaction came from confirming one (7.13); loaded on the detail endpoint. */
   receiptId?: string | null;
   parentTransactionId: string | null;
+  /** Phase 20 — the account this movement is placed on; null when unplaced. */
+  accountId?: string | null;
+  /** Set only on transfers between own accounts — such a row is never spending. */
+  transferAccountId?: string | null;
+  /** The statement line that bank-confirmed this transaction, when one did. */
+  statementLineId?: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;

@@ -21,3 +21,5 @@ export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'en';
 
 export * from './default-categories';
+export * from './institutions';
+export * from './money';

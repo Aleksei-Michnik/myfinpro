@@ -11,6 +11,7 @@
 
 import { isPlanKind } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/ui/Select';
 import type { TransactionType, PlanSpec } from '@/lib/transaction/types';
 
 export const PLAN_TRANSACTIONS_COUNT_MAX = 600;
@@ -205,19 +206,20 @@ export function TransactionPlanSubForm({
         {/* Frequency */}
         <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
           <span>{t('frequencyLabel')}</span>
-          <select
+          <Select
             value={state.frequency}
             onChange={(e) => set({ frequency: e.target.value as PlanSpec['frequency'] })}
             disabled={disabled}
             data-testid="plan-frequency"
-            className={inputClass}
+            size="sm"
+            wrapperClassName="contents"
           >
             {FREQUENCIES.map((f) => (
               <option key={f} value={f}>
                 {t(`frequency.${f}`)}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         {/* First due date */}
@@ -244,17 +246,18 @@ export function TransactionPlanSubForm({
         {/* Amortisation method */}
         <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">
           <span>{t('methodLabel')}</span>
-          <select
+          <Select
             value={state.method}
             onChange={(e) => set({ method: e.target.value as PlanSubFormState['method'] })}
             disabled={disabled}
             data-testid="plan-method"
-            className={inputClass}
+            size="sm"
+            wrapperClassName="contents"
           >
             <option value="auto">{t('method.auto')}</option>
             <option value="equal">{t('method.equal')}</option>
             <option value="french">{t('method.french')}</option>
-          </select>
+          </Select>
         </label>
       </div>
 

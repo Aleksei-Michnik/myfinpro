@@ -68,6 +68,9 @@ export interface PlanParentRow {
   amountCents: number;
   currency: string;
   categoryId: string;
+  /** Phase 20.2 — cloned onto every occurrence so the plan's money lands on
+   *  the same account as its parent. Plan parents are never transfers. */
+  accountId: string | null;
   /** Additional categories, cloned onto every pre-generated occurrence. */
   transactionCategories: { categoryId: string; position: number }[];
   createdById: string;
@@ -121,6 +124,7 @@ export async function createPlanWithinTransaction(
           })),
         },
         parentTransactionId: parent.id,
+        accountId: parent.accountId,
         note: null,
         createdById: parent.createdById,
         idempotencyKey: `plan:${plan.id}:${row.index}`,

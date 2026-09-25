@@ -1,4 +1,9 @@
-import { DEFAULT_CATEGORIES } from '@myfinpro/shared';
+import {
+  DEFAULT_BOTH_CATEGORIES,
+  DEFAULT_CATEGORIES,
+  DEFAULT_IN_CATEGORIES,
+  DEFAULT_OUT_CATEGORIES,
+} from '@myfinpro/shared';
 import { PrismaClient } from '@prisma/client';
 import { StartedMySqlContainer } from '@testcontainers/mysql';
 import { seedSystemCategories } from '../../src/transaction/seed-system-categories';
@@ -60,18 +65,18 @@ describe('seedSystemCategories integration', () => {
     expect(row?.name).toBe('Groceries');
   });
 
-  it('seeds 15 OUT + 7 IN system categories', async () => {
+  it('seeds one row per default, in every direction', async () => {
     await seedSystemCategories(prisma);
 
-    const outCount = await prisma.category.count({
-      where: { ownerType: 'system', ownerId: null, direction: 'OUT' },
-    });
-    const inCount = await prisma.category.count({
-      where: { ownerType: 'system', ownerId: null, direction: 'IN' },
-    });
+    const countFor = (direction: string) =>
+      prisma.category.count({ where: { ownerType: 'system', ownerId: null, direction } });
 
-    expect(outCount).toBe(15);
-    expect(inCount).toBe(7);
+    expect(await countFor('OUT')).toBe(DEFAULT_OUT_CATEGORIES.length);
+    expect(await countFor('IN')).toBe(DEFAULT_IN_CATEGORIES.length);
+    // Phase 20 — `transfer` is the first BOTH default; the column had to be
+    // widened to VarChar(4) to hold the value at all.
+    expect(await countFor('BOTH')).toBe(DEFAULT_BOTH_CATEGORIES.length);
+    expect(DEFAULT_BOTH_CATEGORIES.map((c) => c.slug)).toContain('transfer');
   });
 
   it('marks every seeded row as is_system=true', async () => {

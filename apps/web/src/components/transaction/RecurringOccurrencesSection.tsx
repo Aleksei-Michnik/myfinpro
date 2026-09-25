@@ -18,6 +18,8 @@
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TransactionsList, type TransactionsListData } from './TransactionsList';
+import { cardClass } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
@@ -104,7 +106,7 @@ export function RecurringOccurrencesSection({ transactionId }: RecurringOccurren
   return (
     <details
       open
-      className="relative rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
+      className={cardClass({ className: 'relative' })}
       data-testid="recurring-occurrences-section"
     >
       <summary
@@ -137,12 +139,11 @@ export function RecurringOccurrencesSection({ transactionId }: RecurringOccurren
         )}
 
         {showEmpty ? (
-          <p
-            className="rounded-md border border-dashed border-gray-300 px-3 py-6 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
+          <EmptyState
+            className="px-3 py-6"
+            title={t('empty')}
             data-testid="recurring-occurrences-empty"
-          >
-            {t('empty')}
-          </p>
+          />
         ) : (
           <TransactionsList
             data={data}

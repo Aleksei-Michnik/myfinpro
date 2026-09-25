@@ -13,7 +13,9 @@ import { BarcodeScannerDialog } from '@/components/product/BarcodeScannerDialog'
 import { ProductCard } from '@/components/product/ProductCard';
 import { ProductFormDialog } from '@/components/product/ProductFormDialog';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
 import { useProducts } from '@/lib/product/product-context';
@@ -124,33 +126,35 @@ export function ProductsClient() {
 
   return (
     <main className="container mx-auto max-w-5xl space-y-4 px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setScannerOpen(true)}
-            disabled={scanOp.isLoading}
-            data-testid="products-scan"
-          >
-            {t('list.scan')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setCreateBarcode(undefined);
-              setCreateOpen(true);
-            }}
-            data-testid="products-create"
-          >
-            {t('list.create')}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={t('title')}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setScannerOpen(true)}
+              disabled={scanOp.isLoading}
+              data-testid="products-scan"
+            >
+              {t('list.scan')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setCreateBarcode(undefined);
+                setCreateOpen(true);
+              }}
+              data-testid="products-create"
+            >
+              {t('list.create')}
+            </Button>
+          </>
+        }
+      />
 
       {scanOp.isLoading && (
         <p
@@ -201,12 +205,10 @@ export function ProductsClient() {
           ))}
         </div>
       ) : products.length === 0 ? (
-        <div
-          className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
+        <EmptyState
           data-testid="products-empty"
-        >
-          {activeQuery ? t('list.noResults', { query: activeQuery }) : t('list.empty')}
-        </div>
+          title={activeQuery ? t('list.noResults', { query: activeQuery }) : t('list.empty')}
+        />
       ) : (
         <>
           <p aria-live="polite" className="sr-only">

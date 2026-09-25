@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { Textarea } from '@/components/ui/Textarea';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type { Comment } from '@/lib/transaction/types';
 import { useAsyncOperation } from '@/lib/ui';
@@ -75,7 +76,7 @@ export function TransactionCommentInput({
     >
       <label className="block">
         <span className="sr-only">{t('postPlaceholder')}</span>
-        <textarea
+        <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={t('postPlaceholder')}
@@ -83,7 +84,7 @@ export function TransactionCommentInput({
           rows={3}
           disabled={isDisabled}
           data-testid="comment-input-textarea"
-          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          wrapperClassName="contents"
         />
       </label>
       {validationError && (

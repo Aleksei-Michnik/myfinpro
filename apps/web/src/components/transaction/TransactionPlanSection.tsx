@@ -12,6 +12,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -105,36 +106,30 @@ export function TransactionPlanSection({
 
   if (loadOp.isLoading && !plan) {
     return (
-      <section
-        className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="plan-section-loading"
-        role="status"
-      >
+      <Card as="section" padding="sm" data-testid="plan-section-loading" role="status">
         <div className="h-4 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-      </section>
+      </Card>
     );
   }
 
   if (loadOp.error && !plan) {
     return (
-      <section
-        className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="plan-section-error"
-      >
+      <Card as="section" padding="sm" data-testid="plan-section-error">
         <InlineErrorBanner
           reason={loadOp.error.reason}
           httpStatus={loadOp.error.httpStatus}
           onRetry={load}
         />
-      </section>
+      </Card>
     );
   }
 
   if (!plan) return null;
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
+      padding="sm"
       aria-labelledby="plan-section-title"
       data-testid="plan-section"
       data-cancelled={cancelled || undefined}
@@ -261,6 +256,6 @@ export function TransactionPlanSection({
           )}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

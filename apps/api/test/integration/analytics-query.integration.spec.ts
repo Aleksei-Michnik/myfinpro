@@ -321,6 +321,49 @@ describe('POST /analytics/query (integration)', () => {
       },
     });
 
+    // T11 — Phase 20 §2.4: a transfer between two of Alice's own accounts.
+    // It is a POSTED ONE_TIME OUT row of 250000 in June, so it would dominate
+    // every USD total if the base CTE did not drop `transfer_account_id IS
+    // NOT NULL`. The totals below are the assertion that it does. Inserted
+    // straight through Prisma and deliberately filed under a *spending*
+    // category (the API would insist on the `transfer` one) so that the only
+    // thing excluding it is the CTE predicate, not its category.
+    const transferFrom = await prisma.account.create({
+      data: {
+        name: `Analytics checking ${suffix}`,
+        kind: 'BANK',
+        currency: 'USD',
+        scopeType: 'personal',
+        ownerId: alice.user.id,
+        createdById: alice.user.id,
+      },
+    });
+    const transferTo = await prisma.account.create({
+      data: {
+        name: `Analytics savings ${suffix}`,
+        kind: 'BANK',
+        currency: 'USD',
+        scopeType: 'personal',
+        ownerId: alice.user.id,
+        createdById: alice.user.id,
+      },
+    });
+    await prisma.transaction.create({
+      data: {
+        direction: 'OUT',
+        type: 'ONE_TIME',
+        amountCents: 250000,
+        currency: 'USD',
+        occurredAt: new Date('2026-06-14T12:00:00.000Z'),
+        status: 'POSTED',
+        categoryId: catHome,
+        createdById: alice.user.id,
+        accountId: transferFrom.id,
+        transferAccountId: transferTo.id,
+        attributions: { create: [{ scopeType: 'personal', userId: alice.user.id }] },
+      },
+    });
+
     // T10 — May spend (period-dimension fixture, outside the June filters).
     await createTransaction(alice.accessToken, {
       amountCents: 6000,
@@ -334,6 +377,7 @@ describe('POST /analytics/query (integration)', () => {
       const userIds = [alice.user.id, bob.user.id, carol.user.id];
       await prisma.receipt.deleteMany({ where: { uploadedById: { in: userIds } } });
       await prisma.transaction.deleteMany({ where: { createdById: { in: userIds } } });
+      await prisma.account.deleteMany({ where: { createdById: { in: userIds } } });
       await prisma.product.deleteMany({ where: { id: { in: [productMilk, productSoap] } } });
       await prisma.merchant.deleteMany({ where: { id: merchantId } });
       await prisma.group.deleteMany({ where: { id: { in: [groupId, carolGroupId] } } });
@@ -359,6 +403,28 @@ describe('POST /analytics/query (integration)', () => {
     expect(eur.spendCents).toBe(3000);
     expect(eur.transactionCount).toBe(1);
     expect(eur.itemCount).toBe(0);
+  });
+
+  // Phase 20 §2.4 — transfers move money between the user's own accounts and
+  // are spending in neither direction; the base CTE drops them.
+  it('excludes transfers between own accounts from every total', async () => {
+    const res = await runQuery(alice.accessToken, { dimensions: [], filters: { ...JUNE } });
+    const usd = res.body.data.find((r) => r.currency === 'USD')!;
+    // T11 is a 250000 OUT row in the window; neither its amount nor its row
+    // may appear.
+    expect(usd.spendCents).toBe(JUNE_USD_TOTAL);
+    expect(usd.transactionCount).toBe(6);
+
+    const byCategory = await runQuery(alice.accessToken, {
+      dimensions: ['category'],
+      filters: { ...JUNE, currencies: ['USD'] },
+    });
+    const home = byCategory.body.data.find(
+      (r) => (r.keys.category as { id: string }).id === catHome,
+    );
+    // The `home` bucket keeps T1 + the recurring occurrence and nothing else,
+    // even though the transfer carries the same category.
+    expect(home?.spendCents).toBe(407700);
   });
 
   it('groups by category at hybrid grain (items + header fallback + balancing)', async () => {

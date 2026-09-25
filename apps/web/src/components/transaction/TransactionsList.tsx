@@ -27,6 +27,7 @@ import { TransactionsFilters, type TransactionsFiltersValue } from './Transactio
 import { AttachReceiptDialog } from '@/components/receipt/AttachReceiptDialog';
 import { LinkReceiptDialog } from '@/components/receipt/LinkReceiptDialog';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from '@/i18n/navigation';
@@ -462,12 +463,12 @@ export function TransactionsList({
       )}
 
       {showEmpty && (
-        <div
-          className="py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+        <EmptyState
+          bordered={false}
+          className="py-8"
+          title={emptyState ?? t('list.empty')}
           data-testid="transactions-list-empty"
-        >
-          {emptyState ?? t('list.empty')}
-        </div>
+        />
       )}
 
       {!showEmpty && rows.length > 0 && (

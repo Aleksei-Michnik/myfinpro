@@ -1,4 +1,11 @@
-import { CURRENCY_CODES, CurrencyCode, isPlanKind, TRANSACTION_PLAN_KINDS } from '@myfinpro/shared';
+import {
+  CURRENCY_CODES,
+  CurrencyCode,
+  isPlanKind,
+  MAX_MINOR_UNITS,
+  TRANSACTION_PLAN_KINDS,
+  TRANSFER_CATEGORY_SLUG,
+} from '@myfinpro/shared';
 import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
@@ -10,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
+import { buildAccountVisibilityWhere } from '../account/utils/account-visibility';
 import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TRANSACTION_OCCURRENCES_QUEUE } from '../queue/queue.constants';
@@ -36,9 +44,14 @@ import {
   computeTransactionRecipients,
   type RecipientAttribution,
 } from './utils/transaction-event-recipients';
+import { buildTransactionVisibilityWhere } from './utils/transaction-visibility';
 
-/** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
-const MAX_AMOUNT_CENTS = 1e11;
+/**
+ * Ceiling of the `amount_cents` INT column, from the one shared money limit
+ * (`MAX_MINOR_UNITS`). The previous local `1e11` sat *above* the column's own
+ * range, so a large-but-accepted amount would have failed at the database.
+ */
+const MAX_AMOUNT_CENTS = MAX_MINOR_UNITS;
 
 /**
  * Transaction types that the create flow accepts today.
@@ -56,7 +69,7 @@ export const SUPPORTED_CREATE_TYPES = ['ONE_TIME', 'RECURRING'] as const;
 export type SupportedCreateType = (typeof SUPPORTED_CREATE_TYPES)[number];
 
 /** Compact category projection embedded in transaction responses. */
-const CATEGORY_SUMMARY_SELECT = {
+export const CATEGORY_SUMMARY_SELECT = {
   id: true,
   slug: true,
   name: true,
@@ -83,10 +96,12 @@ export const TRANSACTION_DETAIL_INCLUDE = {
   // Back-link to the source receipt when the transaction came from confirming
   // one (7.13) — a receipt is the transaction's proving document.
   receipt: { select: { id: true } },
+  // Phase 20.2 — the statement line that bank-confirmed this row (20.4 links it).
+  statementLine: { select: { id: true } },
 } as const;
 
 /** Build the include with the `stars.where.userId` set to the viewer. */
-function buildDetailInclude(userId: string) {
+export function buildDetailInclude(userId: string) {
   return {
     category: TRANSACTION_DETAIL_INCLUDE.category,
     transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
@@ -94,6 +109,7 @@ function buildDetailInclude(userId: string) {
     stars: { where: { userId }, select: { id: true } },
     _count: TRANSACTION_DETAIL_INCLUDE._count,
     receipt: TRANSACTION_DETAIL_INCLUDE.receipt,
+    statementLine: TRANSACTION_DETAIL_INCLUDE.statementLine,
   } satisfies Prisma.TransactionInclude;
 }
 
@@ -119,6 +135,9 @@ export type TransactionWithRelations = {
   status: string;
   note: string | null;
   parentTransactionId: string | null;
+  /** Phase 20.2 — the account the money moved on / into (design §6.3). */
+  accountId: string | null;
+  transferAccountId: string | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -148,6 +167,8 @@ export type TransactionWithRelations = {
   }>;
   /** Loaded by the detail include only; undefined on list rows. */
   receipt?: { id: string } | null;
+  /** Loaded by the detail include only; undefined on freshly-created rows. */
+  statementLine?: { id: string } | null;
 };
 
 /**
@@ -188,6 +209,9 @@ export function mapTransactionToSummary(
     hasDocuments: opts.hasDocuments ?? false,
     receiptId: transaction.receipt?.id ?? null,
     parentTransactionId: transaction.parentTransactionId,
+    accountId: transaction.accountId,
+    transferAccountId: transaction.transferAccountId,
+    statementLineId: transaction.statementLine?.id ?? null,
     createdById: transaction.createdById,
     createdAt: transaction.createdAt.toISOString(),
     updatedAt: transaction.updatedAt.toISOString(),
@@ -206,28 +230,6 @@ export class TransactionService {
   ) {}
 
   /**
-   * Visibility predicate (design §5.2): a transaction is visible to `userId` iff at
-   * least one of its attributions is personal to them OR targets a group they
-   * are a member of. Shared between list() (scope=all), findByIdForUser(), and
-   * update() — one source of truth for access logic.
-   */
-  private buildVisibilityWhere(userId: string): Prisma.TransactionWhereInput {
-    return {
-      attributions: {
-        some: {
-          OR: [
-            { scopeType: 'personal', userId },
-            {
-              scopeType: 'group',
-              group: { memberships: { some: { userId } } },
-            },
-          ],
-        },
-      },
-    };
-  }
-
-  /**
    * Public, lightweight visibility guard — cross-service helper.
    *
    * Throws `NotFoundException` with `TRANSACTION_NOT_FOUND` when `transactionId` does
@@ -241,7 +243,7 @@ export class TransactionService {
    */
   async assertVisible(userId: string, transactionId: string): Promise<void> {
     const visible = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       select: { id: true },
     });
     if (!visible) {
@@ -250,6 +252,102 @@ export class TransactionService {
         errorCode: TRANSACTION_ERRORS.TRANSACTION_NOT_FOUND,
       });
     }
+  }
+
+  /**
+   * Phase 20 · Iteration 20.4 — enrich a transaction that a statement line
+   * confirmed (design §5.5, "line → transaction").
+   *
+   * The bank has seen this money, so: the transaction is placed on the
+   * account when it floated unplaced, and a `PENDING` / `DUE` occurrence
+   * becomes `POSTED`. Nothing else is rewritten — `occurredAt` stays the
+   * user's date, the line keeps the bank's `postedAt`.
+   *
+   * This is the ONE write path for that enrichment; the account module never
+   * writes transaction rows itself. It deliberately does not go through
+   * `update()`: that endpoint is creator-only, refuses generated occurrences
+   * (which §5.1 explicitly accepts as candidates) and cannot set `status`.
+   * Access here is the reconciler's: any user who can see the transaction
+   * and the account may confirm it.
+   *
+   * Idempotent — confirming an already-placed, already-posted transaction
+   * changes nothing and emits nothing.
+   */
+  async confirmByStatementLine(
+    actorId: string,
+    transactionId: string,
+    accountId: string,
+    lineId: string,
+  ): Promise<TransactionSummaryDto> {
+    const existing = await this.prisma.transaction.findFirst({
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(actorId)] },
+      include: buildDetailInclude(actorId),
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Transaction not found',
+        errorCode: TRANSACTION_ERRORS.TRANSACTION_NOT_FOUND,
+      });
+    }
+
+    const data: Prisma.TransactionUncheckedUpdateInput = {};
+    if (existing.accountId === null) {
+      await this.validateAccountPlacement(actorId, {
+        accountId,
+        transferAccountId: existing.transferAccountId,
+        direction: existing.direction as 'IN' | 'OUT',
+        currency: existing.currency,
+        type: existing.type,
+        categoryIds: [
+          existing.categoryId,
+          ...existing.transactionCategories.map((tc) => tc.categoryId),
+        ],
+        existingAccountId: null,
+        existingTransferAccountId: existing.transferAccountId,
+      });
+      data.accountId = accountId;
+    }
+    if (existing.status === 'PENDING' || existing.status === 'DUE') {
+      data.status = 'POSTED';
+    }
+
+    const summaryOf = (row: unknown): TransactionSummaryDto =>
+      mapTransactionToSummary(row as TransactionWithRelations, {
+        starredByMe: existing.stars.length > 0,
+        commentCount: existing._count.comments,
+        hasDocuments: existing._count.documents > 0,
+      });
+
+    if (Object.keys(data).length === 0) return summaryOf(existing);
+
+    const updated = await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data,
+      include: buildDetailInclude(actorId),
+    });
+
+    void this.writeAudit(actorId, transactionId, 'TRANSACTION_UPDATED', {
+      changed: Object.keys(data).sort(),
+      reason: 'statement_match',
+      statementLineId: lineId,
+    });
+
+    const summary = summaryOf(updated);
+    const recipients = await computeTransactionRecipients(
+      this.prisma,
+      existing.attributions as RecipientAttribution[],
+      existing.createdById,
+    );
+    this.eventBus.publish({
+      type: 'transaction.updated',
+      userIds: recipients,
+      transaction: summary,
+    });
+
+    this.logger.log(
+      `Transaction ${transactionId} confirmed by statement line ${lineId} (account ${accountId}) for user ${actorId}`,
+    );
+    return summary;
   }
 
   /**
@@ -320,6 +418,16 @@ export class TransactionService {
     // 5. Date — reject occurredAt more than 1 day in the future (timezone grace).
     const occurredAt = this.parseAndValidateOccurredAt(dto.occurredAt);
 
+    // 5b. Accounts (Phase 20.2, design §6.3) — placement + transfer rules.
+    await this.validateAccountPlacement(userId, {
+      accountId: dto.accountId ?? null,
+      transferAccountId: dto.transferAccountId ?? null,
+      direction: dto.direction,
+      currency: dto.currency,
+      type: dto.type,
+      categoryIds: dto.categoryIds,
+    });
+
     // 6. Categories — every id passes the visibility + direction checks. The
     //    first id is the primary (stored on `categoryId`), the rest become
     //    position-ordered `TransactionCategory` rows.
@@ -355,6 +463,8 @@ export class TransactionService {
             categoryId: dto.categoryIds[0],
             transactionCategories: { create: additionalCategoriesCreate(dto.categoryIds) },
             note: dto.note ?? null,
+            accountId: dto.accountId ?? null,
+            transferAccountId: dto.transferAccountId ?? null,
             createdById: userId,
             attributions: {
               create: dto.attributions.map((a) => ({
@@ -386,6 +496,8 @@ export class TransactionService {
       currency: dto.currency,
       categoryIds: dto.categoryIds,
       attributions: dto.attributions,
+      accountId: dto.accountId ?? null,
+      transferAccountId: dto.transferAccountId ?? null,
       ...(planComputed
         ? {
             plan: {
@@ -599,7 +711,7 @@ export class TransactionService {
       };
     } else {
       // 'all' (default) — shared helper with findByIdForUser / update.
-      visibilityClause = this.buildVisibilityWhere(userId);
+      visibilityClause = buildTransactionVisibilityWhere(userId);
     }
 
     const andClauses: Prisma.TransactionWhereInput[] = [visibilityClause];
@@ -662,6 +774,19 @@ export class TransactionService {
       andClauses.push({ createdById: userId });
     }
 
+    // ── 2c. Account filters (Phase 20.2) ──
+    // `accountId` matches both sides of a movement: rows placed on the
+    // account and transfers into it. `excludeTransfers` drops transfer rows,
+    // which are money moving between own accounts, never spending.
+    if (q.accountId) {
+      andClauses.push({
+        OR: [{ accountId: q.accountId }, { transferAccountId: q.accountId }],
+      });
+    }
+    if (q.excludeTransfers === 'true') {
+      andClauses.push({ transferAccountId: null });
+    }
+
     if (q.starred === 'true') {
       andClauses.push({ stars: { some: { userId } } });
     } else if (q.starred === 'false') {
@@ -715,7 +840,7 @@ export class TransactionService {
    */
   async findByIdForUser(userId: string, transactionId: string): Promise<TransactionSummaryDto> {
     const row = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
 
@@ -750,7 +875,7 @@ export class TransactionService {
   ): Promise<TransactionSummaryDto | null> {
     // 1. Fetch with visibility guard — 404 when not visible or missing.
     const existing = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
 
@@ -777,7 +902,9 @@ export class TransactionService {
       dto.occurredAt !== undefined ||
       dto.categoryIds !== undefined ||
       dto.note !== undefined ||
-      dto.type !== undefined;
+      dto.type !== undefined ||
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     if (!hasScalarField && !hasAttributionField) {
@@ -845,6 +972,35 @@ export class TransactionService {
           errorCode: TRANSACTION_ERRORS.TRANSACTION_INVALID_CURRENCY,
         });
       }
+    }
+
+    // 9b. Accounts (Phase 20.2) — validate against the merged state so a
+    //     partial patch can't leave a transfer without a source, or an
+    //     account whose currency no longer matches the transaction's.
+    const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
+    const effectiveTransferAccountId =
+      dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
+    // Any scalar edit to a row that is (or becomes) placed on an account is
+    // re-checked, not just the fields that name the account: changing
+    // `amountCents` or `occurredAt` moves a shared account's ledger just as
+    // surely as changing its currency does, so an editor who has since lost
+    // access to that account must not be able to do it through the back door.
+    const carriesAccount =
+      existing.accountId !== null ||
+      existing.transferAccountId !== null ||
+      effectiveAccountId !== null ||
+      effectiveTransferAccountId !== null;
+    if (hasScalarField && carriesAccount) {
+      await this.validateAccountPlacement(userId, {
+        accountId: effectiveAccountId,
+        transferAccountId: effectiveTransferAccountId,
+        direction: effectiveDirection,
+        currency: dto.currency ?? existing.currency,
+        type: dto.type ?? existing.type,
+        categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
+      });
     }
 
     // 10. Attribution diff (when dto.attributions present).
@@ -934,6 +1090,14 @@ export class TransactionService {
     }
     if (dto.note !== undefined) data.note = dto.note === '' ? null : dto.note;
     if (dto.type !== undefined) data.type = dto.type;
+    if (dto.accountId !== undefined) {
+      data.account = dto.accountId ? { connect: { id: dto.accountId } } : { disconnect: true };
+    }
+    if (dto.transferAccountId !== undefined) {
+      data.transferAccount = dto.transferAccountId
+        ? { connect: { id: dto.transferAccountId } }
+        : { disconnect: true };
+    }
 
     // Cascade trigger: parent transitioning out of RECURRING tears down its
     // schedule + scheduler in the same transaction. ONE_TIME → RECURRING is
@@ -1164,7 +1328,7 @@ export class TransactionService {
   ): Promise<CascadeEditResponseDto> {
     // 1. Fetch parent with visibility guard.
     const existing = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
     if (!existing) {
@@ -1203,7 +1367,12 @@ export class TransactionService {
       dto.amountCents !== undefined ||
       dto.currency !== undefined ||
       dto.categoryIds !== undefined ||
-      dto.note !== undefined;
+      dto.note !== undefined ||
+      // Phase 20.2 — these were accepted by the DTO and silently dropped here,
+      // so the cascade path could change a placed row's direction or currency
+      // without the placement ever being re-checked.
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined;
     const hasAttributionField = dto.attributions !== undefined;
 
     // 5. Validate scalar fields (reuse the single-edit validators). Like
@@ -1236,6 +1405,40 @@ export class TransactionService {
       });
     }
 
+    // 5b. Accounts (Phase 20.2, design §6.3) — the same guard update() applies,
+    //     against the merged state. The cascade writes direction, currency and
+    //     category deltas onto the parent AND every child, each of which may be
+    //     placed on an account, so skipping this check here would let an edit
+    //     move money on an account the caller can no longer use — or flip a
+    //     transfer's direction so both ledgers gain the amount.
+    const effectiveAccountId = dto.accountId !== undefined ? dto.accountId : existing.accountId;
+    const effectiveTransferAccountId =
+      dto.transferAccountId !== undefined ? dto.transferAccountId : existing.transferAccountId;
+    const accountInputsPresent =
+      dto.accountId !== undefined ||
+      dto.transferAccountId !== undefined ||
+      dto.direction !== undefined ||
+      dto.currency !== undefined ||
+      dto.type !== undefined ||
+      dto.categoryIds !== undefined ||
+      dto.amountCents !== undefined ||
+      dto.occurredAt !== undefined;
+    if (
+      accountInputsPresent &&
+      (effectiveAccountId !== null || effectiveTransferAccountId !== null)
+    ) {
+      await this.validateAccountPlacement(userId, {
+        accountId: effectiveAccountId,
+        transferAccountId: effectiveTransferAccountId,
+        direction: effectiveDirection,
+        currency: dto.currency ?? existing.currency,
+        type: dto.type ?? existing.type,
+        categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
+      });
+    }
+
     // 6. Validate desired attributions (non-empty, in editor scope).
     const desired = dto.attributions ?? [];
     if (hasAttributionField) {
@@ -1253,6 +1456,16 @@ export class TransactionService {
       scalarData.category = { connect: { id: dto.categoryIds[0] } };
     }
     if (dto.note !== undefined) scalarData.note = dto.note === '' ? null : dto.note;
+    if (dto.accountId !== undefined) {
+      scalarData.account = dto.accountId
+        ? { connect: { id: dto.accountId } }
+        : { disconnect: true };
+    }
+    if (dto.transferAccountId !== undefined) {
+      scalarData.transferAccount = dto.transferAccountId
+        ? { connect: { id: dto.transferAccountId } }
+        : { disconnect: true };
+    }
     const categoryIdsReplace = categoriesChanging && dto.categoryIds ? dto.categoryIds : null;
 
     // Nothing to do — return the current parent summary with zero counts.
@@ -1746,6 +1959,124 @@ export class TransactionService {
     }
   }
 
+  /**
+   * Phase 20.2 — account placement + transfer guard (design §6.3).
+   *
+   * A transaction may only be placed on an account the caller can see
+   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses) and
+   * whose currency equals the transaction's. "Missing", "not visible" and
+   * "archived" all collapse into `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing
+   * about another user's accounts leaks.
+   *
+   * Archiving stops evaluation, not the past (design §2.1): an account that is
+   * *already* the row's placement stays acceptable, so the history of an
+   * archived account remains editable. Only a NEW placement onto an archived
+   * account is refused. Visibility is required either way — `existingAccountId`
+   * / `existingTransferAccountId` are the row's current placement (both null on
+   * create, where every placement is new).
+   *
+   * A transfer (design §2.4) is one OUT row carrying both a source
+   * (`accountId`) and a destination (`transferAccountId`): the two must
+   * differ, share the currency, and the row must be a plain ONE_TIME
+   * movement — a transfer is never a recurring or plan parent, because its
+   * children would each claim to move the same money again.
+   *
+   * A transfer is also filed under exactly one category: the `transfer`
+   * system category (direction BOTH). It is spending in neither direction, so
+   * it carries no spending category and no additional ones — that is what
+   * keeps it out of every category breakdown even before the
+   * `transfer_account_id IS NULL` predicate does its work.
+   */
+  private async validateAccountPlacement(
+    userId: string,
+    input: {
+      accountId: string | null;
+      transferAccountId: string | null;
+      direction: 'IN' | 'OUT';
+      currency: string;
+      type: string;
+      /** The effective category set: primary first, then additional ones. */
+      categoryIds: string[];
+      /** The row's current placement; null on create. */
+      existingAccountId?: string | null;
+      existingTransferAccountId?: string | null;
+    },
+  ): Promise<void> {
+    const transferInvalid = (message: string): never => {
+      throw new BadRequestException({
+        message,
+        errorCode: TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID,
+      });
+    };
+
+    if (input.transferAccountId !== null) {
+      if (input.type !== 'ONE_TIME') {
+        transferInvalid('Transfers must be ONE_TIME transactions');
+      }
+      if (input.direction !== 'OUT') {
+        transferInvalid('Transfers leave the source account — direction must be OUT');
+      }
+      if (input.accountId === null) {
+        transferInvalid('Transfers require a source accountId');
+      }
+      if (input.accountId === input.transferAccountId) {
+        transferInvalid('Transfer source and destination must be different accounts');
+      }
+      if (input.categoryIds.length !== 1) {
+        transferInvalid('A transfer carries exactly one category and no additional ones');
+      }
+      const primary = await this.prisma.category.findFirst({
+        where: { id: input.categoryIds[0], ownerType: 'system', slug: TRANSFER_CATEGORY_SLUG },
+        select: { id: true },
+      });
+      if (!primary) {
+        transferInvalid(
+          `A transfer's category must be the '${TRANSFER_CATEGORY_SLUG}' system category`,
+        );
+      }
+    }
+
+    const ids = [input.accountId, input.transferAccountId].filter(
+      (id): id is string => id !== null,
+    );
+    if (ids.length === 0) return;
+
+    // The ids the row already sits on: archived is tolerated for these, so
+    // history stays editable. Compared per field, so moving a placement onto
+    // an archived account is still a new placement.
+    const unchanged = new Set<string>();
+    if (input.accountId !== null && input.accountId === input.existingAccountId) {
+      unchanged.add(input.accountId);
+    }
+    if (
+      input.transferAccountId !== null &&
+      input.transferAccountId === input.existingTransferAccountId
+    ) {
+      unchanged.add(input.transferAccountId);
+    }
+
+    const rows = await this.prisma.account.findMany({
+      where: { AND: [{ id: { in: ids } }, buildAccountVisibilityWhere(userId)] },
+      select: { id: true, currency: true, archivedAt: true },
+    });
+
+    for (const id of ids) {
+      const account = rows.find((r) => r.id === id);
+      if (!account || (account.archivedAt !== null && !unchanged.has(id))) {
+        throw new NotFoundException({
+          message: 'Account not found, not visible, or archived and not already this placement',
+          errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND,
+        });
+      }
+      if (account.currency !== input.currency) {
+        throw new BadRequestException({
+          message: `Account currency '${account.currency}' does not match the transaction currency '${input.currency}'`,
+          errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH,
+        });
+      }
+    }
+  }
+
   private ensureCategoryDirectionMatches(
     category: { direction: string },
     direction: 'IN' | 'OUT',
@@ -1896,7 +2227,7 @@ export class TransactionService {
   async toggleStar(userId: string, transactionId: string): Promise<ToggleStarResponseDto> {
     // 1. Visibility check — lightweight, just need the id.
     const visible = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       select: { id: true },
     });
     if (!visible) {

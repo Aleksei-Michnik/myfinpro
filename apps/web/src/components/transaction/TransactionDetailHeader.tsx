@@ -8,8 +8,10 @@
 // optimistic flip + revert logic is DRY with `<TransactionRow>`.
 
 import { useLocale, useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Card } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
@@ -103,10 +105,7 @@ export function TransactionDetailHeader({
   const starColor = starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500';
 
   return (
-    <header
-      data-testid="transaction-detail-header"
-      className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-    >
+    <Card as="header" data-testid="transaction-detail-header">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span
           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${directionClass}`}
@@ -115,18 +114,10 @@ export function TransactionDetailHeader({
         >
           {directionLabel}
         </span>
-        <span
-          className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-          data-testid="detail-type"
-        >
-          {typeLabel}
-        </span>
-        <span
-          className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
-          data-testid="detail-status"
-        >
+        <Badge data-testid="detail-type">{typeLabel}</Badge>
+        <Badge tone="primary" data-testid="detail-status">
           {statusLabel}
-        </span>
+        </Badge>
       </div>
 
       <div
@@ -244,6 +235,6 @@ export function TransactionDetailHeader({
           {tDetail('delete')}
         </Button>
       </div>
-    </header>
+    </Card>
   );
 }

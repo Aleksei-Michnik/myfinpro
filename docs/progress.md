@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-07-20
-> **Current work:** Phase 9 — Purchase Analytics (9.1 aggregation engine shipped, saved views next) · Phase 8 — Product Catalog, Matching & Barcode (8.1–8.27 shipped) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
+> **Last updated:** 2026-09-25
+> **Current work:** Phase 20 — Accounts, Balances & Bank Sync (designed 2026-09-25; 20.1 UI kit and 20.2 schema + API in flight) · Phase 9 — Purchase Analytics (9.1 aggregation engine shipped, saved views next) · Phase 8 — Product Catalog, Matching & Barcode (8.1–8.27 shipped) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
 
 This document is an **index**: per-phase status and a short summary, with a link to each phase's detailed progress document (`phase-<number>-progress.md`). Formatting rules for progress documentation live in [`.kilocode/rules/docs.md`](../.kilocode/rules/docs.md).
 
@@ -61,6 +61,7 @@ This document is an **index**: per-phase status and a short summary, with a link
 | 17    | WebMCP (in-GUI agent tools)                     | ⬜ Not started | —          | —                                            |
 | 18    | Centralized Search                              | ⬜ Not started | —          | —                                            |
 | 19    | LLM Usage & Cost Tracking                       | ⬜ Not started | —          | —                                            |
+| 20    | Accounts, Balances & Bank Sync                  | 🔄 In progress | —          | [phase-20-progress.md](phase-20-progress.md) |
 
 ---
 
@@ -142,3 +143,7 @@ Kickoff 10.1 (runs in parallel with the receipts/catalog track): shared budget t
 | [`docs/ui-realtime-conventions.md`](ui-realtime-conventions.md)                 | UI realtime (SSE) conventions                            |
 | [`IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md)                           | Full implementation roadmap (phases 0–19)                |
 | [`SPECIFICATION-USER-STORIES.md`](../SPECIFICATION-USER-STORIES.md)             | User stories and requirements                            |
+
+### Phase 20 — Accounts, Balances & Bank Sync
+
+Accounts (bank, card, cash) scoped like budgets with a derived ledger balance and a bank-reported balance; transfers between own accounts that never count as spending (the credit-card billing cycle); secure bank sync — statements parsed in the browser or pushed by a user-run connector, reconciled against existing transactions with two-way enrichment and skippable prompts. Preceded by a UI kit extracted from the existing components. Design: [phase-20-accounts-design.md](phase-20-accounts-design.md). Details: [phase-20-progress.md](phase-20-progress.md).

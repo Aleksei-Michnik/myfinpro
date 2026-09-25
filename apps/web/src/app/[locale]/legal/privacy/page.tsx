@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Link } from '@/i18n/navigation';
 
 export default async function PrivacyPage() {
@@ -6,12 +7,7 @@ export default async function PrivacyPage() {
 
   return (
     <article className="max-w-3xl mx-auto space-y-8 leading-relaxed text-gray-800 dark:text-gray-200">
-      <header>
-        <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">
-          {t('privacy.title')}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('privacy.lastUpdated')}</p>
-      </header>
+      <PageHeader size="lg" title={t('privacy.title')} description={t('privacy.lastUpdated')} />
 
       <p>{t('privacy.intro')}</p>
 

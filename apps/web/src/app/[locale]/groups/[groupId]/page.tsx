@@ -6,7 +6,10 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GroupTransactionsTab } from '@/components/group/GroupTransactionsTab';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -130,10 +133,7 @@ function GroupDashboardInner() {
   if (isLoading) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-dashboard-loading"
-        >
+        <Card padding="lg" data-testid="group-dashboard-loading">
           <div className="mb-4 h-8 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-2 h-4 w-1/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           <div className="mb-6 h-4 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
@@ -143,7 +143,7 @@ function GroupDashboardInner() {
             ))}
           </div>
           <p className="sr-only">{t('dashboard.loading')}</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -151,10 +151,7 @@ function GroupDashboardInner() {
   if (hasError || !group) {
     return (
       <div className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="group-dashboard-error"
-        >
+        <Card padding="lg" data-testid="group-dashboard-error">
           <h1
             className="mb-4 text-xl font-semibold text-gray-900 dark:text-gray-100"
             data-testid="group-dashboard-error-title"
@@ -170,7 +167,7 @@ function GroupDashboardInner() {
           >
             {t('dashboard.backToGroups')}
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -180,10 +177,7 @@ function GroupDashboardInner() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       {/* Header */}
-      <div
-        className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-header"
-      >
+      <Card padding="lg" className="mb-6" data-testid="group-dashboard-header">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1
@@ -193,18 +187,12 @@ function GroupDashboardInner() {
               {group.name}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:bg-primary-900/40 dark:text-primary-200"
-                data-testid="group-dashboard-type-badge"
-              >
+              <Badge tone="primary" size="md" data-testid="group-dashboard-type-badge">
                 {typeLabel}
-              </span>
-              <span
-                className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 font-mono text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                data-testid="group-dashboard-currency-badge"
-              >
+              </Badge>
+              <Badge size="md" className="font-mono" data-testid="group-dashboard-currency-badge">
                 {group.defaultCurrency}
-              </span>
+              </Badge>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -227,13 +215,10 @@ function GroupDashboardInner() {
             </button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Overview */}
-      <section
-        className="mb-6 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-overview"
-      >
+      <Card as="section" padding="lg" className="mb-6" data-testid="group-dashboard-overview">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('dashboard.overviewTitle')}
         </h2>
@@ -259,7 +244,7 @@ function GroupDashboardInner() {
             {t('dashboard.overviewPlaceholder')}
           </p>
         </div>
-      </section>
+      </Card>
 
       {/* Transactions */}
       <div className="mb-6">
@@ -267,10 +252,7 @@ function GroupDashboardInner() {
       </div>
 
       {/* Members */}
-      <section
-        className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-        data-testid="group-dashboard-members"
-      >
+      <Card as="section" padding="lg" data-testid="group-dashboard-members">
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
           {t('dashboard.membersTitle')}{' '}
           <span
@@ -330,12 +312,9 @@ function GroupDashboardInner() {
                 </div>
                 <div className="flex flex-shrink-0 flex-col items-end gap-1">
                   {member.role === 'admin' && (
-                    <span
-                      className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
-                      data-testid={`group-member-admin-badge-${member.id}`}
-                    >
+                    <Badge tone="primary" data-testid={`group-member-admin-badge-${member.id}`}>
                       {roleLabel}
-                    </span>
+                    </Badge>
                   )}
                   <span
                     className="text-xs text-gray-500 dark:text-gray-400"
@@ -348,52 +327,45 @@ function GroupDashboardInner() {
             );
           })}
         </ul>
-      </section>
+      </Card>
 
       {isLeaveDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="leave-group-dialog-title"
-          data-testid="group-dashboard-leave-dialog"
+        <Dialog
+          open
+          onClose={handleCloseLeaveDialog}
+          title={t('dashboard.leaveConfirmTitle', { name: group.name })}
+          titleId="leave-group-dialog-title"
+          testId="group-dashboard-leave-dialog"
+          busy={isLeaving}
         >
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-            <h2
-              id="leave-group-dialog-title"
-              className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100"
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            {t('dashboard.leaveConfirmMessage')}
+          </p>
+          <div className="mt-6 flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={handleCloseLeaveDialog}
+              disabled={isLeaving}
+              data-testid="group-dashboard-leave-cancel-btn"
             >
-              {t('dashboard.leaveConfirmTitle', { name: group.name })}
-            </h2>
-            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              {t('dashboard.leaveConfirmMessage')}
-            </p>
-            <div className="mt-6 flex gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                className="flex-1"
-                onClick={handleCloseLeaveDialog}
-                disabled={isLeaving}
-                data-testid="group-dashboard-leave-cancel-btn"
-              >
-                {t('dashboard.leaveCancelButton')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="md"
-                className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-                onClick={handleConfirmLeave}
-                disabled={isLeaving}
-                data-testid="group-dashboard-leave-confirm-btn"
-              >
-                {isLeaving ? '...' : t('dashboard.leaveConfirmButton')}
-              </Button>
-            </div>
+              {t('dashboard.leaveCancelButton')}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              className="flex-1"
+              onClick={handleConfirmLeave}
+              disabled={isLeaving}
+              data-testid="group-dashboard-leave-confirm-btn"
+            >
+              {isLeaving ? '...' : t('dashboard.leaveConfirmButton')}
+            </Button>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

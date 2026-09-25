@@ -13,10 +13,10 @@
 
 import { dominantReceiptCategoryId } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
@@ -102,7 +102,6 @@ export function ReconcileReceiptDialog({
   const { reconcileReceipt } = useReceipts();
   const { addToast } = useToast();
 
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const [transaction, setTransaction] = useState<TransactionSummary | null>(null);
   const [applyTotal, setApplyTotal] = useState(false);
   const [applyCategory, setApplyCategory] = useState(false);
@@ -128,7 +127,6 @@ export function ReconcileReceiptDialog({
     if (!open || !receipt.transactionId) return;
     setApplyTotal(false);
     setApplyCategory(false);
-    setTimeout(() => dialogRef.current?.focus(), 0);
     void loadOp
       .run((signal) => getTransaction(receipt.transactionId as string, signal))
       .then((p) => {
@@ -186,117 +184,79 @@ export function ReconcileReceiptDialog({
 
   if (!open || typeof document === 'undefined') return null;
 
-  const node = (
-    <div
-      data-testid="reconcile-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/60 sm:items-center sm:p-4"
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      variant="sheet"
+      title={t('title')}
+      titleId="reconcile-title"
+      testId="reconcile-dialog"
+      backdropTestId="reconcile-backdrop"
+      closeTestId="reconcile-close"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="reconcile-title"
-        tabIndex={-1}
-        data-testid="reconcile-dialog"
-        className="flex max-h-[92vh] w-full max-w-md flex-col gap-3 rounded-t-2xl border border-gray-200 bg-white p-5 shadow-xl outline-none sm:rounded-2xl dark:border-gray-700 dark:bg-gray-800"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h2
-            id="reconcile-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-          >
-            {t('title')}
-          </h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label={t('close')}
-            data-testid="reconcile-close"
-            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              aria-hidden="true"
+      {loadOp.isLoading && !transaction ? (
+        <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{t('loading')}</p>
+      ) : !transaction ? (
+        <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+          {t('loadFailed')}
+        </p>
+      ) : (
+        <>
+          {!totalDiffers && !categoryDiffers ? (
+            <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="reconcile-match">
+              {t('noDifferences')}
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('hint')}</p>
+              {totalDiffers && (
+                <ChoiceRow
+                  name="total"
+                  label={t('totalLabel')}
+                  current={formatAmount(transaction.amountCents, transaction.currency, locale)}
+                  proposed={formatAmount(
+                    receipt.totalCents as number,
+                    receipt.currency ?? transaction.currency,
+                    locale,
+                  )}
+                  apply={applyTotal}
+                  onChange={setApplyTotal}
+                />
+              )}
+              {categoryDiffers && (
+                <ChoiceRow
+                  name="category"
+                  label={t('categoryLabel')}
+                  current={categoryName(transaction.categories[0].id)}
+                  proposed={categoryName(receiptCategoryId)}
+                  apply={applyCategory}
+                  onChange={setApplyCategory}
+                />
+              )}
+            </>
+          )}
+
+          <p className="text-xs text-gray-400 dark:text-gray-500">{t('itemsNote')}</p>
+
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+            <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={submit}
+              disabled={submitOp.isLoading}
+              data-testid="reconcile-submit"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {loadOp.isLoading && !transaction ? (
-          <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            {t('loading')}
-          </p>
-        ) : !transaction ? (
-          <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            {t('loadFailed')}
-          </p>
-        ) : (
-          <>
-            {!totalDiffers && !categoryDiffers ? (
-              <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="reconcile-match">
-                {t('noDifferences')}
-              </p>
-            ) : (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{t('hint')}</p>
-                {totalDiffers && (
-                  <ChoiceRow
-                    name="total"
-                    label={t('totalLabel')}
-                    current={formatAmount(transaction.amountCents, transaction.currency, locale)}
-                    proposed={formatAmount(
-                      receipt.totalCents as number,
-                      receipt.currency ?? transaction.currency,
-                      locale,
-                    )}
-                    apply={applyTotal}
-                    onChange={setApplyTotal}
-                  />
-                )}
-                {categoryDiffers && (
-                  <ChoiceRow
-                    name="category"
-                    label={t('categoryLabel')}
-                    current={categoryName(transaction.categories[0].id)}
-                    proposed={categoryName(receiptCategoryId)}
-                    apply={applyCategory}
-                    onChange={setApplyCategory}
-                  />
-                )}
-              </>
-            )}
-
-            <p className="text-xs text-gray-400 dark:text-gray-500">{t('itemsNote')}</p>
-
-            <div className="flex justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-              <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-                {t('cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={submit}
-                disabled={submitOp.isLoading}
-                data-testid="reconcile-submit"
-              >
-                {submitOp.isLoading ? <ButtonSpinner /> : null}
-                {t('confirm')}
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+              {submitOp.isLoading ? <ButtonSpinner /> : null}
+              {t('confirm')}
+            </Button>
+          </div>
+        </>
+      )}
+    </Dialog>
   );
-
-  return createPortal(node, document.body);
 }
