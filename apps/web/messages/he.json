@@ -56,6 +56,7 @@
     "dashboard": "לוח בקרה",
     "groups": "קבוצות",
     "transactions": "תנועות",
+    "accounts": "חשבונות",
     "budgets": "תקציבים",
     "settings": "הגדרות",
     "connectedAccounts": "חשבונות מחוברים",
@@ -610,7 +611,8 @@
     },
     "directions": {
       "in": "הכנסה",
-      "out": "הוצאה"
+      "out": "הוצאה",
+      "transfer": "העברה"
     },
     "filters": {
       "all": "הכול",
@@ -1485,6 +1487,135 @@
         "customRangeInvalid": "תאריך הסיום חייב להיות אחרי תאריך ההתחלה.",
         "thresholdInvalid": "הסף חייב להיות מספר שלם בין 1 ל-100."
       }
+    }
+  },
+  "accounts": {
+    "kinds": {
+      "BANK": "חשבון בנק",
+      "CARD": "כרטיס אשראי",
+      "CASH": "מזומן",
+      "OTHER": "אחר"
+    },
+    "list": {
+      "title": "חשבונות",
+      "newAccount": "חשבון חדש",
+      "import": "ייבוא דף חשבון",
+      "loading": "טוען חשבונות…",
+      "emptyTitle": "אין חשבונות עדיין",
+      "emptyBody": "הוסיפו חשבון בנק, כרטיס או ארנק מזומן כדי לראות את היתרה.",
+      "emptyFiltered": "אין חשבונות שמתאימים לסינון הזה.",
+      "showArchived": "הצגת ארכיון",
+      "archivedChip": "בארכיון",
+      "actions": "פעולות חשבון",
+      "edit": "עריכה",
+      "archive": "העברה לארכיון",
+      "unarchive": "שחזור מהארכיון",
+      "delete": "מחיקה",
+      "loadMore": "טעינת עוד",
+      "archivedToast": "החשבון הועבר לארכיון",
+      "unarchivedToast": "החשבון שוחזר מהארכיון",
+      "deletedToast": "החשבון נמחק",
+      "actionFailed": "הפעולה נכשלה"
+    },
+    "card": {
+      "ledger": "יתרה",
+      "ledgerHint": "נכון ל-{date}",
+      "reported": "לפי הבנק",
+      "reportedHint": "בתאריך {date}",
+      "owed": "לתשלום במחזור הזה",
+      "gap": "{amount} ללא הסבר",
+      "reconciled": "מותאם",
+      "pending": "{count, plural, =1 {שורה אחת לבדיקה} other {# שורות לבדיקה}}",
+      "last4": "·· {digits}"
+    },
+    "form": {
+      "createTitle": "חשבון חדש",
+      "editTitle": "עריכת חשבון",
+      "name": "שם",
+      "kind": "סוג",
+      "institution": "מוסד",
+      "currency": "מטבע",
+      "scope": "שיוך",
+      "last4": "4 ספרות אחרונות",
+      "institutionNone": "לא ברשימה",
+      "last4Hint": "רק הספרות האחרונות — לעולם לא המספר המלא.",
+      "currencyImmutable": "לא ניתן לשנות את המטבע — צרו חשבון נוסף במקום.",
+      "scopeImmutable": "לא ניתן לשנות את השיוך לאחר היצירה.",
+      "kindImmutable": "לא ניתן לשנות את הסוג לאחר היצירה.",
+      "openingBalance": "יתרת פתיחה",
+      "openingBalanceAt": "…בתאריך",
+      "openingHint": "היתרה שהופיעה בדף החשבון בתאריך הזה. כל מה שאחריה מחושב.",
+      "billingAccount": "מחויב מחשבון",
+      "billingDay": "יום חיוב",
+      "billingNone": "לא מקושר",
+      "billingHint": "חשבון הבנק שממנו נגבה חיוב הכרטיס, והיום בחודש.",
+      "reportedBalance": "יתרה לפי הבנק",
+      "reportedBalanceAt": "…בתאריך",
+      "reportedHint": "המספר של הבנק עצמו — ייבוא דפי חשבון מעדכן אותו בשבילכם.",
+      "save": "שמירה",
+      "cancel": "ביטול",
+      "close": "סגירה",
+      "saving": "שומר…",
+      "discardChanges": "לבטל את השינויים?",
+      "discard": "ביטול שינויים",
+      "keepEditing": "המשך עריכה",
+      "errorGeneric": "לא ניתן היה לשמור את החשבון.",
+      "validation": {
+        "nameRequired": "יש להזין שם.",
+        "nameTooLong": "השם יכול להכיל עד 100 תווים.",
+        "kindRequired": "יש לבחור סוג.",
+        "currencyInvalid": "יש לבחור מטבע נתמך.",
+        "scopeRequired": "יש לבחור שיוך.",
+        "last4Invalid": "יש להזין 2 עד 4 ספרות.",
+        "openingDateRequired": "יש לקבוע את תאריך יתרת הפתיחה.",
+        "billingDayInvalid": "יום החיוב חייב להיות בין 1 ל-28.",
+        "billingAccountRequired": "יש לבחור את חשבון הבנק שממנו הכרטיס מחויב."
+      }
+    },
+    "select": {
+      "label": "חשבון",
+      "unplaced": "ללא חשבון",
+      "loading": "טוען חשבונות…",
+      "errorLoading": "לא ניתן היה לטעון חשבונות.",
+      "archivedSuffix": "(בארכיון)"
+    },
+    "transfer": {
+      "toggle": "זו העברה בין החשבונות שלי",
+      "from": "מחשבון",
+      "to": "לחשבון",
+      "hint": "העברות לעולם לא נספרות כהוצאה.",
+      "validation": {
+        "fromRequired": "יש לבחור את החשבון שממנו הכסף יוצא.",
+        "toRequired": "יש לבחור את החשבון שאליו הכסף עובר.",
+        "sameAccount": "יש לבחור שני חשבונות שונים.",
+        "currencyMismatch": "שני החשבונות חייבים להיות באותו מטבע."
+      }
+    },
+    "filters": {
+      "account": "חשבון",
+      "anyAccount": "כל חשבון"
+    },
+    "row": {
+      "transferTo": "← {name}",
+      "bankConfirmed": "אושר על ידי הבנק",
+      "viewAccount": "לחשבון",
+      "bankConfirmedHint": "שורה מדף החשבון של הבנק תואמת לתנועה הזו."
+    },
+    "overview": {
+      "title": "חשבונות",
+      "manage": "ניהול חשבונות",
+      "net": "מצב נטו",
+      "empty": "אין חשבונות עדיין — הוסיפו אחד כדי לעקוב אחרי היתרה.",
+      "pending": "{count, plural, =1 {שורה אחת לבדיקה} other {# שורות לבדיקה}}",
+      "pendingGap": "{count, plural, =1 {שורה אחת לבדיקה} other {# שורות לבדיקה}} · {amount} ללא הסבר",
+      "loading": "טוען חשבונות…",
+      "errorLoading": "לא ניתן היה לטעון חשבונות."
+    },
+    "delete": {
+      "title": "מחיקת חשבון",
+      "warning": "למחוק את \"{name}\"? התנועות שלו נשמרות והופכות ללא חשבון; דפי חשבון שיובאו והשורות שלהם נמחקים. לא ניתן לבטל פעולה זו.",
+      "confirm": "מחיקה",
+      "cancel": "ביטול"
     }
   }
 }
