@@ -3,16 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  CONFIG_VERSION,
+  type ConnectorConfig,
   checkToken,
   configPath,
+  findAccountMapping,
   lastFourOf,
   normalizeAppUrl,
   parseConfig,
   readConfig,
   selectProfiles,
   writeConfig,
-  CONFIG_VERSION,
-  type ConnectorConfig,
 } from './config.js';
 import { EXIT_CONFIG, ConnectorError } from './errors.js';
 
@@ -195,5 +196,39 @@ describe('the config file on disk', () => {
   it('honours the path override', () => {
     process.env.MYFINPRO_CONNECTOR_CONFIG = path;
     expect(configPath()).toBe(path);
+  });
+});
+
+describe('findAccountMapping', () => {
+  const profile = {
+    name: 'bank',
+    accounts: [
+      { last4: '3412', accountId: '11111111-1111-4111-8111-111111111111' },
+      { last4: '99', accountId: '22222222-2222-4222-8222-222222222222' },
+    ],
+  };
+
+  it('matches on the stored digits ending the scraped number', () => {
+    expect(findAccountMapping(profile, '12-345-003412')).toEqual({
+      accountId: '11111111-1111-4111-8111-111111111111',
+      last4: '3412',
+    });
+    expect(findAccountMapping(profile, '0099')).toEqual({
+      accountId: '22222222-2222-4222-8222-222222222222',
+      last4: '0099',
+    });
+    expect(findAccountMapping(profile, '5555')).toBeNull();
+    expect(findAccountMapping(profile, '')).toBeNull();
+  });
+
+  it('refuses an ambiguous mapping instead of guessing', () => {
+    const ambiguous = {
+      name: 'bank',
+      accounts: [
+        ...profile.accounts,
+        { last4: '12', accountId: '33333333-3333-4333-8333-333333333333' },
+      ],
+    };
+    expect(() => findAccountMapping(ambiguous, '3412')).toThrow(ConnectorError);
   });
 });

@@ -7,7 +7,13 @@
 import type { TransactionsAccount } from 'israeli-bank-scrapers/lib/transactions.js';
 import { ApiClient } from '../client.js';
 import { importSourceFor } from '../companies.js';
-import { lastFourOf, readConfig, selectProfiles, type ConnectorProfile } from '../config.js';
+import {
+  findAccountMapping,
+  lastFourOf,
+  readConfig,
+  selectProfiles,
+  type ConnectorProfile,
+} from '../config.js';
 import { configError, EXIT_OK } from '../errors.js';
 import {
   mapTransactions,
@@ -16,7 +22,7 @@ import {
   DEFAULT_CURRENCY,
   type MappedTransactions,
 } from '../map.js';
-import { formatAmount, writeLine } from '../output.js';
+import { formatAmount, maskForLog, writeLine } from '../output.js';
 import { defaultStartDate, parseSince, scrapeProfile } from '../scrape.js';
 
 /** How many mapped lines `--dry-run` shows per account. */
@@ -32,11 +38,7 @@ function mappingFor(
   profile: ConnectorProfile,
   account: TransactionsAccount,
 ): { accountId: string; last4: string } | null {
-  const last4 = lastFourOf(account.accountNumber ?? '');
-  const mapping = profile.accounts.find(
-    (candidate) => last4 !== '' && last4.endsWith(candidate.last4),
-  );
-  return mapping ? { accountId: mapping.accountId, last4 } : null;
+  return findAccountMapping(profile, account.accountNumber ?? '');
 }
 
 function reportMapping(mapped: MappedTransactions, scraped: number): string {
@@ -59,7 +61,9 @@ function printSample(mapped: MappedTransactions): void {
     const original = line.originalAmountCents
       ? ` (${formatAmount(line.originalAmountCents, line.originalCurrency ?? '')})`
       : '';
-    writeLine(`      ${line.postedAt}  ${amount}${original}${installments}  ${line.description}`);
+    writeLine(
+      `      ${line.postedAt}  ${amount}${original}${installments}  ${maskForLog(line.description)}`,
+    );
   }
 }
 

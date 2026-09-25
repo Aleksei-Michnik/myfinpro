@@ -28,3 +28,13 @@ export function formatAmount(cents: number, currency: string): string {
 export function pad(value: string, width: number): string {
   return value.length >= width ? value : value + ' '.repeat(width - value.length);
 }
+
+/**
+ * What a dry run may print of a statement description: enough to recognise
+ * the line, never the merchant history a scheduled `sync --dry-run >> log`
+ * would otherwise leave on disk (design §9).
+ */
+export function maskForLog(text: string, keep = 6): string {
+  const trimmed = text.trim();
+  return trimmed.length <= keep ? trimmed : `${trimmed.slice(0, keep)}…`;
+}

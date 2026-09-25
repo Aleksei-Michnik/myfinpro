@@ -291,3 +291,23 @@ export function selectProfiles(config: ConnectorConfig, name?: string): Connecto
   }
   return [profile];
 }
+
+/**
+ * The mapping a scraped account number belongs to: the stored digits must end
+ * the number. Two mappings that both fit are a configuration error — lines
+ * must never land on a guessed account (security review, finding 5).
+ */
+export function findAccountMapping(
+  profile: Pick<ConnectorProfile, 'name' | 'accounts'>,
+  accountNumber: string,
+): { accountId: string; last4: string } | null {
+  const last4 = lastFourOf(accountNumber);
+  if (last4 === '') return null;
+  const matches = profile.accounts.filter((candidate) => last4.endsWith(candidate.last4));
+  if (matches.length > 1) {
+    throw configError(
+      `More than one mapping of profile "${profile.name}" matches account ••${last4} — give each mapping the full last four digits`,
+    );
+  }
+  return matches[0] ? { accountId: matches[0].accountId, last4 } : null;
+}

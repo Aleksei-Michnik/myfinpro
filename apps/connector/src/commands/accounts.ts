@@ -4,7 +4,7 @@
 // account to a MyFinPro account id in `init`. Nothing is sent anywhere; the
 // full account number is never printed, only the last digits `init` asks for.
 
-import { lastFourOf, readConfig, selectProfiles } from '../config.js';
+import { findAccountMapping, lastFourOf, readConfig, selectProfiles } from '../config.js';
 import { EXIT_OK } from '../errors.js';
 import { formatAmount, writeLine } from '../output.js';
 import { defaultStartDate, parseSince, scrapeProfile } from '../scrape.js';
@@ -41,7 +41,7 @@ export async function runAccounts(options: AccountsOptions = {}): Promise<number
         typeof account.balance === 'number'
           ? formatAmount(Math.round(account.balance * 100), currency || 'ILS')
           : 'balance not reported';
-      const mapping = profile.accounts.find((candidate) => last4.endsWith(candidate.last4));
+      const mapping = findAccountMapping(profile, account.accountNumber ?? '');
       writeLine(
         `  ••${last4}  ${balance}  ${account.txns.length} transactions  ` +
           (mapping ? `→ ${mapping.accountId}` : '→ not mapped'),

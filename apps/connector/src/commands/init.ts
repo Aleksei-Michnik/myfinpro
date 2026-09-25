@@ -121,6 +121,16 @@ async function askAccountMappings(
     writeLine(`  ${UUID_HINT}`);
     const accountId = await askRequired('  MyFinPro account id');
     const index = mappings.findIndex((mapping) => mapping.last4 === last4);
+    const overlap = mappings.find(
+      (mapping, i) =>
+        i !== index && (mapping.last4.endsWith(last4) || last4.endsWith(mapping.last4)),
+    );
+    if (overlap) {
+      writeLine(
+        `  ••${last4} overlaps the mapping ••${overlap.last4} — give both the full last four digits.`,
+      );
+      continue;
+    }
     if (index >= 0) mappings[index] = { last4, accountId };
     else mappings.push({ last4, accountId });
   }
