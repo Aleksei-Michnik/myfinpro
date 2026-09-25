@@ -10,6 +10,12 @@
 #
 # The workflow needs only the SSH host/user/key secrets: no database credential leaves
 # the container. A failed scheduled run is the alert — GitHub notifies the repo owner.
+#
+# Off-box copy (production only): when the BACKUP_AGE_RECIPIENT variable and the
+# BACKUP_STORE_SSH_KEY secret exist, the newest production backup is fetched to the
+# runner, encrypted to the recipient with age, and published into the private
+# <repository>-backups store as a single snapshot commit (scripts/backup-copy.sh).
+# Without them the step reports "not configured" and the run stays green.
 
 name: Backup
 
@@ -99,3 +105,32 @@ jobs:
             echo "── Backups on disk ──"
             ls -lh "/opt/myfinpro/backups/$ENVIRONMENT"
             df -h /opt | tail -1
+
+      - name: Off-box copy of the newest production backup
+        if: matrix.environment == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          STORE_SSH_KEY: ${{ secrets.BACKUP_STORE_SSH_KEY }}
+          STORE_URL: git@github.com:${{ github.repository }}-backups.git
+          SERVER_HOST: ${{ secrets.PRODUCTION_HOST }}
+          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
+          SERVER_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          if [ -z "$AGE_RECIPIENT" ] || [ -z "$STORE_SSH_KEY" ]; then
+            echo "::notice::Off-box copy not configured (BACKUP_AGE_RECIPIENT variable, BACKUP_STORE_SSH_KEY secret): skipped."
+            exit 0
+          fi
+          echo "── Installing age ──"
+          gh release download -R FiloSottile/age v1.3.2 -p 'age-v1.3.2-linux-amd64.tar.gz' -O "$RUNNER_TEMP/age.tgz"
+          tar -xzf "$RUNNER_TEMP/age.tgz" -C "$RUNNER_TEMP"
+          sudo install -m 755 "$RUNNER_TEMP/age/age" "$RUNNER_TEMP/age/age-keygen" /usr/local/bin/
+          echo "── Keys for this run only (ephemeral runner) ──"
+          umask 077
+          mkdir -p "$RUNNER_TEMP/keys" ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > "$RUNNER_TEMP/keys/server"
+          printf '%s\n' "$STORE_SSH_KEY" > "$RUNNER_TEMP/keys/store"
+          gh api meta --jq '.ssh_keys[]' | sed 's/^/github.com /' >> ~/.ssh/known_hosts
+          echo "── Copy ──"
+          SERVER_SSH_KEY_FILE="$RUNNER_TEMP/keys/server" STORE_SSH_KEY_FILE="$RUNNER_TEMP/keys/store" \
+            bash scripts/backup-copy.sh production
