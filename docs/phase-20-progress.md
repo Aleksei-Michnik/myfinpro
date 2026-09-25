@@ -287,6 +287,51 @@ Web settings page and the `apps/connector` CLI are on their own tracks (entries 
   unknown or a deactivated user). Every other route stays JWT-only — proven by the integration
   case that `GET /accounts` with a token is 401. `request.user` carries `tokenId` for audit.
 
+### Scope (web) — merged as `815c8a3` from `p20/tokens-ui`
+
+- **`/settings/tokens`** (`tokens-client.tsx`, the categories-settings shell): the list of tokens
+  (`ApiTokenRow`: name, scope badge, expiry badge, created / last used, Revoke behind a
+  `ConfirmDialog`), an active-count `Stat` against the cap, a `Refresh` control (no realtime event
+  exists for tokens — deliberate), the empty state that keeps the statement import as the
+  recommended path. `CreateApiTokenDialog` has two panels in one dialog: the form (name, expiry
+  presets, the fixed scope) and the **show-once reveal** — `CopyField` for the token and for the
+  commands, an `alert` warning, a confirm on closing early; the raw token is never in the URL,
+  storage or the page state once the panel closes. Entry points: the account-settings cards
+  (categories gained its missing link in the same row), the Imports-tab footer, the Help page
+  section `help.connector.*` (four cards).
+- **Kit** — `CopyField` (the one new component; `InviteLink` migrated onto it), `ConfirmDialog`
+  `stacked`, `Input` `errorTestId`, `Stat` `warning` tone.
+- The printed commands are the in-repo build and run lines (`pnpm --filter @myfinpro/connector
+build`, `node apps/connector/dist/main.js init|sync`): the package is unpublished and an `npx`
+  line would run whatever a squatter publishes under the name — publishing needs the npm scope
+  first (owner). `lib/auth/types.ts` re-exports the shared scope and cap constants.
+- Hebrew: `i18n-translator` pass (`b8fad52`, 13 strings: דף חשבון for "statement" everywhere,
+  ביטול תוקף for revoke, imperative buttons, MyFinPro feminine).
+
+### Security review (2026-09-25)
+
+Verdict on 20.6 + 20.7 (API, CLI, web): **fix first** — two findings closed before the merge of
+the web track and five follow-ups closed on the branch. (1) the `npx @myfinpro/connector` line
+(above); (2) the raw token lingered in React state after the reveal (`af9106f`); (3) a
+token-authenticated import now names the token on its `ACCOUNT_IMPORT_CREATED` audit row
+(`bf37b3b`); (4) `--dry-run` masks descriptions so a scheduled dry run leaves no merchant history
+in a log; (5) an account number that fits two mappings is a configuration error, and `init`
+refuses overlapping mappings (`e252a07`); (6) the web constants come from the shared package;
+(7) the auto-link fan-out stays fire-and-forget, bounded by the apply batch — noted, not changed.
+Verified clean: token entropy, hashing and fail-closed verify, JWT-first guard order, a token
+reaching nothing but the import route, auto-link scoping to the creator's visibility, receipt
+placement validated in the confirm's transaction, connector config 0600 and secrets never in
+argv/logs, https-only app URL, no browser download on `pnpm install`, no topology in files or
+messages.
+
+### E2E on the merged branch
+
+`accounts.spec.ts` and `budgets.spec.ts` green; `connector-tokens.spec.ts` (create → reveal →
+copy → list → revoke) run against the merged stack — see below. Ten older local specs fail on
+today's code **and on the code before Phase 20** (connected-accounts route, help and legal page
+locators, the payments and receipts flows from 6.21 / 7.10): stale, being repaired on
+`chore/e2e-stale-specs`.
+
 ### Scope (CLI) — merged as `1029f76` from `p20/connector`
 
 - **`apps/connector`** (`@myfinpro/connector`, private, ESM, `bin: myfinpro-connector`) on
@@ -375,4 +420,7 @@ transactions hide their id too; the sanitiser's character class rewritten as esc
 file is diffable. Integration: `accounts-import` (18) + `accounts-import-limits` (3, incl. a
 full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; api unit 1381.
 
-**Next** — 20.6 (two-way enrichment), then 20.7 connector + `api_tokens`, 20.8 alerts + release.
+**Next** — 20.8 (balance alerts + release) is blocked: its row feeds "the 10.9 alert worker", which
+does not exist yet (Phase 10 stands at 10.4). Owner's call: build a minimal balance-alert path
+inside Phase 20, or release 20.1–20.7 now and ship 20.8 with Phase 10.9. Staging deploy = merge of
+PR #55; production = `/release` by the owner.

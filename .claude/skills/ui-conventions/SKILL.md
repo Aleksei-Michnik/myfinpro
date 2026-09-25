@@ -9,6 +9,12 @@ Binding sources: `docs/ui-async-conventions.md`, `docs/ui-realtime-conventions.m
 itself in `wiki/ui-design-system.md` (tokens, component inventory, page templates). Read the
 sections relevant to the surface — this checklist does not replace them.
 
+- **Mount fetches re-enter, never a ran-once ref.** `useAsyncOperation.run` aborts a superseded
+  run, and React's dev-only remount aborts the first one; a `startedRef` guard then leaves the
+  page on its loading state for good. Fetch in the effect; ignore an `undefined` result whose
+  signal was aborted; re-issue once only when the fetch must survive that remount
+  (`transactions-list-client.tsx`).
+
 ## Async operations (`@/lib/ui`)
 
 - Every fetch and mutation runs through `useAsyncOperation()` with a scope: `page` (navigation and

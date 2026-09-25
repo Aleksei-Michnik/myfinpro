@@ -24,7 +24,7 @@ progress doc, cross-checked against `git log` on `develop`.
 | 17 WebMCP                    | ⬜ not started | —                    | 17.1 | 11                      | **moving spec** — `navigator.modelContext` Chromium origin trial |
 | 18 Centralized search        | ⬜ not started | —                    | 18.1 | 7 + 8                   | none                                                             |
 | 19 LLM usage & cost tracking | ⬜ not started | —                    | 19.1 | 8.11                    | per-model pricing map must be maintained by hand                 |
-| 20 Accounts & bank sync      | 🔄 in progress | design (2026-09-25)  | 20.5 | 6 (+7–8 for enrichment) | export formats drift; the connector needs the user's own machine |
+| 20 Accounts & bank sync      | 🔄 in progress | design (2026-09-25)  | 20.7 | 6 (+7–8 for enrichment) | export formats drift; the connector needs the user's own machine |
 
 Iteration budgets (plan §5 "Phase Size Guidelines"): 8 → 10 + follow-ups, 9 → 8, 10 → 10, 11 → 8,
 12 → 4 + 12, 13 → 10, 14 → 6, 15 → 4, 16 → 7, 17 → 4, 18 → 7, 19 → 6. Target size is 6–10

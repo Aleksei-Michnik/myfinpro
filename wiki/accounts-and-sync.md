@@ -2,7 +2,7 @@
 
 Read when: touching `apps/api/src/account/**`, `packages/shared/src/{types/account.types.ts,constants/institutions.ts,statement/**}`, the `/accounts` web surfaces, `apps/connector`, or any code that must know where money sits or whether a transaction is bank-confirmed.
 
-Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status (2026-09-25): 20.1 UI kit, 20.2 schema + API and 20.4 parser + import API + review queue are merged on `phase/20`; 20.3, 20.5, 20.6 and the 20.7 API side merged; 20.7 web + CLI and 20.8 open — until an iteration has an entry in `docs/phase-20-progress.md`, its facts below are the contract, not shipped behaviour.
+Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status (2026-09-25): 20.1 UI kit, 20.2 schema + API and 20.4 parser + import API + review queue are merged on `phase/20`; 20.3, 20.5, 20.6 and 20.7 (api tokens, settings page, connector CLI) merged; 20.8 open — until an iteration has an entry in `docs/phase-20-progress.md`, its facts below are the contract, not shipped behaviour.
 
 ## Domain model
 
