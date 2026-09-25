@@ -56,7 +56,7 @@ test.describe('Payments happy paths (6.21)', () => {
     await openDialogWithBaseFields(page, '5.00');
     await page.getByTestId('type-disclosure-toggle').click();
     await page.getByTestId('type-radio-RECURRING').check();
-    await expect(page.getByTestId('payment-schedule-subform')).toBeVisible();
+    await expect(page.getByTestId('transaction-schedule-subform')).toBeVisible();
     await page.getByTestId('form-save').click();
     await expect(page.getByTestId('form-amount')).toBeHidden({ timeout: 15_000 });
     // The catch-up worker may already have generated today's occurrence, so
@@ -71,7 +71,7 @@ test.describe('Payments happy paths (6.21)', () => {
     await openDialogWithBaseFields(page, '10000');
     await page.getByTestId('type-disclosure-toggle').click();
     await page.getByTestId('type-radio-LOAN').check();
-    await expect(page.getByTestId('payment-plan-subform')).toBeVisible();
+    await expect(page.getByTestId('transaction-plan-subform')).toBeVisible();
     await page.getByTestId('plan-rate').fill('5');
     await page.getByTestId('plan-count').fill('12');
     await page.getByTestId('plan-first-due').fill('2026-08-01');
@@ -80,14 +80,14 @@ test.describe('Payments happy paths (6.21)', () => {
 
     const loanRow = page
       .getByTestId('transactions-list-desktop')
-      .locator('[data-testid^="payment-row-"]')
+      .locator('[data-testid^="transaction-row-"]')
       .filter({ hasText: '$10,000.00' })
       .first();
     await expect(loanRow).toBeVisible({ timeout: 15_000 });
 
     // ── 4. Loan detail: amortisation table renders all 12 rows ────────────
     await loanRow.click();
-    await expect(page).toHaveURL(/\/payments\//, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/transactions\//, { timeout: 15_000 });
     await expect(page.getByTestId('plan-section')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('plan-status-pill')).toHaveText(/active/i);
     await expect(page.getByTestId('plan-table')).toBeVisible();

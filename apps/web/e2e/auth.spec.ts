@@ -243,6 +243,9 @@ test.describe('Authentication Flows', () => {
   });
 });
 
+// Connected accounts no longer has its own route: since 20.7 it is a section
+// on the account settings page (`/settings/account`, `connected-accounts-section`),
+// alongside preferences, the AI model picker and the password section.
 test.describe('Connected Accounts Page', () => {
   const mockUser = {
     id: 'settings-user-uuid',
@@ -274,13 +277,13 @@ test.describe('Connected Accounts Page', () => {
       });
     });
 
-    await page.goto('/settings/connected-accounts');
+    await page.goto('/settings/account');
 
     // Should redirect to login
     await expect(page).toHaveURL(/\/auth\/login/, { timeout: 15000 });
   });
 
-  test('should show connected accounts page when authenticated', async ({ page }) => {
+  test('should show connected accounts section when authenticated', async ({ page }) => {
     // Mock refresh to authenticate
     await page.route('**/api/v1/auth/refresh', async (route) => {
       await route.fulfill({
@@ -301,9 +304,9 @@ test.describe('Connected Accounts Page', () => {
       }
     });
 
-    await page.goto('/settings/connected-accounts');
+    await page.goto('/settings/account');
 
-    // Should show the page title
+    // Should show the section heading within the account settings page
     await expect(page.getByRole('heading', { name: /connected accounts/i })).toBeVisible({
       timeout: 15000,
     });
@@ -328,11 +331,13 @@ test.describe('Connected Accounts Page', () => {
       }
     });
 
-    await page.goto('/settings/connected-accounts');
+    await page.goto('/settings/account');
 
-    // Should show Email & Password, Google, and Telegram sections
+    // Should show Email & Password, Google, and Telegram cards. The Google
+    // card also shows the connected account name ("Google User"), so match
+    // the card heading exactly to avoid a strict-mode substring collision.
     await expect(page.getByText('Email & Password')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Google')).toBeVisible();
-    await expect(page.getByText('Telegram')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Google', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Telegram', exact: true })).toBeVisible();
   });
 });

@@ -45,7 +45,9 @@ test.describe('Footer', () => {
     const privacyLink = page.locator('footer a[href="/legal/privacy"]');
     await privacyLink.click();
     await expect(page).toHaveURL(/\/legal\/privacy/);
-    await expect(page.getByRole('heading', { name: 'Privacy Policy' })).toBeVisible();
+    // The page also has an h2 "9. Changes to Privacy Policy" section, so the
+    // page title needs the heading level to stay a strict-mode single match.
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', level: 1 })).toBeVisible();
   });
 
   test('Help link navigates to help page', async ({ page }) => {
