@@ -268,14 +268,63 @@ export function rankCandidates(
     .slice(0, MAX_SUGGESTION_CANDIDATES);
 }
 
+/** A statement line scored against one transaction (the §5.5 direction). */
+export interface ScoredLine {
+  lineId: string;
+  score: number;
+}
+
+/**
+ * The mirror of {@link rankCandidates}: the pending lines that could be THIS
+ * transaction, best first — the "transaction → line" direction of design
+ * §5.5, used when a new transaction looks for the bank line that already
+ * recorded it. Same gates, same formula, same per-call bound; only the fixed
+ * side of the pair changes, so a (line, transaction) pair scores identically
+ * whichever way it is looked at.
+ */
+export function rankLinesForTransaction(
+  candidate: MatchableCandidate,
+  lines: MatchableLine[],
+  accountId: string,
+  windowDays: number = STATEMENT_MATCH_DATE_WINDOW_DAYS,
+): ScoredLine[] {
+  const withinWindow: { line: MatchableLine; days: number }[] = [];
+  for (const line of lines) {
+    if (!matchesLineShape(line, candidate, accountId)) continue;
+    const days = dayDistance(line.at, candidate.occurredAt);
+    if (days > windowDays) continue;
+    withinWindow.push({ line, days });
+  }
+  if (withinWindow.length === 0) return [];
+
+  withinWindow.sort((a, b) => a.days - b.days || a.line.id.localeCompare(b.line.id));
+  const scorable = withinWindow.slice(0, MAX_SCORED_CANDIDATES_PER_LINE);
+
+  // The transaction is the fixed side here, so ITS trigram sets are built once.
+  const grams = candidate.texts.filter((text) => text !== '').map(trigramsOf);
+  return scorable
+    .map(({ line }) => ({
+      lineId: line.id,
+      score: scoreWith(
+        line,
+        candidate,
+        accountId,
+        windowDays,
+        maxSimilarity(trigramsOf(line.normalizedDescription), grams),
+      ),
+    }))
+    .sort((a, b) => b.score - a.score || a.lineId.localeCompare(b.lineId));
+}
+
 /**
  * Is the best candidate confident enough to be applied without asking?
  * Design §5.2: at or above the threshold AND leading the runner-up by the
- * lead margin. A tie — two equally plausible transactions — is never
- * resolved by the machine.
+ * lead margin. A tie — two equally plausible transactions, or two equally
+ * plausible lines — is never resolved by the machine. Takes either ranking,
+ * since only the scores decide.
  */
 export function isConfidentMatch(
-  ranked: ScoredCandidate[],
+  ranked: readonly { score: number }[],
   threshold: number = STATEMENT_MATCH_CONFIDENT_SCORE,
 ): boolean {
   const best = ranked[0];
