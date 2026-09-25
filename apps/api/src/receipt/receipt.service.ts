@@ -671,6 +671,10 @@ export class ReceiptService {
             mimeType: file.mimeType,
             sizeBytes: file.sizeBytes,
           })),
+          // 20.6 — placed here, inside the confirm's transaction, so an
+          // account that does not pass the placement rules rolls back the
+          // whole confirm.
+          accountId: dto.accountId ?? null,
         });
 
         await tx.receipt.update({
@@ -699,6 +703,7 @@ export class ReceiptService {
       amountCents,
       currency,
       merchantId,
+      accountId: dto.accountId ?? null,
     });
     if (merchantCreated && merchantId) {
       void this.writeAudit(

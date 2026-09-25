@@ -18,7 +18,8 @@ import { AttributionDto } from '../../transaction/dto/attribution.dto';
  * The receipt already carries the money fields (total, currency, purchase
  * date), the merchant, and the line items from review; confirmation only
  * needs the primary OUT category for the resulting transaction plus the
- * attribution scopes to remember (mirrors POST /transactions).
+ * attribution scopes to remember (mirrors POST /transactions) — and, since
+ * 20.6, optionally the account the money left.
  */
 export class ConfirmReceiptDto {
   @ApiProperty({ description: 'Primary OUT category for the resulting transaction.' })
@@ -40,4 +41,14 @@ export class ConfirmReceiptDto {
   @IsString()
   @MaxLength(2000)
   note?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Phase 20.6 — the account the money left. Must be visible, unarchived and in the ' +
+      "receipt's currency; the resulting transaction is then auto-linked to the pending " +
+      'statement line that confirms it, if there is exactly one.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
 }

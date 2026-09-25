@@ -37,6 +37,7 @@ describe('Statement auto-link (integration)', () => {
   const PHARMACY = 'PHARMACY DIZENGOFF';
   const GYM = 'GYM MONTHLY PLAN';
   const DOUBLE = 'DOUBLE CHARGE KIOSK';
+  const BOOKSTORE = 'BOOKSTORE HABIMA';
 
   beforeAll(async () => {
     const ctx = await bootstrapTestApp();
@@ -125,10 +126,11 @@ describe('Statement auto-link (integration)', () => {
             description: DOUBLE,
             externalId: 'D-2',
           },
+          { postedAt: '2026-09-14', amountCents: 6600, direction: 'OUT', description: BOOKSTORE },
         ],
       })
       .expect(201);
-    expect(res.body.insertedCount).toBe(5);
+    expect(res.body.insertedCount).toBe(6);
 
     const lines = await request(app.getHttpServer())
       .get(`/api/v1/accounts/${accountId}/lines?limit=100`)
@@ -146,6 +148,7 @@ describe('Statement auto-link (integration)', () => {
         select: { id: true },
       })
     ).map((row) => row.id);
+    await prisma.receipt.deleteMany({ where: { uploadedById: owner.user.id } });
     await prisma.accountStatementLine.deleteMany({ where: { accountId: { in: accountIds } } });
     await prisma.accountImport.deleteMany({ where: { accountId: { in: accountIds } } });
     await prisma.transaction.deleteMany({ where: { createdById: owner.user.id } });
@@ -232,6 +235,79 @@ describe('Statement auto-link (integration)', () => {
       .expect(200);
 
     expect(await waitForLink(lineIds[PHARMACY])).toBe(created.body.id);
+  });
+
+  it('links a receipt confirmed onto the account, inside the confirm’s own transaction', async () => {
+    const receiptId = (
+      await prisma.receipt.create({
+        data: {
+          status: 'REVIEW',
+          source: 'upload',
+          originalName: 'bookstore.jpg',
+          extractedMerchantName: BOOKSTORE,
+          currency: 'ILS',
+          totalCents: 6600,
+          purchasedAt: new Date('2026-09-14T10:00:00Z'),
+          uploadedById: owner.user.id,
+          files: {
+            create: [
+              {
+                position: 1,
+                fileRef: `test/${suffix}-bookstore.jpg`,
+                mimeType: 'image/jpeg',
+                sizeBytes: 2048,
+              },
+            ],
+          },
+        },
+      })
+    ).id;
+
+    // A bad account rolls the whole confirm back: still REVIEW, no transaction.
+    const archived = await prisma.account.create({
+      data: {
+        name: `Closed ${suffix}`,
+        kind: 'CASH',
+        currency: 'ILS',
+        scopeType: 'personal',
+        ownerId: owner.user.id,
+        createdById: owner.user.id,
+        archivedAt: new Date(),
+      },
+    });
+    const refused = await request(app.getHttpServer())
+      .post(`/api/v1/receipts/${receiptId}/confirm`)
+      .set(auth())
+      .send({
+        categoryId: groceriesCategoryId,
+        attributions: [{ scope: 'personal' }],
+        accountId: archived.id,
+      })
+      .expect(404);
+    expect(refused.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+    expect(await prisma.receipt.findUnique({ where: { id: receiptId } })).toMatchObject({
+      status: 'REVIEW',
+      transactionId: null,
+    });
+
+    const confirmed = await request(app.getHttpServer())
+      .post(`/api/v1/receipts/${receiptId}/confirm`)
+      .set(auth())
+      .send({
+        categoryId: groceriesCategoryId,
+        attributions: [{ scope: 'personal' }],
+        accountId,
+      })
+      .expect(201);
+
+    const transactionId = confirmed.body.transactionId as string;
+    expect(await waitForLink(lineIds[BOOKSTORE])).toBe(transactionId);
+    expect(
+      await prisma.transaction.findUnique({
+        where: { id: transactionId },
+        select: { accountId: true, status: true },
+      }),
+    ).toEqual({ accountId, status: 'POSTED' });
   });
 
   it('leaves two equally plausible lines alone', async () => {
