@@ -40,11 +40,11 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionPropagateMode } from './dto/update-transaction.query.dto';
 import { createPlanWithinTransaction, validatePlanAndCompute } from './transaction-plan.create';
 import { removeScheduleForTransaction } from './utils/schedule-cascade';
-import { buildTransactionVisibilityWhere } from './utils/transaction-visibility';
 import {
   computeTransactionRecipients,
   type RecipientAttribution,
 } from './utils/transaction-event-recipients';
+import { buildTransactionVisibilityWhere } from './utils/transaction-visibility';
 
 /**
  * Ceiling of the `amount_cents` INT column, from the one shared money limit
@@ -302,6 +302,8 @@ export class TransactionService {
           existing.categoryId,
           ...existing.transactionCategories.map((tc) => tc.categoryId),
         ],
+        existingAccountId: null,
+        existingTransferAccountId: existing.transferAccountId,
       });
       data.accountId = accountId;
     }
