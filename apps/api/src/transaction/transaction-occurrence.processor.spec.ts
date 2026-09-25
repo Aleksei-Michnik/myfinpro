@@ -61,6 +61,7 @@ describe('TransactionOccurrenceProcessor', () => {
   function buildParent(
     overrides: Partial<{
       type: string;
+      accountId: string | null;
       attributions: unknown[];
       transactionCategories: { categoryId: string; position: number }[];
     }> = {},
@@ -78,6 +79,8 @@ describe('TransactionOccurrenceProcessor', () => {
       note: 'parent note',
       createdById: CREATOR_ID,
       idempotencyKey: null,
+      accountId: null,
+      transferAccountId: null,
       attributions: [{ id: 'a1', scopeType: 'personal', userId: CREATOR_ID, groupId: null }],
       transactionCategories: [],
       createdAt: new Date(),
@@ -107,6 +110,11 @@ describe('TransactionOccurrenceProcessor', () => {
       },
       transactionSchedule: {
         update: jest.fn().mockResolvedValue(undefined),
+      },
+      // Phase 20.2 — the template's account is re-resolved inside the same
+      // transaction; by default it still resolves.
+      account: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'acct-1' }),
       },
     };
 
@@ -139,6 +147,72 @@ describe('TransactionOccurrenceProcessor', () => {
       mocks.eventBus as unknown as EventBus,
     );
   }
+
+  // ── Phase 20.2 — the template's account is re-resolved, never trusted ──
+
+  it("clones the template's account when it still resolves for the creator", async () => {
+    const mocks = buildMocks();
+    (mocks.prisma.transactionSchedule as { findUnique: jest.Mock }).findUnique.mockResolvedValue(
+      buildSchedule({ transaction: buildParent({ accountId: 'acct-1' }) }),
+    );
+
+    await build(mocks).process(buildJob());
+
+    const tx = (
+      mocks.prisma as unknown as {
+        _tx: { transaction: { create: jest.Mock }; account: { findFirst: jest.Mock } };
+      }
+    )._tx;
+    expect(tx.account.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { id: 'acct-1', archivedAt: null },
+            {
+              OR: [
+                { scopeType: 'personal', ownerId: CREATOR_ID },
+                { scopeType: 'group', group: { memberships: { some: { userId: CREATOR_ID } } } },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(tx.transaction.create.mock.calls[0][0].data.accountId).toBe('acct-1');
+  });
+
+  it('creates the occurrence unplaced when the account no longer resolves', async () => {
+    const mocks = buildMocks();
+    (mocks.prisma.transactionSchedule as { findUnique: jest.Mock }).findUnique.mockResolvedValue(
+      buildSchedule({ transaction: buildParent({ accountId: 'acct-1' }) }),
+    );
+    const tx = (
+      mocks.prisma as unknown as {
+        _tx: { transaction: { create: jest.Mock }; account: { findFirst: jest.Mock } };
+      }
+    )._tx;
+    // Archived, deleted, or the creator left the group that owns it.
+    tx.account.findFirst.mockResolvedValue(null);
+
+    const result = await build(mocks).process(buildJob());
+
+    // The money is still real — only the placement is dropped.
+    expect(result).toMatchObject({ created: true, occurrenceId: CHILD_ID });
+    expect(tx.transaction.create.mock.calls[0][0].data.accountId).toBeNull();
+    expect(tx.transaction.create.mock.calls[0][0].data.amountCents).toBe(4200);
+  });
+
+  it('does not look up an account when the template carries none', async () => {
+    const mocks = buildMocks();
+    (mocks.prisma.transactionSchedule as { findUnique: jest.Mock }).findUnique.mockResolvedValue(
+      buildSchedule(),
+    );
+
+    await build(mocks).process(buildJob());
+
+    const tx = (mocks.prisma as unknown as { _tx: { account: { findFirst: jest.Mock } } })._tx;
+    expect(tx.account.findFirst).not.toHaveBeenCalled();
+  });
 
   it('happy path — creates child Transaction with parent shape, updates schedule, writes audit', async () => {
     const mocks = buildMocks();
