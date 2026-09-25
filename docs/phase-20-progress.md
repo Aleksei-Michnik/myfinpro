@@ -225,6 +225,43 @@ wizard step 1 against the real messages, helpers) · e2e `accounts.spec.ts` gree
 decided filter → re-import all duplicates → imports and transactions tabs → edit → archive →
 delete). Gate: typecheck, lint, format, i18n parity clean.
 
+## 20.6 — Two-way enrichment (2026-09-25)
+
+Per design §5.5. Merged from `p20/import-api` (six commits: `12d65f3` bus `subscribeAll`,
+`1c475aa` + `313e55c` transaction-side ranking, `ba7f6d5` auto-link, `97c6201` integration,
+`848c9a5` receipt placement) plus the web picker `56b3c21` from `p20/accounts-ui`.
+
+### Scope
+
+- **Transaction → line.** `StatementMatchingService.autoLink(actorId, transactionId)`: for a
+  visible one-off on an account (not a transfer, no line yet, status POSTED / PENDING / DUE) it
+  ranks the account's pending lines with the same currency, direction and exact amount inside the
+  date window through the same pure scorer as the import path (`rankLinesForTransaction`, the
+  mirror of `rankCandidates`; one generic `isConfidentMatch`) and links the single confident one
+  through the same write path the manual `match` decision uses (`linkLineToTransaction`:
+  conditional claim → `confirmByStatementLine` → audit → `account.updated`). Ambiguity does
+  nothing; a lost race returns null; it never throws.
+- **Trigger.** `StatementAutoLinkService` subscribes to the in-process event bus
+  (`EventBus.subscribeAll`, new) and reacts to the `transaction.created` / `transaction.updated`
+  events the transaction service already publishes post-commit — no circular module import, and
+  receipt confirm / reconcile are covered for free. Fire-and-forget; the HTTP response never
+  waits. It stands down for 60 s while a queue decision on that account has claimed a line whose
+  transaction is not attached yet, so a brand-new transaction is never handed to a look-alike
+  second line (not in the design text; unit-tested and commented).
+- **Receipt confirm** gains an optional `accountId` (validated inside the confirm's transaction
+  through `validateAccountPlacement` on the caller's client, so a bad account rolls the whole
+  confirm back); the web confirm dialog offers a "Paid from" picker narrowed to the receipt's
+  currency. Category memory (§5.4), plan-occurrence settle and the gap on cards and the dashboard
+  had shipped with 20.3 – 20.5; the settle now has an integration test.
+- Not exercised end to end: `DUE` (no code path produces it yet).
+
+### Tests
+
+api unit 1414 (95 suites) · integration `accounts-autolink` 5 (create → linked + POSTED + audit;
+placed later by PATCH; two identical lines stay PENDING; archived-account confirm rolls back
+then the real confirm links; occurrence settle) — `accounts*` + `receipts-confirm` 74 green ·
+web `ReceiptConfirmDialog` 8.
+
 ## 20.7 — Connector: api tokens (2026-09-25)
 
 Per design §3, §6.4 and `docs/ui/20.7-connector-tokens.md`. API side merged as `6fd15bf` (track

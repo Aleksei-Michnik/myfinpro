@@ -2,7 +2,7 @@
 
 Read when: touching `apps/api/src/account/**`, `packages/shared/src/{types/account.types.ts,constants/institutions.ts,statement/**}`, the `/accounts` web surfaces, `apps/connector`, or any code that must know where money sits or whether a transaction is bank-confirmed.
 
-Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status (2026-09-25): 20.1 UI kit, 20.2 schema + API and 20.4 parser + import API + review queue are merged on `phase/20`; 20.3 accounts UI and 20.5 import/review UI merged; 20.6–20.8 open — until an iteration has an entry in `docs/phase-20-progress.md`, its facts below are the contract, not shipped behaviour.
+Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status (2026-09-25): 20.1 UI kit, 20.2 schema + API and 20.4 parser + import API + review queue are merged on `phase/20`; 20.3, 20.5, 20.6 and the 20.7 API side merged; 20.7 web + CLI and 20.8 open — until an iteration has an entry in `docs/phase-20-progress.md`, its facts below are the contract, not shipped behaviour.
 
 ## Domain model
 
@@ -30,6 +30,8 @@ Create / edit / archive / delete: owner or group **admin**. Read, **import, reco
 ## Matching (design §5)
 
 Hard gate: exact `amountCents`, same currency and direction, `occurredAt` within ±`STATEMENT_MATCH_DATE_WINDOW_DAYS` (5) of the line date, no statement line yet, `accountId ∈ {null, this}`. Score = 0.60 amount + 0.25 date proximity + 0.15 description trigram similarity (`trigramSimilarity`, reused) + 0.10 same account; confident ≥ `STATEMENT_MATCH_CONFIDENT_SCORE` (0.8) with a 0.10 lead. Card-bill lines on a BANK account become a **transfer** proposal to the CARD whose `billingAccountId` is that bank. Otherwise `create` with the category remembered from earlier lines with the same `normalizedDescription` in the same scope (the lines table is the memory — no extra table). Enrichment both ways: a match sets the transaction's `accountId` and settles PENDING/DUE to POSTED; a new transaction with an account auto-links the single confident pending line, post-commit, best-effort.
+
+**Both ways (20.6).** A new or re-placed one-off with an account is auto-linked to the single confident pending line of that account by `StatementAutoLinkService`, which listens to `transaction.created` / `transaction.updated` on the in-process bus (post-commit, best-effort, one-way dependency) and links through the same path as a manual match; ambiguity does nothing, and the linker stands down for a minute while a queue decision on that account is mid-flight. Receipt confirm accepts `accountId` so a photographed receipt meets its bank line without a click.
 
 ## API surface (design §6)
 
