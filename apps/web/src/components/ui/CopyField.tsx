@@ -143,7 +143,7 @@ export function CopyField({
             readOnly
             dir="ltr"
             spellCheck={false}
-            rows={2}
+            rows={Math.max(2, value.split('\n').length)}
             value={value}
             aria-label={label ? undefined : ariaLabel}
             aria-describedby={describedById}

@@ -176,6 +176,14 @@ export default async function HelpPage() {
             </h3>
             <p>
               {t.rich('connector.setup.content', {
+                code: (chunks) => (
+                  <code
+                    dir="ltr"
+                    className="rounded bg-gray-100 px-1 font-mono text-xs dark:bg-gray-800"
+                  >
+                    {chunks}
+                  </code>
+                ),
                 link: (chunks) => (
                   <Link
                     href="/settings/tokens"
