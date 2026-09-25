@@ -10,7 +10,7 @@ import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Card, cardClass } from '@/components/ui/Card';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
@@ -25,6 +25,8 @@ const localeNames: Record<string, string> = {
 export default function AccountSettingsPage() {
   const t = useTranslations('settings.account');
   const tSettings = useTranslations('settings');
+  const tCategories = useTranslations('categories');
+  const tTokens = useTranslations('settings.tokens');
   const { user, updateProfile } = useAuth();
   const { addToast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -235,6 +237,39 @@ export default function AccountSettingsPage() {
             </div>
           )}
         </Card>
+
+        {/* More settings — 20.7 adds the tokens link and its twin to
+            categories, since settings has no index page of its own. */}
+        <div className="mb-8 space-y-3">
+          {/* `cardClass()`, not `<Card as={Link}>` — the Card doc's own
+              exception: it types as HTMLAttributes, which has no `href`. */}
+          <Link
+            href="/settings/categories"
+            className={cardClass({
+              padding: 'md',
+              className: 'block transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40',
+            })}
+            data-testid="settings-categories-link"
+          >
+            <p className="font-medium text-gray-900 dark:text-gray-100">
+              {tCategories('page.title')}
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {tCategories('page.subtitle')}
+            </p>
+          </Link>
+          <Link
+            href="/settings/tokens"
+            className={cardClass({
+              padding: 'md',
+              className: 'block transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40',
+            })}
+            data-testid="settings-tokens-link"
+          >
+            <p className="font-medium text-gray-900 dark:text-gray-100">{tTokens('entryTitle')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{tTokens('entryBody')}</p>
+          </Link>
+        </div>
 
         {!user?.scheduledDeletionAt && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-800 dark:bg-red-950">

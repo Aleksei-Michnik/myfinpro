@@ -163,6 +163,15 @@ describe('AccountSettingsPage', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('links to the categories and connector-tokens settings pages', () => {
+    render(<AccountSettingsPage />);
+    expect(screen.getByTestId('settings-categories-link')).toHaveAttribute(
+      'href',
+      '/settings/categories',
+    );
+    expect(screen.getByTestId('settings-tokens-link')).toHaveAttribute('href', '/settings/tokens');
+  });
+
   it('renders connected accounts section', () => {
     render(<AccountSettingsPage />);
     expect(screen.getByTestId('connected-accounts-section')).toBeInTheDocument();
