@@ -664,7 +664,7 @@
       },
       "setup": {
         "title": "הגדרה",
-        "content": "צרו אסימון ב<link>הגדרות ← אסימוני מחבר</link>, התקינו Node.js, ואז הריצו `npx @myfinpro/connector init` והדביקו את האסימון ואת כתובת ה-MyFinPro שלכם כשמבקשים. הריצו `npx @myfinpro/connector sync` בכל פעם שתרצו שורות חדשות."
+        "content": "צרו אסימון ב<link>הגדרות ← אסימוני מחבר</link>, התקינו Node.js, בנו את המחבר מתוך עותק של המאגר (`pnpm --filter @myfinpro/connector build`), ואז הריצו `node apps/connector/dist/main.js init` והדביקו את האסימון ואת כתובת ה-MyFinPro שלכם כשמבקשים. הריצו `node apps/connector/dist/main.js sync` בכל פעם שתרצו שורות חדשות."
       },
       "lines": {
         "title": "מה קורה לשורות",

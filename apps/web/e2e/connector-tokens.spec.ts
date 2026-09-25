@@ -53,8 +53,8 @@ test.describe('Connector tokens happy path (20.7)', () => {
     const revealedValue = await page.getByTestId('token-reveal-value').inputValue();
     expect(revealedValue).toMatch(/^mfp_/);
     const commands = await page.getByTestId('token-reveal-commands').inputValue();
-    expect(commands).toContain('npx @myfinpro/connector init');
-    expect(commands).toContain('npx @myfinpro/connector sync');
+    expect(commands).toContain('node apps/connector/dist/main.js init');
+    expect(commands).toContain('node apps/connector/dist/main.js sync');
 
     // ── Copy actually reaches the clipboard ──────────────────────────────
     await page.getByTestId('token-reveal-copy').click();

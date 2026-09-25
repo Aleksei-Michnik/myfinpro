@@ -21,7 +21,7 @@ import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { Stat } from '@/components/ui/Stat';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
-import { API_TOKEN_MAX, type ApiTokenSummary } from '@/lib/auth/types';
+import { API_TOKEN_MAX, type ApiTokenCreated, type ApiTokenSummary } from '@/lib/auth/types';
 import { useApiTokens } from '@/lib/auth/use-api-tokens';
 import { useAsyncOperation, useResetOnLocaleChange } from '@/lib/ui';
 
@@ -76,9 +76,11 @@ export function TokensClient() {
       });
   };
 
-  const handleCreated = (created: ApiTokenSummary) => {
-    // Prepend from the create response — never a refetch (§4 item 4).
-    setTokens((prev) => [created, ...prev]);
+  const handleCreated = (created: ApiTokenCreated) => {
+    // Prepend from the create response — never a refetch (§4 item 4). The raw
+    // token must not outlive the reveal panel, so only the summary is kept.
+    const { token: _raw, ...summary } = created;
+    setTokens((prev) => [summary, ...prev]);
     addToast('success', t('toast.created'));
   };
 

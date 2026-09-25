@@ -38,7 +38,14 @@ const EXPIRY_DAYS: Record<Exclude<ExpiryOption, 'never'>, number> = {
 };
 const DEFAULT_EXPIRY: ExpiryOption = '90';
 
-const CONNECTOR_COMMANDS = 'npx @myfinpro/connector init\nnpx @myfinpro/connector sync';
+// The package is private and unpublished: printing an `npx @myfinpro/…` line
+// would send users to whatever a squatter publishes under that name (security
+// review, finding 1). Until the owner publishes it, the commands run from a
+// checkout of the repository.
+const CONNECTOR_COMMANDS =
+  'pnpm --filter @myfinpro/connector build\n' +
+  'node apps/connector/dist/main.js init\n' +
+  'node apps/connector/dist/main.js sync';
 
 function expiresAtFor(option: ExpiryOption): string | undefined {
   if (option === 'never') return undefined;
@@ -130,6 +137,8 @@ export function CreateApiTokenDialog({ open, onClose, onCreated }: CreateApiToke
   }
 
   function finishClose() {
+    // Drop the secret the moment the reveal closes (security review, finding 2).
+    setCreated(null);
     createOp.cancel();
     onClose();
   }

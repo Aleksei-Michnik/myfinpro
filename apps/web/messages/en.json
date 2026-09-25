@@ -664,7 +664,7 @@
       },
       "setup": {
         "title": "Set it up",
-        "content": "Create a token in <link>Settings → Connector tokens</link>, install Node.js, then run `npx @myfinpro/connector init` and paste the token and your MyFinPro address when it asks. Run `npx @myfinpro/connector sync` whenever you want new lines."
+        "content": "Create a token in <link>Settings → Connector tokens</link>, install Node.js, build the connector from a checkout of the repository (`pnpm --filter @myfinpro/connector build`), then run `node apps/connector/dist/main.js init` and paste the token and your MyFinPro address when it asks. Run `node apps/connector/dist/main.js sync` whenever you want new lines."
       },
       "lines": {
         "title": "What happens to the lines",

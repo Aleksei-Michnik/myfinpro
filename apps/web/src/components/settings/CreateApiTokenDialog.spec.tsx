@@ -81,7 +81,7 @@ describe('CreateApiTokenDialog', () => {
     const value = screen.getByTestId('token-reveal-value') as HTMLInputElement;
     expect(value.value).toMatch(/^mfp_/);
     expect(screen.getByTestId('token-reveal-commands')).toHaveValue(
-      'npx @myfinpro/connector init\nnpx @myfinpro/connector sync',
+      'pnpm --filter @myfinpro/connector build\nnode apps/connector/dist/main.js init\nnode apps/connector/dist/main.js sync',
     );
     expect(screen.getByTestId('token-reveal-warning')).toBeInTheDocument();
     expect(screen.getByTestId('token-reveal-help-link')).toHaveAttribute('href', '/help#connector');
