@@ -12,7 +12,7 @@ import {
   type AccountInstitution,
   type StatementSuggestedAction,
 } from '@myfinpro/shared';
-import { trigramSimilarity } from '../../product/utils/trigram.util';
+import { diceSimilarity, trigramsOf } from '../../product/utils/trigram.util';
 
 /** Weights of the score (design §5.2) — they sum to 1.00 without the bonus. */
 export const SCORE_WEIGHTS = {
@@ -31,6 +31,17 @@ export const STATEMENT_MATCH_LEAD = 0.1;
 
 /** Candidates kept on a stored suggestion (design §6.2). */
 export const MAX_SUGGESTION_CANDIDATES = 5;
+
+/**
+ * How many candidates one line is scored against, at most: the closest by
+ * date inside the window. An import is matched inline on the request's
+ * thread, so the work it can ask for must be bounded by construction — a
+ * hostile statement full of one repeated amount would otherwise turn the
+ * pool scan into a multi-second event-loop block (security review H1).
+ * Within a ±5-day window, fifty same-amount candidates is already far more
+ * than any real account produces.
+ */
+export const MAX_SCORED_CANDIDATES_PER_LINE = 50;
 
 /**
  * Slack for the binary-float arithmetic of the weighted score: a lead that
@@ -119,23 +130,57 @@ export function isAdmissible(
 }
 
 /**
- * `0.60 + 0.25·(1 − |Δdays| / window) + 0.15·max(sim) + 0.10 if same account`
- * — design §5.2, verbatim.
+ * A candidate with its texts' trigram sets already built. The sets are the
+ * expensive part of scoring, and they do not depend on the line — so an
+ * import builds them ONCE for the whole pool (security review H1).
  */
-export function scoreCandidate(
+export interface IndexedCandidate {
+  candidate: MatchableCandidate;
+  grams: Set<string>[];
+}
+
+/**
+ * The candidate pool, bucketed by everything the hard gates demand exactly:
+ * the line direction a candidate can serve, its amount and its currency. A
+ * line therefore visits only the candidates that already passed the amount
+ * gate, instead of the whole pool.
+ *
+ * A transfer row serves the `IN` line of the account it pays — the one
+ * carve-out of design §5.3 — so it is bucketed under `IN` whatever its own
+ * direction says.
+ */
+export type CandidateIndex = Map<string, IndexedCandidate[]>;
+
+function bucketKey(direction: string, amountCents: number, currency: string): string {
+  return `${direction}|${amountCents}|${currency}`;
+}
+
+export function buildCandidateIndex(candidates: MatchableCandidate[]): CandidateIndex {
+  const index: CandidateIndex = new Map();
+  for (const candidate of candidates) {
+    const serves = candidate.transferAccountId !== null ? 'IN' : candidate.direction;
+    const key = bucketKey(serves, candidate.amountCents, candidate.currency);
+    const entry: IndexedCandidate = {
+      candidate,
+      grams: candidate.texts.filter((text) => text !== '').map(trigramsOf),
+    };
+    const bucket = index.get(key);
+    if (bucket) bucket.push(entry);
+    else index.set(key, [entry]);
+  }
+  return index;
+}
+
+/** The score formula of design §5.2, with the similarity already measured. */
+function scoreWith(
   line: MatchableLine,
   candidate: MatchableCandidate,
   accountId: string,
-  windowDays: number = STATEMENT_MATCH_DATE_WINDOW_DAYS,
+  windowDays: number,
+  similarity: number,
 ): number {
   const days = Math.min(dayDistance(line.at, candidate.occurredAt), windowDays);
   const proximity = windowDays === 0 ? 1 : 1 - days / windowDays;
-
-  let similarity = 0;
-  for (const text of candidate.texts) {
-    if (!text) continue;
-    similarity = Math.max(similarity, trigramSimilarity(line.normalizedDescription, text));
-  }
 
   return (
     SCORE_WEIGHTS.amount +
@@ -145,18 +190,79 @@ export function scoreCandidate(
   );
 }
 
-/** Admissible candidates, scored, best first, capped at the stored top 5. */
+/**
+ * `0.60 + 0.25·(1 − |Δdays| / window) + 0.15·max(sim) + 0.10 if same account`
+ * — design §5.2, verbatim. Builds the trigram sets itself; the import path
+ * uses the indexed form below instead.
+ */
+export function scoreCandidate(
+  line: MatchableLine,
+  candidate: MatchableCandidate,
+  accountId: string,
+  windowDays: number = STATEMENT_MATCH_DATE_WINDOW_DAYS,
+): number {
+  const grams = candidate.texts.filter((text) => text !== '').map(trigramsOf);
+  return scoreWith(
+    line,
+    candidate,
+    accountId,
+    windowDays,
+    maxSimilarity(trigramsOf(line.normalizedDescription), grams),
+  );
+}
+
+function maxSimilarity(lineGrams: Set<string>, candidateGrams: Set<string>[]): number {
+  let best = 0;
+  for (const grams of candidateGrams) {
+    const similarity = diceSimilarity(lineGrams, grams);
+    if (similarity > best) best = similarity;
+  }
+  return best;
+}
+
+/**
+ * Admissible candidates for one line, scored, best first, capped at the
+ * stored top 5.
+ *
+ * Only the line's own bucket is visited, only the entries inside the date
+ * window survive, and only the `MAX_SCORED_CANDIDATES_PER_LINE` closest of
+ * those are scored — so the work per line is bounded no matter how large or
+ * how adversarial the statement is.
+ */
 export function rankCandidates(
   line: MatchableLine,
-  candidates: MatchableCandidate[],
+  index: CandidateIndex,
   accountId: string,
   windowDays: number = STATEMENT_MATCH_DATE_WINDOW_DAYS,
 ): ScoredCandidate[] {
-  return candidates
-    .filter((candidate) => isAdmissible(line, candidate, accountId, windowDays))
-    .map((candidate) => ({
-      transactionId: candidate.id,
-      score: scoreCandidate(line, candidate, accountId, windowDays),
+  const bucket = index.get(bucketKey(line.direction, line.amountCents, line.currency));
+  if (!bucket || bucket.length === 0) return [];
+
+  const withinWindow: { entry: IndexedCandidate; days: number }[] = [];
+  for (const entry of bucket) {
+    if (!matchesLineShape(line, entry.candidate, accountId)) continue;
+    const days = dayDistance(line.at, entry.candidate.occurredAt);
+    if (days > windowDays) continue;
+    withinWindow.push({ entry, days });
+  }
+  if (withinWindow.length === 0) return [];
+
+  withinWindow.sort(
+    (a, b) => a.days - b.days || a.entry.candidate.id.localeCompare(b.entry.candidate.id),
+  );
+  const scorable = withinWindow.slice(0, MAX_SCORED_CANDIDATES_PER_LINE);
+
+  const lineGrams = trigramsOf(line.normalizedDescription);
+  return scorable
+    .map(({ entry }) => ({
+      transactionId: entry.candidate.id,
+      score: scoreWith(
+        line,
+        entry.candidate,
+        accountId,
+        windowDays,
+        maxSimilarity(lineGrams, entry.grams),
+      ),
     }))
     .sort((a, b) => b.score - a.score || a.transactionId.localeCompare(b.transactionId))
     .slice(0, MAX_SUGGESTION_CANDIDATES);

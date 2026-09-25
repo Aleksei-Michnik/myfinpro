@@ -40,7 +40,7 @@ describe('parseStatementDate', () => {
   });
 
   it('ignores RTL marks around the digits', () => {
-    expect(parseStatementDate('‏03/09/2026‎')).toBe('2026-09-03');
+    expect(parseStatementDate('\u200f03/09/2026\u200e')).toBe('2026-09-03');
   });
 });
 
@@ -101,8 +101,11 @@ describe('parseHebrewMonthYear', () => {
 });
 
 describe('normalisation', () => {
-  it('strips control and bidi marks and collapses whitespace', () => {
-    expect(sanitizeStatementText('‮סופר‏  פארם')).toBe('סופר פארם');
+  it('strips control, bidi and invisible marks and collapses whitespace', () => {
+    const raw = '\u202eסופר\u200f  פארם\u0007';
+    expect(sanitizeStatementText(raw)).toBe('סופר פארם');
+    // A soft hyphen hides inside a description and would break every lookup.
+    expect(sanitizeStatementText('סו\u00adפר')).toBe('סופר');
   });
 
   it('lowercases Latin text for the lookup form', () => {

@@ -103,16 +103,25 @@ export class AccountImportService {
         direction: line.direction,
         amountCents: line.amountCents,
         normalizedDescription: line.normalizedDescription,
-        externalId: line.externalId,
-        balanceAfterCents: line.balanceAfterCents,
       })),
     );
 
-    const statementBalanceAt = dto.statementBalanceAt ? new Date(dto.statementBalanceAt) : null;
+    // The statement balance is the bank's own figure and stays member-level
+    // data entry — but it becomes the account's reported balance, which the
+    // reconciliation gap is measured against, so its date is bounded exactly
+    // like a line's (security review M1).
+    const statementBalanceAt = dto.statementBalanceAt
+      ? this.parsePlausibleDate(dto.statementBalanceAt, {
+          message: 'statementBalanceAt is outside the plausible range',
+          errorCode: ACCOUNT_ERRORS.ACCOUNT_IMPORT_INVALID_BALANCE,
+        })
+      : null;
     const updatesReportedBalance =
       dto.statementBalanceCents !== undefined &&
       statementBalanceAt !== null &&
-      (account.reportedBalanceAt === null || statementBalanceAt > account.reportedBalanceAt);
+      // `>=`: re-importing a corrected statement of the SAME day must be able
+      // to fix the figure.
+      (account.reportedBalanceAt === null || statementBalanceAt >= account.reportedBalanceAt);
 
     // One DB transaction: the import row, its lines (duplicates skipped by
     // the unique fence) and the reported balance move together or not at all.
@@ -314,6 +323,17 @@ export class AccountImportService {
   }
 
   private parseLineDate(value: string, index: number, field: string): Date {
+    return this.parsePlausibleDate(value, {
+      message: `Line ${index} is invalid: ${field} is outside the plausible range`,
+      errorCode: ACCOUNT_ERRORS.ACCOUNT_IMPORT_INVALID_LINE,
+    });
+  }
+
+  /**
+   * One range for every date an import carries: no statement predates online
+   * banking, and the future needs only a little timezone grace.
+   */
+  private parsePlausibleDate(value: string, error: { message: string; errorCode: string }): Date {
     const date = new Date(value);
     const time = date.getTime();
     if (
@@ -321,10 +341,7 @@ export class AccountImportService {
       time < EARLIEST_PLAUSIBLE_LINE_DATE ||
       time > Date.now() + FUTURE_GRACE_MS
     ) {
-      throw new BadRequestException({
-        message: `Line ${index} is invalid: ${field} is outside the plausible range`,
-        errorCode: ACCOUNT_ERRORS.ACCOUNT_IMPORT_INVALID_LINE,
-      });
+      throw new BadRequestException(error);
     }
     return date;
   }

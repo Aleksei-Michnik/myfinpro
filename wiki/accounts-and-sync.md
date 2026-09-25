@@ -42,7 +42,7 @@ Hard gate: exact `amountCents`, same currency and direction, `occurredAt` within
 ## Invariants
 
 1. No bank credential, statement file or full account number is stored, logged or echoed.
-2. One dedup fence: `(accountId, fingerprint)`; duplicates are counted, never errors.
+2. One dedup fence: `(accountId, fingerprint)` = sha256 over account, posting date, direction, amount, normalized description and the row's ordinal among identical tuples of its import — never a reference number or a running balance, which only some export variants carry. Duplicates are counted, never errors.
 3. Transfers are one row and count in **no** spend total (analytics base CTE, budget progress, dashboard totals share the predicate).
 4. Balances are never stored; the reported balance is never derived.
 5. A group account's ledger sums **every** countable row placed on it, whatever the reader can see: a member's personal transaction on a shared account moves the shared balance, so the balance and `GET /transactions?accountId=` need not add up _for a given reader_ — by design (design §2.2), not a bug. Placement is therefore re-checked on every scalar edit of a placed row, so an editor who has lost access to the account cannot keep moving its balance through amount or date edits.

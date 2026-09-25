@@ -337,7 +337,9 @@ model AccountStatementLine {
   importId  String        @map("import_id") @db.VarChar(36)
   import    AccountImport @relation(fields: [importId], references: [id], onDelete: Cascade)
   // sha256 over (accountId, postedAt, direction, amountCents, normalizedDescription,
-  // externalId ?? balanceAfterCents ?? ordinal-among-equal-rows-in-the-import). Dedup fence.
+  // ordinal-among-equal-rows-in-the-import). Dedup fence — a reference number or a
+  // running balance is deliberately NOT hashed: one export variant of the same row
+  // carries it and another does not (20.4 security review, L5).
   fingerprint String @db.VarChar(64)
 
   postedAt DateTime  @map("posted_at")

@@ -43,6 +43,12 @@
  *                                plausible range, installment 7 of 6). The
  *                                message names the line's INDEX only —
  *                                statement content is never echoed (§9).
+ * - ACCOUNT_IMPORT_INVALID_BALANCE — the statement's closing balance carries a
+ *                                date outside the plausible range. Added by
+ *                                the 20.4 security review (M1): the reported
+ *                                balance is the figure the reconciliation gap
+ *                                is measured against, so its date is input the
+ *                                server must bound, not accept.
  * - STATEMENT_LINE_NOT_FOUND   — no such line on this account (404; a line is
  *                                only ever reached through its account).
  * - STATEMENT_LINE_NOT_PENDING — the line was already decided; undo it with
@@ -64,6 +70,7 @@ export const ACCOUNT_ERRORS = {
   ACCOUNT_CURRENCY_MISMATCH: 'ACCOUNT_CURRENCY_MISMATCH',
   ACCOUNT_IMPORT_TOO_LARGE: 'ACCOUNT_IMPORT_TOO_LARGE',
   ACCOUNT_IMPORT_INVALID_LINE: 'ACCOUNT_IMPORT_INVALID_LINE',
+  ACCOUNT_IMPORT_INVALID_BALANCE: 'ACCOUNT_IMPORT_INVALID_BALANCE',
   STATEMENT_LINE_NOT_FOUND: 'STATEMENT_LINE_NOT_FOUND',
   STATEMENT_LINE_NOT_PENDING: 'STATEMENT_LINE_NOT_PENDING',
   STATEMENT_LINE_ALREADY_LINKED: 'STATEMENT_LINE_ALREADY_LINKED',
