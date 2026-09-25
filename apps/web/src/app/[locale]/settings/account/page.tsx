@@ -10,6 +10,9 @@ import { DeletionBanner } from '@/components/auth/DeletionBanner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LlmSettingsSection } from '@/components/settings/LlmSettingsSection';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -75,11 +78,11 @@ export default function AccountSettingsPage() {
   return (
     <ProtectedRoute>
       <div className="container mx-auto max-w-2xl px-4 py-8">
-        <h1 className="mb-6 text-2xl font-bold">{t('title')}</h1>
+        <PageHeader className="mb-6" title={t('title')} />
 
         {user?.scheduledDeletionAt && <DeletionBanner />}
 
-        <div className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <Card padding="lg" className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('userInfo')}
           </h2>
@@ -105,13 +108,10 @@ export default function AccountSettingsPage() {
               </dd>
             </div>
           </dl>
-        </div>
+        </Card>
 
         {/* Preferences section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="preferences-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="preferences-section">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('preferences')}
           </h2>
@@ -123,19 +123,19 @@ export default function AccountSettingsPage() {
               >
                 {t('language')}
               </label>
-              <select
+              <Select
                 id="language-select"
                 data-testid="language-select"
                 value={selectedLocale}
                 onChange={(e) => setSelectedLocale(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {LOCALES.map((loc) => (
                   <option key={loc} value={loc}>
                     {localeNames[loc] || loc}
                   </option>
                 ))}
-              </select>
+              </Select>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {t('languageDescription')}
               </p>
@@ -147,19 +147,19 @@ export default function AccountSettingsPage() {
               >
                 {t('defaultCurrency')}
               </label>
-              <select
+              <Select
                 id="currency-select"
                 data-testid="currency-select"
                 value={selectedCurrency}
                 onChange={(e) => setSelectedCurrency(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {CURRENCY_CODES.map((code) => (
                   <option key={code} value={code}>
                     {CURRENCIES[code].symbol} {code} — {CURRENCIES[code].name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label
@@ -168,19 +168,19 @@ export default function AccountSettingsPage() {
               >
                 {t('timezone')}
               </label>
-              <select
+              <Select
                 id="timezone-select"
                 data-testid="timezone-select"
                 value={selectedTimezone}
                 onChange={(e) => setSelectedTimezone(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                wrapperClassName="contents"
               >
                 {timezones.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <Button
               variant="primary"
@@ -192,16 +192,13 @@ export default function AccountSettingsPage() {
               {isSaving ? '...' : t('savePreferences')}
             </Button>
           </div>
-        </div>
+        </Card>
 
         {/* AI model section (Phase 8.11 — per-user LLM selection + BYOK keys) */}
         <LlmSettingsSection />
 
         {/* Connected Accounts section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="connected-accounts-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="connected-accounts-section">
           <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {tSettings('connectedAccounts')}
           </h2>
@@ -209,13 +206,10 @@ export default function AccountSettingsPage() {
             {tSettings('connectedAccountsDescription')}
           </p>
           <ConnectedAccounts />
-        </div>
+        </Card>
 
         {/* Password section */}
-        <div
-          className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="password-section"
-        >
+        <Card padding="lg" className="mb-8" data-testid="password-section">
           <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {t('password.title')}
           </h2>
@@ -240,7 +234,7 @@ export default function AccountSettingsPage() {
               </Link>
             </div>
           )}
-        </div>
+        </Card>
 
         {!user?.scheduledDeletionAt && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-800 dark:bg-red-950">
@@ -249,9 +243,8 @@ export default function AccountSettingsPage() {
             </h2>
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">{t('deleteWarning')}</p>
             <Button
-              variant="primary"
+              variant="danger"
               size="md"
-              className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
               onClick={() => setIsDialogOpen(true)}
               data-testid="open-delete-dialog-btn"
             >

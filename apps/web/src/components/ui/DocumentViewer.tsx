@@ -12,7 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { swipeDelta } from '@/lib/swipe';
-import { useBodyScrollLock } from '@/lib/ui';
+import { useDialogBehaviour } from '@/lib/ui';
 
 /** One page to display — `src` is null while its blob still loads. */
 export interface ViewerPage {
@@ -48,10 +48,12 @@ export function DocumentViewer({
   onClose,
 }: DocumentViewerProps) {
   const t = useTranslations('common.viewer');
-  useBodyScrollLock(open);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const { dialogRef } = useDialogBehaviour<HTMLDivElement>({
+    open,
+    onClose,
+    initialFocusRef: closeRef,
+  });
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   // At 1× a horizontal drag pages next/prev (RTL-aware, 8.27); a completed
   // swipe suppresses the click that follows so it never doubles as zoom-in.
@@ -91,47 +93,11 @@ export function DocumentViewer({
     // not snap back when the pages array identity changes.
   }, [open, initialIndex]);
 
-  // Snapshot the previously-focused element on open; restore on close.
-  useEffect(() => {
-    if (!open || typeof document === 'undefined') return;
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    const timer = setTimeout(() => closeRef.current?.focus(), 0);
-    return () => {
-      clearTimeout(timer);
-      const prev = previouslyFocusedRef.current;
-      if (prev && typeof prev.focus === 'function') prev.focus();
-    };
-  }, [open]);
-
-  // ESC + Tab focus trap + image zoom/pan shortcuts.
+  // Image zoom / pan shortcuts. ESC, the focus trap, focus restore and the
+  // body scroll lock are `useDialogBehaviour`'s (20.1) — never a second copy.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key === 'Tab') {
-        const root = dialogRef.current;
-        if (!root) return;
-        const focusables = Array.from(
-          root.querySelectorAll<HTMLElement>(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-          ),
-        ).filter((el) => !el.hasAttribute('disabled'));
-        if (focusables.length === 0) return;
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-        return;
-      }
       if (!isImage) return;
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
@@ -153,7 +119,7 @@ export function DocumentViewer({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose, isImage, scale, zoomBy, reset]);
+  }, [open, isImage, scale, zoomBy, reset]);
 
   if (!open || typeof document === 'undefined') return null;
 

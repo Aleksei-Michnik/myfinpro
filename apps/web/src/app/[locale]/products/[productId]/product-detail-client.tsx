@@ -11,7 +11,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { ProductFormDialog } from '@/components/product/ProductFormDialog';
 import { ProductGallery } from '@/components/product/ProductGallery';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { Link } from '@/i18n/navigation';
 import { useProducts } from '@/lib/product/product-context';
@@ -107,11 +109,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
     const notFound = loadOp.error.httpStatus === 404;
     return (
       <main className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          role="alert"
-          data-testid="product-detail-error"
-        >
+        <Card padding="lg" role="alert" data-testid="product-detail-error">
           <h1 className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100">
             {notFound ? t('notFound') : t('loadFailed')}
           </h1>
@@ -129,7 +127,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
           >
             ← {t('back')}
           </Link>
-        </div>
+        </Card>
       </main>
     );
   }
@@ -186,14 +184,7 @@ export function ProductDetailClient({ productId }: { productId: string }) {
 
         {/* ── Registry data ──────────────────────────────────────────── */}
         <section className="space-y-3">
-          <div>
-            {product.brand && (
-              <p className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {product.brand}
-              </p>
-            )}
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{product.name}</h1>
-          </div>
+          <PageHeader eyebrow={product.brand ?? undefined} title={product.name} />
 
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>

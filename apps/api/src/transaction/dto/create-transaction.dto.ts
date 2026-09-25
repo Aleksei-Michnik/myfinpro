@@ -73,6 +73,35 @@ export class CreateTransactionDto {
   @Length(0, 2000)
   note?: string;
 
+  /**
+   * Phase 20.2 — where the money moved. The account must be visible to the
+   * caller, not archived, and carry the same currency as the transaction.
+   */
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Account this movement is placed on (visible, active, same currency).',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string | null;
+
+  /**
+   * Phase 20.2 — set only on a transfer between two of the caller's own
+   * accounts (design §2.4): `direction` must be OUT, `accountId` must be set,
+   * both accounts must differ and share the currency, and `categoryIds` must
+   * be exactly the `transfer` system category. A transfer is never spending
+   * and never a recurring / plan parent.
+   */
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Destination account — makes this row a transfer (OUT, ONE_TIME, the `transfer` ' +
+      'system category only).',
+  })
+  @IsOptional()
+  @IsUUID()
+  transferAccountId?: string | null;
+
   @ApiProperty({ type: [AttributionDto], description: 'Must be non-empty.' })
   @IsArray()
   @ArrayMinSize(1)

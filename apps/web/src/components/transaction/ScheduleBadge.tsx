@@ -10,6 +10,7 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { humanReadableRepeat } from '@/lib/transaction/schedule-formatters';
 import { deriveScheduleStatus, type ScheduleResponse } from '@/lib/transaction/types';
 
@@ -85,8 +86,9 @@ export function ScheduleBadge({
   const isCron = !!schedule.cron;
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
+      padding="sm"
       aria-labelledby="schedule-badge-title"
       // Realtime schedule lifecycle updates (created / paused / resumed /
       // cancelled / deleted) re-render this section. `aria-live=polite`
@@ -230,6 +232,6 @@ export function ScheduleBadge({
           )}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

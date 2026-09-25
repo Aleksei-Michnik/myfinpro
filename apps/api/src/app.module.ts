@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AccountModule } from './account/account.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -40,6 +41,7 @@ import { TransactionModule } from './transaction/transaction.module';
     ReceiptModule,
     AnalyticsModule,
     BudgetModule,
+    AccountModule,
     CategoryModule,
     RealtimeModule,
   ],

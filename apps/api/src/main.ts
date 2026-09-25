@@ -7,12 +7,16 @@ import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { applyBodyParsers } from './common/middleware/body-parsers';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { MetricsService } from './common/metrics/metrics.service';
 import { setupSwagger } from './config/swagger.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `bodyParser: false` so the parsers can be registered with per-route
+  // limits — a statement import is the one body allowed past 100 KB.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
+  applyBodyParsers(app);
 
   // ── Disable X-Powered-By header (security best practice) ──
   const httpAdapter = app.getHttpAdapter();

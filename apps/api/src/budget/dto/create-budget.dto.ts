@@ -1,4 +1,9 @@
-import { BUDGET_PERIODS, CURRENCY_CODES, type BudgetPeriod } from '@myfinpro/shared';
+import {
+  BUDGET_PERIODS,
+  CURRENCY_CODES,
+  MAX_MINOR_UNITS,
+  type BudgetPeriod,
+} from '@myfinpro/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -14,8 +19,11 @@ import {
   Min,
 } from 'class-validator';
 
-/** Same sanity cap transactions apply to amountCents (design §5 "Validation rules"). */
-export const MAX_BUDGET_AMOUNT_CENTS = 1e11;
+/**
+ * Ceiling of the `amount_cents` INT column — the one shared money limit, the
+ * same one transactions and account balances derive from.
+ */
+export const MAX_BUDGET_AMOUNT_CENTS = MAX_MINOR_UNITS;
 
 /**
  * POST /budgets body — Phase 10, iteration 10.2 (design §5).

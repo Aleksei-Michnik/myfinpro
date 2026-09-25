@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { useTelegramLogin, type TelegramLoginResult } from '@/components/auth/TelegramLoginButton';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -179,13 +180,13 @@ export function ConnectedAccounts() {
             {t('emailPassword')}
           </h3>
           {data.hasPassword ? (
-            <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
+            <Badge tone="success" size="md" className="mt-1">
               {t('connected')}
-            </span>
+            </Badge>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
+            <Badge size="md" className="mt-1">
               {t('notConnected')}
-            </span>
+            </Badge>
           )}
         </div>
       </div>
@@ -199,14 +200,14 @@ export function ConnectedAccounts() {
               <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-300">
                 {googleProvider.name || googleProvider.email}
               </p>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
+              <Badge tone="success" size="md" className="mt-1">
                 {t('connected')}
-              </span>
+              </Badge>
             </>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
+            <Badge size="md" className="mt-1">
               {t('notConnected')}
-            </span>
+            </Badge>
           )}
         </div>
         <div>
@@ -255,14 +256,14 @@ export function ConnectedAccounts() {
               <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-300">
                 {telegramProvider.name}
               </p>
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 mt-1 dark:bg-green-900/40 dark:text-green-300">
+              <Badge tone="success" size="md" className="mt-1">
                 {t('connected')}
-              </span>
+              </Badge>
             </>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 mt-1 dark:bg-gray-700 dark:text-gray-300">
+            <Badge size="md" className="mt-1">
               {t('notConnected')}
-            </span>
+            </Badge>
           )}
         </div>
         <div>

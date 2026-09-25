@@ -87,6 +87,30 @@ export class UpdateTransactionDto {
   @Length(0, 2000)
   note?: string;
 
+  /** Phase 20.2 — move the row to another account; `null` unplaces it. */
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Account this movement is placed on; null clears it.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string | null;
+
+  /**
+   * Phase 20.2 — make (or unmake) this row a transfer; `null` clears it.
+   * Turning a row into a transfer also requires `categoryIds` to be exactly
+   * the `transfer` system category.
+   */
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Destination account of a transfer (OUT, ONE_TIME, `transfer` category only); ' +
+      'null clears it.',
+  })
+  @IsOptional()
+  @IsUUID()
+  transferAccountId?: string | null;
+
   @ApiPropertyOptional({
     type: [AttributionDto],
     description:

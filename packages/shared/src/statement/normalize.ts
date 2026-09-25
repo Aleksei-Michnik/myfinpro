@@ -1,0 +1,72 @@
+// Phase 20 · Iteration 20.4 — statement text normalisation.
+//
+// Both sides of the import run these: the browser parser writes
+// `description`, the API recomputes `normalizedDescription` from it and the
+// matcher's category memory looks descriptions up by that value. One
+// function, so a remembered category is always found again (design §5.4).
+
+import { normalizeLookupName } from '../types/product.types';
+
+/**
+ * Bidi controls, zero-width and C0/C1 control characters. Statement text is
+ * untrusted (design §9) and an RTL override can make a description render as
+ * something else entirely, so they are removed before anything is stored.
+ *
+ * Written as escape sequences on purpose: the literal characters are
+ * invisible, which makes the file undiffable and the class unreviewable.
+ */
+const CONTROL_AND_BIDI = new RegExp(
+  '[' +
+    '\\u0000-\\u0008\\u000B-\\u001F' + // C0 controls, tabs and newlines excepted
+    '\\u007F-\\u009F' + // DEL and the C1 controls
+    '\\u00AD' + // soft hyphen — invisible, splits a word for a matcher
+    '\\u061C' + // Arabic letter mark
+    '\\u200B-\\u200F' + // zero-width space/joiners, LRM, RLM
+    '\\u202A-\\u202E' + // the bidi embedding and override controls
+    '\\u2066-\\u2069' + // the bidi isolates
+    '\\uFEFF' + // byte-order mark
+    ']',
+  'g',
+);
+
+/** Longest text the `description` / `normalized_description` columns hold. */
+export const STATEMENT_DESCRIPTION_MAX_LENGTH = 300;
+
+/**
+ * Sanitize a raw cell for storage/display: control and bidi marks removed,
+ * tabs/newlines folded into single spaces, trimmed, length-capped. Keeps the
+ * original letter case — this is what the user sees.
+ */
+export function sanitizeStatementText(
+  raw: string,
+  maxLength = STATEMENT_DESCRIPTION_MAX_LENGTH,
+): string {
+  return raw.replace(CONTROL_AND_BIDI, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+/**
+ * The lookup form of a description: sanitized, then lowercased and
+ * diacritics-folded by the registry rule the merchant/product registries
+ * already use (`normalizeLookupName`) — Latin folds to lowercase ASCII,
+ * Hebrew letters are left alone.
+ */
+export function normalizeDescription(raw: string): string {
+  return normalizeLookupName(sanitizeStatementText(raw), STATEMENT_DESCRIPTION_MAX_LENGTH);
+}
+
+/**
+ * The comparison form of a header cell: bidi marks and quotes unified
+ * (`״`→`"`, `׳`→`'`), whitespace (including the line breaks Cal prints
+ * inside header cells) collapsed, trailing punctuation dropped, lowercased.
+ */
+export function normalizeHeader(raw: string): string {
+  return raw
+    .replace(CONTROL_AND_BIDI, '')
+    .replace(/[״“”]/g, '"')
+    .replace(/[׳‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[:\-–—]+$/, '')
+    .trim()
+    .toLowerCase();
+}

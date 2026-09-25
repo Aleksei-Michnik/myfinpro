@@ -13,7 +13,10 @@ import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialo
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
@@ -225,7 +228,7 @@ export function ReceiptsClient() {
 
   return (
     <main className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{t('title')}</h1>
+      <PageHeader title={t('title')} />
 
       <ReceiptUploadZone onFiles={handleFiles} onUrl={handleUrl} pending={intakeOp.isLoading} />
 
@@ -268,21 +271,17 @@ export function ReceiptsClient() {
         )}
 
         {!listOp.isLoading && !listOp.error && receipts.length === 0 && (
-          <p
-            className="py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+          <EmptyState
+            bordered={false}
+            className="py-12"
             data-testid="receipts-empty"
-          >
-            {t('list.empty')}
-          </p>
+            title={t('list.empty')}
+          />
         )}
 
         <ul className="space-y-2">
           {receipts.map((receipt) => (
-            <li
-              key={receipt.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-              data-testid={`receipt-row-${receipt.id}`}
-            >
+            <Card as="li" padding="sm" key={receipt.id} data-testid={`receipt-row-${receipt.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <Link
@@ -383,7 +382,7 @@ export function ReceiptsClient() {
                     ))}
                 </div>
               </div>
-            </li>
+            </Card>
           ))}
         </ul>
 

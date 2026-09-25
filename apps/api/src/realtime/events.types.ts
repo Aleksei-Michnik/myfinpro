@@ -99,6 +99,12 @@ export type RealtimeEvent =
   // budget mutation (create / edit / delete / archive / unarchive); clients
   // refetch budget lists on receipt. Recipients: the owner (personal) or
   // all group members (group).
-  | { type: 'budget.updated'; userIds: string[]; budgetId: string };
+  | { type: 'budget.updated'; userIds: string[]; budgetId: string }
+  // Phase 20.2 — account lifecycle. Advisory (design §2.6): fired on every
+  // account mutation (create / edit / delete / archive / unarchive), and from
+  // 20.4 on every import and line decision; clients refetch the account list
+  // or detail on receipt. Recipients: the owner (personal) or all group
+  // members (group).
+  | { type: 'account.updated'; userIds: string[]; accountId: string };
 
 export type RealtimeEventType = RealtimeEvent['type'];

@@ -107,7 +107,7 @@ describe('ProductQuickViewDialog (8.27)', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByTestId('product-quick-view-backdrop'));
+    fireEvent.mouseDown(screen.getByTestId('product-quick-view-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByTestId('product-quick-view-close'));
     expect(onClose).toHaveBeenCalledTimes(3);

@@ -110,6 +110,9 @@ export type RealtimeEvent =
   // budget mutation (create / edit / delete / archive / unarchive); clients
   // refetch budget lists on receipt.
   | { type: 'budget.updated'; budgetId: string }
+  // Phase 20.2 — advisory account lifecycle event; clients refetch the account
+  // list or detail on receipt.
+  | { type: 'account.updated'; accountId: string }
   | { type: 'ping' };
 
 export type RealtimeEventType = RealtimeEvent['type'];
