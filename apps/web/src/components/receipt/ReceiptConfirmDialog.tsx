@@ -8,6 +8,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
+import { AccountSelect } from '@/components/account/AccountSelect';
 import { TransactionCategoryPicker } from '@/components/transaction/TransactionCategoryPicker';
 import { TransactionScopeSelector } from '@/components/transaction/TransactionScopeSelector';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +27,8 @@ export interface ReceiptConfirmDialogProps {
   categories: CategoryDto[];
   /** Pre-selected primary category (e.g. the most common line-item category). */
   defaultCategoryId?: string | null;
+  /** The receipt's currency — narrows the account picker (20.6). */
+  currency?: string | null;
   onCancel(): void;
   /** Fired with the new transaction id once confirmation succeeds. */
   onConfirmed(transactionId: string): void;
@@ -36,6 +39,7 @@ export function ReceiptConfirmDialog({
   receiptId,
   categories,
   defaultCategoryId,
+  currency,
   onCancel,
   onConfirmed,
 }: ReceiptConfirmDialogProps) {
@@ -46,6 +50,7 @@ export function ReceiptConfirmDialog({
   const [categoryId, setCategoryId] = useState<string | null>(defaultCategoryId ?? null);
   const [scopes, setScopes] = useState<AttributionScope[]>([{ scope: 'personal' }]);
   const [note, setNote] = useState('');
+  const [accountId, setAccountId] = useState<string | null>(null);
 
   const confirmOp = useAsyncOperation<string>({ scope: 'control' });
 
@@ -55,6 +60,7 @@ export function ReceiptConfirmDialog({
     setCategoryId(defaultCategoryId ?? null);
     setScopes(getLastUsedScopes());
     setNote('');
+    setAccountId(null);
   }, [open, defaultCategoryId]);
 
   useEffect(() => {
@@ -76,7 +82,12 @@ export function ReceiptConfirmDialog({
       .run(async (signal) => {
         const fresh = await confirmReceipt(
           receiptId,
-          { categoryId, attributions: scopes, note: note.trim() || undefined },
+          {
+            categoryId,
+            attributions: scopes,
+            note: note.trim() || undefined,
+            accountId: accountId ?? undefined,
+          },
           signal,
         );
         if (!fresh.transactionId) throw new Error('Confirmation returned no transaction');
@@ -126,6 +137,15 @@ export function ReceiptConfirmDialog({
         </span>
         <TransactionScopeSelector value={scopes} onChange={setScopes} />
       </div>
+
+      {/* Phase 20.6 — an account placement lets the bank line find this receipt. */}
+      <AccountSelect
+        label={t('accountLabel')}
+        value={accountId}
+        onChange={setAccountId}
+        currency={currency ?? undefined}
+        testId="receipt-confirm-account"
+      />
 
       <div className="space-y-1">
         <label

@@ -47,6 +47,26 @@ vi.mock('@/components/transaction/TransactionCategoryPicker', () => ({
   ),
 }));
 
+// Phase 20.6 — the account picker is provider-backed; a stub that picks one account.
+vi.mock('@/components/account/AccountSelect', () => ({
+  AccountSelect: ({
+    value,
+    onChange,
+    testId,
+  }: {
+    value: string | null;
+    onChange: (id: string | null) => void;
+    testId?: string;
+  }) => (
+    <button
+      type="button"
+      data-testid={testId}
+      data-value={value ?? ''}
+      onClick={() => onChange('acc-1')}
+    />
+  ),
+}));
+
 vi.mock('@/components/transaction/TransactionScopeSelector', () => ({
   TransactionScopeSelector: ({
     value,
@@ -133,6 +153,20 @@ describe('ReceiptConfirmDialog', () => {
     await waitFor(() => expect(onConfirmed).toHaveBeenCalledWith('p-1'));
     expect(setLastUsedScopesMock).toHaveBeenCalledWith([{ scope: 'personal' }]);
     expect(addToastMock).toHaveBeenCalledWith('success', 'confirmedToast');
+  });
+
+  it('places the transaction on the chosen account (20.6)', async () => {
+    confirmReceiptMock.mockResolvedValue({ transactionId: 'p-1' });
+    renderDialog();
+    fireEvent.click(screen.getByTestId('receipt-confirm-account'));
+    fireEvent.click(screen.getByTestId('receipt-confirm-submit'));
+    await waitFor(() =>
+      expect(confirmReceiptMock).toHaveBeenCalledWith(
+        'r-1',
+        expect.objectContaining({ accountId: 'acc-1' }),
+        expect.anything(),
+      ),
+    );
   });
 
   it('sends note undefined when the field is empty, and picks up scope changes', async () => {

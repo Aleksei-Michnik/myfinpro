@@ -839,6 +839,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
         receiptId={receiptId}
         categories={categories}
         defaultCategoryId={defaultCategoryId}
+        currency={receipt?.currency ?? null}
         onCancel={() => setConfirmOpen(false)}
         onConfirmed={(transactionId) => {
           setConfirmOpen(false);
