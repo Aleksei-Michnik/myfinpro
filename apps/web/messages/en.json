@@ -418,6 +418,84 @@
         "keyDeleted": "API key removed",
         "reauthRequired": "Please sign in again to manage API keys"
       }
+    },
+    "tokens": {
+      "title": "Connector tokens",
+      "subtitle": "Let a program on your own computer send bank lines to MyFinPro.",
+      "entryTitle": "Connector tokens",
+      "entryBody": "Create or revoke tokens for the statement connector.",
+      "fromImports": "Automate this with the connector",
+      "loading": "Loading tokens…",
+      "refresh": "Refresh",
+      "active": "Active tokens",
+      "activeCount": "{count} of {max}",
+      "new": "New token",
+      "limitHint": "You have the maximum of {max} tokens. Revoke one to create another.",
+      "emptyTitle": "No connector tokens",
+      "emptyBody": "A connector token lets a small program you run on your own computer push your bank lines into MyFinPro. Your bank password stays on your machine — it is never sent here, and this token can do nothing except add statement lines to your accounts. Revoke it any time and the connector stops. For most people the simpler path is still to download a statement and import it in the app; set up a connector only if you want it automatic.",
+      "emptyPreferImport": "Import a statement instead",
+      "scopes": {
+        "accountsImport": "Import statement lines"
+      },
+      "created": "Created",
+      "lastUsed": "Last used",
+      "neverUsed": "Never used",
+      "noExpiry": "No expiry",
+      "expiresOn": "Expires {date}",
+      "expiringSoon": "Expires in {count, plural, =1 {1 day} other {# days}}",
+      "expired": "Expired",
+      "form": {
+        "title": "New connector token",
+        "name": "Name",
+        "namePlaceholder": "Laptop connector",
+        "expiry": "Expiry",
+        "scope": "Scope",
+        "scopeFixed": "Import statement lines — this is all a token can ever do.",
+        "reach": "A token acts as you: it can add lines to any account you can import into, and nothing else.",
+        "expiryOptions": {
+          "d30": "30 days",
+          "d90": "90 days",
+          "d365": "1 year",
+          "never": "No expiry"
+        },
+        "create": "Create token",
+        "cancel": "Cancel",
+        "creating": "Creating…",
+        "limitError": "You have the maximum of {max} tokens. Revoke one to create another.",
+        "errorGeneric": "Could not create the token. Try again.",
+        "validation": {
+          "nameRequired": "Name is required.",
+          "nameTooLong": "Name must be 60 characters or fewer."
+        }
+      },
+      "reveal": {
+        "title": "Copy your token",
+        "warning": "Copy this token now. It will not be shown again — if you lose it, revoke it and create a new one.",
+        "tokenLabel": "Token",
+        "copy": "Copy",
+        "copied": "Copied",
+        "copyFailed": "Could not copy — select the token and copy it manually.",
+        "next": "Next, connect the connector",
+        "commandsLabel": "Commands",
+        "initHint": "`init` asks for this token and your MyFinPro address once and stores them in the connector's own config on your computer. Paste the token when it asks — never type it into the command itself.",
+        "syncHint": "`sync` signs in to your bank on your machine, reads the new lines and sends only those lines here. Run it whenever you like, or from your own scheduler.",
+        "reviewHint": "Imported lines still wait for a decision — review them on the account's Review tab.",
+        "helpLink": "Learn more about the connector",
+        "done": "Done",
+        "closeConfirm": "Close without saving the token elsewhere? You will not be able to see it again.",
+        "closeConfirmConfirm": "Close"
+      },
+      "revoke": {
+        "title": "Revoke token",
+        "warning": "Revoke \"{name}\"? Any connector using it stops working immediately. Lines it already imported are kept.",
+        "confirm": "Revoke",
+        "cancel": "Cancel",
+        "done": "Token revoked",
+        "failed": "Could not revoke the token"
+      },
+      "toast": {
+        "created": "Token created"
+      }
     }
   },
   "legal": {
