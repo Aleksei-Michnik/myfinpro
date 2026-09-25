@@ -125,10 +125,22 @@ export function TransactionsListClient() {
   const commit = useCallback(async (intent: TransactionFilters) => {
     pendingFiltersRef.current = intent;
     setShowErrorDialog(false);
-    const result = await opRef.current.run((signal) =>
-      fetchListRef.current(paramsFor(intent), signal),
-    );
+    // An aborted run (a newer commit, StrictMode's double effect in dev, unmount)
+    // is not a failure — only a real one opens the retry dialog.
+    let aborted = false;
+    const result = await opRef.current.run((signal) => {
+      signal.addEventListener('abort', () => (aborted = true));
+      return fetchListRef.current(paramsFor(intent), signal);
+    });
     if (result === undefined) {
+      if (aborted) {
+        // Superseded by a newer commit → that one owns the outcome. Cancelled
+        // by an unmount → nothing to do. Cancelled by React's dev-only
+        // unmount/remount (StrictMode) → re-issue once, or the list stays
+        // behind its loading overlay for good.
+        if (mountedRef.current && pendingFiltersRef.current === intent) void commit(intent);
+        return;
+      }
       setShowErrorDialog(true);
       return;
     }
@@ -139,6 +151,14 @@ export function TransactionsListClient() {
     pendingFiltersRef.current = null;
     const qs = filtersToQuery(intent).toString();
     routerRef.current.replace(qs ? `${pathnameRef.current}?${qs}` : pathnameRef.current);
+  }, []);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   // ── Initial mount — runs exactly once via a ref guard ─────────────────

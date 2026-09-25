@@ -3,7 +3,8 @@ import { test, expect, type Page } from '@playwright/test';
 /**
  * Phase 20 · Iteration 20.3 — accounts happy path:
  * create a bank account and a card → place a transaction on the bank →
- * transfer bank → card → balances on /accounts and the dashboard → edit →
+ * transfer bank → card → balances on /accounts and the dashboard → import a
+ * statement (20.5) → review the queue → re-import (all duplicates) → edit →
  * archive → delete.
  *
  * Requires a live stack (web + api + MySQL + Redis). A fresh user is
@@ -50,10 +51,53 @@ async function clickCardAction(page: Page, id: string, action: 'edit' | 'archive
   await page.getByTestId(`account-${action}-${id}`).click();
 }
 
-test.describe('Accounts happy path (20.3)', () => {
+/** A generic CSV statement, built at run time so its dates sit inside the match window. */
+function statementCsv(): Buffer {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = [
+    'Date,Description,Amount,Reference',
+    `${today},SHUFERSAL DEAL,-100.00,1001`, // equals the spend placed on the bank
+    `${today},SUPER-PHARM,-45.90,1002`,
+    `${today},PAZ GAS STATION,-250.00,1003`,
+    `${today},SALARY ACME LTD,12000.00,1004`,
+    `${today},CAFE NIMROD,-18.00,1005`,
+    `${today},AM:PM MARKET,-62.30,1006`,
+  ];
+  return Buffer.from(rows.join('\n'), 'utf8');
+}
+
+async function importStatement(page: Page, expectNew: boolean): Promise<void> {
+  await expect(page.getByTestId('statement-import-dialog')).toBeVisible();
+  await page
+    .getByTestId('statement-file-input')
+    .setInputFiles({ name: 'statement.csv', mimeType: 'text/csv', buffer: statementCsv() });
+  await expect(page.getByTestId('statement-file-name')).toContainText('statement.csv');
+  await page.getByTestId('statement-import-continue').click();
+  await expect(page.getByTestId('statement-import-step-2')).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByTestId('statement-import-preset')).toContainText('CSV');
+  await expect(page.getByTestId('statement-import-rows')).toHaveText('6');
+  await page.getByTestId('statement-import-submit').click();
+  await expect(page.getByTestId('statement-import-step-3')).toHaveAttribute(
+    'aria-current',
+    'step',
+    {
+      timeout: 20_000,
+    },
+  );
+  if (expectNew) {
+    await expect(page.getByTestId('statement-result-inserted')).toHaveText('6');
+    await expect(page.getByTestId('statement-result-duplicates')).toHaveText('0');
+  } else {
+    await expect(page.getByTestId('statement-result-empty')).toBeVisible();
+  }
+}
+
+test.describe('Accounts happy path (20.3 + 20.5)', () => {
   test.setTimeout(240_000);
 
-  test('create → place → transfer → balances → edit → archive → delete', async ({ page }) => {
+  test('create → place → transfer → balances → import → review → edit → archive → delete', async ({
+    page,
+  }) => {
     await registerFreshUser(page);
 
     await page.goto('/accounts');
@@ -110,6 +154,59 @@ test.describe('Accounts happy path (20.3)', () => {
     await expect(
       page.getByTestId('transactions-list-desktop').locator('[data-testid^="transaction-row-"]'),
     ).toHaveCount(1, { timeout: 30_000 });
+
+    // ── Import a statement on the bank (20.5) ─────────────────────────────
+    await page.goto('/accounts');
+    await expect(page.getByTestId(`account-card-${bankId}`)).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId(`account-actions-${bankId}`).click();
+    await page.getByTestId(`account-import-${bankId}`).click();
+    await expect(page.getByTestId('statement-import-account')).toBeDisabled();
+    await importStatement(page, true);
+    await page.getByTestId('statement-import-review-cta').click();
+
+    // ── Review queue: six pending lines, decide by hand, undo, ignore ─────
+    await expect(page).toHaveURL(new RegExp(`/accounts/${bankId}\\?tab=review`), {
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('account-review-list')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('account-tab-review-count')).toHaveText('6');
+    const rows = page.getByTestId('account-review-list').locator('[data-testid^="line-row-"]');
+    await expect(rows).toHaveCount(6);
+    const firstId = (await rows.first().getAttribute('data-testid'))!.replace('line-row-', '');
+    // Create: every line needs a category the first time round.
+    await page
+      .getByTestId(`line-category-picker-${firstId}`)
+      .getByTestId('category-picker-select')
+      .selectOption({ index: 1 });
+    await page.getByTestId(`line-accept-${firstId}`).click();
+    await expect(page.getByTestId(`line-row-${firstId}`)).toBeHidden({ timeout: 15_000 });
+    await expect(page.getByTestId('account-review-undo')).toBeVisible();
+    await expect(page.getByTestId('account-tab-review-count')).toHaveText('5', { timeout: 15_000 });
+    // Undo brings it back.
+    await page.getByTestId('account-review-undo-button').click();
+    await expect(page.getByTestId(`line-row-${firstId}`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('account-tab-review-count')).toHaveText('6', { timeout: 15_000 });
+    // Ignore through the keyboard: focus the row, press I.
+    await page.getByTestId(`line-row-${firstId}`).focus();
+    await page.keyboard.press('i');
+    await expect(page.getByTestId(`line-row-${firstId}`)).toBeHidden({ timeout: 15_000 });
+    // The decided filter shows it with an undo action.
+    await page.getByTestId('account-review-filter-decided').click();
+    await expect(page.getByTestId(`line-undo-${firstId}`)).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('account-review-filter-all').click();
+    await expect(rows).toHaveCount(5, { timeout: 15_000 });
+
+    // ── Re-import the same file: nothing new ───────────────────────────────
+    await page.getByTestId('account-detail-import').click();
+    await importStatement(page, false);
+    await page.getByTestId('statement-import-done').click();
+    await page.getByTestId('account-tab-imports').click();
+    // The tab renders a card list (phone) and a table (desktop) — count one rendering.
+    await expect(page.locator('table tr[data-testid^="import-row-"]')).toHaveCount(2, {
+      timeout: 15_000,
+    });
+    await page.getByTestId('account-tab-transactions').click();
+    await expect(page.getByTestId('transactions-list')).toBeVisible({ timeout: 15_000 });
 
     // ── Edit → archive → delete ──────────────────────────────────────────
     await page.goto('/accounts');

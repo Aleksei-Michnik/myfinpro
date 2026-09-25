@@ -14,10 +14,18 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AccountImport,
+  AccountImportListResponse,
   AccountListResponse,
   AccountSummary,
+  ApplySuggestionsResult,
   CreateAccountInput,
+  CreateFromLineInput,
+  CreateImportInput,
   ListAccountsParams,
+  ListLinesParams,
+  StatementLineDecision,
+  StatementLineListResponse,
   UpdateAccountInput,
 } from './types';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -50,6 +58,57 @@ interface AccountContextValue {
   directory: ReadonlyMap<string, AccountSummary> | null;
   /** Asks for the directory (idempotent). */
   ensureDirectory(): void;
+
+  // ── 20.5 — statement imports and the review queue ──
+  createImport(
+    accountId: string,
+    input: CreateImportInput,
+    signal?: AbortSignal,
+  ): Promise<AccountImport>;
+  fetchImports(
+    accountId: string,
+    params?: { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ): Promise<AccountImportListResponse>;
+  fetchLines(
+    accountId: string,
+    params?: ListLinesParams,
+    signal?: AbortSignal,
+  ): Promise<StatementLineListResponse>;
+  matchLine(
+    accountId: string,
+    lineId: string,
+    transactionId: string,
+    signal?: AbortSignal,
+  ): Promise<StatementLineDecision>;
+  createFromLine(
+    accountId: string,
+    lineId: string,
+    input: CreateFromLineInput,
+    signal?: AbortSignal,
+  ): Promise<StatementLineDecision>;
+  transferFromLine(
+    accountId: string,
+    lineId: string,
+    transferAccountId: string,
+    signal?: AbortSignal,
+  ): Promise<StatementLineDecision>;
+  ignoreLine(
+    accountId: string,
+    lineId: string,
+    signal?: AbortSignal,
+  ): Promise<StatementLineDecision>;
+  /** Back to PENDING; the transaction is left untouched. */
+  unlinkLine(
+    accountId: string,
+    lineId: string,
+    signal?: AbortSignal,
+  ): Promise<StatementLineDecision>;
+  applySuggestions(
+    accountId: string,
+    lineIds?: string[],
+    signal?: AbortSignal,
+  ): Promise<ApplySuggestionsResult>;
 }
 
 const AccountContext = createContext<AccountContextValue | null>(null);
@@ -185,6 +244,110 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     [archiveAction],
   );
 
+  // ── 20.5 — imports and lines share one request helper ───────────────────
+  const request = useCallback(
+    async <T,>(
+      path: string,
+      init: { method?: string; body?: unknown; signal?: AbortSignal },
+      fallback: string,
+    ): Promise<T> => {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: init.method ?? 'GET',
+        headers: authHeaders(),
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        signal: init.signal,
+      });
+      if (!res.ok) await throwApiError(res, fallback);
+      return (await res.json()) as T;
+    },
+    [authHeaders],
+  );
+  const accountPath = (accountId: string) => `/accounts/${encodeURIComponent(accountId)}`;
+  const linePath = (accountId: string, lineId: string) =>
+    `${accountPath(accountId)}/lines/${encodeURIComponent(lineId)}`;
+
+  const createImport = useCallback(
+    (accountId: string, input: CreateImportInput, signal?: AbortSignal) =>
+      request<AccountImport>(
+        `${accountPath(accountId)}/imports`,
+        { method: 'POST', body: input, signal },
+        'Failed to import statement',
+      ),
+    [request],
+  );
+  const fetchImports = useCallback(
+    (accountId: string, params?: { limit?: number; cursor?: string }, signal?: AbortSignal) =>
+      request<AccountImportListResponse>(
+        `${accountPath(accountId)}/imports${buildQuery({ ...params })}`,
+        { signal },
+        'Failed to load imports',
+      ),
+    [request],
+  );
+  const fetchLines = useCallback(
+    (accountId: string, params?: ListLinesParams, signal?: AbortSignal) =>
+      request<StatementLineListResponse>(
+        `${accountPath(accountId)}/lines${buildQuery({ ...params })}`,
+        { signal },
+        'Failed to load statement lines',
+      ),
+    [request],
+  );
+  const matchLine = useCallback(
+    (accountId: string, lineId: string, transactionId: string, signal?: AbortSignal) =>
+      request<StatementLineDecision>(
+        `${linePath(accountId, lineId)}/match`,
+        { method: 'POST', body: { transactionId }, signal },
+        'Failed to match line',
+      ),
+    [request],
+  );
+  const createFromLine = useCallback(
+    (accountId: string, lineId: string, input: CreateFromLineInput, signal?: AbortSignal) =>
+      request<StatementLineDecision>(
+        `${linePath(accountId, lineId)}/create`,
+        { method: 'POST', body: input, signal },
+        'Failed to create transaction from line',
+      ),
+    [request],
+  );
+  const transferFromLine = useCallback(
+    (accountId: string, lineId: string, transferAccountId: string, signal?: AbortSignal) =>
+      request<StatementLineDecision>(
+        `${linePath(accountId, lineId)}/transfer`,
+        { method: 'POST', body: { transferAccountId }, signal },
+        'Failed to record transfer',
+      ),
+    [request],
+  );
+  const ignoreLine = useCallback(
+    (accountId: string, lineId: string, signal?: AbortSignal) =>
+      request<StatementLineDecision>(
+        `${linePath(accountId, lineId)}/ignore`,
+        { method: 'POST', signal },
+        'Failed to ignore line',
+      ),
+    [request],
+  );
+  const unlinkLine = useCallback(
+    (accountId: string, lineId: string, signal?: AbortSignal) =>
+      request<StatementLineDecision>(
+        `${linePath(accountId, lineId)}/link`,
+        { method: 'DELETE', signal },
+        'Failed to undo decision',
+      ),
+    [request],
+  );
+  const applySuggestions = useCallback(
+    (accountId: string, lineIds?: string[], signal?: AbortSignal) =>
+      request<ApplySuggestionsResult>(
+        `${accountPath(accountId)}/lines/apply-suggestions`,
+        { method: 'POST', body: lineIds ? { lineIds } : {}, signal },
+        'Failed to apply suggestions',
+      ),
+    [request],
+  );
+
   // ── Directory (name lookup for rows) ────────────────────────────────────
   const { isAuthenticated } = useAuth();
   const [directory, setDirectory] = useState<ReadonlyMap<string, AccountSummary> | null>(null);
@@ -216,6 +379,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       unarchiveAccount,
       directory,
       ensureDirectory,
+      createImport,
+      fetchImports,
+      fetchLines,
+      matchLine,
+      createFromLine,
+      transferFromLine,
+      ignoreLine,
+      unlinkLine,
+      applySuggestions,
     }),
     [
       fetchAccounts,
@@ -227,6 +399,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       unarchiveAccount,
       directory,
       ensureDirectory,
+      createImport,
+      fetchImports,
+      fetchLines,
+      matchLine,
+      createFromLine,
+      transferFromLine,
+      ignoreLine,
+      unlinkLine,
+      applySuggestions,
     ],
   );
 

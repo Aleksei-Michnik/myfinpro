@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccountCard } from '@/components/account/AccountCard';
 import { AccountFormDialog } from '@/components/account/AccountFormDialog';
+import { ImportStatementDialog } from '@/components/account/ImportStatementDialog';
 import { TransactionsScopeTabs } from '@/components/transaction/TransactionsScopeTabs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -62,6 +63,8 @@ export function AccountsClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<AccountSummary | null>(null);
   const [deleting, setDeleting] = useState<AccountSummary | null>(null);
+  // 20.5 — `'any'` opens the wizard with the account picker unlocked.
+  const [importing, setImporting] = useState<AccountSummary | 'any' | null>(null);
 
   const listOp = useAsyncOperation<AccountListResponse>({
     scope: 'container',
@@ -204,15 +207,26 @@ export function AccountsClient() {
       <PageHeader
         title={t('title')}
         actions={
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-            data-testid="accounts-new"
-          >
-            {t('newAccount')}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setImporting('any')}
+              data-testid="accounts-import"
+            >
+              {t('import')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              data-testid="accounts-new"
+            >
+              {t('newAccount')}
+            </Button>
+          </>
         }
       />
 
@@ -289,6 +303,7 @@ export function AccountsClient() {
                 groups={groups}
                 actionsDisabled={archiveOp.isLoading}
                 onEdit={setEditing}
+                onImport={setImporting}
                 onToggleArchive={handleToggleArchive}
                 onDelete={setDeleting}
               />
@@ -313,6 +328,13 @@ export function AccountsClient() {
 
         <LoadingOverlay active={loading && hasLoadedOnce} />
       </div>
+
+      <ImportStatementDialog
+        open={importing !== null}
+        account={importing === 'any' ? null : importing}
+        onClose={() => setImporting(null)}
+        onImported={() => commit(committedRef.current)}
+      />
 
       <AccountFormDialog
         open={createOpen}

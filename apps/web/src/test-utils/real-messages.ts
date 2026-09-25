@@ -23,8 +23,13 @@ export function realMessagesIntl() {
     useTranslations:
       (namespace?: string) => (key: string, values?: Record<string, string | number>) => {
         const msg = resolveMessage(namespace, key);
+        // `count` keeps the row spec's `label:count` convention; other
+        // placeholders are substituted so a rendered value can be asserted.
         if (values && typeof values.count === 'number') return `${msg}:${values.count}`;
-        return msg;
+        if (!values) return msg;
+        return msg.replace(/\{(\w+)\}/g, (m, name: string) =>
+          name in values ? String(values[name]) : m,
+        );
       },
   };
 }
