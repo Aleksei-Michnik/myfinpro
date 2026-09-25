@@ -2,6 +2,7 @@ import {
   CURRENCY_CODES,
   CurrencyCode,
   isPlanKind,
+  MAX_MINOR_UNITS,
   TRANSACTION_PLAN_KINDS,
   TRANSFER_CATEGORY_SLUG,
 } from '@myfinpro/shared';
@@ -44,8 +45,12 @@ import {
   type RecipientAttribution,
 } from './utils/transaction-event-recipients';
 
-/** Sanity cap (~$1 billion in cents); keeps amountCents well inside a 32-bit Int column. */
-const MAX_AMOUNT_CENTS = 1e11;
+/**
+ * Ceiling of the `amount_cents` INT column, from the one shared money limit
+ * (`MAX_MINOR_UNITS`). The previous local `1e11` sat *above* the column's own
+ * range, so a large-but-accepted amount would have failed at the database.
+ */
+const MAX_AMOUNT_CENTS = MAX_MINOR_UNITS;
 
 /**
  * Transaction types that the create flow accepts today.

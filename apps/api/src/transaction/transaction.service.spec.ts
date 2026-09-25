@@ -1,3 +1,4 @@
+import { MAX_MINOR_UNITS } from '@myfinpro/shared';
 import { getQueueToken } from '@nestjs/bullmq';
 import {
   BadRequestException,
@@ -330,12 +331,19 @@ describe('TransactionService', () => {
       }
     });
 
-    it('rejects amountCents above 1e11 cap', async () => {
+    // The cap is the INT column's own ceiling (MAX_MINOR_UNITS), so an amount
+    // the API accepts is always an amount the database can store.
+    it('rejects amountCents above the money cap', async () => {
+      await expect(
+        service.create('user-1', baseDto({ amountCents: MAX_MINOR_UNITS + 1 })),
+      ).rejects.toBeInstanceOf(BadRequestException);
       try {
-        await service.create('user-1', baseDto({ amountCents: 1e11 + 1 }));
+        await service.create('user-1', baseDto({ amountCents: MAX_MINOR_UNITS + 1 }));
+        throw new Error('expected a rejection');
       } catch (err) {
         expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_INVALID_AMOUNT);
       }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
     });
   });
 
@@ -1631,10 +1639,11 @@ describe('TransactionService', () => {
       }
     });
 
-    it('amount > 1e11 cents → 400 TRANSACTION_INVALID_AMOUNT', async () => {
+    it('amount above the money cap → 400 TRANSACTION_INVALID_AMOUNT', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow());
       try {
-        await service.update('user-1', 'pay-1', { amountCents: 1e11 + 1 });
+        await service.update('user-1', 'pay-1', { amountCents: MAX_MINOR_UNITS + 1 });
+        throw new Error('expected a rejection');
       } catch (err) {
         expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_INVALID_AMOUNT);
       }
