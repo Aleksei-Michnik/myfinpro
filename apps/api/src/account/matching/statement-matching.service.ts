@@ -17,13 +17,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { fuzzyLookupTokens, trigramSimilarity } from '../../product/utils/trigram.util';
 import { categoryVisibilityClauses } from '../../category/utils/category-visibility';
 import { buildTransactionVisibilityWhere } from '../../transaction/utils/transaction-visibility';
+import { StatementLineService } from '../statement-line.service';
 import { buildAccountVisibilityWhere } from '../utils/account-visibility';
 import {
   buildCandidateIndex,
   buildSuggestion,
   detectCardBillTransfer,
   detectCounterpartTransfer,
+  isConfidentMatch,
+  MAX_SCORED_CANDIDATES_PER_LINE,
   rankCandidates,
+  rankLinesForTransaction,
   type CounterLine,
   type MatchableCandidate,
   type MatchableLine,
@@ -32,7 +36,7 @@ import {
 } from './statement-matcher';
 
 /** Statuses a bank line may settle: a plan occurrence posts when it clears. */
-const MATCHABLE_STATUSES = ['POSTED', 'PENDING', 'DUE'] as const;
+export const MATCHABLE_STATUSES = ['POSTED', 'PENDING', 'DUE'] as const;
 
 /** Ceiling on the evidence rows one import may pull in (bounded memory). */
 const EVIDENCE_TAKE = 500;
@@ -42,6 +46,14 @@ const MERCHANT_MEMORY_MIN_SIMILARITY = 0.6;
 
 /** Suggestion writes per DB transaction when persisting an import's results. */
 const SUGGESTION_WRITE_CHUNK = 100;
+
+/**
+ * How long a claimed-but-unattached line counts as "a decision in flight"
+ * (see {@link StatementMatchingService.autoLink}). Long enough to cover any
+ * request that is still writing its transaction, short enough that a crashed
+ * one cannot disable auto-linking for an account for good.
+ */
+const DECISION_IN_FLIGHT_MS = 60_000;
 
 const MS_PER_DAY = 86_400_000;
 
@@ -70,7 +82,10 @@ export interface MatchingAccountRow {
 export class StatementMatchingService {
   private readonly logger = new Logger(StatementMatchingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly lines: StatementLineService,
+  ) {}
 
   /**
    * Suggest an action for every given line, as the actor sees the world
@@ -137,6 +152,144 @@ export class StatementMatchingService {
       );
     }
     return result;
+  }
+
+  /**
+   * The other direction of design §5.5 — transaction → line: a transaction
+   * that was just written onto an account takes the ONE pending bank line
+   * that would score as a confident match for it, so a receipt photographed
+   * on Tuesday and a statement imported on Friday meet without a click.
+   * Ambiguity does nothing: the review queue asks.
+   *
+   * Best-effort by contract — it is called post-commit, fire-and-forget, and
+   * NEVER throws to its caller. A concurrent manual decision always wins: the
+   * link is taken through the same conditional claim the review queue uses,
+   * so a lost race is just `null`.
+   */
+  async autoLink(actorId: string, transactionId: string): Promise<{ lineId: string } | null> {
+    try {
+      const transaction = await this.prisma.transaction.findFirst({
+        where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(actorId)] },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          direction: true,
+          amountCents: true,
+          currency: true,
+          occurredAt: true,
+          accountId: true,
+          transferAccountId: true,
+          note: true,
+          category: { select: { name: true } },
+          receipt: { select: { merchant: { select: { normalizedName: true } } } },
+          statementLine: { select: { id: true } },
+        },
+      });
+
+      // Only a plain, unsettled one-off movement placed on an account can be
+      // what a bank line records (design §5.1). A transfer is recorded by the
+      // review queue's transfer decision, never here.
+      if (!transaction?.accountId) return null;
+      if (transaction.transferAccountId !== null) return null;
+      if (transaction.type !== 'ONE_TIME') return null;
+      if (!(MATCHABLE_STATUSES as readonly string[]).includes(transaction.status)) return null;
+      if (transaction.statementLine) return null;
+
+      const account = await this.prisma.account.findFirst({
+        where: {
+          AND: [
+            { id: transaction.accountId, archivedAt: null },
+            buildAccountVisibilityWhere(actorId),
+          ],
+        },
+      });
+      if (!account) return null;
+      if (await this.decisionInFlight(account.id)) return null;
+
+      const window = STATEMENT_MATCH_DATE_WINDOW_DAYS * MS_PER_DAY;
+      const from = new Date(transaction.occurredAt.getTime() - window);
+      const to = new Date(transaction.occurredAt.getTime() + window);
+      const rows = await this.prisma.accountStatementLine.findMany({
+        where: {
+          accountId: account.id,
+          status: 'PENDING',
+          direction: transaction.direction,
+          amountCents: transaction.amountCents,
+          currency: transaction.currency,
+          OR: [{ postedAt: { gte: from, lte: to } }, { valueAt: { gte: from, lte: to } }],
+        },
+        orderBy: [{ postedAt: 'asc' }, { id: 'asc' }],
+        take: MAX_SCORED_CANDIDATES_PER_LINE,
+      });
+      if (rows.length === 0) return null;
+
+      const candidate: MatchableCandidate = {
+        id: transaction.id,
+        direction: transaction.direction,
+        amountCents: transaction.amountCents,
+        currency: transaction.currency,
+        occurredAt: transaction.occurredAt,
+        accountId: transaction.accountId,
+        transferAccountId: transaction.transferAccountId,
+        texts: [
+          transaction.note ? normalizeDescription(transaction.note) : '',
+          transaction.receipt?.merchant?.normalizedName ?? '',
+          normalizeLookupName(transaction.category.name),
+        ],
+      };
+      const ranked = rankLinesForTransaction(
+        candidate,
+        rows.map((row) => ({
+          id: row.id,
+          direction: row.direction,
+          amountCents: row.amountCents,
+          currency: row.currency,
+          normalizedDescription: row.normalizedDescription,
+          at: row.valueAt ?? row.postedAt,
+        })),
+        account.id,
+      );
+      if (!isConfidentMatch(ranked)) return null;
+
+      const line = rows.find((row) => row.id === ranked[0].lineId);
+      if (!line) return null;
+
+      // The same claim → confirm → audit → fan-out path a person's `match`
+      // decision takes; a conflict means someone decided this line (or this
+      // transaction) first, and the auto-linker simply steps aside.
+      await this.lines.linkLineToTransaction(actorId, account, line, transaction.id);
+      this.logger.log(
+        `Auto-linked transaction ${transaction.id} to statement line ${line.id} on account ${account.id}`,
+      );
+      return { lineId: line.id };
+    } catch (err) {
+      // Ids only — a statement description never reaches a log (design §9).
+      this.logger.warn(
+        `Auto-link skipped for transaction ${transactionId}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Is a review-queue decision mid-flight on this account? `create` and
+   * `transfer` claim their line BEFORE they write the transaction, so a
+   * recently claimed line with no transaction yet means the row that just
+   * triggered this call is that decision's own. Linking it to a look-alike
+   * line would steal the transaction the decision is about to attach, so the
+   * auto-linker stands down and leaves the queue to finish.
+   */
+  private async decisionInFlight(accountId: string): Promise<boolean> {
+    const claimed = await this.prisma.accountStatementLine.count({
+      where: {
+        accountId,
+        status: { in: ['CREATED', 'MATCHED'] },
+        transactionId: null,
+        decidedAt: { gte: new Date(Date.now() - DECISION_IN_FLIGHT_MS) },
+      },
+    });
+    return claimed > 0;
   }
 
   /** Store the snapshots on their lines, in bounded chunks. */
