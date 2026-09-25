@@ -1,4 +1,4 @@
-# Auth and groups (checked 2026-09-24)
+# Auth and groups (checked 2026-09-25)
 
 Read when: touching identity, sessions, providers, account lifecycle, legal/help pages, or group membership and roles.
 
@@ -22,21 +22,24 @@ Prisma models (`apps/api/prisma/schema.prisma`): `User`, `RefreshToken`, `OAuthP
 | Access      | JWT HS256, `{sub,email,name}`         | `JWT_EXPIRATION` (default `15m`)        | JSON body → React state only; **and** `access_token` cookie (httpOnly, SameSite=Lax, path `/`)           |
 | Refresh     | random UUID                           | `JWT_REFRESH_EXPIRATION` (default `7d`) | SHA-256 hash in `refresh_tokens`; raw in `refresh_token` cookie (httpOnly, SameSite=Strict, path `/api`) |
 | Google link | JWT, `purpose: 'link_google'`, 10 min | hardcoded                               | `link_token` cookie (httpOnly, SameSite=Lax)                                                             |
+| API token   | `mfp_` + 40 url-safe chars (20.7)     | optional `expiresAt`, else none         | SHA-256 hash in `api_tokens`; raw shown once in the creation response, never retrievable                 |
 
 - Signing secret: `JWT_SECRET`. `apps/api/src/auth/jwt-config.module.ts` and `strategies/jwt.strategy.ts` throw when it is unset outside `development`/`test`; the dev fallback string is unreachable in deployed envs.
 - **Rotation + reuse detection** (`services/refresh-token.service.ts`): every `POST /auth/refresh` creates a new row, then revokes the old one with `replacedBy`. Presenting an already-revoked token revokes _every_ token of that user, writes `TOKEN_REUSE_DETECTED`, and 401s.
 - The refresh token is never echoed in a response body — `AuthController.issueAuthCookies` strips it. The service layer is cookie-free; only the controller touches `Response`.
 - `TokenService.setRefreshTokenCookie` also clears a legacy cookie at path `/api/v1/auth` on every set/clear: browsers send the more specific path first, which used to look like token reuse (phase-1 progress "Silent refresh — Missing User + Cookie Path").
+- **Personal access tokens** (`services/api-token.service.ts`, phase 20.7, design §6.4): scoped tokens for the user-run import connector. `POST /auth/tokens` mints one and returns the raw value exactly once (only the hash is stored, through the same `TokenService.hashToken`); `GET` lists metadata; `DELETE /auth/tokens/:id` revokes. At most 10 active per user (`API_TOKEN_LIMIT_REACHED`, 409); `scopes` is a comma-separated list from `API_TOKEN_SCOPES` (v1: `accounts:import`); `lastUsedAt` is stamped at most once a minute; `API_TOKEN_CREATED` / `API_TOKEN_REVOKED` audit rows carry ids and scopes only. Managing tokens is JWT-only — a token can never mint or revoke another.
 - Web (`apps/web/src/lib/auth/auth-context.tsx`): access token in memory only (never `localStorage`), a 12-minute interval refresh (80 % of the 15-minute TTL), a shared single-flight refresh on any 401 via `configureApiAuth`, and a `BroadcastChannel('auth')` so sibling tabs reuse one refresh.
 
 ## Guards
 
-| Guard                                  | Accepts                                                                                | Used on                                                                                                                                                   |
-| -------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JwtAuthGuard` (passport)              | `Authorization: Bearer` only                                                           | every mutating/auth'd auth and group route                                                                                                                |
-| `CookieOrBearerAuthGuard`              | `access_token` cookie, else Bearer                                                     | read-only surfaces the browser cannot add headers to: SSE (`realtime/events.controller.ts`) and `<img>`-loaded product pictures (`product.controller.ts`) |
-| `GoogleAuthGuard`                      | passport-google-oauth20, `state: true`                                                 | `GET /auth/google`, `GET /auth/google/callback`                                                                                                           |
-| `GroupMemberGuard` / `GroupAdminGuard` | resolves `groupMembership` from `:id` + `request.user.sub`, attaches it to the request | group routes, always **after** `JwtAuthGuard`                                                                                                             |
+| Guard                                  | Accepts                                                                                | Used on                                                                                                                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JwtAuthGuard` (passport)              | `Authorization: Bearer` only                                                           | every mutating/auth'd auth and group route                                                                                                                             |
+| `CookieOrBearerAuthGuard`              | `access_token` cookie, else Bearer                                                     | read-only surfaces the browser cannot add headers to: SSE (`realtime/events.controller.ts`) and `<img>`-loaded product pictures (`product.controller.ts`)              |
+| `GoogleAuthGuard`                      | passport-google-oauth20, `state: true`                                                 | `GET /auth/google`, `GET /auth/google/callback`                                                                                                                        |
+| `GroupMemberGuard` / `GroupAdminGuard` | resolves `groupMembership` from `:id` + `request.user.sub`, attaches it to the request | group routes, always **after** `JwtAuthGuard`                                                                                                                          |
+| `JwtOrApiTokenGuard`                   | Bearer JWT first; else an `mfp_` personal access token with scope `accounts:import`    | **`POST /accounts/:accountId/imports` only** (20.7). Wrong scope → 403 `API_TOKEN_SCOPE`; anything else → 401. `request.user` is the `JwtPayload` shape plus `tokenId` |
 
 Both header and cookie exist because `EventSource` and `<img>` cannot set headers; the header path stays for curl/non-browser clients. Any module using `CookieOrBearerAuthGuard` must import `JwtConfigModule` (`@UseGuards` instantiates the guard in the _host_ module).
 
@@ -95,7 +98,7 @@ Global default: one `default` throttler, `RATE_LIMIT_TTL` / `RATE_LIMIT_MAX` (60
 
 ## Audit log
 
-`AuditLog{userId?, action, entity, entityId?, details?, ipAddress?, userAgent?}`. Auth: `USER_REGISTERED`, `USER_REGISTERED_OAUTH`, `USER_LOGIN`, `LOGIN_FAILED`, `USER_LOGOUT`, `TOKEN_REUSE_DETECTED`, `PASSWORD_RESET`, `auth.password_changed`, `OAUTH_PROVIDER_LINKED`, `OAUTH_PROVIDER_UNLINKED`, `ACCOUNT_MERGED`, `ACCOUNT_DELETION_REQUESTED`, `ACCOUNT_DELETION_CANCELLED`, `ACCOUNT_REACTIVATED_VIA_LOGIN`. Groups: `GROUP_CREATED`, `GROUP_UPDATED`, `GROUP_DELETED`, `GROUP_INVITE_CREATED`, `GROUP_MEMBER_JOINED`, `group.member.role_changed`, `group.member.removed`, `group.member.left`, `group.deleted_on_leave`. Naming is deliberately mixed (`UPPER_SNAKE` older, `dot.notation` newer) to preserve historical continuity — phase-5-progress §5.8.
+`AuditLog{userId?, action, entity, entityId?, details?, ipAddress?, userAgent?}`. Auth: `USER_REGISTERED`, `USER_REGISTERED_OAUTH`, `USER_LOGIN`, `LOGIN_FAILED`, `USER_LOGOUT`, `TOKEN_REUSE_DETECTED`, `PASSWORD_RESET`, `auth.password_changed`, `OAUTH_PROVIDER_LINKED`, `OAUTH_PROVIDER_UNLINKED`, `ACCOUNT_MERGED`, `ACCOUNT_DELETION_REQUESTED`, `ACCOUNT_DELETION_CANCELLED`, `ACCOUNT_REACTIVATED_VIA_LOGIN`, `API_TOKEN_CREATED`, `API_TOKEN_REVOKED`. Groups: `GROUP_CREATED`, `GROUP_UPDATED`, `GROUP_DELETED`, `GROUP_INVITE_CREATED`, `GROUP_MEMBER_JOINED`, `group.member.role_changed`, `group.member.removed`, `group.member.left`, `group.deleted_on_leave`. Naming is deliberately mixed (`UPPER_SNAKE` older, `dot.notation` newer) to preserve historical continuity — phase-5-progress §5.8.
 
 ## Groups
 
@@ -111,35 +114,37 @@ Global default: one `default` throttler, `RATE_LIMIT_TTL` / `RATE_LIMIT_MAX` (60
 
 `/api/v1` prefix. Guard column: J = `JwtAuthGuard`, G = `GoogleAuthGuard`, M = `GroupMemberGuard`, A = `GroupAdminGuard`, — = public.
 
-| Method | Path                                    | Guard | Body/param DTO                            |
-| ------ | --------------------------------------- | ----- | ----------------------------------------- |
-| POST   | `/auth/register`                        | —     | `RegisterDto`                             |
-| POST   | `/auth/login`                           | —     | `LoginDto`                                |
-| POST   | `/auth/refresh`, `/auth/logout`         | —     | `refresh_token` cookie                    |
-| GET    | `/auth/me`                              | J     | —                                         |
-| PATCH  | `/auth/profile`                         | J     | `UpdateProfileDto`                        |
-| POST   | `/auth/send-verification-email`         | J     | —                                         |
-| GET    | `/auth/verify-email?token=`             | —     | query token                               |
-| POST   | `/auth/forgot-password`                 | —     | `ForgotPasswordDto`                       |
-| POST   | `/auth/reset-password`                  | —     | `ResetPasswordDto`                        |
-| POST   | `/auth/change-password` (204)           | J     | `ChangePasswordDto`                       |
-| POST   | `/auth/delete-account`                  | J     | `DeleteAccountDto`                        |
-| POST   | `/auth/cancel-deletion`                 | J     | —                                         |
-| GET    | `/auth/google`, `/auth/google/callback` | G     | —                                         |
-| GET    | `/auth/google/link`                     | —\*   | `access_token` cookie (\*verified inline) |
-| POST   | `/auth/telegram/callback`               | —     | `TelegramAuthDto`                         |
-| POST   | `/auth/link/telegram`                   | J     | `TelegramAuthDto`                         |
-| GET    | `/auth/connected-accounts`              | J     | —                                         |
-| DELETE | `/auth/connected-accounts/:provider`    | J     | `google` \| `telegram`                    |
-| POST   | `/groups` (201) · GET `/groups`         | J     | `CreateGroupDto`                          |
-| GET    | `/groups/invite/:token`                 | J     | raw token                                 |
-| POST   | `/groups/invite/:token/accept`          | J     | raw token                                 |
-| GET    | `/groups/:id`                           | J+M   | —                                         |
-| PATCH  | `/groups/:id` · DELETE `/groups/:id`    | J+A   | `UpdateGroupDto`                          |
-| POST   | `/groups/:id/invites` (201)             | J+A   | —                                         |
-| PATCH  | `/groups/:id/members/:userId`           | J+A   | `UpdateMemberRoleDto`                     |
-| DELETE | `/groups/:id/members/:userId` (204)     | J+A   | —                                         |
-| POST   | `/groups/:id/leave` (204)               | J+M   | —                                         |
+| Method | Path                                      | Guard | Body/param DTO                            |
+| ------ | ----------------------------------------- | ----- | ----------------------------------------- |
+| POST   | `/auth/register`                          | —     | `RegisterDto`                             |
+| POST   | `/auth/login`                             | —     | `LoginDto`                                |
+| POST   | `/auth/refresh`, `/auth/logout`           | —     | `refresh_token` cookie                    |
+| GET    | `/auth/me`                                | J     | —                                         |
+| PATCH  | `/auth/profile`                           | J     | `UpdateProfileDto`                        |
+| POST   | `/auth/send-verification-email`           | J     | —                                         |
+| GET    | `/auth/verify-email?token=`               | —     | query token                               |
+| POST   | `/auth/forgot-password`                   | —     | `ForgotPasswordDto`                       |
+| POST   | `/auth/reset-password`                    | —     | `ResetPasswordDto`                        |
+| POST   | `/auth/change-password` (204)             | J     | `ChangePasswordDto`                       |
+| POST   | `/auth/delete-account`                    | J     | `DeleteAccountDto`                        |
+| POST   | `/auth/cancel-deletion`                   | J     | —                                         |
+| GET    | `/auth/google`, `/auth/google/callback`   | G     | —                                         |
+| GET    | `/auth/google/link`                       | —\*   | `access_token` cookie (\*verified inline) |
+| POST   | `/auth/telegram/callback`                 | —     | `TelegramAuthDto`                         |
+| POST   | `/auth/link/telegram`                     | J     | `TelegramAuthDto`                         |
+| GET    | `/auth/connected-accounts`                | J     | —                                         |
+| DELETE | `/auth/connected-accounts/:provider`      | J     | `google` \| `telegram`                    |
+| POST   | `/auth/tokens` (201) · GET `/auth/tokens` | J     | `CreateApiTokenDto`                       |
+| DELETE | `/auth/tokens/:id` (204)                  | J     | token id                                  |
+| POST   | `/groups` (201) · GET `/groups`           | J     | `CreateGroupDto`                          |
+| GET    | `/groups/invite/:token`                   | J     | raw token                                 |
+| POST   | `/groups/invite/:token/accept`            | J     | raw token                                 |
+| GET    | `/groups/:id`                             | J+M   | —                                         |
+| PATCH  | `/groups/:id` · DELETE `/groups/:id`      | J+A   | `UpdateGroupDto`                          |
+| POST   | `/groups/:id/invites` (201)               | J+A   | —                                         |
+| PATCH  | `/groups/:id/members/:userId`             | J+A   | `UpdateMemberRoleDto`                     |
+| DELETE | `/groups/:id/members/:userId` (204)       | J+A   | —                                         |
+| POST   | `/groups/:id/leave` (204)                 | J+M   | —                                         |
 
 `/groups/invite/:token` is declared **before** `/groups/:id` so Nest does not match `invite` as an id.
 
@@ -151,7 +156,7 @@ Global default: one `default` throttler, `RATE_LIMIT_TTL` / `RATE_LIMIT_MAX` (60
 
 ## Tests
 
-`apps/api/test/integration/`: `auth`, `email-verification`, `password-reset`, `password-change`, `account-deletion`, `telegram-auth`, `profile-update` (Testcontainers, real DB). Unit specs sit next to every auth/group source file. `apps/web/e2e/auth.spec.ts` (338 lines) covers login/register pages, unauthenticated redirects, silent refresh across reload, the Google button and callback page, and connected accounts; `registration-consent.spec.ts`, `legal-pages.spec.ts`, `help-page.spec.ts`, `footer.spec.ts` cover Phase 4 surfaces. **Groups have no integration or e2e test** — unit specs only.
+`apps/api/test/integration/`: `auth`, `auth-tokens` (20.7), `email-verification`, `password-reset`, `password-change`, `account-deletion`, `telegram-auth`, `profile-update` (Testcontainers, real DB). Unit specs sit next to every auth/group source file. `apps/web/e2e/auth.spec.ts` (338 lines) covers login/register pages, unauthenticated redirects, silent refresh across reload, the Google button and callback page, and connected accounts; `registration-consent.spec.ts`, `legal-pages.spec.ts`, `help-page.spec.ts`, `footer.spec.ts` cover Phase 4 surfaces. **Groups have no integration or e2e test** — unit specs only.
 
 ## Security invariants (keep true)
 
@@ -166,7 +171,8 @@ Global default: one `default` throttler, `RATE_LIMIT_TTL` / `RATE_LIMIT_MAX` (60
 9. Never leave an account with zero authentication methods (unlink safety check).
 10. Deletion needs the account email as confirmation; grace period is 30 days, secrets (LLM keys) are wiped at once.
 11. All DTOs validated by class-validator; auth/group errors carry an `errorCode` constant, never a raw message.
-12. Every auth and group mutation writes an `AuditLog` row.
+12. A personal access token is hashed at rest, shown once, scoped, revocable, and accepted by exactly one route — never for reads, never for managing tokens. Bank credentials never reach the server at all (phase-20 design §3.5).
+13. Every auth and group mutation writes an `AuditLog` row.
 
 ## Drift and gotchas
 
