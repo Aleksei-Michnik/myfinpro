@@ -89,9 +89,14 @@ myfinpro-connector accounts                 # list the scraped accounts, to map 
 myfinpro-connector doctor                   # check the config, the browser and the app
 ```
 
-`sync` prints, per scraped account: how much was scraped, how many lines it made, how many the app
-inserted, how many it already had (duplicates are normal and safe — re-running is idempotent), how
-many still need a decision, and the address of the account's **Review** tab. Imported lines are not
+`sync` prints, per scraped account: how much was scraped, how many lines it made, the balance the
+bank reports, how many lines the app inserted, how many it already had (duplicates are normal and
+safe — re-running is idempotent), how many still need a decision, and the address of the account's
+**Review** tab.
+
+Besides the lines, an import carries the period it covers (from the effective `--since` date to
+today) and, once per account, the balance the bank reported, so the app can show the gap between
+its own ledger and the bank's number. Nothing else is sent. Imported lines are not
 transactions yet: you accept, match or ignore them there, exactly like a file import.
 
 `--dry-run` additionally prints the first three mapped lines with their amounts, so you can see the

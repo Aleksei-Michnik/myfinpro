@@ -28,7 +28,11 @@ import {
   STATEMENT_DESCRIPTION_MAX_LENGTH,
   type ImportLineInput,
 } from '@myfinpro/shared';
-import { TransactionStatuses, type Transaction } from 'israeli-bank-scrapers/lib/transactions.js';
+import {
+  TransactionStatuses,
+  type Transaction,
+  type TransactionsAccount,
+} from 'israeli-bank-scrapers/lib/transactions.js';
 
 /** Currency assumed when neither the row nor the account states one. */
 export const DEFAULT_CURRENCY = 'ILS';
@@ -81,10 +85,14 @@ export function toIsoDate(raw: string | undefined): string | null {
   }
 
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  return `${parsed.getFullYear()}-${month}-${day}`;
+  return Number.isNaN(parsed.getTime()) ? null : toLocalIsoDate(parsed);
+}
+
+/** `yyyy-mm-dd` of an instant in the machine's local timezone. */
+export function toLocalIsoDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function toCents(amount: number | undefined): number | null {
@@ -228,4 +236,29 @@ export function mapTransactions(
   }
 
   return result;
+}
+
+/**
+ * The statement balance of a scraped account, in the shape
+ * `POST /accounts/:id/imports` takes (design §2.3, §6.2).
+ *
+ * The scrapers report a balance per ACCOUNT, not per row, so it describes the
+ * whole statement — the connector sends it with the LAST chunk only, exactly
+ * as the web import wizard does. A balance with no date of its own is dated
+ * today: it is what the bank showed at the moment of this scrape, and the API
+ * only moves the account's reported balance when a date comes with it.
+ *
+ * Returns an empty object when the scraper reported no balance or one that
+ * does not fit the contract's range — the import then simply carries none.
+ */
+export function statementBalanceOf(
+  account: Pick<TransactionsAccount, 'balance' | 'balanceDate'>,
+  now: Date = new Date(),
+): { statementBalanceCents?: number; statementBalanceAt?: string } {
+  const cents = toCents(account.balance);
+  if (cents === null || Math.abs(cents) > MAX_MINOR_UNITS) return {};
+  return {
+    statementBalanceCents: cents,
+    statementBalanceAt: toIsoDate(account.balanceDate) ?? toLocalIsoDate(now),
+  };
 }

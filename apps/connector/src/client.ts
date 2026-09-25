@@ -30,6 +30,21 @@ export interface ImportSummary extends Omit<ImportResponse, 'id'> {
   chunks: number;
 }
 
+/**
+ * What an import carries besides its lines (design §6.2).
+ *
+ * The period covers the whole request and goes on EVERY chunk; the statement
+ * balance describes the statement as a whole and goes on the LAST chunk only
+ * — the same split the web import wizard uses, so one balance lands, not one
+ * per chunk.
+ */
+export interface ImportMetadata {
+  periodFrom?: string;
+  periodTo?: string;
+  statementBalanceCents?: number;
+  statementBalanceAt?: string;
+}
+
 export type FetchLike = typeof fetch;
 
 export interface ApiClientOptions {
@@ -135,10 +150,24 @@ export class ApiClient {
     accountId: string,
     source: string,
     lines: readonly ImportLineInput[],
+    metadata: ImportMetadata = {},
   ): Promise<ImportSummary> {
+    const parts = chunk(lines, ACCOUNT_IMPORT_MAX_LINES);
     const responses: ImportResponse[] = [];
-    for (const part of chunk(lines, ACCOUNT_IMPORT_MAX_LINES)) {
-      responses.push(await this.createImport(accountId, source, part));
+    for (const [index, part] of parts.entries()) {
+      const last = index === parts.length - 1;
+      responses.push(
+        await this.createImport(accountId, source, part, {
+          periodFrom: metadata.periodFrom,
+          periodTo: metadata.periodTo,
+          ...(last
+            ? {
+                statementBalanceCents: metadata.statementBalanceCents,
+                statementBalanceAt: metadata.statementBalanceAt,
+              }
+            : {}),
+        }),
+      );
     }
     return summaryOf(responses);
   }
@@ -147,6 +176,7 @@ export class ApiClient {
     accountId: string,
     source: string,
     lines: readonly ImportLineInput[],
+    metadata: ImportMetadata,
   ): Promise<ImportResponse> {
     const path = `${API_PREFIX}/accounts/${encodeURIComponent(accountId)}/imports`;
     const response = await this.request(
@@ -155,7 +185,8 @@ export class ApiClient {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         // `originalName` is deliberately absent: there is no file here.
-        body: JSON.stringify({ source, lines }),
+        // JSON.stringify drops the metadata fields that are undefined.
+        body: JSON.stringify({ source, lines, ...metadata }),
       },
       true,
     );

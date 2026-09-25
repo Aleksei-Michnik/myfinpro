@@ -10,7 +10,13 @@ import {
   type Transaction,
 } from 'israeli-bank-scrapers/lib/transactions.js';
 import { describe, expect, it } from 'vitest';
-import { mapTransaction, mapTransactions, toIsoDate } from './map.js';
+import {
+  mapTransaction,
+  mapTransactions,
+  statementBalanceOf,
+  toIsoDate,
+  toLocalIsoDate,
+} from './map.js';
 
 function txn(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -202,5 +208,39 @@ describe('mapTransactions', () => {
       txn({ date: '2026-09-01', description: 'b' }),
     ]);
     expect(result.lines.map((item) => item.description)).toEqual(['a', 'b']);
+  });
+});
+
+describe('statementBalanceOf', () => {
+  const NOW = new Date(2026, 8, 25, 9, 0);
+
+  it('takes the balance and its own date', () => {
+    expect(statementBalanceOf({ balance: 12345.67, balanceDate: '2026-09-24' }, NOW)).toEqual({
+      statementBalanceCents: 1234567,
+      statementBalanceAt: '2026-09-24',
+    });
+  });
+
+  it('keeps a negative balance (an overdraft is a real balance)', () => {
+    expect(statementBalanceOf({ balance: -250.5, balanceDate: '2026-09-24' }, NOW)).toMatchObject({
+      statementBalanceCents: -25050,
+    });
+  });
+
+  it('dates a balance with no date of its own as today', () => {
+    expect(statementBalanceOf({ balance: 10 }, NOW)).toEqual({
+      statementBalanceCents: 1000,
+      statementBalanceAt: toLocalIsoDate(NOW),
+    });
+  });
+
+  it('omits everything when the scraper reports no balance', () => {
+    expect(statementBalanceOf({}, NOW)).toEqual({});
+    expect(statementBalanceOf({ balance: Number.NaN }, NOW)).toEqual({});
+  });
+
+  it('omits a balance that does not fit the contract range', () => {
+    expect(statementBalanceOf({ balance: MAX_MINOR_UNITS / 100 + 1 }, NOW)).toEqual({});
+    expect(statementBalanceOf({ balance: -(MAX_MINOR_UNITS / 100 + 1) }, NOW)).toEqual({});
   });
 });

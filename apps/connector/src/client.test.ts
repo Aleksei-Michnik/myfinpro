@@ -103,6 +103,69 @@ describe('createImports', () => {
     expect(summary.importIds).toEqual(['import-1', 'import-1']);
   });
 
+  it('puts the period on every chunk and the balance on the last only', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(importResponse()));
+    await clientWith(fetchImpl as unknown as FetchLike).createImports(
+      ACCOUNT_ID,
+      'hapoalim',
+      lines(ACCOUNT_IMPORT_MAX_LINES + 1),
+      {
+        periodFrom: '2026-07-27',
+        periodTo: '2026-09-25',
+        statementBalanceCents: 1234567,
+        statementBalanceAt: '2026-09-24',
+      },
+    );
+
+    const bodies = fetchImpl.mock.calls.map(
+      (call) => JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>,
+    );
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect(body.periodFrom).toBe('2026-07-27');
+      expect(body.periodTo).toBe('2026-09-25');
+    }
+    expect(bodies[0]).not.toHaveProperty('statementBalanceCents');
+    expect(bodies[0]).not.toHaveProperty('statementBalanceAt');
+    expect(bodies[1]).toMatchObject({
+      statementBalanceCents: 1234567,
+      statementBalanceAt: '2026-09-24',
+    });
+  });
+
+  it('sends no balance and no period when the scrape reported none', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(importResponse()));
+    await clientWith(fetchImpl as unknown as FetchLike).createImports(
+      ACCOUNT_ID,
+      'connector',
+      lines(1),
+      { periodFrom: '2026-07-27', periodTo: '2026-09-25' },
+    );
+
+    const body = JSON.parse(String((fetchImpl.mock.calls[0][1] as RequestInit).body)) as Record<
+      string,
+      unknown
+    >;
+    expect(body).not.toHaveProperty('statementBalanceCents');
+    expect(body).not.toHaveProperty('statementBalanceAt');
+    expect(body.periodFrom).toBe('2026-07-27');
+  });
+
+  it('carries a single-chunk balance on that one chunk', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(importResponse()));
+    await clientWith(fetchImpl as unknown as FetchLike).createImports(
+      ACCOUNT_ID,
+      'connector',
+      lines(1),
+      { statementBalanceCents: -25050, statementBalanceAt: '2026-09-24' },
+    );
+
+    expect(JSON.parse(String((fetchImpl.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      statementBalanceCents: -25050,
+      statementBalanceAt: '2026-09-24',
+    });
+  });
+
   it('stops at the first rejected chunk', async () => {
     const fetchImpl = vi
       .fn()

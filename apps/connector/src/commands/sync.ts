@@ -9,7 +9,13 @@ import { ApiClient } from '../client.js';
 import { importSourceFor } from '../companies.js';
 import { lastFourOf, readConfig, selectProfiles, type ConnectorProfile } from '../config.js';
 import { configError, EXIT_OK } from '../errors.js';
-import { mapTransactions, type MappedTransactions } from '../map.js';
+import {
+  mapTransactions,
+  statementBalanceOf,
+  toLocalIsoDate,
+  DEFAULT_CURRENCY,
+  type MappedTransactions,
+} from '../map.js';
 import { formatAmount, writeLine } from '../output.js';
 import { defaultStartDate, parseSince, scrapeProfile } from '../scrape.js';
 
@@ -63,9 +69,12 @@ export async function runSync(options: SyncOptions = {}): Promise<number> {
   const startDate = options.since ? parseSince(options.since) : defaultStartDate();
   const client = new ApiClient({ appUrl: config.appUrl, token: config.token });
 
-  writeLine(
-    `Scraping from ${startDate.toISOString().slice(0, 10)}${options.dryRun ? ' (dry run — nothing is sent)' : ''}`,
-  );
+  // The period every import of this run covers: the effective --since date to
+  // today (design §6.2 — it is the statement's period, not the lines' range).
+  const periodFrom = toLocalIsoDate(startDate);
+  const periodTo = toLocalIsoDate(new Date());
+
+  writeLine(`Scraping from ${periodFrom}${options.dryRun ? ' (dry run — nothing is sent)' : ''}`);
 
   let mappedAccounts = 0;
   let unmappedAccounts = 0;
@@ -89,8 +98,14 @@ export async function runSync(options: SyncOptions = {}): Promise<number> {
       mappedAccounts += 1;
 
       const mapped = mapTransactions(account.txns, { currency: account.currency });
+      const balance = statementBalanceOf(account);
       writeLine(`${label} → ${mapping.accountId}`);
       writeLine(`    ${reportMapping(mapped, account.txns.length)}`);
+      if (balance.statementBalanceCents !== undefined) {
+        writeLine(
+          `    bank balance ${formatAmount(balance.statementBalanceCents, account.currency ?? DEFAULT_CURRENCY)} as of ${balance.statementBalanceAt}`,
+        );
+      }
 
       if (mapped.lines.length === 0) continue;
 
@@ -99,7 +114,11 @@ export async function runSync(options: SyncOptions = {}): Promise<number> {
         continue;
       }
 
-      const summary = await client.createImports(mapping.accountId, source, mapped.lines);
+      const summary = await client.createImports(mapping.accountId, source, mapped.lines, {
+        periodFrom,
+        periodTo,
+        ...balance,
+      });
       writeLine(
         `    inserted ${summary.insertedCount}, duplicates ${summary.duplicateCount}, ` +
           `needs input ${summary.needsInputCount}`,
