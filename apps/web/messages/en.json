@@ -49,6 +49,11 @@
       },
       "retry": "Retry",
       "return": "Cancel"
+    },
+    "copyField": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Press Ctrl+C to copy"
     }
   },
   "nav": {

@@ -7,22 +7,33 @@ const mockAddToast = vi.fn();
 
 vi.mock('next-intl', () => ({
   useLocale: () => 'en',
-  useTranslations: () => (key: string, values?: Record<string, string | number>) => {
-    if (key === 'expiresOn' && values?.date !== undefined) {
-      return `Link expires on ${values.date}`;
-    }
-    const translations: Record<string, string> = {
-      description: 'Generate a shareable invite link. Anyone with the link can join this group.',
-      generateButton: 'Generate Invite Link',
-      generating: 'Generating...',
-      copyButton: 'Copy',
-      copied: 'Link copied to clipboard',
-      linkLabel: 'Invite Link',
-      regenerateButton: 'Generate new link',
-      error: 'Failed to generate invite',
-    };
-    return translations[key] || key;
-  },
+  useTranslations:
+    (namespace?: string) => (key: string, values?: Record<string, string | number>) => {
+      if (key === 'expiresOn' && values?.date !== undefined) {
+        return `Link expires on ${values.date}`;
+      }
+      // CopyField's own `ui.copyField` defaults — only reached when a caller
+      // does not override copyLabel/copiedLabel/copyFailedLabel.
+      if (namespace === 'ui.copyField') {
+        const copyFieldDefaults: Record<string, string> = {
+          copy: 'Copy',
+          copied: 'Copied',
+          copyFailed: 'Press Ctrl+C to copy',
+        };
+        return copyFieldDefaults[key] ?? key;
+      }
+      const translations: Record<string, string> = {
+        description: 'Generate a shareable invite link. Anyone with the link can join this group.',
+        generateButton: 'Generate Invite Link',
+        generating: 'Generating...',
+        copyButton: 'Copy',
+        copied: 'Link copied to clipboard',
+        linkLabel: 'Invite Link',
+        regenerateButton: 'Generate new link',
+        error: 'Failed to generate invite',
+      };
+      return translations[key] || key;
+    },
 }));
 
 vi.mock('@/lib/group/group-context', () => ({
@@ -106,9 +117,13 @@ describe('InviteLink', () => {
       expect(writeText).toHaveBeenCalledWith('https://example.test/groups/invite/raw-token');
     });
 
+    // Feedback is CopyField's own inline status line, not a toast.
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith('success', 'Link copied to clipboard');
+      expect(screen.getByTestId('invite-url-input-status')).toHaveTextContent(
+        'Link copied to clipboard',
+      );
     });
+    expect(mockAddToast).not.toHaveBeenCalled();
   });
 
   it('shows error toast when generation fails', async () => {
@@ -125,7 +140,7 @@ describe('InviteLink', () => {
     expect(screen.queryByTestId('invite-result')).not.toBeInTheDocument();
   });
 
-  it('falls back to selecting input when clipboard is unavailable', async () => {
+  it('falls back to selecting the field when the clipboard is unavailable', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -145,12 +160,12 @@ describe('InviteLink', () => {
 
     fireEvent.click(screen.getByTestId('copy-invite-btn'));
 
-    // Still shows info toast
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalled();
+      expect(screen.getByTestId('invite-url-input-status')).toHaveTextContent(
+        'Press Ctrl+C to copy',
+      );
     });
-    const call = mockAddToast.mock.calls[mockAddToast.mock.calls.length - 1];
-    expect(call[1]).toBe('Link copied to clipboard');
+    expect(mockAddToast).not.toHaveBeenCalled();
   });
 
   it('regenerates the invite when clicking the regenerate button', async () => {

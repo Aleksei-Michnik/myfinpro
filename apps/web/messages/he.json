@@ -49,6 +49,11 @@
       },
       "retry": "נסה שוב",
       "return": "ביטול"
+    },
+    "copyField": {
+      "copy": "העתק",
+      "copied": "הועתק",
+      "copyFailed": "יש להעתיק באמצעות Ctrl+C"
     }
   },
   "nav": {
