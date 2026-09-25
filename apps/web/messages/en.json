@@ -656,8 +656,27 @@
         "content": "Go to the <link>forgot password page</link> to request a password reset link. You will receive an email with instructions to set a new password."
       }
     },
+    "connector": {
+      "title": "6. Automate with a connector",
+      "whatIsIt": {
+        "title": "What a connector is",
+        "content": "A connector is a small program you run on your own computer. MyFinPro never learns your bank password — only the lines the connector sends. Downloading a statement and importing it in the app is still the simpler, recommended way to get started."
+      },
+      "setup": {
+        "title": "Set it up",
+        "content": "Create a token in <link>Settings → Connector tokens</link>, install Node.js, then run `npx @myfinpro/connector init` and paste the token and your MyFinPro address when it asks. Run `npx @myfinpro/connector sync` whenever you want new lines."
+      },
+      "lines": {
+        "title": "What happens to the lines",
+        "content": "Lines the connector sends land as a normal import — you review and accept them on <link>the account's Review tab</link>, exactly like a file import."
+      },
+      "stayingSafe": {
+        "title": "Staying safe",
+        "content": "Use one token per machine and give it an expiry. Revoke it instantly from Settings if a computer is lost or a token leaks, then create a new one and run init again."
+      }
+    },
     "gettingHelp": {
-      "title": "6. Getting Help",
+      "title": "7. Getting Help",
       "contact": {
         "title": "Contact & Support",
         "content": "If you need assistance or have questions, please reach out to our support team at support@myfinpro.com. We aim to respond within 24 hours."

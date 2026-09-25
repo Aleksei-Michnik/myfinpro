@@ -156,7 +156,66 @@ export default async function HelpPage() {
         </div>
       </section>
 
-      {/* 6. Getting Help */}
+      {/* 6. Automate with a connector — 20.7 */}
+      <section id="connector" className="space-y-6">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          {t('connector.title')}
+        </h2>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">
+              {t('connector.whatIsIt.title')}
+            </h3>
+            <p>{t('connector.whatIsIt.content')}</p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">
+              {t('connector.setup.title')}
+            </h3>
+            <p>
+              {t.rich('connector.setup.content', {
+                link: (chunks) => (
+                  <Link
+                    href="/settings/tokens"
+                    className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">
+              {t('connector.lines.title')}
+            </h3>
+            <p>
+              {t.rich('connector.lines.content', {
+                link: (chunks) => (
+                  <Link
+                    href="/accounts"
+                    className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-lg font-medium mb-2 text-gray-900 dark:text-white">
+              {t('connector.stayingSafe.title')}
+            </h3>
+            <p>{t('connector.stayingSafe.content')}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Getting Help */}
       <section className="space-y-6">
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
           {t('gettingHelp.title')}
