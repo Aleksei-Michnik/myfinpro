@@ -40,12 +40,9 @@ pnpm --filter @myfinpro/connector build
 node apps/connector/dist/main.js help
 ```
 
-Once it is published, the commands the app prints in the token dialog work as they read:
-
-```bash
-npx @myfinpro/connector init
-npx @myfinpro/connector sync
-```
+The token dialog and the Help page print these same in-repo commands. Publishing the package (so
+that an `npx` line works) is a release decision: the npm scope must be owned first, otherwise a
+printed `npx @myfinpro/connector` would run whatever a squatter publishes under that name.
 
 The examples below use `myfinpro-connector`, the name of the installed command.
 
