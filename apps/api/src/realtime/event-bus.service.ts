@@ -44,6 +44,16 @@ export class EventBus implements OnApplicationShutdown {
   }
 
   /**
+   * The whole stream, unfiltered — for SERVER-side consumers that react to
+   * what other modules did (Phase 20.6: the statement auto-linker). Browser
+   * streams must keep using {@link subscribeForUser}; this view has no
+   * recipient filter and therefore never leaves the process.
+   */
+  subscribeAll(): Observable<RealtimeEvent> {
+    return this.subject.asObservable();
+  }
+
+  /**
    * Test/utility hook: completes the underlying Subject so any open
    * subscriber observable terminates cleanly. Safe to call multiple times.
    */
