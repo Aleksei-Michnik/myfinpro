@@ -19,6 +19,7 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DeletionBanner } from '@/components/auth/DeletionBanner';
+import { AccountsOverview } from '@/components/dashboard/AccountsOverview';
 import { computeMonthRange } from '@/components/dashboard/date-range';
 import { QuickAddTransactionButton } from '@/components/dashboard/QuickAddTransactionButton';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
@@ -92,6 +93,8 @@ export function DashboardClient() {
       />
 
       <TotalsCard key={`totals-${refreshKey}`} fromIso={range.fromIso} toIso={range.toIso} />
+
+      <AccountsOverview key={`accounts-${refreshKey}`} />
 
       <ScopeEntryCards key={`scopes-${refreshKey}`} fromIso={range.fromIso} toIso={range.toIso} />
 

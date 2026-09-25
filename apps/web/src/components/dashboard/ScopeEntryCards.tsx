@@ -46,6 +46,8 @@ function bucketsFromTransactions(
 ): Map<string, ScopeBucket> {
   const buckets = new Map<string, ScopeBucket>();
   for (const r of rows) {
+    // Phase 20 §2.4 — transfers between own accounts are spending in neither direction.
+    if (r.transferAccountId) continue;
     for (const a of r.attributions) {
       let key: string | null = null;
       if (a.scope === 'personal' && (a.userId === null || a.userId === userId)) {
