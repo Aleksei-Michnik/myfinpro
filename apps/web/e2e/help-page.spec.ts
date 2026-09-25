@@ -16,8 +16,9 @@ test.describe('Help Page', () => {
 
   test('Help page content is non-empty', async ({ page }) => {
     await page.goto('/help');
-    const main = page.locator('main');
-    const text = await main.textContent();
+    // The help page renders an <article>, not a <main> landmark.
+    const article = page.getByRole('article');
+    const text = await article.textContent();
     expect(text && text.length > 100).toBeTruthy();
   });
 
@@ -31,7 +32,8 @@ test.describe('Help Page', () => {
       },
     ]);
     await page.goto('/help');
-    const heading = page.getByRole('heading', { name: 'איך להשתמש ב-MyFinPro' });
+    // Today's Hebrew copy is "כיצד" (not "איך") להשתמש ב-MyFinPro.
+    const heading = page.getByRole('heading', { name: 'כיצד להשתמש ב-MyFinPro' });
     await expect(heading).toBeVisible();
   });
 

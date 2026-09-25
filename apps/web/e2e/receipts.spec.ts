@@ -55,7 +55,10 @@ test.describe('Receipts happy path (7.10)', () => {
     await expect(firstRow.locator('[data-status="REVIEW"]')).toBeVisible({ timeout: 60_000 });
 
     // ── Review ────────────────────────────────────────────────────────────
-    await firstRow.locator('[data-testid^="receipt-link-"]').click();
+    // The row also carries a `receipt-link-transaction-…` link once confirmed;
+    // open the receipt itself by its exact testid.
+    const receiptId = (await firstRow.getAttribute('data-testid'))!.replace('receipt-row-', '');
+    await page.getByTestId(`receipt-link-${receiptId}`).click();
     await expect(page.getByTestId('review-merchant')).toHaveValue('Mock Grocery', {
       timeout: 30_000,
     });
@@ -72,7 +75,7 @@ test.describe('Receipts happy path (7.10)', () => {
     await page.getByTestId('receipt-confirm-submit').click();
 
     // Lands on the new payment's detail page.
-    await expect(page).toHaveURL(/\/payments\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/transactions\/[0-9a-f-]{36}/, { timeout: 30_000 });
     await expect(page.getByText('$16.60').first()).toBeVisible({ timeout: 15_000 });
   });
 });

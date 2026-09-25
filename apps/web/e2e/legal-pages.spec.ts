@@ -53,15 +53,16 @@ test.describe('Legal Pages', () => {
 
   test('Terms page content is non-empty', async ({ page }) => {
     await page.goto('/legal/terms');
-    const main = page.locator('main');
-    const text = await main.textContent();
+    // The legal pages render an <article>, not a <main> landmark.
+    const article = page.getByRole('article');
+    const text = await article.textContent();
     expect(text && text.length > 100).toBeTruthy();
   });
 
   test('Privacy page content is non-empty', async ({ page }) => {
     await page.goto('/legal/privacy');
-    const main = page.locator('main');
-    const text = await main.textContent();
+    const article = page.getByRole('article');
+    const text = await article.textContent();
     expect(text && text.length > 100).toBeTruthy();
   });
 });
