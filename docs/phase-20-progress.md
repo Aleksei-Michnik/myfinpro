@@ -22,6 +22,33 @@ skill and the search-before-you-write rule for the architect and coder roles.
 - A UI kit (20.1) precedes the new surfaces so they are composed from primitives that replace
   the hand-rolled dialog, select and card shells.
 
+## 20.1 — UI kit (2026-09-25)
+
+Per design §8. Merged as `b68ae9e` (track branch `p20/ui-kit`, twelve commits).
+
+### Scope
+
+`components/ui/` gained `Dialog` (THE modal shell — `panel` and `sheet` variants, behaviour in
+one hook `lib/ui/use-dialog-behaviour.ts`: scroll lock, ESC, focus trap, focus restore — also
+used by the two full-screen surfaces that keep their own chrome), `Select`, `Textarea`,
+`Checkbox` (the `Input` contract, control classes from one `controlClass()` in
+`input-styles.ts`), `Card` (+ `cardClass()`), `Badge`, `PageHeader`, `EmptyState`, `Tabs`
+(`TransactionsScopeTabs` is now a wrapper), `Stat` (the dashboard totals figures), and
+`styles.ts` (`focusRing`, `surfaceClass`, `borderClass`, `cx`). Every hand-rolled instance was
+replaced: 22 dialog shells, 17 raw selects, 4 textareas, 3 checkboxes, 34 card shells, the
+`h1` variants and the ad-hoc empty states — `grep` for each pattern outside `components/ui`
+returns nothing. `wiki/ui-design-system.md` inventory, page templates and gotchas updated
+(backdrop dismiss is on mousedown; Tailwind utility precedence — size through props, never a
+competing class).
+
+### Tests
+
+Web unit 130 files green at the merge (kit specs beside each primitive; existing specs kept,
+fixed only where they asserted a class name). E2E `budgets` and `payments` flows re-run by the
+track before the session limit cut it off; re-verified on `phase/20` in 20.3's QA pass.
+
+**Next** — 20.3 (accounts UI) on the kit.
+
 ## 20.2 — Accounts schema + API (2026-09-25)
 
 Per design §4, §6.1, §6.3. Merged as `29c57ee` (track branch `p20/accounts-api`, nine commits) plus the security-review
@@ -117,5 +144,24 @@ schema change.
 shared 209 (14 files) · api unit 1377 (93 suites) · integration `accounts-import` (14) new;
 `accounts-crud`, `transactions-accounts`, `analytics-query` green (71 across the four).
 
-**Next** — 20.5 (import wizard + review UI) once 20.1 and 20.3 land; security review of the
-import intake.
+### Security review (2026-09-25)
+
+Verdict on the first merge: fix first — one authenticated DoS (unmemoised trigram scoring over
+the whole 500-candidate pool, ≈48 s of event-loop block for a hostile import), a member-level
+write into the admin-only reported balance with an unbounded date, a double-apply race that
+could create two transactions per line, an unmapped unique-violation on concurrent matches,
+and a 100 KB body limit that made the documented 2000-line chunk unreachable; plus six low
+findings. All closed in `5ce4973`: candidates are bucketed by direction/amount/currency with
+trigram sets built once per import and at most 50 scored per line; every decision is a
+conditional claim (`updateMany … status: 'PENDING'`) taken before any money write, P2002 →
+409 `STATEMENT_LINE_ALREADY_LINKED`; a route-scoped JSON limit derived from the import
+contract (`common/middleware/body-parsers.ts`, shared with the integration bootstrap);
+`statementBalanceAt` bounded like line dates and equal-date corrections allowed; manual
+matches gated on `ONE_TIME` + matchable status; category memory and suggestion categories
+limited to what the actor can use; `apply-suggestions` capped at 200 with `remaining`;
+fingerprint over the stable tuple only (no reference or running balance); invisible linked
+transactions hide their id too; the sanitiser's character class rewritten as escapes so the
+file is diffable. Integration: `accounts-import` (18) + `accounts-import-limits` (3, incl. a
+full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; api unit 1381.
+
+**Next** — 20.5 (import wizard + review UI) after 20.3.

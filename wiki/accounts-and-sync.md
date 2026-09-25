@@ -2,7 +2,7 @@
 
 Read when: touching `apps/api/src/account/**`, `packages/shared/src/{types/account.types.ts,constants/institutions.ts,statement/**}`, the `/accounts` web surfaces, `apps/connector`, or any code that must know where money sits or whether a transaction is bank-confirmed.
 
-Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status: **designed 2026-09-25; 20.1 (UI kit) and 20.2 (schema + API) in flight** — until an iteration's progress entry exists in `docs/phase-20-progress.md`, treat every fact below as the contract to build, not as shipped behaviour.
+Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md). Status (2026-09-25): 20.1 UI kit, 20.2 schema + API and 20.4 parser + import API + review queue are merged on `phase/20`; 20.3 accounts UI and 20.5 import/review UI in flight — until an iteration has an entry in `docs/phase-20-progress.md`, its facts below are the contract, not shipped behaviour.
 
 ## Domain model
 
