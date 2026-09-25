@@ -51,7 +51,11 @@ retry dialog carries no `dialog` role — detect it by its text or testid, and k
 page load of `/transactions` in dev opens it on `develop` too (`wiki/gotchas.md`); (6) a
 Hebrew run needs a user whose profile locale is `he` — the cookie alone is overwritten at login. (7) A prefix locator
 (`[data-testid^="import-row-"]`) also matches longer testids such as `import-row-counts-…` —
-anchor it on the element (`tr[data-testid^=…]`) before trusting a count.
+anchor it on the element (`tr[data-testid^=…]`) before trusting a count. (8) The whole local suite in one go trips the
+silent-refresh throttle after ~40 page loads (52× 429 on 2026-09-25) and the last flows land on the
+login page: run the heavy flows one file at a time, about a minute apart, and judge them by their
+solo runs. (9) A host worktree needs its own Redis (`myfinpro-p20-redis`, 6383): on the compose
+stack's Redis the containerised API consumes the queue jobs with an older schema.
 
 Check, and screenshot, every combination that the conventions promise:
 

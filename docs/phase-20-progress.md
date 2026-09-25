@@ -338,8 +338,11 @@ messages.
 `accounts.spec.ts` and `budgets.spec.ts` green; `connector-tokens.spec.ts` (create → reveal →
 copy → list → revoke) run against the merged stack — see below. Ten older local specs fail on
 today's code **and on the code before Phase 20** (connected-accounts route, help and legal page
-locators, the payments and receipts flows from 6.21 / 7.10): stale, being repaired on
-`chore/e2e-stale-specs`.
+locators, the payments and receipts flows from 6.21 / 7.10): stale — repaired and merged (`chore/e2e-stale-specs`): every local spec is green on its own
+against the merged stack; the suite in one go still trips the refresh throttle, so heavy flows run
+one file at a time (`playwright-qa`). Two environment traps found on the way are in
+`wiki/gotchas.md`: a stale `tsbuildinfo` makes the API watcher emit nothing, and a worktree on the
+compose stack's Redis loses its queue jobs to the containerised API.
 
 ### Scope (CLI) — merged as `1029f76` from `p20/connector`
 
