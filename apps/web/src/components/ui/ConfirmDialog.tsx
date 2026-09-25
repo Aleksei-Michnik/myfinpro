@@ -19,6 +19,8 @@ export interface ConfirmDialogProps {
   danger?: boolean;
   /** In-flight (useAsyncOperation isLoading) — spinner + disabled confirm. */
   busy?: boolean;
+  /** Nested on top of another open `Dialog` (e.g. the token reveal's close prompt). */
+  stacked?: boolean;
   onConfirm(): void;
   onClose(): void;
 }
@@ -30,6 +32,7 @@ export function ConfirmDialog({
   cancelLabel,
   danger = false,
   busy = false,
+  stacked = false,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
@@ -42,6 +45,7 @@ export function ConfirmDialog({
       testId="confirm-dialog"
       danger={danger}
       busy={busy}
+      stacked={stacked}
     >
       <p className="mb-4 text-sm text-gray-700 dark:text-gray-300">{message}</p>
       <div className="flex gap-3">

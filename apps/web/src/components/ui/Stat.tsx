@@ -6,13 +6,15 @@
 import type { ReactNode } from 'react';
 import { cx } from './styles';
 
-export type StatTone = 'neutral' | 'positive' | 'negative' | 'muted';
+export type StatTone = 'neutral' | 'positive' | 'negative' | 'muted' | 'warning';
 
 const TONES: Record<StatTone, string> = {
   neutral: 'text-gray-900 dark:text-gray-100',
   positive: 'text-green-700 dark:text-green-400',
   negative: 'text-red-700 dark:text-red-400',
   muted: 'text-gray-500 dark:text-gray-400',
+  // Phase 20 · Iteration 20.7 — the connector-tokens "at the cap" figure.
+  warning: 'text-amber-700 dark:text-amber-400',
 };
 
 export interface StatProps {

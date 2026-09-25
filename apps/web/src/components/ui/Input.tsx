@@ -16,6 +16,8 @@ import {
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
   error?: string;
+  /** `data-testid` on the error `<p>` — a spec that names it exactly (e.g. `token-form-error-name`). */
+  errorTestId?: string;
   /** `md` (default) for standalone forms, `sm` for dense editing surfaces. */
   size?: ControlSize;
   fullWidth?: boolean;
@@ -27,6 +29,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     {
       label,
       error,
+      errorTestId,
       id,
       size = 'md',
       fullWidth = true,
@@ -53,7 +56,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {error && (
-          <p id={`${inputId}-error`} className={controlErrorClass} role="alert">
+          <p
+            id={`${inputId}-error`}
+            data-testid={errorTestId}
+            className={controlErrorClass}
+            role="alert"
+          >
             {error}
           </p>
         )}

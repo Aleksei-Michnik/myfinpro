@@ -24,6 +24,9 @@ describe('Stat (20.1)', () => {
     expect(screen.getByTestId('v').className).toContain('dark:text-green-400');
     rerender(<Stat label="Out" value="1" tone="negative" valueTestId="v" />);
     expect(screen.getByTestId('v').className).toContain('text-red-700');
+    rerender(<Stat label="At cap" value="10 / 10" tone="warning" valueTestId="v" />);
+    expect(screen.getByTestId('v').className).toContain('text-amber-700');
+    expect(screen.getByTestId('v').className).toContain('dark:text-amber-400');
   });
 
   it('shrinks the value in dense rows', () => {

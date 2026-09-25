@@ -99,6 +99,11 @@ describe('Input', () => {
     expect(input.className).toContain('rounded-md');
   });
 
+  it('puts a caller-supplied testid on the error paragraph', () => {
+    render(<Input name="email" error="Bad email" errorTestId="email-error-testid" />);
+    expect(screen.getByTestId('email-error-testid')).toHaveTextContent('Bad email');
+  });
+
   it('passes through additional HTML attributes', () => {
     render(<Input name="email" type="email" placeholder="test@example.com" />);
     const input = screen.getByPlaceholderText('test@example.com');
