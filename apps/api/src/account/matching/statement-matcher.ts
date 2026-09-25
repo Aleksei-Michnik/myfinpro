@@ -323,8 +323,8 @@ export function rankLinesForTransaction(
  * plausible lines — is never resolved by the machine. Takes either ranking,
  * since only the scores decide.
  */
-export function isConfidentMatch(
-  ranked: readonly { score: number }[],
+export function isConfidentMatch<T extends { score: number }>(
+  ranked: readonly T[],
   threshold: number = STATEMENT_MATCH_CONFIDENT_SCORE,
 ): boolean {
   const best = ranked[0];
