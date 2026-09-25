@@ -25,7 +25,8 @@
     "next": "^16.2.4",
     "next-intl": "^4.9.1",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@myfinpro/eslint-config": "workspace:*",
