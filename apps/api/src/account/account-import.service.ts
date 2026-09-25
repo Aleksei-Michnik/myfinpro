@@ -78,6 +78,8 @@ export class AccountImportService {
     userId: string,
     accountId: string,
     dto: CreateImportDto,
+    /** The api token behind the call, when the connector pushed the lines — for the audit trail. */
+    tokenId: string | null = null,
   ): Promise<AccountImportResponseDto> {
     const account = await this.accounts.loadForRead(userId, accountId);
     if (account.archivedAt) {
@@ -196,6 +198,7 @@ export class AccountImportService {
       details: {
         accountId,
         source: dto.source,
+        tokenId,
         totalCount: importRow.totalCount,
         insertedCount: importRow.insertedCount,
         duplicateCount: importRow.duplicateCount,

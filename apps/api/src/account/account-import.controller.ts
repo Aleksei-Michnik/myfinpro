@@ -26,7 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtOrApiTokenGuard } from '../auth/guards/jwt-or-api-token.guard';
+import { JwtOrApiTokenGuard, type ApiTokenPrincipal } from '../auth/guards/jwt-or-api-token.guard';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { AccountImportService } from './account-import.service';
@@ -87,7 +87,12 @@ export class AccountImportController {
     @Param('accountId', ParseUUIDPipe) accountId: string,
     @Body() dto: CreateImportDto,
   ): Promise<AccountImportResponseDto> {
-    return this.service.create(user.sub, accountId, dto);
+    return this.service.create(
+      user.sub,
+      accountId,
+      dto,
+      (user as ApiTokenPrincipal).tokenId ?? null,
+    );
   }
 
   @CustomThrottle({ limit: 120, ttl: 60000 })
