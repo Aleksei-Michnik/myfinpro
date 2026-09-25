@@ -17,13 +17,17 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventBus } from '../realtime/event-bus.service';
 import { COUNTABLE_TRANSACTION_WHERE } from '../transaction/utils/countable';
-import { computeTransactionRecipients } from '../transaction/utils/transaction-event-recipients';
 import { ACCOUNT_ERRORS } from './constants/account-errors';
 import { AccountListResponseDto } from './dto/account-list-response.dto';
 import { AccountResponseDto } from './dto/account-response.dto';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { ListAccountsQueryDto } from './dto/list-accounts-query.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
+import {
+  publishAccountUpdated,
+  writeAccountAudit,
+  type AccountAuditAction,
+} from './utils/account-side-effects';
 import { buildAccountVisibilityWhere } from './utils/account-visibility';
 
 type AccountRow = Prisma.AccountGetPayload<Record<string, never>>;
@@ -78,13 +82,6 @@ export function mapAccountToResponse(
     ...derived,
   };
 }
-
-type AccountAuditAction =
-  | 'ACCOUNT_CREATED'
-  | 'ACCOUNT_UPDATED'
-  | 'ACCOUNT_DELETED'
-  | 'ACCOUNT_ARCHIVED'
-  | 'ACCOUNT_UNARCHIVED';
 
 /**
  * Phase 20 · Iteration 20.2 — Account CRUD/archive service with derived
@@ -410,8 +407,12 @@ export class AccountService {
   /**
    * Fetch + read-access check: owner for personal, membership for group.
    * 404 (`ACCOUNT_NOT_FOUND`) on both "missing" and "not visible".
+   *
+   * Public since 20.4: importing a statement and deciding its lines is data
+   * entry, open to every member, and both sibling services reach an account
+   * through exactly this check.
    */
-  private async loadForRead(userId: string, id: string): Promise<AccountRow> {
+  async loadForRead(userId: string, id: string): Promise<AccountRow> {
     const account = await this.prisma.account.findFirst({
       where: { AND: [{ id }, buildAccountVisibilityWhere(userId)] },
     });
@@ -693,22 +694,10 @@ export class AccountService {
     return deltas;
   }
 
-  // ── side effects ──
+  // ── side effects (shared with the import / statement-line services) ──
 
-  /**
-   * Advisory `account.updated` SSE on every mutation (design §2.6). The
-   * account's scope maps 1:1 onto the attribution shape the transaction
-   * recipient util understands, so recipients — the owner (personal) or all
-   * group members (group), plus the acting user — are computed by the same
-   * code path budget and transaction events use.
-   */
   private async publishAccountUpdated(account: AccountRow, actorId: string): Promise<void> {
-    const recipients = await computeTransactionRecipients(
-      this.prisma,
-      [{ scopeType: account.scopeType, userId: account.ownerId, groupId: account.groupId }],
-      actorId,
-    );
-    this.eventBus.publish({ type: 'account.updated', userIds: recipients, accountId: account.id });
+    await publishAccountUpdated(this.prisma, this.eventBus, account, actorId);
   }
 
   private async writeAudit(
@@ -717,20 +706,11 @@ export class AccountService {
     action: AccountAuditAction,
     details: Record<string, unknown>,
   ): Promise<void> {
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          userId,
-          action,
-          entity: 'Account',
-          entityId: accountId,
-          details: details as Prisma.InputJsonValue,
-        },
-      });
-    } catch (err) {
-      this.logger.warn(
-        `Failed to write audit log for ${action} ${accountId}: ${(err as Error).message}`,
-      );
-    }
+    await writeAccountAudit(this.prisma, this.logger, {
+      userId,
+      action,
+      entityId: accountId,
+      details,
+    });
   }
 }
