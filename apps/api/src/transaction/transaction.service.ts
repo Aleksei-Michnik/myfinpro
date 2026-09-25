@@ -923,6 +923,8 @@ export class TransactionService {
         currency: dto.currency ?? existing.currency,
         type: dto.type ?? existing.type,
         categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
       });
     }
 
@@ -1357,6 +1359,8 @@ export class TransactionService {
         currency: dto.currency ?? existing.currency,
         type: dto.type ?? existing.type,
         categoryIds: dto.categoryIds ?? existingCategoryIds,
+        existingAccountId: existing.accountId,
+        existingTransferAccountId: existing.transferAccountId,
       });
     }
 
@@ -1884,11 +1888,17 @@ export class TransactionService {
    * Phase 20.2 — account placement + transfer guard (design §6.3).
    *
    * A transaction may only be placed on an account the caller can see
-   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses),
-   * that is not archived, and whose currency equals the transaction's.
-   * "Missing", "not visible" and "archived" all collapse into
-   * `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing about another user's accounts
-   * leaks.
+   * (`buildAccountVisibilityWhere`, the same predicate `/accounts` uses) and
+   * whose currency equals the transaction's. "Missing", "not visible" and
+   * "archived" all collapse into `TRANSACTION_ACCOUNT_NOT_FOUND` so nothing
+   * about another user's accounts leaks.
+   *
+   * Archiving stops evaluation, not the past (design §2.1): an account that is
+   * *already* the row's placement stays acceptable, so the history of an
+   * archived account remains editable. Only a NEW placement onto an archived
+   * account is refused. Visibility is required either way — `existingAccountId`
+   * / `existingTransferAccountId` are the row's current placement (both null on
+   * create, where every placement is new).
    *
    * A transfer (design §2.4) is one OUT row carrying both a source
    * (`accountId`) and a destination (`transferAccountId`): the two must
@@ -1912,6 +1922,9 @@ export class TransactionService {
       type: string;
       /** The effective category set: primary first, then additional ones. */
       categoryIds: string[];
+      /** The row's current placement; null on create. */
+      existingAccountId?: string | null;
+      existingTransferAccountId?: string | null;
     },
   ): Promise<void> {
     const transferInvalid = (message: string): never => {
@@ -1953,18 +1966,30 @@ export class TransactionService {
     );
     if (ids.length === 0) return;
 
+    // The ids the row already sits on: archived is tolerated for these, so
+    // history stays editable. Compared per field, so moving a placement onto
+    // an archived account is still a new placement.
+    const unchanged = new Set<string>();
+    if (input.accountId !== null && input.accountId === input.existingAccountId) {
+      unchanged.add(input.accountId);
+    }
+    if (
+      input.transferAccountId !== null &&
+      input.transferAccountId === input.existingTransferAccountId
+    ) {
+      unchanged.add(input.transferAccountId);
+    }
+
     const rows = await this.prisma.account.findMany({
-      where: {
-        AND: [{ id: { in: ids }, archivedAt: null }, buildAccountVisibilityWhere(userId)],
-      },
-      select: { id: true, currency: true },
+      where: { AND: [{ id: { in: ids } }, buildAccountVisibilityWhere(userId)] },
+      select: { id: true, currency: true, archivedAt: true },
     });
 
     for (const id of ids) {
       const account = rows.find((r) => r.id === id);
-      if (!account) {
+      if (!account || (account.archivedAt !== null && !unchanged.has(id))) {
         throw new NotFoundException({
-          message: 'Account not found, not visible or archived',
+          message: 'Account not found, not visible, or archived and not already this placement',
           errorCode: TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND,
         });
       }

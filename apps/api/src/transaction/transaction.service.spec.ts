@@ -3117,7 +3117,9 @@ describe('TransactionService', () => {
         prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
         categoryServiceMock.findById.mockResolvedValue(okCategory());
         // The account is visible but denominated in USD.
-        prismaMock.account.findMany.mockResolvedValue([{ id: 'acct-1', currency: 'USD' }]);
+        prismaMock.account.findMany.mockResolvedValue([
+          { id: 'acct-1', currency: 'USD', archivedAt: null },
+        ]);
 
         try {
           await service.editTransactionWithPropagation(
@@ -3156,7 +3158,9 @@ describe('TransactionService', () => {
     it('applies and cascades a placement change to the parent and every child', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
       prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
-      prismaMock.account.findMany.mockResolvedValue([{ id: 'acct-1', currency: 'USD' }]);
+      prismaMock.account.findMany.mockResolvedValue([
+        { id: 'acct-1', currency: 'USD', archivedAt: null },
+      ]);
 
       const r = await service.editTransactionWithPropagation(
         'user-1',
@@ -3377,6 +3381,7 @@ describe('TransactionService', () => {
     const visibleAccount = (over: Record<string, unknown> = {}) => ({
       id: 'acct-1',
       currency: 'USD',
+      archivedAt: null,
       ...over,
     });
 
@@ -3395,11 +3400,18 @@ describe('TransactionService', () => {
       };
       expect(arg.data.accountId).toBe('acct-1');
       expect(arg.data.transferAccountId).toBeNull();
-      // The lookup is scoped to accounts the caller can see AND that are active.
+      // The lookup is scoped to accounts the caller can see; the archived flag
+      // is judged per id afterwards, because an existing placement may stay.
       const where = prismaMock.account.findMany.mock.calls[0][0] as {
         where: { AND: Array<Record<string, unknown>> };
       };
-      expect(where.where.AND[0]).toEqual({ id: { in: ['acct-1'] }, archivedAt: null });
+      expect(where.where.AND[0]).toEqual({ id: { in: ['acct-1'] } });
+      expect(where.where.AND[1]).toEqual({
+        OR: [
+          { scopeType: 'personal', ownerId: 'user-1' },
+          { scopeType: 'group', group: { memberships: { some: { userId: 'user-1' } } } },
+        ],
+      });
     });
 
     it('404s an account that is missing, invisible or archived — one code, no leak', async () => {
@@ -3516,6 +3528,41 @@ describe('TransactionService', () => {
       prismaMock.account.findMany.mockResolvedValue([visibleAccount()]);
       await service.create('user-1', baseDto({ accountId: 'acct-1' }));
       expect(prismaMock.category.findFirst).not.toHaveBeenCalled();
+    });
+
+    // Archiving stops evaluation, not the past (design §2.1).
+    it('refuses a NEW placement onto an archived account', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ archivedAt: new Date() })]);
+      await expect(
+        service.create('user-1', baseDto({ accountId: 'acct-1' })),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the history of an archived account editable', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        makeFullRow({ accountId: 'acct-1', createdById: 'user-1' }),
+      );
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ archivedAt: new Date() })]);
+      prismaMock.transaction.findUnique.mockResolvedValue(makeFullRow({ accountId: 'acct-1' }));
+
+      await expect(service.update('user-1', 'pay-1', { amountCents: 4321 })).resolves.toMatchObject(
+        { id: 'pay-1' },
+      );
+      expect(prismaMock.transaction.update).toHaveBeenCalled();
+    });
+
+    it('still refuses moving a row onto a different archived account', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        makeFullRow({ accountId: 'acct-1', createdById: 'user-1' }),
+      );
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-2', archivedAt: new Date() }),
+      ]);
+
+      await expect(
+        service.update('user-1', 'pay-1', { accountId: 'acct-2' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('does not touch the accounts table when no account is given', async () => {

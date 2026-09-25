@@ -306,19 +306,14 @@ describe('Transactions with accounts (integration)', () => {
     expect(mismatch.body.errorCode).toBe('TRANSACTION_ACCOUNT_CURRENCY_MISMATCH');
   });
 
-  it('404s a cascade edit of a row placed on an account the editor cannot use', async () => {
-    const doomed = await prisma.account.create({
-      data: {
-        name: `Doomed ${suffix}`,
-        kind: 'BANK',
-        currency: 'ILS',
-        scopeType: 'personal',
-        ownerId: alice.user.id,
-        createdById: alice.user.id,
-      },
+  it('404s a cascade edit of a row placed on an account the editor cannot see', async () => {
+    const created = await create(alice.accessToken, payload({ accountId: checkingId })).expect(201);
+    // Simulate losing sight of the account the row sits on: a direct move to
+    // another owner is the cheapest way to reproduce it here.
+    await prisma.account.update({
+      where: { id: checkingId },
+      data: { ownerId: bob.user.id },
     });
-    const created = await create(alice.accessToken, payload({ accountId: doomed.id })).expect(201);
-    await prisma.account.update({ where: { id: doomed.id }, data: { archivedAt: new Date() } });
 
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/transactions/${created.body.id}?propagate=all`)
@@ -327,7 +322,65 @@ describe('Transactions with accounts (integration)', () => {
       .expect(404);
     expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
 
-    await prisma.account.delete({ where: { id: doomed.id } });
+    await prisma.account.update({
+      where: { id: checkingId },
+      data: { ownerId: alice.user.id },
+    });
+  });
+
+  // ── archived accounts: history stays editable (design §2.1) ──
+
+  it("keeps an archived account's history editable but refuses new placements", async () => {
+    const retired = await prisma.account.create({
+      data: {
+        name: `Retired ${suffix}`,
+        kind: 'BANK',
+        currency: 'ILS',
+        scopeType: 'personal',
+        ownerId: alice.user.id,
+        createdById: alice.user.id,
+      },
+    });
+    const historical = await create(alice.accessToken, payload({ accountId: retired.id })).expect(
+      201,
+    );
+    const elsewhere = await create(alice.accessToken, payload({ amountCents: 300 })).expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${retired.id}/archive`)
+      .set(auth(alice.accessToken))
+      .expect(200);
+
+    // The past is still the past: note and amount edits go through, and the
+    // placement survives them.
+    for (const body of [{ note: 'reconciled by hand' }, { amountCents: 1999 }]) {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/transactions/${historical.body.id}`)
+        .set(auth(alice.accessToken))
+        .send(body)
+        .expect(200);
+      expect(res.body.accountId).toBe(retired.id);
+    }
+    // Including through the cascade path.
+    await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${historical.body.id}?propagate=all`)
+      .set(auth(alice.accessToken))
+      .send({ amountCents: 2999 })
+      .expect(200);
+
+    // But nothing new may be moved onto it.
+    const moved = await request(app.getHttpServer())
+      .patch(`/api/v1/transactions/${elsewhere.body.id}`)
+      .set(auth(alice.accessToken))
+      .send({ accountId: retired.id })
+      .expect(404);
+    expect(moved.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    const fresh = await create(alice.accessToken, payload({ accountId: retired.id })).expect(404);
+    expect(fresh.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    await prisma.transaction.deleteMany({ where: { accountId: retired.id } });
+    await prisma.account.delete({ where: { id: retired.id } });
   });
 
   // ── list filters ──
