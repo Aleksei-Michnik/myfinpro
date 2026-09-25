@@ -123,6 +123,18 @@ describe('AccountService', () => {
       });
     });
 
+    it('anchors the ledger at the epoch when no opening date is given', async () => {
+      prisma.account.create.mockResolvedValue(accountRow());
+
+      await service.create('u1', createDto({ openingBalanceAt: undefined }));
+
+      expect(prisma.account.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ openingBalanceAt: new Date(0) }),
+        }),
+      );
+    });
+
     it('rejects a personal account carrying a groupId', async () => {
       await expectError(
         service.create('u1', createDto({ groupId: 'g1' })),

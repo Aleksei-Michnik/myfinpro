@@ -98,6 +98,9 @@ export function mapAccountToResponse(
  * fixed number of aggregate queries over the listed ids — never one query per
  * account. Statement imports, line decisions and the matcher land in 20.4.
  */
+/** The anchor of an account created without an opening balance date: the beginning of time. */
+const ANCHOR_EPOCH = 0;
+
 @Injectable()
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
@@ -176,7 +179,14 @@ export class AccountService {
         ownerId,
         groupId,
         openingBalanceCents: dto.openingBalanceCents ?? 0,
-        ...(dto.openingBalanceAt ? { openingBalanceAt: new Date(dto.openingBalanceAt) } : {}),
+        // No anchor given ⇒ count everything: an account created today with
+        // yesterday's expenses must show them, and a "now" anchor would even
+        // exclude a same-minute entry (the form's datetime has no seconds).
+        // An explicit opening balance carries its own date (validated by the
+        // web form; the DTO allows either alone).
+        openingBalanceAt: dto.openingBalanceAt
+          ? new Date(dto.openingBalanceAt)
+          : new Date(ANCHOR_EPOCH),
         reportedBalanceCents: dto.reportedBalanceCents ?? null,
         reportedBalanceAt: dto.reportedBalanceAt ? new Date(dto.reportedBalanceAt) : null,
         billingAccountId: dto.billingAccountId ?? null,
