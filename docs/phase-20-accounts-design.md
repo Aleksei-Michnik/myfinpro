@@ -54,7 +54,11 @@ An `Account` has a `kind` (`BANK | CARD | CASH | OTHER`), an optional `instituti
 shared closed list (§4.1), one `currency`, a scope (`personal` → `ownerId`, or `group` →
 `groupId`, exactly as `Budget`), an optional masked identifier (`last4` — never a full account or
 card number), and a **balance anchor**: `openingBalanceCents` at `openingBalanceAt`. The anchor is
-the user's statement "on this date this account held X"; everything after it is derived.
+the user's statement "on this date this account held X"; everything after it is derived. An
+account created without an opening date anchors at the beginning of time (opening 0), so
+earlier-dated transactions count — a "now" anchor would exclude an entry typed a minute later
+(the form's date has no seconds) and yesterday's expenses on a brand-new account (found by the
+20.3 e2e flow).
 
 Roles mirror budgets: create / edit / archive / delete need the owner or a group **admin**; every
 group member can read, **import statements and reconcile lines** (data entry, like adding a group

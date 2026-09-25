@@ -42,6 +42,15 @@ PLAYWRIGHT_BASE_URL=http://localhost:<PORT> pnpm --filter web exec playwright te
 `PLAYWRIGHT_BASE_URL` makes the config's `webServer` block reuse the running stack instead of
 starting `pnpm run dev` on port 3000. Screenshots go under the scratchpad (absolute `path`).
 
+Before trusting a red run: (1) the API env has `RECEIPT_EXTRACTION_PROVIDER=mock`; (2) run
+with `--workers=1` — parallel specs each register a user and trip the auth throttle; (3) if a
+route answers Next's 404 page after a big refactor, stop the server, `rm -rf apps/web/.next`
+and start again (stale Turbopack cache); (4) a list renders a card **and** a table row per item,
+so count inside `transactions-list-desktop` (or the card list), never on the page; (5) the
+retry dialog carries no `dialog` role — detect it by its text or testid, and know that a full
+page load of `/transactions` in dev opens it on `develop` too (`wiki/gotchas.md`); (6) a
+Hebrew run needs a user whose profile locale is `he` — the cookie alone is overwritten at login.
+
 Check, and screenshot, every combination that the conventions promise:
 
 | Dimension     | How                                                                                                             |

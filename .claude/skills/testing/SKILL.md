@@ -31,6 +31,9 @@ One file: `pnpm --filter api exec jest src/<module>/<file>.spec.ts`;
   `apps/api/test/helpers/` (Testcontainers pinned to `mysql:9.7`); e2e specs build their own
   users via the register flow (no shared fixtures yet).
 - Test behaviour through public surfaces (endpoints, rendered components), not internals.
+- A new web surface gets at least one spec rendered against the real messages bundle
+  (`apps/web/src/test-utils/real-messages.ts`): a key-echo mock hides a missing key. When a
+  shared type grows a field, grow the spec factories with it, or the new branch is never hit.
 - A flaky test is a finding: fix the race at its source; never `.skip`, broaden an assertion or
   raise a timeout to pass.
 

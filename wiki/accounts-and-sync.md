@@ -14,7 +14,7 @@ Design: [`docs/phase-20-accounts-design.md`](../docs/phase-20-accounts-design.md
 | `Transaction.accountId`                            | where the money moved                                                  | nullable, SetNull; must be visible, unarchived, same currency                                                                     |
 | `Transaction.transferAccountId`                    | set only on a **transfer** (destination)                               | direction OUT, distinct from `accountId`, same currency; excluded from spend by `transfer_account_id IS NULL`                     |
 
-Balances are **derived** (design §2.2): `opening + Σ countable rows` where countable = `status='POSTED' AND type='ONE_TIME'` — the analytics rule. `reportedBalance*` is the bank's number (from an import or the user); the gap between the two is information, never enforced.
+Balances are **derived** (design §2.2): `opening + Σ countable rows` from the anchor (`openingBalanceAt`; the epoch when the account was created without one, so every row counts) where countable = `status='POSTED' AND type='ONE_TIME'` — the analytics rule. `reportedBalance*` is the bank's number (from an import or the user); the gap between the two is information, never enforced.
 
 ## Roles (mirror budgets)
 

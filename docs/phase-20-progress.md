@@ -106,6 +106,57 @@ worktree.
 **Next** — 20.4 (statement parsing + import API) in parallel with 20.3 (accounts UI, after the
 20.1 UI kit lands).
 
+## 20.3 — Accounts UI (2026-09-25)
+
+Per design §7 and `docs/ui/20.3-accounts.md`. Merged as `fcf110b` (track branch `p20/accounts-ui`,
+six commits: `72f7131` account lib + provider, `48dc553` accounts page, `9826795` transaction
+surfaces, `d4e087f` dashboard overview, `7740f20` ledger anchor, `07f4114` e2e). The web-coder
+subagent was cut off by the session limit early on; the main session finished the iteration.
+
+### Scope
+
+- **`lib/account`** — types mirrored from the shared package, `formatters.ts` (`isCardOwed`,
+  `displayLedgerCents`, `isReconciled`), `AccountProvider` in the budget-context shape plus a
+  lazily loaded **directory** of every visible account (refreshed on `account.updated` and after a
+  resync) so rows and headers show names from an id alone; `useOptionalAccounts` /
+  `useAccountDirectory` degrade without a provider so existing specs keep rendering.
+- **`/accounts`** — kit cards (kind, institution, masked digits, ledger balance, the bank's
+  figure and the unexplained gap), scope tabs, archived toggle, row menu edit / archive / delete;
+  `AccountFormDialog` (kind, scope and currency immutable after creation, billing account for
+  cards); `AccountSelect` is the one picker (grouped by scope, filtered by currency / kind /
+  scope, self-fetching unless a list is supplied). Sidebar item; provider mounted in the layout.
+- **Transactions** — account picker and transfer toggle in the form (a transfer is one OUT row
+  with `transferAccountId` and the system `transfer` category; direction and categories fold
+  away), account / transfer / bank-confirmed badges on rows and the detail header, the direction
+  pill reads **Transfer** in a neutral tone through `directionPresentation` (shared by both
+  surfaces), `accountId` filter in the list and the query string, API errors land on their field.
+- **Dashboard** — `AccountsOverview` (net position per currency, one row per account, review
+  nudge, empty state) between the totals and the scope cards; the scope cards now skip transfers
+  like the totals card.
+- **API** — an account created without an opening date anchors its ledger at the epoch
+  (`ANCHOR_EPOCH`), not at the creation instant: a same-minute transaction used to fall outside
+  the countable window and the card showed zero after a transfer. Design §2.1 and the wiki say so.
+
+### Visual QA (`playwright-qa`, throwaway spec, en light · he dark · Pixel 5)
+
+Found and fixed before the merge: the kind select read a `kindOptions.*` key that never
+existed (rendered as its path — the key-echo unit mock could not see it); the scope card counted
+the 3,200 transfer as expense (its spec factory dropped the new field, so the branch was never
+hit); the card name truncated to four letters on a phone (badges now wrap under the name, the
+menu stays on the first line); overview amounts forced `dir="ltr"` unlike every other amount.
+Recorded, not fixed (pre-existing, reproduced on `phase/20` without 20.3): a full page load of
+`/transactions` in dev opens the retry dialog while the list renders — `wiki/gotchas.md`.
+Hebrew strings are a first draft; `i18n-translator` review pending.
+
+### Tests
+
+web unit 1433 (134 files; new `AccountCard`, `AccountFormDialog` against the real messages,
+`AccountsOverview`, account formatters, `directionPresentation`, scope-card transfer case) ·
+api unit 1382 (`account.service` 39) · integration `accounts-crud` 23 · e2e `accounts.spec.ts`
+green (create → place → transfer → balances 650 / 250 → dashboard → filter → edit → archive →
+delete); `payments.spec.ts` repaired (it targeted the pre-8.20 route). Gate: typecheck, lint,
+format, i18n parity clean.
+
 ## 20.4 — Statement parsing + import API (2026-09-25)
 
 Per design §4.1, §5, §6.2. Merged as `6663b77` (track branch `p20/import-api`, eight commits). No
@@ -164,4 +215,4 @@ transactions hide their id too; the sanitiser's character class rewritten as esc
 file is diffable. Integration: `accounts-import` (18) + `accounts-import-limits` (3, incl. a
 full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; api unit 1381.
 
-**Next** — 20.5 (import wizard + review UI) after 20.3.
+**Next** — 20.5 (import wizard + review UI).
