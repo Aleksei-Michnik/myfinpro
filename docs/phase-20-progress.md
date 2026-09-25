@@ -287,10 +287,34 @@ Web settings page and the `apps/connector` CLI are on their own tracks (entries 
   unknown or a deactivated user). Every other route stays JWT-only — proven by the integration
   case that `GET /accounts` with a token is 401. `request.user` carries `tokenId` for audit.
 
+### Scope (CLI) — merged as `1029f76` from `p20/connector`
+
+- **`apps/connector`** (`@myfinpro/connector`, private, ESM, `bin: myfinpro-connector`) on
+  `israeli-bank-scrapers` 6.12 (puppeteer 24; the browser is a documented one-time
+  `npx puppeteer browsers install chrome`, never downloaded by `pnpm install`). Commands: `init`
+  (prompts, secrets read with echo off, config written 0600 and refused when readable by others),
+  `sync [--since] [--dry-run] [--profile]`, `accounts`, `doctor`. Exit codes 0 / 1 / 2 config / 3
+  scrape / 4 API. Credentials live only in the user's config; nothing is logged; the server never
+  sees a bank password — the safety property of design §3 is structural.
+- **Mapper** (`src/map.ts`): `chargedAmount` moves money (sign → direction), `date` → `postedAt`,
+  `processedDate` → `valueAt` when different, foreign pair only when the currencies differ,
+  `identifier` → `externalId`, `category` → `categoryHint`, installments kept when consistent,
+  pending lines imported as they are (the fingerprint dedups them when they post), skips reported
+  by index and reason never by content, lines emitted oldest first so the ordinal fingerprint is
+  reproducible. Sources mapped onto `ACCOUNT_IMPORT_SOURCES` (`visaCal → cal`, unknown →
+  `connector`). Chunks of `ACCOUNT_IMPORT_MAX_LINES`; `periodFrom`/`periodTo` on every chunk, the
+  scraped balance on the last one like the wizard (`0ee68a4`). The three import-line field caps
+  moved into `packages/shared` so the CLI and the API cut to the same lengths (`24ee991`).
+- Not verified: no real bank login was attempted (no browser on this machine); the token path is
+  exercised only by the API integration suite. `npx @myfinpro/connector` as printed by the
+  settings page needs the package published — the owner's call (README documents the in-repo
+  invocation meanwhile).
+
 ### Tests (API)
 
 api unit 1406 (95 suites; `ApiTokenService` 18, guard 6) · integration `auth-tokens` 8 +
-`accounts-import*` 21 = 29 green (verified in the orchestrator's own run after the merge base).
+`accounts-import*` 21 = 29 green (verified in the orchestrator's own run after the merge base) ·
+connector 80 (6 files: mapper 30, config 20, client 16, companies 7, cli 4, scrape 3).
 Security review of the token, settings and CLI tracks together: pending until all three are in.
 
 ## 20.4 — Statement parsing + import API (2026-09-25)
