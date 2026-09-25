@@ -50,7 +50,10 @@ export class StatementLineResponseDto {
   @ApiPropertyOptional({
     type: StatementSuggestionDto,
     nullable: true,
-    description: 'What the matcher proposes; null once the line is decided.',
+    description:
+      'What the matcher proposed at import time; null when it had nothing to say. Kept ' +
+      'after a decision as the record of what was offered — the review filters only ever ' +
+      'look at pending lines.',
   })
   suggestion?: StatementSuggestionDto | null;
 
