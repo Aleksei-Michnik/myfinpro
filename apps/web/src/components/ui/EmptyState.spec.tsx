@@ -24,8 +24,13 @@ describe('EmptyState (20.1)', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 
-  it('drops the frame inside a card', () => {
-    render(<EmptyState title="No activity" bordered={false} data-testid="empty" />);
-    expect(screen.getByTestId('empty').className).not.toContain('border-dashed');
+  it('drops the frame inside a card and leaves the rhythm to the caller', () => {
+    render(
+      <EmptyState title="No activity" bordered={false} className="py-4" data-testid="empty" />,
+    );
+    const block = screen.getByTestId('empty');
+    expect(block.className).not.toContain('border-dashed');
+    expect(block.className).not.toContain('p-10');
+    expect(block.className).toContain('py-4');
   });
 });

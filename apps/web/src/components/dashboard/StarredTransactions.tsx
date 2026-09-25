@@ -48,7 +48,7 @@ export function StarredTransactions({ limit = 5 }: StarredTransactionsProps) {
         limit={limit}
         disableInternalAdd
         filters={filters}
-        emptyState={<p>{t('empty')}</p>}
+        emptyState={t('empty')}
       />
     </section>
   );

@@ -271,7 +271,12 @@ export function ReceiptsClient() {
         )}
 
         {!listOp.isLoading && !listOp.error && receipts.length === 0 && (
-          <EmptyState bordered={false} data-testid="receipts-empty" title={t('list.empty')} />
+          <EmptyState
+            bordered={false}
+            className="py-12"
+            data-testid="receipts-empty"
+            title={t('list.empty')}
+          />
         )}
 
         <ul className="space-y-2">

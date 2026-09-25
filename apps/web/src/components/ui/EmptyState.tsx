@@ -2,7 +2,9 @@
 
 // Phase 20 · Iteration 20.1 — THE "nothing here" block. `bordered` (default)
 // is the dashed frame a page shows when its whole list is empty; `bordered={false}`
-// is the plain centred line used inside a card or a dialog list.
+// is the plain centred line used inside a card or a dialog list — there the
+// caller owns the vertical rhythm (`className="py-8"`), because two padding
+// utilities on one element fight (Tailwind resolves by stylesheet order).
 
 import type { ReactNode } from 'react';
 import { cx } from './styles';
@@ -32,9 +34,7 @@ export function EmptyState({
     <div
       className={cx(
         'text-center text-sm text-gray-500 dark:text-gray-400',
-        bordered
-          ? 'rounded-xl border border-dashed border-gray-300 p-10 dark:border-gray-600'
-          : 'py-12',
+        bordered && 'rounded-xl border border-dashed border-gray-300 p-10 dark:border-gray-600',
         className,
       )}
       data-testid={testId}
