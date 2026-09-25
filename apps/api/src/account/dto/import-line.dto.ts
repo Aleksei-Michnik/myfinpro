@@ -1,4 +1,7 @@
 import {
+  IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH,
+  IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH,
+  IMPORT_LINE_MAX_INSTALLMENTS,
   STATEMENT_DESCRIPTION_MAX_LENGTH,
   TRANSACTION_DIRECTIONS,
   type ImportLineInput,
@@ -16,12 +19,6 @@ import {
   Min,
 } from 'class-validator';
 import { MAX_ACCOUNT_BALANCE_CENTS } from './create-account.dto';
-
-/** Column widths of `account_statement_lines` (design §4.2). */
-export const IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH = 64;
-export const IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH = 100;
-/** Sanity cap on an installment plan's length. */
-export const IMPORT_LINE_MAX_INSTALLMENTS = 999;
 
 /**
  * One normalised statement row on a POST /accounts/:id/imports body — the

@@ -45,6 +45,16 @@ export type StatementSuggestedAction = (typeof STATEMENT_SUGGESTED_ACTIONS)[numb
 /** Hard cap on the number of lines one import request may carry. */
 export const ACCOUNT_IMPORT_MAX_LINES = 2000;
 
+/**
+ * Column widths of the optional `ImportLineInput` text fields and the sanity
+ * cap on an installment plan's length. Shared, because every producer of a
+ * line has to cut to the same length as the API's DTO: the browser parser,
+ * the user-run connector (20.7) and the API's own sanitisation.
+ */
+export const IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH = 64;
+export const IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH = 100;
+export const IMPORT_LINE_MAX_INSTALLMENTS = 999;
+
 /** ± days around a line's date in which a transaction may still match it. */
 export const STATEMENT_MATCH_DATE_WINDOW_DAYS = 5;
 

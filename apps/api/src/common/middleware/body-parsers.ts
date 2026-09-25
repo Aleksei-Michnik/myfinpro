@@ -10,13 +10,14 @@
 // Used by `main.ts` and by the integration bootstrap, so the tests exercise
 // the same limits production runs.
 
-import { ACCOUNT_IMPORT_MAX_LINES, STATEMENT_DESCRIPTION_MAX_LENGTH } from '@myfinpro/shared';
-import type { INestApplication } from '@nestjs/common';
-import { json, urlencoded } from 'express';
 import {
+  ACCOUNT_IMPORT_MAX_LINES,
   IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH,
   IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH,
-} from '../../account/dto/import-line.dto';
+  STATEMENT_DESCRIPTION_MAX_LENGTH,
+} from '@myfinpro/shared';
+import type { INestApplication } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 
 /**
  * The limit is DERIVED from what a legal maximum chunk actually weighs — a
