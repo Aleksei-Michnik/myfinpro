@@ -14,6 +14,7 @@ import {
   MAX_SCORED_CANDIDATES_PER_LINE,
   MAX_SUGGESTION_CANDIDATES,
   rankCandidates,
+  rankLinesForTransaction,
   scoreCandidate,
   SCORE_WEIGHTS,
   STATEMENT_MATCH_LEAD,
@@ -165,6 +166,66 @@ describe('statement matcher', () => {
         isConfidentMatch([{ transactionId: 'a', score: STATEMENT_MATCH_CONFIDENT_SCORE - 0.01 }]),
       ).toBe(false);
       expect(isConfidentMatch([])).toBe(false);
+    });
+  });
+
+  describe('ranking the lines of one transaction (§5.5)', () => {
+    it('scores a pair the same in both directions', () => {
+      const l = line({ normalizedDescription: 'super pharm dizengoff' });
+      const c = candidate({ accountId: ACCOUNT, texts: ['super pharm'] });
+
+      expect(rankLinesForTransaction(c, [l], ACCOUNT)).toEqual([
+        { lineId: l.id, score: scoreCandidate(l, c, ACCOUNT) },
+      ]);
+    });
+
+    it('drops the lines the hard gates or the date window refuse', () => {
+      const c = candidate({ accountId: ACCOUNT });
+      const ranked = rankLinesForTransaction(
+        c,
+        [
+          line({ id: 'in-window' }),
+          line({ id: 'other-amount', amountCents: 12499 }),
+          line({ id: 'other-currency', currency: 'USD' }),
+          line({ id: 'other-direction', direction: 'IN' }),
+          line({
+            id: 'too-old',
+            at: new Date(
+              Date.UTC(2026, 8, 10) - (STATEMENT_MATCH_DATE_WINDOW_DAYS + 1) * 86_400_000,
+            ),
+          }),
+        ],
+        ACCOUNT,
+      );
+
+      expect(ranked.map((entry) => entry.lineId)).toEqual(['in-window']);
+    });
+
+    it('never resolves two equally plausible lines', () => {
+      const c = candidate({ accountId: ACCOUNT });
+      const ranked = rankLinesForTransaction(
+        c,
+        [line({ id: 'line-a' }), line({ id: 'line-b' })],
+        ACCOUNT,
+      );
+
+      expect(ranked.map((entry) => entry.lineId)).toEqual(['line-a', 'line-b']);
+      expect(ranked[0].score).toBe(ranked[1].score);
+      expect(isConfidentMatch(ranked)).toBe(false);
+    });
+
+    it('scores at most the closest lines, best first', () => {
+      const lines = Array.from({ length: MAX_SCORED_CANDIDATES_PER_LINE + 10 }, (_, i) =>
+        line({ id: `line-${String(i).padStart(3, '0')}`, at: new Date('2026-09-10T00:00:00Z') }),
+      );
+      // One line lands a day away — it must still be scored, and last.
+      lines.push(line({ id: 'line-far', at: new Date('2026-09-14T00:00:00Z') }));
+
+      const ranked = rankLinesForTransaction(candidate({ accountId: ACCOUNT }), lines, ACCOUNT);
+
+      expect(ranked).toHaveLength(MAX_SCORED_CANDIDATES_PER_LINE);
+      expect(ranked.map((entry) => entry.lineId)).not.toContain('line-far');
+      expect(ranked[0].score).toBeGreaterThanOrEqual(ranked[ranked.length - 1].score);
     });
   });
 

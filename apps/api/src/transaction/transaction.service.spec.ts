@@ -3344,6 +3344,91 @@ describe('TransactionService', () => {
         ]);
       });
 
+      it('places the transaction on an account, checked through the caller’s client', async () => {
+        const txTransactionCreate = jest.fn().mockResolvedValue(makePersistedTransaction());
+        const txAccountFindMany = jest
+          .fn()
+          .mockResolvedValue([{ id: 'acct-1', currency: 'ILS', archivedAt: null }]);
+
+        await service.createExpenseWithinTx(
+          {
+            transaction: { create: txTransactionCreate },
+            account: { findMany: txAccountFindMany },
+          } as never,
+          'user-1',
+          {
+            amountCents: 4590,
+            currency: 'ILS',
+            occurredAt: new Date('2026-07-01T00:00:00Z'),
+            categoryId: 'cat-1',
+            note: null,
+            attributions: [{ scope: 'personal' }],
+            accountId: 'acct-1',
+          },
+        );
+
+        // The pool client is never touched: the check must see — and be
+        // rolled back with — the confirm's own transaction.
+        expect(txAccountFindMany).toHaveBeenCalledTimes(1);
+        expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+        const arg = txTransactionCreate.mock.calls[0][0] as { data: { accountId: string | null } };
+        expect(arg.data.accountId).toBe('acct-1');
+      });
+
+      it.each([
+        [
+          'missing, invisible or archived',
+          [] as unknown[],
+          TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND,
+        ],
+        [
+          'in another currency',
+          [{ id: 'acct-1', currency: 'USD', archivedAt: null }],
+          TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH,
+        ],
+      ])('refuses an account that is %s, writing nothing', async (_label, rows, errorCode) => {
+        const txTransactionCreate = jest.fn();
+        const client = {
+          transaction: { create: txTransactionCreate },
+          account: { findMany: jest.fn().mockResolvedValue(rows) },
+        } as never;
+        const input = {
+          amountCents: 4590,
+          currency: 'ILS',
+          occurredAt: new Date('2026-07-01T00:00:00Z'),
+          categoryId: 'cat-1',
+          note: null,
+          attributions: [{ scope: 'personal' as const }],
+          accountId: 'acct-1',
+        };
+
+        try {
+          await service.createExpenseWithinTx(client, 'user-1', input);
+          throw new Error('expected a rejection');
+        } catch (e) {
+          expect(codeOf(e)).toBe(errorCode);
+        }
+        expect(txTransactionCreate).not.toHaveBeenCalled();
+      });
+
+      it('leaves the placement null when the confirm names no account', async () => {
+        const txTransactionCreate = jest.fn().mockResolvedValue(makePersistedTransaction());
+        await service.createExpenseWithinTx(
+          { transaction: { create: txTransactionCreate } } as never,
+          'user-1',
+          {
+            amountCents: 100,
+            currency: 'USD',
+            occurredAt: new Date('2026-07-01T00:00:00Z'),
+            categoryId: 'cat-1',
+            note: null,
+            attributions: [{ scope: 'personal' }],
+          },
+        );
+        const arg = txTransactionCreate.mock.calls[0][0] as { data: { accountId: string | null } };
+        expect(arg.data.accountId).toBeNull();
+      });
+
       it('omits the documents relation when no document is supplied', async () => {
         const txTransactionCreate = jest.fn().mockResolvedValue(makePersistedTransaction());
         await service.createExpenseWithinTx(

@@ -557,8 +557,9 @@ export class TransactionService {
    * inside a caller-provided transaction. The receipt-confirm flow owns the
    * transaction so the transaction, its `TransactionDocument`, and the receipt→transaction
    * link all commit atomically. Validation is the caller's responsibility
-   * (see {@link validateExpenseInputs}); the post-commit fan-out is
-   * {@link publishCreated}.
+   * (see {@link validateExpenseInputs}) — except the account placement, which
+   * is validated here so it shares the caller's transaction; the post-commit
+   * fan-out is {@link publishCreated}.
    */
   async createExpenseWithinTx(
     tx: Prisma.TransactionClient,
@@ -579,8 +580,29 @@ export class TransactionService {
         mimeType: string | null;
         sizeBytes: number | null;
       }[];
+      /** Phase 20.6 — where the money moved, when the confirm names an account. */
+      accountId?: string | null;
     },
   ): Promise<TransactionWithRelations> {
+    // The one validation this method does itself: the placement is checked
+    // on the CALLER'S transaction client, so an account that is gone,
+    // invisible, archived or in another currency rolls the whole confirm
+    // back instead of leaving a receipt linked to a misplaced transaction.
+    if (input.accountId) {
+      await this.validateAccountPlacement(
+        userId,
+        {
+          accountId: input.accountId,
+          transferAccountId: null,
+          direction: 'OUT',
+          currency: input.currency,
+          type: 'ONE_TIME',
+          categoryIds: [input.categoryId],
+        },
+        tx,
+      );
+    }
+
     const transaction = await tx.transaction.create({
       data: {
         direction: 'OUT',
@@ -591,6 +613,7 @@ export class TransactionService {
         status: 'POSTED',
         categoryId: input.categoryId,
         note: input.note,
+        accountId: input.accountId ?? null,
         createdById: userId,
         attributions: {
           create: input.attributions.map((a) => ({
@@ -2001,6 +2024,8 @@ export class TransactionService {
       existingAccountId?: string | null;
       existingTransferAccountId?: string | null;
     },
+    /** The client to read through — a caller's open transaction, or the pool. */
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
     const transferInvalid = (message: string): never => {
       throw new BadRequestException({
@@ -2025,7 +2050,7 @@ export class TransactionService {
       if (input.categoryIds.length !== 1) {
         transferInvalid('A transfer carries exactly one category and no additional ones');
       }
-      const primary = await this.prisma.category.findFirst({
+      const primary = await client.category.findFirst({
         where: { id: input.categoryIds[0], ownerType: 'system', slug: TRANSFER_CATEGORY_SLUG },
         select: { id: true },
       });
@@ -2055,7 +2080,7 @@ export class TransactionService {
       unchanged.add(input.transferAccountId);
     }
 
-    const rows = await this.prisma.account.findMany({
+    const rows = await client.account.findMany({
       where: { AND: [{ id: { in: ids } }, buildAccountVisibilityWhere(userId)] },
       select: { id: true, currency: true, archivedAt: true },
     });

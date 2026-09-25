@@ -57,6 +57,19 @@ describe('EventBus', () => {
     expect(completed).toBe(true);
   });
 
+  it('gives a server-side subscriber every event, whoever it was addressed to', () => {
+    const received: RealtimeEvent[] = [];
+    const sub = bus.subscribeAll().subscribe((e) => received.push(e));
+    bus.publish(ev(['u1'], 'p1'));
+    bus.publish(ev(['u2'], 'p2'));
+    sub.unsubscribe();
+    bus.publish(ev(['u1'], 'p3'));
+    expect(received.map((e) => (e as { transactionId: string }).transactionId)).toEqual([
+      'p1',
+      'p2',
+    ]);
+  });
+
   it('cleans up after a subscriber unsubscribes', () => {
     const received: RealtimeEvent[] = [];
     const sub = bus.subscribeForUser('u1').subscribe((e) => received.push(e));

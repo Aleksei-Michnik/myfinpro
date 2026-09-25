@@ -704,6 +704,35 @@ describe('ReceiptService', () => {
       expect(actions).not.toContain('MERCHANT_CREATED');
     });
 
+    it('hands the account on to the transaction write, and nothing when omitted', async () => {
+      prismaMock.receipt.findFirst.mockResolvedValue(reviewRow());
+      txMerchant.findUnique.mockResolvedValue({ id: 'm-existing', name: 'Shufersal' });
+      prismaMock.receipt.findUnique.mockResolvedValue(
+        reviewRow({ status: 'CONFIRMED', transactionId: 'p-1', merchantId: 'm-existing' }),
+      );
+
+      await service.confirm('u-1', 'r-1', {
+        categoryId: 'cat-1',
+        attributions: [{ scope: 'personal' }],
+        accountId: 'acct-1',
+      });
+      expect(transactionServiceMock.createExpenseWithinTx).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'u-1',
+        expect.objectContaining({ accountId: 'acct-1' }),
+      );
+
+      await service.confirm('u-1', 'r-1', {
+        categoryId: 'cat-1',
+        attributions: [{ scope: 'personal' }],
+      });
+      expect(transactionServiceMock.createExpenseWithinTx).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'u-1',
+        expect.objectContaining({ accountId: null }),
+      );
+    });
+
     it('omits the document for a URL receipt with no stored file', async () => {
       prismaMock.receipt.findFirst.mockResolvedValue(
         reviewRow({ source: 'url', files: [], extractedMerchantName: null }),

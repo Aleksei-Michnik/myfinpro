@@ -332,16 +332,41 @@ export class StatementLineService {
       });
     }
 
-    // Claim the line AND the 1:1 link first, in one conditional write: two
-    // concurrent requests cannot both pass the checks above, and the loser
-    // gets a clean conflict instead of a half-applied enrichment (security
-    // review M2 / M3). The unique index on `transaction_id` is the fence.
-    const updated = await this.claimLine(userId, line.id, 'MATCHED', candidate.id);
+    const { line: updated, transaction } = await this.linkLineToTransaction(
+      userId,
+      account,
+      line,
+      candidate.id,
+    );
+    return this.decisionResponse(userId, updated, transaction);
+  }
+
+  /**
+   * The ONE write path a match takes (design §5.5): claim the line and its
+   * 1:1 link, enrich the transaction, audit, fan out. Shared by the manual
+   * decision above — which validates the pair first — and by
+   * `StatementMatchingService.autoLink`, which found the pair itself; neither
+   * may grow a second way to link a line to a transaction.
+   *
+   * Claiming the line AND the link first, in one conditional write, is what
+   * makes it race-safe: two concurrent decisions cannot both pass, and the
+   * loser gets a clean conflict instead of a half-applied enrichment
+   * (security review M2 / M3). The unique index on `transaction_id` is the
+   * fence; `STATEMENT_LINE_NOT_PENDING` / `STATEMENT_LINE_ALREADY_LINKED`
+   * are what a loser sees.
+   */
+  async linkLineToTransaction(
+    userId: string,
+    account: AccountRow,
+    line: LineRow,
+    transactionId: string,
+  ): Promise<{ line: LineRow; transaction: TransactionSummaryDto }> {
+    const updated = await this.claimLine(userId, line.id, 'MATCHED', transactionId);
     let transaction: TransactionSummaryDto;
     try {
       transaction = await this.transactions.confirmByStatementLine(
         userId,
-        candidate.id,
+        transactionId,
         account.id,
         line.id,
       );
@@ -351,10 +376,9 @@ export class StatementLineService {
     }
 
     await this.afterDecision(userId, account, updated, 'STATEMENT_LINE_MATCHED', {
-      transactionId: candidate.id,
+      transactionId,
     });
-
-    return this.decisionResponse(userId, updated, transaction);
+    return { line: updated, transaction };
   }
 
   private async applyCreate(
