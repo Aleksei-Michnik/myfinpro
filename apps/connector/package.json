@@ -1,0 +1,44 @@
+{
+  "name": "@myfinpro/connector",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "User-run bridge from israeli-bank-scrapers to the MyFinPro statement import API",
+  "type": "module",
+  "bin": {
+    "myfinpro-connector": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/main.js",
+    "start": "node dist/main.js",
+    "dev": "tsc --watch",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@myfinpro/shared": "workspace:*",
+    "israeli-bank-scrapers": "^6.12.1",
+    "puppeteer": "^24.40.0"
+  },
+  "devDependencies": {
+    "@myfinpro/eslint-config": "workspace:*",
+    "@myfinpro/tsconfig": "workspace:*",
+    "@types/node": "^26.1.1",
+    "eslint": "^10.2.0",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
