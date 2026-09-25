@@ -41,7 +41,7 @@ export interface TransactionsFiltersProps {
    * Hide certain controls when the parent forces them. E.g. when scope is
    * locked by the page (group-tab), we hide the scope dropdown.
    */
-  hide?: { scope?: boolean };
+  hide?: { scope?: boolean; account?: boolean };
   /**
    * Optional category list. When `null` or omitted, the component fetches
    * its own and re-fetches whenever `value.direction` changes.
@@ -343,16 +343,18 @@ export function TransactionsFilters({
         </Select>
       </label>
 
-      {/* Account (Phase 20.3) */}
-      <AccountSelect
-        value={value.accountId ?? null}
-        onChange={setAccountId}
-        includeArchived
-        emptyOptionLabel={tAccounts('filters.anyAccount')}
-        disabled={disabled}
-        testId="filter-account"
-        fullWidth={false}
-      />
+      {/* Account (Phase 20.3); hidden where the page fixes the account (20.5). */}
+      {!hide?.account && (
+        <AccountSelect
+          value={value.accountId ?? null}
+          onChange={setAccountId}
+          includeArchived
+          emptyOptionLabel={tAccounts('filters.anyAccount')}
+          disabled={disabled}
+          testId="filter-account"
+          fullWidth={false}
+        />
+      )}
 
       {/* Sort */}
       <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">

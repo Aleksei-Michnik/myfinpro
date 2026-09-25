@@ -55,6 +55,8 @@ export interface TransactionsListProps {
   onFiltersChange?(next: TransactionsFiltersValue): void;
   /** Hide the scope dropdown — used by /transactions where a tab strip owns scope. */
   lockScope?: boolean;
+  /** Hide the account filter — the account detail page fixes it (20.5). */
+  hide?: { account?: boolean };
   /** Toggle the filter toolbar entirely. Default true. */
   showFilters?: boolean;
   /** Per-row controls (edit / delete). Default true. */
@@ -112,6 +114,7 @@ export function TransactionsList({
   filters: controlledFilters,
   onFiltersChange,
   lockScope,
+  hide,
   showFilters = true,
   showControls = true,
   showStar = true,
@@ -411,7 +414,7 @@ export function TransactionsList({
             <TransactionsFilters
               value={filters}
               onChange={setFilters}
-              hide={{ scope: lockScope }}
+              hide={{ scope: lockScope, account: hide?.account }}
               categories={categories ?? null}
               disabled={loading}
             />
