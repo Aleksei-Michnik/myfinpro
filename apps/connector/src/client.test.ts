@@ -4,7 +4,7 @@ import { ApiClient, chunk, type FetchLike } from './client.js';
 import { EXIT_API, type ConnectorError } from './errors.js';
 
 const APP_URL = 'https://app.example.com';
-const TOKEN = 'mfp_0123456789abcdef0123456789';
+const TOKEN = 'mfp_placeholder0123456789abc';
 const ACCOUNT_ID = '3f1d0f1a-9b1e-4c2a-8f3d-6a7b8c9d0e1f';
 
 function lines(count: number): ImportLineInput[] {

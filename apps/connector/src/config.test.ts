@@ -16,8 +16,8 @@ import {
 } from './config.js';
 import { EXIT_CONFIG, ConnectorError } from './errors.js';
 
-const TOKEN = 'mfp_0123456789abcdef0123456789';
-const PASSWORD = 'hunter2-not-a-real-password';
+const TOKEN = 'mfp_placeholder0123456789abc';
+const PASSWORD = 'placeholder-bank-password';
 const ACCOUNT_ID = '3f1d0f1a-9b1e-4c2a-8f3d-6a7b8c9d0e1f';
 
 function validConfig(): ConnectorConfig {
@@ -71,19 +71,19 @@ describe('checkToken', () => {
   });
 
   it('warns, but does not refuse, an unexpected prefix', () => {
-    const result = checkToken('xyz_0123456789abcdef0123456789');
+    const result = checkToken('xyz_placeholder0123456789abc');
     expect(result.warning).toContain('mfp_');
   });
 
   it('refuses an empty, short or whitespace-carrying value', () => {
     expectConfigError(() => checkToken(''));
     expectConfigError(() => checkToken('mfp_short'));
-    expectConfigError(() => checkToken('mfp_0123456789 abcdef0123456789'));
+    expectConfigError(() => checkToken('mfp_placeholder 0123456789abc'));
   });
 
   it('never puts the token in the message', () => {
-    const error = expectConfigError(() => checkToken('mfp_0123456789 abcdef0123456789'));
-    expect(error.message).not.toContain('0123456789');
+    const error = expectConfigError(() => checkToken('mfp_placeholder 0123456789abc'));
+    expect(error.message).not.toContain('placeholder');
   });
 });
 
