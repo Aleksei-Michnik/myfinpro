@@ -23,6 +23,8 @@ export interface FileCaptureButtonsProps {
   onFiles(files: File[], source: 'picker' | 'camera'): void;
   browseLabel: string;
   cameraLabel: string;
+  /** Render the camera button (default true); off for files a photo cannot replace. */
+  camera?: boolean;
   /** data-testids: `<prefix>-browse-button|-camera-button|-file-input|-camera-input`. */
   testIdPrefix: string;
   size?: 'sm' | 'md';
@@ -37,6 +39,7 @@ export function FileCaptureButtons({
   onFiles,
   browseLabel,
   cameraLabel,
+  camera = true,
   testIdPrefix,
   size = 'sm',
   variant = 'secondary',
@@ -64,16 +67,18 @@ export function FileCaptureButtons({
       >
         {browseLabel}
       </Button>
-      <Button
-        type="button"
-        variant={variant}
-        size={size}
-        disabled={disabled}
-        onClick={() => cameraInputRef.current?.click()}
-        data-testid={`${testIdPrefix}-camera-button`}
-      >
-        {cameraLabel}
-      </Button>
+      {camera && (
+        <Button
+          type="button"
+          variant={variant}
+          size={size}
+          disabled={disabled}
+          onClick={() => cameraInputRef.current?.click()}
+          data-testid={`${testIdPrefix}-camera-button`}
+        >
+          {cameraLabel}
+        </Button>
+      )}
       <input
         ref={fileInputRef}
         type="file"
