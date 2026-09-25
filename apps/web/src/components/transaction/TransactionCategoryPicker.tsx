@@ -1,6 +1,6 @@
 'use client';
 
-// Phase 6 · Iteration 6.13 — category <select> with optgroups (System /
+// Phase 6 · Iteration 6.13 — category picker with optgroups (System /
 // Personal / per-group). Reusable across the form dialog and future
 // recurring / installment forms (6.18 / 6.20).
 // Phase 6 · Iteration 6.16.4 — self-fetch migrated to
