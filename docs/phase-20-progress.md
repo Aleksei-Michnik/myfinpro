@@ -24,7 +24,8 @@ skill and the search-before-you-write rule for the architect and coder roles.
 
 ## 20.2 — Accounts schema + API (2026-09-25)
 
-Per design §4, §6.1, §6.3. Merged as `29c57ee` (track branch `p20/accounts-api`, nine commits).
+Per design §4, §6.1, §6.3. Merged as `29c57ee` (track branch `p20/accounts-api`, nine commits) plus the security-review
+merge (six more commits).
 
 ### Scope
 
@@ -54,11 +55,26 @@ Per design §4, §6.1, §6.3. Merged as `29c57ee` (track branch `p20/accounts-ap
 
 ### Tests
 
-shared 174 · api unit 1341 (91 suites) · web unit 1370 · integration:
+shared 174 · api unit 1353 (91 suites) · web unit 1370 · integration:
 `accounts-crud` (23) + `transactions-accounts` (15) new, `analytics-query` (transfer exclusion
 case), `transactions-create/edit/cascade-edit`, `receipts-confirm`, `system-categories` green.
 Known pre-existing red: `transactions-list` test 19 trips the 30/min POST throttle on a local
 run.
+
+### Security review (2026-09-25)
+
+`security-reviewer` verdict on the first merge: fix first. Three integrity findings, all closed
+in the second merge: the propagation editor (`PATCH ?propagate=`) bypassed the account guard
+(a transfer could be flipped to `IN` and inflate both ledgers); generated occurrences cloned
+the template's account without re-checking archive state or the creator's visibility; amount
+and date edits on a placed row skipped re-validation, so an ex-member could move a shared
+balance. Rulings: placement is re-checked on every scalar edit of a placed row; archived
+accounts keep their history editable but accept no new placement; a group ledger sums every
+countable row placed on it regardless of the reader's transaction visibility (documented
+invariant); every money cap derives from one `MAX_MINOR_UNITS` (the MySQL INT ceiling) —
+the budget cap was 47× above its column. Process note: the built-in `security-review` skill
+diffs the primary working directory, so the reviewer ran the pass manually against the phase
+worktree.
 
 **Next** — 20.4 (statement parsing + import API) in parallel with 20.3 (accounts UI, after the
 20.1 UI kit lands).
