@@ -2,12 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
+import { focusRing } from '@/components/ui/styles';
 import { Link, usePathname } from '@/i18n/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-
-/** Shared focus ring for keyboard navigation visibility. */
-const focusRing =
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600';
 
 interface NavItem {
   href: string;

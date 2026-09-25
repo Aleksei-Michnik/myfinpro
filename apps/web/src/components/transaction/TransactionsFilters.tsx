@@ -10,6 +10,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { Select } from '@/components/ui/Select';
 import { useGroups } from '@/lib/group/group-context';
 import { useTransactions } from '@/lib/transaction/transaction-context';
 import type { CategoryDto } from '@/lib/transaction/types';
@@ -225,13 +226,15 @@ export function TransactionsFilters({
       {!hide?.scope && (
         <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
           <span className="sr-only">{t('scopeAll')}</span>
-          <select
+          <Select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
             disabled={disabled}
             aria-disabled={disabled || undefined}
             data-testid="filter-scope"
-            className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            size="sm"
+            fullWidth={false}
+            wrapperClassName="contents"
           >
             <option value="all">{t('scopeAll')}</option>
             <option value="personal">{t('scopePersonal')}</option>
@@ -240,7 +243,7 @@ export function TransactionsFilters({
                 {t('scopeGroup', { name: g.name })}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
@@ -288,13 +291,15 @@ export function TransactionsFilters({
       {/* Category */}
       <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
         <span className="sr-only">{t('category')}</span>
-        <select
+        <Select
           value={value.categoryId ?? ''}
           onChange={(e) => setCategoryId(e.target.value)}
           disabled={disabled}
           aria-disabled={disabled || undefined}
           data-testid="filter-category"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          size="sm"
+          fullWidth={false}
+          wrapperClassName="contents"
         >
           <option value="">{t('anyCategory')}</option>
           {grouped && grouped.system.length > 0 && (
@@ -329,25 +334,27 @@ export function TransactionsFilters({
                 </optgroup>
               );
             })}
-        </select>
+        </Select>
       </label>
 
       {/* Sort */}
       <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
         <span className="sr-only">{t('sort')}</span>
-        <select
+        <Select
           value={value.sort}
           onChange={(e) => setSort(e.target.value as TransactionsFiltersSort)}
           disabled={disabled}
           aria-disabled={disabled || undefined}
           data-testid="filter-sort"
-          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          size="sm"
+          fullWidth={false}
+          wrapperClassName="contents"
         >
           <option value="date_desc">{t('sortDateDesc')}</option>
           <option value="date_asc">{t('sortDateAsc')}</option>
           <option value="amount_desc">{t('sortAmountDesc')}</option>
           <option value="amount_asc">{t('sortAmountAsc')}</option>
-        </select>
+        </Select>
       </label>
     </div>
   );

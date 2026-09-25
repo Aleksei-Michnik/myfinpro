@@ -10,6 +10,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useId, useRef, useState } from 'react';
 import { ProductQuickViewDialog } from '@/components/product/ProductQuickViewDialog';
 import { ProductThumb } from '@/components/product/ProductThumb';
+import { Card } from '@/components/ui/Card';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Link } from '@/i18n/navigation';
 import { useReceipts } from '@/lib/receipt/receipt-context';
@@ -72,10 +73,7 @@ export function TransactionPurchaseDetails({
   );
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
-      data-testid="transaction-purchase-details"
-    >
+    <Card as="section" padding="none" data-testid="transaction-purchase-details">
       <button
         type="button"
         onClick={toggle}
@@ -201,6 +199,6 @@ export function TransactionPurchaseDetails({
           onClose={() => setQuickViewProductId(null)}
         />
       )}
-    </section>
+    </Card>
   );
 }

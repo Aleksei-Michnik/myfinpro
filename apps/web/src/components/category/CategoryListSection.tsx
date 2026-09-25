@@ -12,6 +12,7 @@ import { CategoryFormDialog } from './CategoryFormDialog';
 import { CategoryRow } from './CategoryRow';
 import { DeleteCategoryDialog } from './DeleteCategoryDialog';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import type { CategoryDto } from '@/lib/category/types';
 
@@ -49,8 +50,10 @@ export function CategoryListSection({
     scope.type === 'personal' ? 'category-section-personal' : `category-section-${scope.groupId}`;
 
   return (
-    <section
-      className="relative rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
+      padding="sm"
+      className="relative"
       data-testid={sectionTestId}
       aria-label={title}
       aria-busy={loading || undefined}
@@ -136,6 +139,6 @@ export function CategoryListSection({
           onDeleted={() => setDeleting(null)}
         />
       )}
-    </section>
+    </Card>
   );
 }

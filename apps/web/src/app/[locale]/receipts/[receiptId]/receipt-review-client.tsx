@@ -20,10 +20,12 @@ import { ReceiptItemCard, type ItemRow } from '@/components/receipt/ReceiptItemC
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
 import { ReconcileReceiptDialog } from '@/components/receipt/ReconcileReceiptDialog';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DocumentViewer } from '@/components/ui/DocumentViewer';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { inputClass } from '@/components/ui/input-styles';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
@@ -372,11 +374,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
     const notFound = loadOp.error.httpStatus === 404 || loadOp.error.httpStatus === 403;
     return (
       <main className="container mx-auto max-w-lg px-4 py-8">
-        <div
-          className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-          data-testid="receipt-review-error"
-          role="alert"
-        >
+        <Card padding="lg" data-testid="receipt-review-error" role="alert">
           <h1 className="mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100">
             {notFound ? t('notFound') : t('loadFailed')}
           </h1>
@@ -394,7 +392,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
           >
             ← {t('back')}
           </Link>
-        </div>
+        </Card>
       </main>
     );
   }
@@ -490,8 +488,10 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ── Preview ─────────────────────────────────────────────────── */}
-        <section
-          className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800"
+        <Card
+          as="section"
+          padding="none"
+          className="p-3"
           aria-label={t('previewTitle')}
           data-testid="receipt-preview"
         >
@@ -564,13 +564,10 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               {t('previewLoading')}
             </div>
           )}
-        </section>
+        </Card>
 
         {/* ── Extracted header ────────────────────────────────────────── */}
-        <section
-          className="space-y-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-          aria-label={t('headerTitle')}
-        >
+        <Card as="section" padding="sm" className="space-y-3" aria-label={t('headerTitle')}>
           <div className="relative">
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('merchantLabel')}</span>
@@ -633,7 +630,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
             </label>
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('currencyLabel')}</span>
-              <select
+              <Select
                 value={currency}
                 onChange={(e) => {
                   setCurrency(e.target.value);
@@ -641,7 +638,8 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                 }}
                 disabled={!editable}
                 data-testid="review-currency"
-                className={inputClass}
+                size="sm"
+                wrapperClassName="contents"
               >
                 <option value="">—</option>
                 {CURRENCY_CODES.map((code) => (
@@ -649,7 +647,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
                     {code}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               <span>{t('totalLabel')}</span>
@@ -833,7 +831,7 @@ export function ReceiptReviewClient({ receiptId }: { receiptId: string }) {
               )}
             </div>
           )}
-        </section>
+        </Card>
       </div>
 
       <ReceiptConfirmDialog

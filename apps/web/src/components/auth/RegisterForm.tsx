@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
 import { useTelegramLogin } from '@/components/auth/TelegramLoginButton';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -191,41 +192,39 @@ export function RegisterForm() {
       />
 
       <div>
-        <label className="flex items-start gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => {
-              setConsent(e.target.checked);
-              if (e.target.checked) {
-                setErrors((prev) => ({ ...prev, consent: undefined }));
-              }
-            }}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-            disabled={isLoading}
-            data-testid="consent-checkbox"
-          />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {t.rich('consentLabel', {
-              terms: (chunks) => (
-                <Link
-                  href="/legal/terms"
-                  className="text-primary-600 hover:text-primary-500 underline"
-                >
-                  {chunks}
-                </Link>
-              ),
-              privacy: (chunks) => (
-                <Link
-                  href="/legal/privacy"
-                  className="text-primary-600 hover:text-primary-500 underline"
-                >
-                  {chunks}
-                </Link>
-              ),
-            })}
-          </span>
-        </label>
+        <Checkbox
+          checked={consent}
+          onChange={(e) => {
+            setConsent(e.target.checked);
+            if (e.target.checked) {
+              setErrors((prev) => ({ ...prev, consent: undefined }));
+            }
+          }}
+          disabled={isLoading}
+          data-testid="consent-checkbox"
+          label={
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              {t.rich('consentLabel', {
+                terms: (chunks) => (
+                  <Link
+                    href="/legal/terms"
+                    className="text-primary-600 hover:text-primary-500 underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+                privacy: (chunks) => (
+                  <Link
+                    href="/legal/privacy"
+                    className="text-primary-600 hover:text-primary-500 underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </span>
+          }
+        />
         {touched.consent && errors.consent && (
           <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.consent}</p>
         )}

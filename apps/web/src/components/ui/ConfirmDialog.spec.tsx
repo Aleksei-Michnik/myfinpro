@@ -51,7 +51,7 @@ describe('ConfirmDialog (8.27)', () => {
     renderDialog();
     fireEvent.click(screen.getByTestId('confirm-dialog-cancel'));
     fireEvent.keyDown(document, { key: 'Escape' });
-    fireEvent.mouseDown(screen.getByTestId('confirm-dialog'));
+    fireEvent.mouseDown(screen.getByTestId('confirm-dialog-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(3);
     expect(onConfirm).not.toHaveBeenCalled();
   });
@@ -64,7 +64,7 @@ describe('ConfirmDialog (8.27)', () => {
 
   it('danger turns the confirm button red', () => {
     renderDialog({ danger: true });
-    expect(screen.getByTestId('confirm-dialog-confirm').className).toContain('!bg-red-600');
+    expect(screen.getByTestId('confirm-dialog-confirm').className).toContain('bg-red-600');
   });
 
   it('busy disables confirm and shows the spinner', () => {

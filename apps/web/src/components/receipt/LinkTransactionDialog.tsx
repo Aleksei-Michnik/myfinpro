@@ -81,7 +81,6 @@ export function LinkTransactionDialog({
       searchPlaceholder={t('searchTransactionsPlaceholder')}
       emptyLabel={t('noTransactions')}
       loadingLabel={t('loading')}
-      closeLabel={t('close')}
       fetchCandidates={fetchCandidates}
       getKey={(tx) => tx.id}
       renderRow={(tx) => (

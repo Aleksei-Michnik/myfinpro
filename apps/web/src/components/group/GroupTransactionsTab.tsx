@@ -6,6 +6,7 @@
 import { useTranslations } from 'next-intl';
 import { useMemo } from 'react';
 import { TransactionsList } from '@/components/transaction/TransactionsList';
+import { Card } from '@/components/ui/Card';
 import { defaultFilters } from '@/lib/transaction/filters';
 
 export interface GroupTransactionsTabProps {
@@ -16,8 +17,9 @@ export function GroupTransactionsTab({ groupId }: GroupTransactionsTabProps) {
   const t = useTranslations('transactions.page');
   const filters = useMemo(() => defaultFilters(`group:${groupId}`), [groupId]);
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+    <Card
+      as="section"
+      padding="lg"
       data-testid="group-transactions-tab"
       aria-labelledby="group-transactions-title"
     >
@@ -28,6 +30,6 @@ export function GroupTransactionsTab({ groupId }: GroupTransactionsTabProps) {
         {t('groupTabTitle')}
       </h2>
       <TransactionsList filters={filters} lockScope showFilters showControls showStar />
-    </section>
+    </Card>
   );
 }

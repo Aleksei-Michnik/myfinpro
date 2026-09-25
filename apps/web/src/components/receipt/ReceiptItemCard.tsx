@@ -11,6 +11,7 @@
 import { useTranslations } from 'next-intl';
 import { ProductThumb } from '@/components/product/ProductThumb';
 import { inputClass } from '@/components/ui/input-styles';
+import { Select } from '@/components/ui/Select';
 import type { ReceiptItem } from '@/lib/receipt/types';
 import type { CategoryDto } from '@/lib/transaction/types';
 
@@ -221,12 +222,13 @@ export function ReceiptItemCard({
 
       <label className={labelClass}>
         <span>{t('itemCategory')}</span>
-        <select
+        <Select
           value={row.categoryId ?? ''}
           onChange={(e) => onChange({ categoryId: e.target.value || null })}
           disabled={!editable}
           data-testid={`item-category-${index}`}
-          className={inputClass}
+          size="sm"
+          wrapperClassName="contents"
         >
           <option value="">{t('itemNoCategory')}</option>
           {categories.map((c) => (
@@ -234,7 +236,7 @@ export function ReceiptItemCard({
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   );

@@ -18,7 +18,9 @@ import { CreateBudgetDialog } from '@/components/budget/CreateBudgetDialog';
 import { TransactionsScopeTabs } from '@/components/transaction/TransactionsScopeTabs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { useToast } from '@/components/ui/Toast';
 import { useBudgets } from '@/lib/budget/budget-context';
@@ -223,18 +225,20 @@ export function BudgetsClient() {
 
   return (
     <main className="container mx-auto max-w-3xl space-y-4 px-4 py-8" data-testid="budgets-page">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          onClick={() => setCreateOpen(true)}
-          data-testid="budgets-new"
-        >
-          {t('newBudget')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('title')}
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            data-testid="budgets-new"
+          >
+            {t('newBudget')}
+          </Button>
+        }
+      />
 
       <TransactionsScopeTabs
         current={committed.scope}
@@ -280,12 +284,7 @@ export function BudgetsClient() {
             ))}
           </div>
         ) : budgets.length === 0 ? (
-          <div
-            className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
-            data-testid="budgets-empty"
-          >
-            {t('empty')}
-          </div>
+          <EmptyState data-testid="budgets-empty" title={t('empty')} />
         ) : (
           <ul className="space-y-2" data-testid="budgets-list">
             {budgets.map((budget) => (

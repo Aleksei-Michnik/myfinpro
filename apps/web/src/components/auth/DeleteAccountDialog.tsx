@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/lib/auth/auth-context';
 
@@ -44,72 +45,65 @@ export function DeleteAccountDialog({ isOpen, onClose }: DeleteAccountDialogProp
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      data-testid="delete-account-dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-dialog-title"
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('deleteAccount')}
+      titleId="delete-dialog-title"
+      testId="delete-account-dialog"
+      danger
+      busy={isLoading}
     >
-      <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h2
-          id="delete-dialog-title"
-          className="mb-4 text-lg font-semibold text-red-600 dark:text-red-400"
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400" data-testid="delete-warning">
+        {t('deleteWarning')}
+      </p>
+
+      {error && (
+        <div
+          className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
+          role="alert"
+          data-testid="delete-error"
         >
-          {t('deleteAccount')}
-        </h2>
+          {error}
+        </div>
+      )}
 
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400" data-testid="delete-warning">
-          {t('deleteWarning')}
-        </p>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <Input
+          name="confirm-email"
+          type="email"
+          label={t('confirmEmail')}
+          placeholder={user?.email}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={isLoading}
+          autoComplete="off"
+        />
 
-        {error && (
-          <div
-            className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300"
-            role="alert"
-            data-testid="delete-error"
-          >
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <Input
-            name="confirm-email"
-            type="email"
-            label={t('confirmEmail')}
-            placeholder={user?.email}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            className="flex-1"
+            onClick={handleClose}
             disabled={isLoading}
-            autoComplete="off"
-          />
-
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              className="flex-1"
-              onClick={handleClose}
-              disabled={isLoading}
-              data-testid="cancel-delete-btn"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              className="flex-1 !bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
-              disabled={!emailMatches || isLoading}
-              data-testid="confirm-delete-btn"
-            >
-              {isLoading ? '...' : t('deleteButton')}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+            data-testid="cancel-delete-btn"
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="submit"
+            variant="danger"
+            size="md"
+            className="flex-1"
+            disabled={!emailMatches || isLoading}
+            data-testid="confirm-delete-btn"
+          >
+            {isLoading ? '...' : t('deleteButton')}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

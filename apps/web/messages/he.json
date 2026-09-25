@@ -28,6 +28,9 @@
     }
   },
   "ui": {
+    "dialog": {
+      "close": "סגירה"
+    },
     "loading": {
       "pageProgressLabel": "טוען",
       "overlayDefault": "טוען…",
