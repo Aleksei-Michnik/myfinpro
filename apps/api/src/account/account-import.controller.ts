@@ -16,6 +16,7 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -25,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtOrApiTokenGuard } from '../auth/guards/jwt-or-api-token.guard';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CustomThrottle } from '../common/decorators/throttle.decorator';
 import { AccountImportService } from './account-import.service';
@@ -50,7 +52,7 @@ export class AccountImportController {
   constructor(private readonly service: AccountImportService) {}
 
   @CustomThrottle({ limit: 10, ttl: 60000 })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtOrApiTokenGuard)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth()
@@ -61,7 +63,9 @@ export class AccountImportController {
       'currency and are deduplicated by a server-computed fingerprint, so re-importing an ' +
       'overlapping statement is safe: duplicates are counted, never rejected. The matcher ' +
       'runs inline and stores a suggestion on every new line. A statement longer than the ' +
-      'line cap is sent in consecutive chunks, one import each.',
+      'line cap is sent in consecutive chunks, one import each. This is the ONE route that ' +
+      'also accepts a personal access token (20.7, design §6.4): a `mfp_…` bearer with the ' +
+      '`accounts:import` scope, which is what the user-run connector pushes with.',
   })
   @ApiBody({ type: CreateImportDto })
   @ApiCreatedResponse({
@@ -73,7 +77,8 @@ export class AccountImportController {
       'Validation failed: ACCOUNT_IMPORT_TOO_LARGE, ACCOUNT_IMPORT_INVALID_LINE (index only) ' +
       'or ACCOUNT_CURRENCY_MISMATCH',
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT / API token' })
+  @ApiForbiddenResponse({ description: "API_TOKEN_SCOPE — the token lacks 'accounts:import'" })
   @ApiNotFoundResponse({ description: 'Account not found or not visible to the caller' })
   @ApiConflictResponse({ description: 'Account is archived' })
   @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded (10/min)' })
