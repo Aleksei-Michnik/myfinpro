@@ -197,6 +197,26 @@ the id now), a duplicated "Transfer to" label, the toolbar sticking under the ap
 (sticky only from `lg:`), and a seed that used `reference` where the DTO says `externalId`.
 Hebrew strings are a first draft; `i18n-translator` review pending for 20.3 + 20.5.
 
+### Security review (2026-09-25)
+
+Verdict on the 20.3 + 20.5 diff: **merge**, five low findings, all closed in `6c4ee00` except the
+one that was a product call (taken here, reversible): the apply-suggestions loop shared by the
+wizard and the queue now stops on a round that applies nothing or leaves the remainder unchanged,
+with a hard ceiling; the decoder reads the first sheet only with a row cap (a zip-bomb workbook
+cannot expand past the size cap into a frozen tab); Enter inside a native select never commits a
+row; digit runs of five or more are redacted from the file name before it is sent (bank exports
+put the account or card number there — design §9). The SheetJS CDN dependency is pinned with a
+lockfile integrity but sits outside registry advisories (`wiki/accounts-and-sync.md`). Verified
+clean: no HTML from untrusted text, nothing binary leaves the browser, `last4` only, the API stays
+the enforcement point, bulk apply confirms above 20, no topology in files or messages.
+
+### Hebrew (2026-09-25)
+
+`i18n-translator` pass on `accounts.*` (`25ee008`): 19 strings — imperative buttons like the
+sibling forms, direct validation phrasing, participle badges, an agreement fix in `emptyGap`,
+impersonal `decided.ignored`; layout-sensitive strings flagged for a look in RTL: the mirrored
+`row.transferTo` arrow, the shortcut list, the numeric ranges in validation.
+
 ### Tests
 
 web unit 1458 (138 files; new: decoder 12, queue helpers, line card against the real messages,
