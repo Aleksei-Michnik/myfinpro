@@ -8,7 +8,13 @@ import {
   type ApiTokenScope,
   type ApiTokenSummary,
 } from '@myfinpro/shared';
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AUTH_ERRORS } from '../constants/auth-errors';
@@ -51,6 +57,16 @@ export class ApiTokenService {
 
   /** Mint a token. The raw value exists only in the response — never again. */
   async create(userId: string, dto: CreateApiTokenDto): Promise<ApiTokenCreated> {
+    // A token that is already expired is a dead token the user would have to
+    // debug at the connector; refuse it here instead of shipping the secret.
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (expiresAt && expiresAt <= new Date()) {
+      throw new BadRequestException({
+        message: 'expiresAt must be in the future',
+        errorCode: AUTH_ERRORS.API_TOKEN_EXPIRY_INVALID,
+      });
+    }
+
     const activeCount = await this.prisma.apiToken.count({
       where: {
         userId,
@@ -76,7 +92,7 @@ export class ApiTokenService {
         userId,
         name: dto.name,
         scopes: scopes.join(','),
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        expiresAt,
       },
     });
     await this.writeAudit(userId, 'API_TOKEN_CREATED', token.id, {

@@ -169,12 +169,27 @@ describe('Personal access tokens (integration)', () => {
     expect(res.body.errorCode).toBe('API_TOKEN_SCOPE');
   });
 
-  it('401s an expired token', async () => {
+  it('refuses to mint a token whose expiry has already passed', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/auth/tokens')
+      .set(auth(owner.accessToken))
+      .send({ name: 'Born expired', expiresAt: new Date(Date.now() - 60_000).toISOString() })
+      .expect(400);
+    expect(res.body.errorCode).toBe('API_TOKEN_EXPIRY_INVALID');
+  });
+
+  it('401s a token that has since expired', async () => {
     const created = await request(app.getHttpServer())
       .post('/api/v1/auth/tokens')
       .set(auth(owner.accessToken))
-      .send({ name: 'Already expired', expiresAt: '2026-09-01T00:00:00.000Z' })
+      .send({ name: 'Expires soon', expiresAt: new Date(Date.now() + 3_600_000).toISOString() })
       .expect(201);
+
+    // Time passes — the row is the clock the guard reads.
+    await prisma.apiToken.update({
+      where: { id: created.body.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
 
     await request(app.getHttpServer())
       .post(`/api/v1/accounts/${accountId}/imports`)

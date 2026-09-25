@@ -59,7 +59,10 @@ export class ApiTokenController {
   })
   @ApiBody({ type: CreateApiTokenDto })
   @ApiCreatedResponse({ description: 'The token, shown once', type: ApiTokenCreatedResponseDto })
-  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiBadRequestResponse({
+    description:
+      'Validation failed, or API_TOKEN_EXPIRY_INVALID — `expiresAt` is not in the future',
+  })
   @ApiUnauthorizedResponse({ description: 'Invalid or missing JWT token' })
   @ApiConflictResponse({
     description: `API_TOKEN_LIMIT_REACHED — at most ${API_TOKEN_MAX_ACTIVE} active tokens per user`,

@@ -5,9 +5,10 @@ import {
   API_TOKEN_RANDOM_LENGTH,
   API_TOKEN_SCOPE_ACCOUNTS_IMPORT,
 } from '@myfinpro/shared';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AUTH_ERRORS } from '../constants/auth-errors';
 import { ApiTokenService } from './api-token.service';
 import { TokenService } from './token.service';
 
@@ -109,6 +110,30 @@ describe('ApiTokenService', () => {
         entityId: 'token-1',
       });
       expect(JSON.stringify(audit)).not.toContain(result.token);
+    });
+
+    it('accepts an expiry in the future and stores it as a date', async () => {
+      const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+
+      const result = await service.create('user-1', { name: 'Expiring', expiresAt });
+
+      expect(result.expiresAt).toBe(expiresAt);
+      expect(mockPrisma.apiToken.create.mock.calls[0][0].data.expiresAt).toEqual(
+        new Date(expiresAt),
+      );
+    });
+
+    it('refuses an expiry that has already passed — a dead token is never minted', async () => {
+      const dead = service.create('user-1', {
+        name: 'Born expired',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+      });
+
+      await expect(dead).rejects.toBeInstanceOf(BadRequestException);
+      await expect(dead).rejects.toMatchObject({
+        response: { errorCode: AUTH_ERRORS.API_TOKEN_EXPIRY_INVALID },
+      });
+      expect(mockPrisma.apiToken.create).not.toHaveBeenCalled();
     });
 
     it('rejects a new token once the active cap is reached', async () => {

@@ -38,7 +38,9 @@ export class CreateApiTokenDto {
   scopes?: ApiTokenScope[];
 
   @ApiPropertyOptional({
-    description: 'ISO 8601 instant after which the token stops working. Omit for no expiry.',
+    description:
+      'ISO 8601 instant after which the token stops working, and it must be in the future ' +
+      '(a past value is refused with API_TOKEN_EXPIRY_INVALID). Omit for no expiry.',
     example: '2027-01-01T00:00:00.000Z',
   })
   @IsOptional()
