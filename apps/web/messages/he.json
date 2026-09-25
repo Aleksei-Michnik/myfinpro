@@ -1552,24 +1552,24 @@
       "reportedBalance": "יתרה לפי הבנק",
       "reportedBalanceAt": "…בתאריך",
       "reportedHint": "המספר של הבנק עצמו — ייבוא דפי חשבון מעדכן אותו בשבילכם.",
-      "save": "שמירה",
+      "save": "שמור",
       "cancel": "ביטול",
-      "close": "סגירה",
+      "close": "סגור",
       "saving": "שומר…",
       "discardChanges": "לבטל את השינויים?",
-      "discard": "ביטול שינויים",
+      "discard": "בטל",
       "keepEditing": "המשך עריכה",
       "errorGeneric": "לא ניתן היה לשמור את החשבון.",
       "validation": {
-        "nameRequired": "יש להזין שם.",
+        "nameRequired": "הזן שם.",
         "nameTooLong": "השם יכול להכיל עד 100 תווים.",
-        "kindRequired": "יש לבחור סוג.",
-        "currencyInvalid": "יש לבחור מטבע נתמך.",
-        "scopeRequired": "יש לבחור שיוך.",
-        "last4Invalid": "יש להזין 2 עד 4 ספרות.",
-        "openingDateRequired": "יש לקבוע את תאריך יתרת הפתיחה.",
+        "kindRequired": "בחר סוג.",
+        "currencyInvalid": "בחר מטבע נתמך.",
+        "scopeRequired": "בחר שיוך.",
+        "last4Invalid": "הזן 2 עד 4 ספרות.",
+        "openingDateRequired": "קבע את תאריך יתרת הפתיחה.",
         "billingDayInvalid": "יום החיוב חייב להיות בין 1 ל-28.",
-        "billingAccountRequired": "יש לבחור את חשבון הבנק שממנו הכרטיס מחויב."
+        "billingAccountRequired": "בחר את חשבון הבנק שממנו הכרטיס מחויב."
       }
     },
     "select": {
@@ -1585,9 +1585,9 @@
       "to": "לחשבון",
       "hint": "העברות לעולם לא נספרות כהוצאה.",
       "validation": {
-        "fromRequired": "יש לבחור את החשבון שממנו הכסף יוצא.",
-        "toRequired": "יש לבחור את החשבון שאליו הכסף עובר.",
-        "sameAccount": "יש לבחור שני חשבונות שונים.",
+        "fromRequired": "בחר את החשבון שממנו הכסף יוצא.",
+        "toRequired": "בחר את החשבון שאליו הכסף עובר.",
+        "sameAccount": "בחר שני חשבונות שונים.",
         "currencyMismatch": "שני החשבונות חייבים להיות באותו מטבע."
       }
     },
@@ -1597,8 +1597,8 @@
     },
     "row": {
       "transferTo": "← {name}",
-      "bankConfirmed": "אושר על ידי הבנק",
-      "viewAccount": "לחשבון",
+      "bankConfirmed": "מאושר על ידי הבנק",
+      "viewAccount": "צפייה בחשבון",
       "bankConfirmedHint": "שורה מדף החשבון של הבנק תואמת לתנועה הזו."
     },
     "overview": {
@@ -1623,7 +1623,7 @@
       "account": "חשבון",
       "drop": "גררו לכאן את דף החשבון",
       "browse": "בחירת קובץ",
-      "camera": "צילום",
+      "camera": "צילום תמונה",
       "formats": "CSV, XLSX או XLS",
       "privacy": "הקובץ מפוענח בדפדפן ולעולם לא מועלה. רק השורות המפוענחות נשלחות.",
       "preset": "פורמט שזוהה: {name}",
@@ -1691,7 +1691,7 @@
         "invalidLine": "לא ניתן לייבא את שורה {index}.",
         "currency": "מטבע דף החשבון אינו תואם לחשבון.",
         "archived": "החשבון בארכיון.",
-        "generic": "הייבוא נכשל. נסו שוב."
+        "generic": "הייבוא נכשל. נסה שוב."
       }
     },
     "detail": {
@@ -1746,7 +1746,7 @@
         "matched": "הותאמה",
         "created": "נוצרה",
         "transferred": "נרשמה כהעברה",
-        "ignored": "התעלמנו ממנה"
+        "ignored": "התעלמו ממנה"
       },
       "undoBar": "{description} — {decision}",
       "undo": "ביטול",
@@ -1754,7 +1754,7 @@
       "shortcuts": "קיצורי מקלדת",
       "shortcutList": "↑↓ מעבר · Enter אישור · M התאמה · C יצירה · T העברה · I התעלמות · S דילוג · U ביטול · Esc יציאה",
       "emptyReconciled": "אין מה לסקור. הספרים שלכם תואמים לבנק.",
-      "emptyGap": "אין מה לסקור, אבל {amount} עדיין לא מוסברים. ייבאו דף חשבון עדכני יותר.",
+      "emptyGap": "אין מה לסקור, אבל {amount} עדיין לא מוסבר. ייבאו דף חשבון עדכני יותר.",
       "emptyNoImport": "עדיין לא יובא דף חשבון.",
       "emptyFilter": "אין שורות שמתאימות לסינון הזה.",
       "actionFailed": "ההחלטה לא נקלטה.",
