@@ -2,6 +2,8 @@ import {
   ACCOUNT_IMPORT_MAX_LINES,
   decodeCursor,
   encodeCursor,
+  IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH,
+  IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH,
   normalizeDescription,
   sanitizeStatementText,
   STATEMENT_DESCRIPTION_MAX_LENGTH,
@@ -17,11 +19,7 @@ import {
   AccountImportResponseDto,
 } from './dto/account-import-response.dto';
 import { CreateImportDto } from './dto/create-import.dto';
-import {
-  IMPORT_LINE_CATEGORY_HINT_MAX_LENGTH,
-  IMPORT_LINE_EXTERNAL_ID_MAX_LENGTH,
-  ImportLineDto,
-} from './dto/import-line.dto';
+import { ImportLineDto } from './dto/import-line.dto';
 import { ListImportsQueryDto } from './dto/list-imports-query.dto';
 import type { SuggestionSnapshot } from './matching/statement-matcher';
 import { StatementMatchingService } from './matching/statement-matching.service';
