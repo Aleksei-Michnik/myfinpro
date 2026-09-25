@@ -44,6 +44,7 @@ import {
   computeTransactionRecipients,
   type RecipientAttribution,
 } from './utils/transaction-event-recipients';
+import { buildTransactionVisibilityWhere } from './utils/transaction-visibility';
 
 /**
  * Ceiling of the `amount_cents` INT column, from the one shared money limit
@@ -68,7 +69,7 @@ export const SUPPORTED_CREATE_TYPES = ['ONE_TIME', 'RECURRING'] as const;
 export type SupportedCreateType = (typeof SUPPORTED_CREATE_TYPES)[number];
 
 /** Compact category projection embedded in transaction responses. */
-const CATEGORY_SUMMARY_SELECT = {
+export const CATEGORY_SUMMARY_SELECT = {
   id: true,
   slug: true,
   name: true,
@@ -100,7 +101,7 @@ export const TRANSACTION_DETAIL_INCLUDE = {
 } as const;
 
 /** Build the include with the `stars.where.userId` set to the viewer. */
-function buildDetailInclude(userId: string) {
+export function buildDetailInclude(userId: string) {
   return {
     category: TRANSACTION_DETAIL_INCLUDE.category,
     transactionCategories: TRANSACTION_DETAIL_INCLUDE.transactionCategories,
@@ -229,28 +230,6 @@ export class TransactionService {
   ) {}
 
   /**
-   * Visibility predicate (design §5.2): a transaction is visible to `userId` iff at
-   * least one of its attributions is personal to them OR targets a group they
-   * are a member of. Shared between list() (scope=all), findByIdForUser(), and
-   * update() — one source of truth for access logic.
-   */
-  private buildVisibilityWhere(userId: string): Prisma.TransactionWhereInput {
-    return {
-      attributions: {
-        some: {
-          OR: [
-            { scopeType: 'personal', userId },
-            {
-              scopeType: 'group',
-              group: { memberships: { some: { userId } } },
-            },
-          ],
-        },
-      },
-    };
-  }
-
-  /**
    * Public, lightweight visibility guard — cross-service helper.
    *
    * Throws `NotFoundException` with `TRANSACTION_NOT_FOUND` when `transactionId` does
@@ -264,7 +243,7 @@ export class TransactionService {
    */
   async assertVisible(userId: string, transactionId: string): Promise<void> {
     const visible = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       select: { id: true },
     });
     if (!visible) {
@@ -273,6 +252,102 @@ export class TransactionService {
         errorCode: TRANSACTION_ERRORS.TRANSACTION_NOT_FOUND,
       });
     }
+  }
+
+  /**
+   * Phase 20 · Iteration 20.4 — enrich a transaction that a statement line
+   * confirmed (design §5.5, "line → transaction").
+   *
+   * The bank has seen this money, so: the transaction is placed on the
+   * account when it floated unplaced, and a `PENDING` / `DUE` occurrence
+   * becomes `POSTED`. Nothing else is rewritten — `occurredAt` stays the
+   * user's date, the line keeps the bank's `postedAt`.
+   *
+   * This is the ONE write path for that enrichment; the account module never
+   * writes transaction rows itself. It deliberately does not go through
+   * `update()`: that endpoint is creator-only, refuses generated occurrences
+   * (which §5.1 explicitly accepts as candidates) and cannot set `status`.
+   * Access here is the reconciler's: any user who can see the transaction
+   * and the account may confirm it.
+   *
+   * Idempotent — confirming an already-placed, already-posted transaction
+   * changes nothing and emits nothing.
+   */
+  async confirmByStatementLine(
+    actorId: string,
+    transactionId: string,
+    accountId: string,
+    lineId: string,
+  ): Promise<TransactionSummaryDto> {
+    const existing = await this.prisma.transaction.findFirst({
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(actorId)] },
+      include: buildDetailInclude(actorId),
+    });
+    if (!existing) {
+      throw new NotFoundException({
+        message: 'Transaction not found',
+        errorCode: TRANSACTION_ERRORS.TRANSACTION_NOT_FOUND,
+      });
+    }
+
+    const data: Prisma.TransactionUncheckedUpdateInput = {};
+    if (existing.accountId === null) {
+      await this.validateAccountPlacement(actorId, {
+        accountId,
+        transferAccountId: existing.transferAccountId,
+        direction: existing.direction as 'IN' | 'OUT',
+        currency: existing.currency,
+        type: existing.type,
+        categoryIds: [
+          existing.categoryId,
+          ...existing.transactionCategories.map((tc) => tc.categoryId),
+        ],
+        existingAccountId: null,
+        existingTransferAccountId: existing.transferAccountId,
+      });
+      data.accountId = accountId;
+    }
+    if (existing.status === 'PENDING' || existing.status === 'DUE') {
+      data.status = 'POSTED';
+    }
+
+    const summaryOf = (row: unknown): TransactionSummaryDto =>
+      mapTransactionToSummary(row as TransactionWithRelations, {
+        starredByMe: existing.stars.length > 0,
+        commentCount: existing._count.comments,
+        hasDocuments: existing._count.documents > 0,
+      });
+
+    if (Object.keys(data).length === 0) return summaryOf(existing);
+
+    const updated = await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data,
+      include: buildDetailInclude(actorId),
+    });
+
+    void this.writeAudit(actorId, transactionId, 'TRANSACTION_UPDATED', {
+      changed: Object.keys(data).sort(),
+      reason: 'statement_match',
+      statementLineId: lineId,
+    });
+
+    const summary = summaryOf(updated);
+    const recipients = await computeTransactionRecipients(
+      this.prisma,
+      existing.attributions as RecipientAttribution[],
+      existing.createdById,
+    );
+    this.eventBus.publish({
+      type: 'transaction.updated',
+      userIds: recipients,
+      transaction: summary,
+    });
+
+    this.logger.log(
+      `Transaction ${transactionId} confirmed by statement line ${lineId} (account ${accountId}) for user ${actorId}`,
+    );
+    return summary;
   }
 
   /**
@@ -636,7 +711,7 @@ export class TransactionService {
       };
     } else {
       // 'all' (default) — shared helper with findByIdForUser / update.
-      visibilityClause = this.buildVisibilityWhere(userId);
+      visibilityClause = buildTransactionVisibilityWhere(userId);
     }
 
     const andClauses: Prisma.TransactionWhereInput[] = [visibilityClause];
@@ -765,7 +840,7 @@ export class TransactionService {
    */
   async findByIdForUser(userId: string, transactionId: string): Promise<TransactionSummaryDto> {
     const row = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
 
@@ -800,7 +875,7 @@ export class TransactionService {
   ): Promise<TransactionSummaryDto | null> {
     // 1. Fetch with visibility guard — 404 when not visible or missing.
     const existing = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
 
@@ -1253,7 +1328,7 @@ export class TransactionService {
   ): Promise<CascadeEditResponseDto> {
     // 1. Fetch parent with visibility guard.
     const existing = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       include: buildDetailInclude(userId),
     });
     if (!existing) {
@@ -2152,7 +2227,7 @@ export class TransactionService {
   async toggleStar(userId: string, transactionId: string): Promise<ToggleStarResponseDto> {
     // 1. Visibility check — lightweight, just need the id.
     const visible = await this.prisma.transaction.findFirst({
-      where: { AND: [{ id: transactionId }, this.buildVisibilityWhere(userId)] },
+      where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       select: { id: true },
     });
     if (!visible) {
