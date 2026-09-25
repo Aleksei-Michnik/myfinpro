@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ApiTokenController } from './api-token.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtConfigModule } from './jwt-config.module';
 import { AccountCleanupService } from './services/account-cleanup.service';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { AccountMergeService } from './services/account-merge.service';
+import { ApiTokenService } from './services/api-token.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { OAuthService } from './services/oauth.service';
 import { PasswordResetService } from './services/password-reset.service';
@@ -19,11 +21,12 @@ import { LocalStrategy } from './strategies/local.strategy';
 
 @Module({
   imports: [PrismaModule, PassportModule, JwtConfigModule],
-  controllers: [AuthController],
+  controllers: [AuthController, ApiTokenController],
   providers: [
     AccountCleanupService,
     AccountDeletionService,
     AccountMergeService,
+    ApiTokenService,
     AuthService,
     EmailVerificationService,
     OAuthService,
@@ -37,6 +40,7 @@ import { LocalStrategy } from './strategies/local.strategy';
   ],
   exports: [
     AccountDeletionService,
+    ApiTokenService,
     AuthService,
     EmailVerificationService,
     OAuthService,

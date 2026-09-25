@@ -1,22 +1,23 @@
-# Data model (checked 2026-09-24)
+# Data model (checked 2026-09-25)
 
 Read when: you touch `apps/api/prisma/schema.prisma`, write a migration, or need to know where a
 fact is stored and who may see it.
 
-Source of truth is `apps/api/prisma/schema.prisma` (852 lines, 33 models, **zero Prisma enums**).
+Source of truth is `apps/api/prisma/schema.prisma` (877 lines, 34 models, **zero Prisma enums**).
 Naming and file-layout rules are in [conventions.md](conventions.md); this page is the map.
 
 ## Identity and auth
 
-| Model                                          | Purpose                    | Key fields / relations                                                                                                                     | Notable indexes                                        | Soft delete           |
-| ---------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | --------------------- |
-| `User` → `users`                               | account + preferences      | `email` unique, `passwordHash?`, `defaultCurrency`, `locale`, `timezone`, `dueReminderDays`, `llmProvider/llmModel`, `scheduledDeletionAt` | `email`, `createdAt`, `scheduledDeletionAt`            | **yes** (`deletedAt`) |
-| `UserLlmCredential` → `user_llm_credentials`   | BYOK provider keys         | `encryptedValue` (`v1:<iv>:<tag>:<ct>`, AES-256-GCM under `LLM_SECRETS_ENCRYPTION_KEY`), `keyHint` = last 4 chars                          | `@@unique([userId, provider])`                         | no                    |
-| `RefreshToken` → `refresh_tokens`              | rotation + reuse detection | `tokenHash` unique, `revokedAt`, `replacedBy`, `userAgent`, `ipAddress`                                                                    | `userId`, `expiresAt`                                  | no                    |
-| `OAuthProvider` → `oauth_providers`            | Google/Telegram linkage    | `metadata Json?`                                                                                                                           | `@@unique([provider, providerId])`, `(provider,email)` | no                    |
-| `EmailVerificationToken`, `PasswordResetToken` | one-shot tokens            | `tokenHash` unique, `expiresAt`, `usedAt`                                                                                                  | `userId`, `expiresAt`                                  | no                    |
-| `AuditLog` → `audit_logs`                      | who did what               | `userId?`, `action`, `entity`, `entityId?`, `details Json?`, `ipAddress`, `userAgent`                                                      | `userId`, `action`, `createdAt`                        | no                    |
-| `HealthCheck` → `health_checks`                | Phase 0 connection probe   | autoincrement `Int` id — the only non-uuid id in the schema                                                                                | —                                                      | no                    |
+| Model                                          | Purpose                    | Key fields / relations                                                                                                                          | Notable indexes                                        | Soft delete           |
+| ---------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------- |
+| `User` → `users`                               | account + preferences      | `email` unique, `passwordHash?`, `defaultCurrency`, `locale`, `timezone`, `dueReminderDays`, `llmProvider/llmModel`, `scheduledDeletionAt`      | `email`, `createdAt`, `scheduledDeletionAt`            | **yes** (`deletedAt`) |
+| `UserLlmCredential` → `user_llm_credentials`   | BYOK provider keys         | `encryptedValue` (`v1:<iv>:<tag>:<ct>`, AES-256-GCM under `LLM_SECRETS_ENCRYPTION_KEY`), `keyHint` = last 4 chars                               | `@@unique([userId, provider])`                         | no                    |
+| `RefreshToken` → `refresh_tokens`              | rotation + reuse detection | `tokenHash` unique, `revokedAt`, `replacedBy`, `userAgent`, `ipAddress`                                                                         | `userId`, `expiresAt`                                  | no                    |
+| `ApiToken` → `api_tokens`                      | scoped connector tokens    | `tokenHash` unique, `name`, `scopes` (comma-separated, v1 `accounts:import`), `lastUsedAt`, `expiresAt?`, `revokedAt?` — max 10 active per user | `userId`                                               | no                    |
+| `OAuthProvider` → `oauth_providers`            | Google/Telegram linkage    | `metadata Json?`                                                                                                                                | `@@unique([provider, providerId])`, `(provider,email)` | no                    |
+| `EmailVerificationToken`, `PasswordResetToken` | one-shot tokens            | `tokenHash` unique, `expiresAt`, `usedAt`                                                                                                       | `userId`, `expiresAt`                                  | no                    |
+| `AuditLog` → `audit_logs`                      | who did what               | `userId?`, `action`, `entity`, `entityId?`, `details Json?`, `ipAddress`, `userAgent`                                                           | `userId`, `action`, `createdAt`                        | no                    |
+| `HealthCheck` → `health_checks`                | Phase 0 connection probe   | autoincrement `Int` id — the only non-uuid id in the schema                                                                                     | —                                                      | no                    |
 
 Tokens are never stored in the clear: `tokenHash` everywhere. Deleting a user cascades to every
 table above.
@@ -124,8 +125,8 @@ Nothing is owned by a group directly; ownership is expressed by side tables.
 
 ## Migrations
 
-22 directories under `apps/api/prisma/migrations/`, named `<YYYYMMDDHHMMSS>_<topic>`, from
-`20260314123440_phase1_auth_schema` to `20260725110000_receipt_extraction_reasoning`. Timestamps are
+25 directories under `apps/api/prisma/migrations/`, named `<YYYYMMDDHHMMSS>_<topic>`, from
+`20260314123440_phase1_auth_schema` to `20260925130000_phase20_7_api_tokens`. Timestamps are
 hand-set rather than left to `migrate dev`, which is how ordering stays deliberate when several
 phases are in flight: Prisma applies directories in lexical order, so a branch that lands late must
 carry a timestamp after everything already merged. Never edit an applied migration.
