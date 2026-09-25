@@ -225,6 +225,37 @@ wizard step 1 against the real messages, helpers) · e2e `accounts.spec.ts` gree
 decided filter → re-import all duplicates → imports and transactions tabs → edit → archive →
 delete). Gate: typecheck, lint, format, i18n parity clean.
 
+## 20.7 — Connector: api tokens (2026-09-25)
+
+Per design §3, §6.4 and `docs/ui/20.7-connector-tokens.md`. API side merged as `6fd15bf` (track
+`p20/accounts-api`, six commits: `8c3848e` table + scope, `d6bef53` create / list / revoke,
+`733bed6` the import-route guard, `cf9ff3c` integration, `83dc011` wiki, `1e69f3a` expiry rule).
+Web settings page and the `apps/connector` CLI are on their own tracks (entries follow).
+
+### Scope (API)
+
+- **`api_tokens`** — migration `20260925130000_phase20_7_api_tokens` (additive; `migrate diff`
+  clean): `tokenHash` unique (sha256 through the refresh-token hasher), `scopes` (one scope exists,
+  `accounts:import`), `name`, `lastUsedAt`, `expiresAt`, `revokedAt`. Shared constants and types in
+  `packages/shared/src/types/api-token.types.ts` (`API_TOKEN_PREFIX = 'mfp_'`, 40 url-safe random
+  characters, `API_TOKEN_MAX_ACTIVE = 10`, `ApiTokenSummary`, `ApiTokenCreated`).
+- **`/auth/tokens`** (JWT only — a token can never manage tokens): `POST` → 201 with the raw
+  token exactly once (409 `API_TOKEN_LIMIT_REACHED` past ten active, 400
+  `API_TOKEN_EXPIRY_INVALID` for a past expiry), `GET` → live tokens without secrets (expired ones
+  listed with their `expiresAt` so the UI can label them), `DELETE /:id` → 204 (404 for unknown,
+  revoked or another user's). Audit `API_TOKEN_CREATED` / `API_TOKEN_REVOKED` with scopes and
+  expiry only; `lastUsedAt` stamped at most once a minute.
+- **`JwtOrApiTokenGuard`** on `POST /accounts/:accountId/imports` only: JWT first, else an
+  `mfp_` bearer with `accounts:import` (403 `API_TOKEN_SCOPE` otherwise, 401 for revoked, expired,
+  unknown or a deactivated user). Every other route stays JWT-only — proven by the integration
+  case that `GET /accounts` with a token is 401. `request.user` carries `tokenId` for audit.
+
+### Tests (API)
+
+api unit 1406 (95 suites; `ApiTokenService` 18, guard 6) · integration `auth-tokens` 8 +
+`accounts-import*` 21 = 29 green (verified in the orchestrator's own run after the merge base).
+Security review of the token, settings and CLI tracks together: pending until all three are in.
+
 ## 20.4 — Statement parsing + import API (2026-09-25)
 
 Per design §4.1, §5, §6.2. Merged as `6663b77` (track branch `p20/import-api`, eight commits). No
