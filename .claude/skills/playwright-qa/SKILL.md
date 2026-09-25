@@ -49,7 +49,9 @@ and start again (stale Turbopack cache); (4) a list renders a card **and** a tab
 so count inside `transactions-list-desktop` (or the card list), never on the page; (5) the
 retry dialog carries no `dialog` role — detect it by its text or testid, and know that a full
 page load of `/transactions` in dev opens it on `develop` too (`wiki/gotchas.md`); (6) a
-Hebrew run needs a user whose profile locale is `he` — the cookie alone is overwritten at login.
+Hebrew run needs a user whose profile locale is `he` — the cookie alone is overwritten at login. (7) A prefix locator
+(`[data-testid^="import-row-"]`) also matches longer testids such as `import-row-counts-…` —
+anchor it on the element (`tr[data-testid^=…]`) before trusting a count.
 
 Check, and screenshot, every combination that the conventions promise:
 

@@ -157,6 +157,54 @@ green (create → place → transfer → balances 650 / 250 → dashboard → fi
 delete); `payments.spec.ts` repaired (it targeted the pre-8.20 route). Gate: typecheck, lint,
 format, i18n parity clean.
 
+## 20.5 — Statement import & review UI (2026-09-25)
+
+Per design §4.1, §6.2, §7 and `docs/ui/20.5-statement-import-review.md`. Merged as `fb4e517`
+(track branch `p20/accounts-ui`, five commits: `a5056bb` decoder + client methods, `4489106`
+import wizard, `698e525` detail page + review queue, `539eb00` transactions-list abort fix,
+the e2e). Built by the main session (subagents still limited).
+
+### Scope
+
+- **Decoder** — `lib/statement/decode.ts`: CSV as UTF-8 or windows-1255, XLSX / BIFF `.xls` /
+  HTML-as-`.xls` through SheetJS **0.20.3 from the SheetJS CDN tarball** (pinned by URL in
+  `apps/web/package.json`, code-page tables wired in, `raw: true` so day-first dates stay text),
+  5 MB cap, first sheet only. Nothing binary leaves the browser.
+- **Client** — `AccountProvider` gains `createImport`, `fetchImports`, `fetchLines`, `matchLine`,
+  `createFromLine`, `transferFromLine`, `ignoreLine`, `unlinkLine`, `applySuggestions`; web types
+  mirror the line / suggestion / import / apply DTOs.
+- **`ImportStatementDialog`** — three steps; preview shows the detected format, rows, period,
+  statement balance, first rows and warnings; unknown formats open `StatementColumnMapper`; lines
+  post in **chunks of `ACCOUNT_IMPORT_MAX_LINES`** (design §6.2 — the spec's "block above the
+  cap" was superseded by the design's chunking), statement balance on the last chunk; step 3 sums
+  the chunks and offers the review link and a one-click apply. Entry points: `/accounts` header,
+  card menu (account locked), detail page. `FileCaptureButtons` gained `camera={false}`.
+- **`/accounts/[accountId]`** — balances, URL-synced tabs, Review by default while lines are
+  pending; `AccountReviewQueue` + `StatementLineCard` + `LineCandidatesDialog` implement the
+  decision model and the keyboard map from the spec; `AccountImportsList` narrows the queue to one
+  import; `TransactionsList` gained `hide.account`. Deliberate deviations: the `suggested` and
+  `decided` filters narrow the fetched page client-side (the API has no single value for either),
+  the bulk apply and the step-3 apply act on every pending line of the account (the import
+  response carries no line ids).
+- **Fixed on the way** — the recorded gotcha: a fetch aborted by React's dev-only remount no
+  longer opens the retry dialog on `/transactions`; the mount fetch is re-issued once instead.
+
+### Visual QA (`playwright-qa`, throwaway spec, en light · he dark · Pixel 5)
+
+Caught before the merge: a `<div>` inside a `<p>` (the list's `emptyState` is a title, not a
+component), the wizard resetting to step 1 when the host refetched the account (reset keyed on
+the id now), a duplicated "Transfer to" label, the toolbar sticking under the app header on phones
+(sticky only from `lg:`), and a seed that used `reference` where the DTO says `externalId`.
+Hebrew strings are a first draft; `i18n-translator` review pending for 20.3 + 20.5.
+
+### Tests
+
+web unit 1458 (138 files; new: decoder 12, queue helpers, line card against the real messages,
+wizard step 1 against the real messages, helpers) · e2e `accounts.spec.ts` green end to end
+(create → place → transfer → balances → import 6 lines → review: create, undo, ignore by key,
+decided filter → re-import all duplicates → imports and transactions tabs → edit → archive →
+delete). Gate: typecheck, lint, format, i18n parity clean.
+
 ## 20.4 — Statement parsing + import API (2026-09-25)
 
 Per design §4.1, §5, §6.2. Merged as `6663b77` (track branch `p20/import-api`, eight commits). No
@@ -215,4 +263,4 @@ transactions hide their id too; the sanitiser's character class rewritten as esc
 file is diffable. Integration: `accounts-import` (18) + `accounts-import-limits` (3, incl. a
 full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; api unit 1381.
 
-**Next** — 20.5 (import wizard + review UI).
+**Next** — 20.6 (two-way enrichment), then 20.7 connector + `api_tokens`, 20.8 alerts + release.
