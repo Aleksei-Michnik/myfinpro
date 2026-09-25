@@ -499,7 +499,13 @@ describe('Account statement imports (integration)', () => {
       .set(auth(owner.accessToken))
       .send({ lineIds: [lines.body.data[0].id] })
       .expect(200);
-    expect(applied.body).toEqual({ matched: 0, transferred: 0, created: 1, skipped: 0 });
+    expect(applied.body).toEqual({
+      matched: 0,
+      transferred: 0,
+      created: 1,
+      skipped: 0,
+      remaining: 0,
+    });
 
     const after = await listLines(`?importId=${res.body.id}`).expect(200);
     expect(after.body.data[0]).toMatchObject({ status: 'CREATED' });
@@ -507,6 +513,62 @@ describe('Account statement imports (integration)', () => {
       amountCents: 9900,
       accountId: checkingId,
     });
+  });
+
+  it('applies a suggestion exactly once when two runs race for the same lines', async () => {
+    // Both lines carry the remembered bakery category, so both runs would
+    // happily create a transaction for each — the conditional claim is what
+    // makes exactly one of them win per line (security review M2).
+    const imported = await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${checkingId}/imports`)
+      .set(auth(owner.accessToken))
+      .send({
+        source: 'hapoalim',
+        lines: [
+          {
+            postedAt: '2026-09-21',
+            amountCents: 7701,
+            direction: 'OUT',
+            description: BAKERY,
+            externalId: 'C-1',
+          },
+          {
+            postedAt: '2026-09-21',
+            amountCents: 7702,
+            direction: 'OUT',
+            description: BAKERY,
+            externalId: 'C-2',
+          },
+        ],
+      })
+      .expect(201);
+
+    const pending = await listLines(`?importId=${imported.body.id}`).expect(200);
+    const raceLineIds = pending.body.data.map((line: { id: string }) => line.id);
+    expect(raceLineIds).toHaveLength(2);
+
+    const apply = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/accounts/${checkingId}/lines/apply-suggestions`)
+        .set(auth(owner.accessToken))
+        .send({ lineIds: raceLineIds })
+        .expect(200);
+
+    const [first, second] = await Promise.all([apply(), apply()]);
+
+    // Two lines, two transactions in total — whatever the interleaving was.
+    expect(first.body.created + second.body.created).toBe(2);
+    expect(first.body.skipped + second.body.skipped).toBe(2);
+    for (const amountCents of [7701, 7702]) {
+      expect(
+        await prisma.transaction.count({ where: { amountCents, createdById: owner.user.id } }),
+      ).toBe(1);
+    }
+    const decided = await listLines(`?importId=${imported.body.id}`).expect(200);
+    for (const line of decided.body.data) {
+      expect(line.status).toBe('CREATED');
+      expect(line.transactionId).not.toBeNull();
+    }
   });
 
   // ── role matrix ──
@@ -537,6 +599,97 @@ describe('Account statement imports (integration)', () => {
     expect(lines.body.data).toHaveLength(1);
   });
 
+  it('hides a transaction the reader cannot see behind the line that links it', async () => {
+    const lines = await request(app.getHttpServer())
+      .get(`/api/v1/accounts/${groupBankId}/lines`)
+      .set(auth(member.accessToken))
+      .expect(200);
+    const groupLineId = lines.body.data[0].id;
+
+    // The member files the group account's line under their OWN personal
+    // scope — legitimate, and invisible to everyone else in the group.
+    const created = await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${groupBankId}/lines/${groupLineId}/create`)
+      .set(auth(member.accessToken))
+      .send({ categoryIds: [groceriesCategoryId], attributions: [{ scope: 'personal' }] })
+      .expect(200);
+    expect(created.body.line.transactionId).toBe(created.body.transaction.id);
+
+    // The group admin sees the bank line — it is the group's — but learns
+    // nothing about the transaction behind it (security review L6).
+    const asOwner = await request(app.getHttpServer())
+      .get(`/api/v1/accounts/${groupBankId}/lines`)
+      .set(auth(owner.accessToken))
+      .expect(200);
+    expect(asOwner.body.data[0]).toMatchObject({
+      id: groupLineId,
+      status: 'CREATED',
+      transactionId: null,
+      transaction: null,
+    });
+  });
+
+  it('404s a match against a transaction the caller cannot see', async () => {
+    // Alice's own transaction, on her personal account — Bob is in the group
+    // but has no business matching a group line to it.
+    const hidden = await prisma.transaction.create({
+      data: {
+        direction: 'OUT',
+        type: 'ONE_TIME',
+        amountCents: 4200,
+        currency: 'ILS',
+        occurredAt: new Date('2026-09-15T00:00:00Z'),
+        status: 'POSTED',
+        categoryId: groceriesCategoryId,
+        createdById: owner.user.id,
+        attributions: { create: [{ scopeType: 'personal', userId: owner.user.id }] },
+      },
+    });
+
+    const groupLine = await prisma.accountStatementLine.create({
+      data: {
+        accountId: groupBankId,
+        importId: (
+          await prisma.accountImport.findFirstOrThrow({
+            where: { accountId: groupBankId },
+          })
+        ).id,
+        fingerprint: `hidden-${suffix}`,
+        postedAt: new Date('2026-09-15T00:00:00Z'),
+        direction: 'OUT',
+        amountCents: 4200,
+        currency: 'ILS',
+        description: 'קניות נוספות',
+        normalizedDescription: 'קניות נוספות',
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${groupBankId}/lines/${groupLine.id}/match`)
+      .set(auth(member.accessToken))
+      .send({ transactionId: hidden.id })
+      .expect(404);
+    expect(res.body.errorCode).toBe('TRANSACTION_NOT_FOUND');
+  });
+
+  it('404s a transfer to an account the caller cannot see', async () => {
+    const line = await prisma.accountStatementLine.findFirstOrThrow({
+      where: { accountId: groupBankId, status: 'PENDING' },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/accounts/${groupBankId}/lines/${line.id}/transfer`)
+      .set(auth(member.accessToken))
+      // `checkingId` is Alice's personal account: visible to nobody else.
+      .send({ transferAccountId: checkingId })
+      .expect(404);
+    expect(res.body.errorCode).toBe('TRANSACTION_ACCOUNT_NOT_FOUND');
+
+    // The failed decision left the line exactly where it was.
+    const after = await prisma.accountStatementLine.findUniqueOrThrow({ where: { id: line.id } });
+    expect(after).toMatchObject({ status: 'PENDING', transactionId: null, decidedById: null });
+  });
+
   it('404s an outsider on import, lines and decisions — existence is never leaked', async () => {
     const importRes = await request(app.getHttpServer())
       .post(`/api/v1/accounts/${groupBankId}/imports`)
@@ -562,6 +715,11 @@ describe('Account statement imports (integration)', () => {
 
     await request(app.getHttpServer())
       .post(`/api/v1/accounts/${checkingId}/lines/${lineIds[SUPER_PHARM]}/ignore`)
+      .set(auth(outsider.accessToken))
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/accounts/${checkingId}/lines/${lineIds[BAKERY]}/link`)
       .set(auth(outsider.accessToken))
       .expect(404);
   });

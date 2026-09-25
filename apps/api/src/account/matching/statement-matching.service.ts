@@ -15,9 +15,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { fuzzyLookupTokens, trigramSimilarity } from '../../product/utils/trigram.util';
+import { categoryVisibilityClauses } from '../../category/utils/category-visibility';
 import { buildTransactionVisibilityWhere } from '../../transaction/utils/transaction-visibility';
 import { buildAccountVisibilityWhere } from '../utils/account-visibility';
 import {
+  buildCandidateIndex,
   buildSuggestion,
   detectCardBillTransfer,
   detectCounterpartTransfer,
@@ -103,11 +105,16 @@ export class StatementMatchingService {
       this.loadCounterLines(userId, account, matchable, from, to),
     ]);
 
+    // The pool is indexed ONCE — bucketed by direction, amount and currency,
+    // with every candidate's trigram sets prebuilt — so matching a 2000-line
+    // statement stays linear in the lines (security review H1).
+    const index = buildCandidateIndex(candidates);
+
     // Rank and detect transfers first; only what is left over needs the
     // category memory, so its queries see the smallest possible input.
     const scored = matchable.map((line) => ({
       line,
-      ranked: rankCandidates(line, candidates, account.id),
+      ranked: rankCandidates(line, index, account.id),
       transferAccountId:
         detectCardBillTransfer(line, account.kind, account.id, cards) ??
         detectCounterpartTransfer(line, counterLines, account.id),
@@ -372,6 +379,42 @@ export class StatementMatchingService {
         }
       }
       if (best) memory.set(description, best.categoryId);
+    }
+
+    return this.dropUnusableCategories(userId, memory);
+  }
+
+  /**
+   * A memory is only worth proposing if the reviewer could have picked the
+   * category themselves: a line decided by another member may remember a
+   * category personal to them, and "apply all" would then file money under a
+   * category this actor cannot even see (security review L2).
+   */
+  private async dropUnusableCategories(
+    userId: string,
+    memory: Map<string, string>,
+  ): Promise<Map<string, string>> {
+    const ids = [...new Set(memory.values())];
+    if (ids.length === 0) return memory;
+
+    const memberships = await this.prisma.groupMembership.findMany({
+      where: { userId },
+      select: { groupId: true },
+    });
+    const usable = await this.prisma.category.findMany({
+      where: {
+        id: { in: ids },
+        OR: categoryVisibilityClauses(
+          userId,
+          memberships.map((membership) => membership.groupId),
+        ),
+      },
+      select: { id: true },
+    });
+    const allowed = new Set(usable.map((category) => category.id));
+
+    for (const [description, categoryId] of memory) {
+      if (!allowed.has(categoryId)) memory.delete(description);
     }
     return memory;
   }

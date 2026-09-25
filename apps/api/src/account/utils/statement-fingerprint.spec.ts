@@ -34,16 +34,23 @@ describe('statementLineFingerprint', () => {
     ).not.toBe(base);
   });
 
-  it('prefers the reference, then the running balance, then the ordinal', () => {
-    const withReference = statementLineFingerprint(ACCOUNT, line({ externalId: 'A1' }), 0);
-    // The ordinal is ignored once the export carries its own identifier.
-    expect(statementLineFingerprint(ACCOUNT, line({ externalId: 'A1' }), 7)).toBe(withReference);
+  it('ignores the reference and the running balance a variant may not carry', () => {
+    // The same movement exported twice must hash the same even when one
+    // export prints an `אסמכתא` or a balance column and the other does not.
+    const base = statementLineFingerprint(ACCOUNT, line(), 0);
+    expect(
+      statementLineFingerprint(
+        ACCOUNT,
+        { ...line(), externalId: 'A1', balanceAfterCents: 5000 } as never,
+        0,
+      ),
+    ).toBe(base);
+  });
 
-    const withBalance = statementLineFingerprint(ACCOUNT, line({ balanceAfterCents: 5000 }), 0);
-    expect(statementLineFingerprint(ACCOUNT, line({ balanceAfterCents: 5000 }), 7)).toBe(
-      withBalance,
+  it('separates the rows of one import by their ordinal', () => {
+    expect(statementLineFingerprint(ACCOUNT, line(), 1)).not.toBe(
+      statementLineFingerprint(ACCOUNT, line(), 0),
     );
-    expect(withBalance).not.toBe(withReference);
   });
 });
 

@@ -5,13 +5,17 @@
 // deduplicated by a fingerprint computed from the row itself, fenced by
 // `@@unique(accountId, fingerprint)`.
 //
-// The tie-breaker is what makes two genuinely different rows that look
-// identical (two identical coffees on the same day) survive: the export's own
-// reference number when it has one, else the running balance after the row,
-// else the row's ordinal among the identical rows of THIS import. The ordinal
-// reproduces on a re-import of the same file, which is what keeps the whole
-// thing idempotent (design §11 records the one case that can still slip: a
-// bank that reorders identical rows between exports).
+// The fingerprint deliberately hashes only the facts every export of the same
+// row agrees on — account, posting date, direction, amount and the normalized
+// description — plus the row's ordinal among the identical tuples of its
+// import. A reference number or a running balance is NOT part of it: the same
+// movement exported twice (a different date range, a CSV instead of an XLSX,
+// the connector instead of a file) often carries one in one variant and not in
+// the other, and hashing it would let the same row in twice. The ordinal
+// reproduces on a re-import of the same rows, which is what keeps the whole
+// thing idempotent while still separating two identical coffees on one day
+// (design §11 records the residual case: a bank that reorders identical rows
+// between exports).
 
 import { createHash } from 'crypto';
 
@@ -21,34 +25,25 @@ export interface FingerprintInput {
   direction: string;
   amountCents: number;
   normalizedDescription: string;
-  externalId?: string | null;
-  balanceAfterCents?: number | null;
 }
 
 /**
  * Fingerprint one line. `ordinal` is its 0-based position among the lines of
  * the same import sharing the same (date, direction, amount, description)
- * tuple — only consulted when the row carries neither a reference nor a
- * running balance.
+ * tuple.
  */
 export function statementLineFingerprint(
   accountId: string,
   line: FingerprintInput,
   ordinal: number,
 ): string {
-  const tiebreak =
-    line.externalId ??
-    (line.balanceAfterCents !== null && line.balanceAfterCents !== undefined
-      ? String(line.balanceAfterCents)
-      : String(ordinal));
-
   const payload = [
     accountId,
     line.postedAt,
     line.direction,
     String(line.amountCents),
     line.normalizedDescription,
-    tiebreak,
+    String(ordinal),
   ].join('|');
 
   return createHash('sha256').update(payload).digest('hex');

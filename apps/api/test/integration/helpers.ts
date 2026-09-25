@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { applyBodyParsers } from '../../src/common/middleware/body-parsers';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 /**
@@ -25,7 +26,8 @@ export async function bootstrapTestApp(): Promise<IntegrationTestContext> {
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication({ bodyParser: false });
+  applyBodyParsers(app);
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
   app.useGlobalPipes(

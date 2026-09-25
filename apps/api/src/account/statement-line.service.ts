@@ -1,5 +1,4 @@
 import {
-  ACCOUNT_IMPORT_MAX_LINES,
   decodeCursor,
   encodeCursor,
   TRANSFER_CATEGORY_SLUG,
@@ -30,6 +29,7 @@ import {
   type TransactionWithRelations,
 } from '../transaction/transaction.service';
 import { buildTransactionVisibilityWhere } from '../transaction/utils/transaction-visibility';
+import { categoryVisibilityClauses } from '../category/utils/category-visibility';
 import { AccountService } from './account.service';
 import { ACCOUNT_ERRORS } from './constants/account-errors';
 import { ApplySuggestionsDto, ApplySuggestionsResultDto } from './dto/apply-suggestions.dto';
@@ -51,6 +51,17 @@ type LineRow = Prisma.AccountStatementLineGetPayload<Record<string, never>>;
 
 /** Note length of `CreateTransactionDto` — a description never exceeds it. */
 const NOTE_MAX_LENGTH = 2000;
+
+/**
+ * Lines one "apply all" call may decide. Each applied line writes a
+ * transaction through `TransactionService`, so the run has to stay a
+ * request-sized unit of work; the response says how many are left and the
+ * client calls again (security review L4).
+ */
+export const APPLY_SUGGESTIONS_BATCH_SIZE = 200;
+
+/** The statuses a transaction may have for a bank line to settle it (§5.1). */
+const MATCHABLE_TRANSACTION_STATUSES = ['POSTED', 'PENDING', 'DUE'];
 
 /**
  * Phase 20 · Iteration 20.4 — the review queue (design §2.5, §5.5, §6.2).
@@ -175,7 +186,7 @@ export class StatementLineService {
     const account = await this.accounts.loadForRead(userId, accountId);
     const line = await this.loadPendingLine(accountId, lineId);
 
-    const updated = await this.decide(userId, line.id, 'IGNORED', null);
+    const updated = await this.claimLine(userId, line.id, 'IGNORED', null);
     await this.afterDecision(userId, account, updated, 'STATEMENT_LINE_IGNORED', {});
     return { line: (await this.mapLines(userId, [updated]))[0], transaction: null };
   }
@@ -221,21 +232,26 @@ export class StatementLineService {
   ): Promise<ApplySuggestionsResultDto> {
     const account = await this.loadAccountForDecision(userId, accountId);
 
-    const lines = await this.prisma.accountStatementLine.findMany({
-      where: {
-        accountId,
-        status: 'PENDING',
-        ...(dto.lineIds ? { id: { in: dto.lineIds } } : {}),
-      },
-      orderBy: [{ postedAt: 'asc' }, { id: 'asc' }],
-      take: ACCOUNT_IMPORT_MAX_LINES,
-    });
+    const where: Prisma.AccountStatementLineWhereInput = {
+      accountId,
+      status: 'PENDING',
+      ...(dto.lineIds ? { id: { in: dto.lineIds } } : {}),
+    };
+    const [lines, pendingCount] = await Promise.all([
+      this.prisma.accountStatementLine.findMany({
+        where,
+        orderBy: [{ postedAt: 'asc' }, { id: 'asc' }],
+        take: APPLY_SUGGESTIONS_BATCH_SIZE,
+      }),
+      this.prisma.accountStatementLine.count({ where }),
+    ]);
 
     const result: ApplySuggestionsResultDto = {
       matched: 0,
       transferred: 0,
       created: 0,
       skipped: 0,
+      remaining: Math.max(pendingCount - lines.length, 0),
     };
 
     for (const line of lines) {
@@ -262,7 +278,7 @@ export class StatementLineService {
     }
 
     this.logger.log(
-      `apply-suggestions on account ${accountId} by user ${userId}: ${result.matched} matched, ${result.transferred} transferred, ${result.created} created, ${result.skipped} skipped`,
+      `apply-suggestions on account ${accountId} by user ${userId}: ${result.matched} matched, ${result.transferred} transferred, ${result.created} created, ${result.skipped} skipped, ${result.remaining} left for the next call`,
     );
     return result;
   }
@@ -279,6 +295,8 @@ export class StatementLineService {
       where: { AND: [{ id: transactionId }, buildTransactionVisibilityWhere(userId)] },
       select: {
         id: true,
+        type: true,
+        status: true,
         direction: true,
         amountCents: true,
         currency: true,
@@ -299,24 +317,39 @@ export class StatementLineService {
         errorCode: ACCOUNT_ERRORS.STATEMENT_LINE_ALREADY_LINKED,
       });
     }
-    if (!matchesLineShape(line, candidate, account.id)) {
+    // Design §5.1: only a plain one-off movement that has not settled
+    // elsewhere can be what this bank line records.
+    if (
+      !matchesLineShape(line, candidate, account.id) ||
+      candidate.type !== 'ONE_TIME' ||
+      !MATCHABLE_TRANSACTION_STATUSES.includes(candidate.status)
+    ) {
       throw new BadRequestException({
         message:
-          'The transaction does not record this line: amount, currency, direction or account differ',
+          'The transaction does not record this line: amount, currency, direction, account, ' +
+          'type or status differ',
         errorCode: ACCOUNT_ERRORS.STATEMENT_MATCH_INVALID,
       });
     }
 
-    // The transaction first: if the line write failed afterwards the user can
-    // simply retry, whereas a linked line with an unenriched transaction
-    // would be stuck behind STATEMENT_LINE_NOT_PENDING.
-    const transaction = await this.transactions.confirmByStatementLine(
-      userId,
-      candidate.id,
-      account.id,
-      line.id,
-    );
-    const updated = await this.decide(userId, line.id, 'MATCHED', candidate.id);
+    // Claim the line AND the 1:1 link first, in one conditional write: two
+    // concurrent requests cannot both pass the checks above, and the loser
+    // gets a clean conflict instead of a half-applied enrichment (security
+    // review M2 / M3). The unique index on `transaction_id` is the fence.
+    const updated = await this.claimLine(userId, line.id, 'MATCHED', candidate.id);
+    let transaction: TransactionSummaryDto;
+    try {
+      transaction = await this.transactions.confirmByStatementLine(
+        userId,
+        candidate.id,
+        account.id,
+        line.id,
+      );
+    } catch (err) {
+      await this.releaseClaim(line.id);
+      throw err;
+    }
+
     await this.afterDecision(userId, account, updated, 'STATEMENT_LINE_MATCHED', {
       transactionId: candidate.id,
     });
@@ -330,19 +363,24 @@ export class StatementLineService {
     line: LineRow,
     dto: CreateFromLineDto,
   ): Promise<StatementLineDecisionResponseDto> {
-    const transaction = await this.transactions.create(userId, {
-      direction: line.direction as 'IN' | 'OUT',
-      type: 'ONE_TIME',
-      amountCents: line.amountCents,
-      currency: line.currency,
-      occurredAt: (line.valueAt ?? line.postedAt).toISOString(),
-      categoryIds: dto.categoryIds,
-      note: (dto.note ?? line.description).slice(0, NOTE_MAX_LENGTH),
-      attributions: dto.attributions ?? defaultAttributions(account),
-      accountId: account.id,
-    });
+    // Claim before writing money: whoever loses the race never creates a
+    // second transaction for the same bank line (security review M2).
+    await this.claimLine(userId, line.id, 'CREATED', null);
+    const transaction = await this.createOrRelease(line.id, () =>
+      this.transactions.create(userId, {
+        direction: line.direction as 'IN' | 'OUT',
+        type: 'ONE_TIME',
+        amountCents: line.amountCents,
+        currency: line.currency,
+        occurredAt: (line.valueAt ?? line.postedAt).toISOString(),
+        categoryIds: dto.categoryIds,
+        note: (dto.note ?? line.description).slice(0, NOTE_MAX_LENGTH),
+        attributions: dto.attributions ?? defaultAttributions(account),
+        accountId: account.id,
+      }),
+    );
 
-    const updated = await this.decide(userId, line.id, 'CREATED', transaction.id);
+    const updated = await this.attachTransaction(line.id, transaction.id);
     await this.afterDecision(userId, account, updated, 'STATEMENT_LINE_CREATED', {
       transactionId: transaction.id,
       categoryIds: dto.categoryIds,
@@ -371,20 +409,23 @@ export class StatementLineService {
     const source = line.direction === 'OUT' ? account.id : otherAccountId;
     const destination = line.direction === 'OUT' ? otherAccountId : account.id;
 
-    const transaction = await this.transactions.create(userId, {
-      direction: 'OUT',
-      type: 'ONE_TIME',
-      amountCents: line.amountCents,
-      currency: line.currency,
-      occurredAt: (line.valueAt ?? line.postedAt).toISOString(),
-      categoryIds: [transferCategory.id],
-      note: line.description.slice(0, NOTE_MAX_LENGTH),
-      attributions: defaultAttributions(account),
-      accountId: source,
-      transferAccountId: destination,
-    });
+    await this.claimLine(userId, line.id, 'CREATED', null);
+    const transaction = await this.createOrRelease(line.id, () =>
+      this.transactions.create(userId, {
+        direction: 'OUT',
+        type: 'ONE_TIME',
+        amountCents: line.amountCents,
+        currency: line.currency,
+        occurredAt: (line.valueAt ?? line.postedAt).toISOString(),
+        categoryIds: [transferCategory.id],
+        note: line.description.slice(0, NOTE_MAX_LENGTH),
+        attributions: defaultAttributions(account),
+        accountId: source,
+        transferAccountId: destination,
+      }),
+    );
 
-    const updated = await this.decide(userId, line.id, 'CREATED', transaction.id);
+    const updated = await this.attachTransaction(line.id, transaction.id);
     await this.afterDecision(userId, account, updated, 'STATEMENT_LINE_TRANSFERRED', {
       transactionId: transaction.id,
       sourceAccountId: source,
@@ -436,16 +477,81 @@ export class StatementLineService {
     return line;
   }
 
-  private async decide(
+  /**
+   * Take the line out of `PENDING` with a CONDITIONAL write — the row moves
+   * only if it is still pending, so two concurrent decisions (two clicks, two
+   * "apply all" runs) can never both proceed. The loser sees
+   * `STATEMENT_LINE_NOT_PENDING`, and a transaction that was already claimed
+   * by another line trips the 1:1 unique index and becomes
+   * `STATEMENT_LINE_ALREADY_LINKED` (security review M2 / M3).
+   */
+  private async claimLine(
     userId: string,
     lineId: string,
     status: StatementLineStatus,
     transactionId: string | null,
   ): Promise<LineRow> {
+    let claimed: { count: number };
+    try {
+      claimed = await this.prisma.accountStatementLine.updateMany({
+        where: { id: lineId, status: 'PENDING' },
+        data: { status, transactionId, decidedAt: new Date(), decidedById: userId },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException({
+          message: 'That transaction is already confirmed by another statement line',
+          errorCode: ACCOUNT_ERRORS.STATEMENT_LINE_ALREADY_LINKED,
+        });
+      }
+      throw err;
+    }
+    if (claimed.count === 0) {
+      throw new ConflictException({
+        message: 'That line was already decided — unlink it first',
+        errorCode: ACCOUNT_ERRORS.STATEMENT_LINE_NOT_PENDING,
+      });
+    }
+    return this.loadLineById(lineId);
+  }
+
+  /** Give a claim back when the write it was taken for never happened. */
+  private async releaseClaim(lineId: string): Promise<void> {
+    await this.prisma.accountStatementLine.updateMany({
+      where: { id: lineId },
+      data: { status: 'PENDING', transactionId: null, decidedAt: null, decidedById: null },
+    });
+  }
+
+  /** Run the transaction write, releasing the claim if it throws. */
+  private async createOrRelease(
+    lineId: string,
+    write: () => Promise<TransactionSummaryDto>,
+  ): Promise<TransactionSummaryDto> {
+    try {
+      return await write();
+    } catch (err) {
+      await this.releaseClaim(lineId);
+      throw err;
+    }
+  }
+
+  private async attachTransaction(lineId: string, transactionId: string): Promise<LineRow> {
     return this.prisma.accountStatementLine.update({
       where: { id: lineId },
-      data: { status, transactionId, decidedAt: new Date(), decidedById: userId },
+      data: { transactionId },
     });
+  }
+
+  private async loadLineById(lineId: string): Promise<LineRow> {
+    const line = await this.prisma.accountStatementLine.findUnique({ where: { id: lineId } });
+    if (!line) {
+      throw new NotFoundException({
+        message: 'Statement line not found',
+        errorCode: ACCOUNT_ERRORS.STATEMENT_LINE_NOT_FOUND,
+      });
+    }
+    return line;
   }
 
   /**
@@ -477,6 +583,27 @@ export class StatementLineService {
       details: { accountId: account.id, ...details },
     });
     await publishAccountUpdated(this.prisma, this.eventBus, account, userId);
+  }
+
+  /** Categories among `ids` that the actor may actually file a row under. */
+  private async loadUsableCategories(
+    userId: string,
+    ids: string[],
+  ): Promise<TransactionCategorySummary[]> {
+    const memberships = await this.prisma.groupMembership.findMany({
+      where: { userId },
+      select: { groupId: true },
+    });
+    return this.prisma.category.findMany({
+      where: {
+        id: { in: ids },
+        OR: categoryVisibilityClauses(
+          userId,
+          memberships.map((membership) => membership.groupId),
+        ),
+      },
+      select: CATEGORY_SUMMARY_SELECT,
+    });
   }
 
   /**
@@ -512,12 +639,10 @@ export class StatementLineService {
             include: buildDetailInclude(userId),
           })
         : Promise.resolve([]),
-      categoryIds.size
-        ? this.prisma.category.findMany({
-            where: { id: { in: [...categoryIds] } },
-            select: CATEGORY_SUMMARY_SELECT,
-          })
-        : Promise.resolve([]),
+      // A remembered category the reader cannot use is not surfaced at all
+      // (security review L2) — the review UI would offer them a category they
+      // could not have picked themselves.
+      categoryIds.size ? this.loadUsableCategories(userId, [...categoryIds]) : Promise.resolve([]),
     ]);
 
     const summaries = new Map<string, TransactionSummaryDto>(
@@ -554,7 +679,11 @@ export class StatementLineService {
       installmentTotal: row.installmentTotal,
       categoryHint: row.categoryHint,
       status: row.status as StatementLineStatus,
-      transactionId: row.transactionId,
+      // A line may be linked to a transaction this reader cannot see (a group
+      // account matched to someone's personal row). Then neither the id nor
+      // the summary is theirs to learn (security review L6).
+      transactionId:
+        row.transactionId && summaries.has(row.transactionId) ? row.transactionId : null,
       transaction: row.transactionId ? (summaries.get(row.transactionId) ?? null) : null,
       suggestion: resolveSuggestion(snapshots.get(row.id) ?? null, summaries, categoryById),
       decidedAt: row.decidedAt ? row.decidedAt.toISOString() : null,

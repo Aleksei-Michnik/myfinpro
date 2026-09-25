@@ -3,6 +3,7 @@ import {
   STATEMENT_MATCH_DATE_WINDOW_DAYS,
 } from '@myfinpro/shared';
 import {
+  buildCandidateIndex,
   buildSuggestion,
   dayDistance,
   detectCardBillTransfer,
@@ -10,6 +11,7 @@ import {
   isAdmissible,
   isConfidentMatch,
   matchesLineShape,
+  MAX_SCORED_CANDIDATES_PER_LINE,
   MAX_SUGGESTION_CANDIDATES,
   rankCandidates,
   scoreCandidate,
@@ -18,6 +20,7 @@ import {
   type MatchableCandidate,
   type MatchableLine,
 } from './statement-matcher';
+import * as trigram from '../../product/utils/trigram.util';
 
 /**
  * Phase 20 · Iteration 20.4 — the matcher's arithmetic (design §5).
@@ -138,7 +141,7 @@ describe('statement matcher', () => {
       const candidates = Array.from({ length: 7 }, (_, i) =>
         candidate({ id: `tx-${i}`, occurredAt: new Date(`2026-09-${10 + (i % 5)}T00:00:00Z`) }),
       );
-      const ranked = rankCandidates(line(), candidates, ACCOUNT);
+      const ranked = rankCandidates(line(), buildCandidateIndex(candidates), ACCOUNT);
       expect(ranked).toHaveLength(MAX_SUGGESTION_CANDIDATES);
       expect(ranked[0].score).toBeGreaterThanOrEqual(ranked[1].score);
     });
@@ -274,5 +277,105 @@ describe('statement matcher', () => {
       expect(blind).toMatchObject({ action: 'create', needsInput: true, candidates: [] });
       expect(blind.categoryId).toBeUndefined();
     });
+  });
+});
+
+/**
+ * Phase 20 · Iteration 20.4 security review H1 — an import is matched inline,
+ * on the request's thread, so the work a statement can ask for must be
+ * bounded by construction rather than by how friendly the data happens to be.
+ */
+describe('statement matcher — bounded work', () => {
+  const ACCOUNT = 'account-a';
+  const DAY = 86_400_000;
+  const BASE = Date.UTC(2026, 8, 10);
+
+  const candidateAt = (id: string, amountCents: number, dayOffset = 0): MatchableCandidate => ({
+    id,
+    direction: 'OUT',
+    amountCents,
+    currency: 'ILS',
+    occurredAt: new Date(BASE + dayOffset * DAY),
+    accountId: null,
+    transferAccountId: null,
+    texts: [`merchant ${id}`],
+  });
+
+  const lineAt = (id: string, amountCents: number): MatchableLine => ({
+    id,
+    direction: 'OUT',
+    amountCents,
+    currency: 'ILS',
+    normalizedDescription: 'merchant 42',
+    at: new Date(BASE),
+  });
+
+  let gramsSpy: jest.SpyInstance;
+  let diceSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    gramsSpy = jest.spyOn(trigram, 'trigramsOf');
+    diceSpy = jest.spyOn(trigram, 'diceSimilarity');
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('scores only the candidates in the line’s own (direction, amount, currency) bucket', () => {
+    const candidates = Array.from({ length: 500 }, (_, i) => candidateAt(`tx-${i}`, 1000 + i));
+    const index = buildCandidateIndex(candidates);
+    diceSpy.mockClear();
+
+    const ranked = rankCandidates(lineAt('line-1', 1042), index, ACCOUNT);
+
+    expect(ranked).toEqual([expect.objectContaining({ transactionId: 'tx-42' })]);
+    // One candidate in the bucket, one text on it — one similarity measured,
+    // not 500.
+    expect(diceSpy).toHaveBeenCalledTimes(1);
+    // A direction or currency the pool does not hold visits nothing at all.
+    diceSpy.mockClear();
+    expect(rankCandidates({ ...lineAt('line-2', 1042), direction: 'IN' }, index, ACCOUNT)).toEqual(
+      [],
+    );
+    expect(rankCandidates({ ...lineAt('line-3', 1042), currency: 'USD' }, index, ACCOUNT)).toEqual(
+      [],
+    );
+    expect(diceSpy).not.toHaveBeenCalled();
+  });
+
+  it('caps the candidates one line is scored against', () => {
+    // 200 same-amount, same-day rows — what a hostile statement aims for.
+    const candidates = Array.from({ length: 200 }, (_, i) => candidateAt(`tx-${i}`, 5000));
+    const index = buildCandidateIndex(candidates);
+    diceSpy.mockClear();
+
+    const ranked = rankCandidates(lineAt('line-1', 5000), index, ACCOUNT);
+
+    expect(ranked).toHaveLength(MAX_SUGGESTION_CANDIDATES);
+    expect(diceSpy).toHaveBeenCalledTimes(MAX_SCORED_CANDIDATES_PER_LINE);
+  });
+
+  it('builds every trigram set once for the whole import, not once per comparison', () => {
+    const candidates = Array.from({ length: 500 }, (_, i) =>
+      candidateAt(`tx-${i}`, 1000 + (i % 50)),
+    );
+    const lines = Array.from({ length: 1000 }, (_, i) => lineAt(`line-${i}`, 1000 + (i % 50)));
+
+    gramsSpy.mockClear();
+    const index = buildCandidateIndex(candidates);
+    // One set per candidate text — the pool is prepared exactly once.
+    expect(gramsSpy).toHaveBeenCalledTimes(candidates.length);
+
+    gramsSpy.mockClear();
+    diceSpy.mockClear();
+    for (const line of lines) rankCandidates(line, index, ACCOUNT);
+
+    // At most one set per line, and never a candidate's again.
+    expect(gramsSpy.mock.calls.length).toBeLessThanOrEqual(lines.length);
+    // 50 buckets of 10 candidates: ten similarities per line, and in every
+    // case bounded by the per-line cap.
+    expect(diceSpy.mock.calls.length).toBeLessThanOrEqual(
+      lines.length * MAX_SCORED_CANDIDATES_PER_LINE,
+    );
+    expect(diceSpy.mock.calls.length).toBe(lines.length * 10);
   });
 });

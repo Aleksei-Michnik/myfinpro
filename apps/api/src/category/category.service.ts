@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { categoryVisibilityClauses } from './utils/category-visibility';
 import { CATEGORY_ERRORS } from './constants/category-errors';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -46,11 +47,7 @@ export class CategoryService {
     const visibility: Prisma.CategoryWhereInput[] = [];
 
     if (scope === 'all') {
-      visibility.push({ ownerType: 'system' });
-      visibility.push({ ownerType: 'user', ownerId: userId });
-      if (memberGroupIds.length > 0) {
-        visibility.push({ ownerType: 'group', ownerId: { in: memberGroupIds } });
-      }
+      visibility.push(...categoryVisibilityClauses(userId, memberGroupIds));
     } else if (scope === 'system') {
       visibility.push({ ownerType: 'system' });
     } else if (scope === 'personal') {
