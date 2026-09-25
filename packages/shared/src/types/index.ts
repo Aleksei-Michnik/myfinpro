@@ -4,6 +4,7 @@
 
 export * from './account.types';
 export * from './analytics.types';
+export * from './api-token.types';
 export * from './budget.types';
 export * from './common.types';
 export * from './currency.types';
