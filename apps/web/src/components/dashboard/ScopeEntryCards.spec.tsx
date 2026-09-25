@@ -56,6 +56,8 @@ function makeTransaction(p: Partial<TransactionSummary> = {}): TransactionSummar
     createdById: 'me',
     createdAt: '2026-04-25T00:00:00Z',
     updatedAt: '2026-04-25T00:00:00Z',
+    accountId: p.accountId ?? null,
+    transferAccountId: p.transferAccountId ?? null,
   };
 }
 
@@ -122,6 +124,27 @@ describe('ScopeEntryCards', () => {
     expect(personal.textContent).toContain('50.00');
     const group = screen.getByTestId('scope-card-group-g1-totals');
     expect(group.textContent).toContain('80.00');
+  });
+
+  it('Phase 20 §2.4 — a transfer between own accounts never enters a scope total', async () => {
+    render(
+      <ScopeEntryCards
+        groups={[]}
+        transactions={[
+          makeTransaction({ id: 'spend', direction: 'OUT', amountCents: 5000 }),
+          makeTransaction({
+            id: 'transfer',
+            direction: 'OUT',
+            amountCents: 3000,
+            accountId: 'bank',
+            transferAccountId: 'card',
+          }),
+        ]}
+      />,
+    );
+    const personal = await screen.findByTestId('scope-card-personal-totals');
+    expect(personal.textContent).toContain('50.00');
+    expect(personal.textContent).not.toContain('80.00');
   });
 
   it('uses `dashboard.totals.in/out/net` for amount labels (DRY: same as <TotalsCard>)', async () => {

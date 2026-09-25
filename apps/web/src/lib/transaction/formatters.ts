@@ -111,3 +111,29 @@ export function formatScopeLabel(
   if (attribution.scope === 'personal') return t('scope.personal');
   return attribution.groupName ?? t('scope.group');
 }
+
+/**
+ * Phase 20 §2.4 — the direction pill. A transfer between the user's own
+ * accounts is spending in neither direction, so it reads "Transfer" in a
+ * neutral tone instead of "Expense" in red. `t` is scoped to `transactions`.
+ */
+export function directionPresentation(
+  transaction: Pick<TransactionSummary, 'direction' | 'transferAccountId'>,
+  t: (key: string) => string,
+): { directionClass: string; directionLabel: string } {
+  if (transaction.transferAccountId) {
+    return {
+      directionClass: 'bg-gray-100 text-gray-700 dark:bg-gray-700/60 dark:text-gray-200',
+      directionLabel: t('directions.transfer'),
+    };
+  }
+  return transaction.direction === 'IN'
+    ? {
+        directionClass: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+        directionLabel: t('directions.in'),
+      }
+    : {
+        directionClass: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+        directionLabel: t('directions.out'),
+      };
+}

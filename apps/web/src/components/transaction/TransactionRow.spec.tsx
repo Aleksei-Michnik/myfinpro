@@ -1,38 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TransactionRow } from './TransactionRow';
-import enMessages from '@/../messages/en.json';
 import type { TransactionSummary } from '@/lib/transaction/types';
 
 const mockToggleStar = vi.fn();
 
-// Resolve a dotted key against the loaded messages bundle. Returns the
-// literal key when the path is missing (mirrors next-intl's fallback) so
-// the doubled-prefix anti-pattern is observable in tests.
-function resolveMessage(namespace: string | undefined, key: string): string {
-  const path = (namespace ? `${namespace}.${key}` : key).split('.');
-  let cur: unknown = enMessages;
-  for (const seg of path) {
-    if (cur && typeof cur === 'object' && seg in (cur as Record<string, unknown>)) {
-      cur = (cur as Record<string, unknown>)[seg];
-    } else {
-      return namespace ? `${namespace}.${key}` : key;
-    }
-  }
-  return typeof cur === 'string' ? cur : namespace ? `${namespace}.${key}` : key;
-}
-
-vi.mock('next-intl', () => ({
-  useLocale: () => 'en',
-  useTranslations:
-    (namespace?: string) => (key: string, values?: Record<string, string | number>) => {
-      const msg = resolveMessage(namespace, key);
-      if (values && typeof values.count === 'number') {
-        return `${msg}:${values.count}`;
-      }
-      return msg;
-    },
-}));
+vi.mock('next-intl', async () => (await import('@/test-utils/real-messages')).realMessagesIntl());
 
 vi.mock('@/lib/transaction/transaction-context', () => ({
   useTransactions: () => ({

@@ -49,6 +49,7 @@ function paramsFor(filters: TransactionFilters, cursor?: string) {
     scope: filters.scope === 'all' ? undefined : filters.scope,
     direction: filters.direction,
     categoryId: filters.categoryId,
+    accountId: filters.accountId,
     from: filters.from,
     to: filters.to,
     starred: filters.starred ? true : undefined,

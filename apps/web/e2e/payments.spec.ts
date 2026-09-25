@@ -28,7 +28,7 @@ async function registerFreshUser(page: Page): Promise<string> {
 
 /** Open the add-payment dialog from /payments and fill the base fields. */
 async function openDialogWithBaseFields(page: Page, amount: string) {
-  await page.getByTestId('payments-list-add').click();
+  await page.getByTestId('transactions-list-add').click();
   await expect(page.getByTestId('form-amount')).toBeVisible();
   await page.getByTestId('form-amount').fill(amount);
   // Default direction OUT; pick the first real category option.
@@ -41,16 +41,16 @@ test.describe('Payments happy paths (6.21)', () => {
   test('one-time, recurring, and loan flows end-to-end', async ({ page }) => {
     await registerFreshUser(page);
 
-    await page.goto('/payments');
-    await expect(page.getByTestId('payments-list')).toBeVisible({ timeout: 30_000 });
+    await page.goto('/transactions');
+    await expect(page.getByTestId('transactions-list')).toBeVisible({ timeout: 30_000 });
 
     // ── 1. ONE_TIME ────────────────────────────────────────────────────────
     await openDialogWithBaseFields(page, '42.50');
     await page.getByTestId('form-save').click();
     await expect(page.getByTestId('form-amount')).toBeHidden({ timeout: 15_000 });
-    await expect(page.getByTestId('payments-list-desktop').getByText('$42.50').first()).toBeVisible(
-      { timeout: 15_000 },
-    );
+    await expect(
+      page.getByTestId('transactions-list-desktop').getByText('$42.50').first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // ── 2. RECURRING (schedule sub-form defaults: every 1 day) ────────────
     await openDialogWithBaseFields(page, '5.00');
@@ -61,7 +61,9 @@ test.describe('Payments happy paths (6.21)', () => {
     await expect(page.getByTestId('form-amount')).toBeHidden({ timeout: 15_000 });
     // The catch-up worker may already have generated today's occurrence, so
     // the parent and a child can both show -$5.00 — assert at-least-one.
-    await expect(page.getByTestId('payments-list-desktop').getByText('$5.00').first()).toBeVisible({
+    await expect(
+      page.getByTestId('transactions-list-desktop').getByText('$5.00').first(),
+    ).toBeVisible({
       timeout: 15_000,
     });
 
@@ -77,7 +79,7 @@ test.describe('Payments happy paths (6.21)', () => {
     await expect(page.getByTestId('form-amount')).toBeHidden({ timeout: 20_000 });
 
     const loanRow = page
-      .getByTestId('payments-list-desktop')
+      .getByTestId('transactions-list-desktop')
       .locator('[data-testid^="payment-row-"]')
       .filter({ hasText: '$10,000.00' })
       .first();

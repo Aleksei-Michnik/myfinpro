@@ -51,6 +51,9 @@ vi.mock('@/components/dashboard/TotalsCard', () => ({
   },
 }));
 
+vi.mock('@/components/dashboard/AccountsOverview', () => ({
+  AccountsOverview: () => <div data-testid="mocked-accounts" />,
+}));
 vi.mock('@/components/dashboard/ScopeEntryCards', () => ({
   ScopeEntryCards: () => {
     scopesMounts();

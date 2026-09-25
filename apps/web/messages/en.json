@@ -56,6 +56,7 @@
     "dashboard": "Dashboard",
     "groups": "Groups",
     "transactions": "Transactions",
+    "accounts": "Accounts",
     "budgets": "Budgets",
     "settings": "Settings",
     "connectedAccounts": "Connected Accounts",
@@ -610,7 +611,8 @@
     },
     "directions": {
       "in": "Income",
-      "out": "Expense"
+      "out": "Expense",
+      "transfer": "Transfer"
     },
     "filters": {
       "all": "All",
@@ -1485,6 +1487,135 @@
         "customRangeInvalid": "The end date must be after the start date.",
         "thresholdInvalid": "Threshold must be a whole number between 1 and 100."
       }
+    }
+  },
+  "accounts": {
+    "kinds": {
+      "BANK": "Bank account",
+      "CARD": "Credit card",
+      "CASH": "Cash",
+      "OTHER": "Other"
+    },
+    "list": {
+      "title": "Accounts",
+      "newAccount": "New account",
+      "import": "Import statement",
+      "loading": "Loading accounts…",
+      "emptyTitle": "No accounts yet",
+      "emptyBody": "Add a bank account, card or cash wallet to see your balance.",
+      "emptyFiltered": "No accounts match this filter.",
+      "showArchived": "Show archived",
+      "archivedChip": "Archived",
+      "actions": "Account actions",
+      "edit": "Edit",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete",
+      "loadMore": "Load more",
+      "archivedToast": "Account archived",
+      "unarchivedToast": "Account unarchived",
+      "deletedToast": "Account deleted",
+      "actionFailed": "Action failed"
+    },
+    "card": {
+      "ledger": "Balance",
+      "ledgerHint": "As of {date}",
+      "reported": "Bank says",
+      "reportedHint": "On {date}",
+      "owed": "Owed this cycle",
+      "gap": "{amount} unexplained",
+      "reconciled": "Reconciled",
+      "pending": "{count, plural, =1 {1 line to review} other {# lines to review}}",
+      "last4": "·· {digits}"
+    },
+    "form": {
+      "createTitle": "New account",
+      "editTitle": "Edit account",
+      "name": "Name",
+      "kind": "Kind",
+      "institution": "Institution",
+      "currency": "Currency",
+      "scope": "Scope",
+      "last4": "Last 4 digits",
+      "institutionNone": "Not listed",
+      "last4Hint": "Last digits only — never the full number.",
+      "currencyImmutable": "The currency can't be changed — create another account instead.",
+      "scopeImmutable": "The scope can't be changed after creation.",
+      "kindImmutable": "The kind can't be changed after creation.",
+      "openingBalance": "Opening balance",
+      "openingBalanceAt": "…on",
+      "openingHint": "The balance your statement showed on that date. Everything after it is calculated.",
+      "billingAccount": "Billed from",
+      "billingDay": "Billing day",
+      "billingNone": "Not linked",
+      "billingHint": "The bank account the card bill is charged to, and the day of the month.",
+      "reportedBalance": "Balance the bank reports",
+      "reportedBalanceAt": "…on",
+      "reportedHint": "The bank's own number — statement imports update it for you.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "saving": "Saving…",
+      "discardChanges": "Discard your changes?",
+      "discard": "Discard",
+      "keepEditing": "Keep editing",
+      "errorGeneric": "Could not save the account.",
+      "validation": {
+        "nameRequired": "Name is required.",
+        "nameTooLong": "Name must be 100 characters or fewer.",
+        "kindRequired": "Pick a kind.",
+        "currencyInvalid": "Pick a supported currency.",
+        "scopeRequired": "Pick a scope.",
+        "last4Invalid": "Enter 2 to 4 digits.",
+        "openingDateRequired": "Set the date of the opening balance.",
+        "billingDayInvalid": "Billing day must be between 1 and 28.",
+        "billingAccountRequired": "Pick the bank account the card is billed from."
+      }
+    },
+    "select": {
+      "label": "Account",
+      "unplaced": "No account",
+      "loading": "Loading accounts…",
+      "errorLoading": "Could not load accounts.",
+      "archivedSuffix": "(archived)"
+    },
+    "transfer": {
+      "toggle": "This is a transfer between my accounts",
+      "from": "From account",
+      "to": "To account",
+      "hint": "Transfers never count as spending.",
+      "validation": {
+        "fromRequired": "Pick the account the money leaves.",
+        "toRequired": "Pick the account the money goes to.",
+        "sameAccount": "Pick two different accounts.",
+        "currencyMismatch": "Both accounts must use the same currency."
+      }
+    },
+    "filters": {
+      "account": "Account",
+      "anyAccount": "Any account"
+    },
+    "row": {
+      "transferTo": "→ {name}",
+      "bankConfirmed": "Bank-confirmed",
+      "viewAccount": "View account",
+      "bankConfirmedHint": "A statement line from your bank matches this transaction."
+    },
+    "overview": {
+      "title": "Accounts",
+      "manage": "Manage accounts",
+      "net": "Net position",
+      "empty": "No accounts yet — add one to track your balance.",
+      "pending": "{count, plural, =1 {1 line to review} other {# lines to review}}",
+      "pendingGap": "{count, plural, =1 {1 line to review} other {# lines to review}} · {amount} unexplained",
+      "loading": "Loading accounts…",
+      "errorLoading": "Could not load accounts."
+    },
+    "delete": {
+      "title": "Delete account",
+      "warning": "Delete \"{name}\"? Its transactions are kept and become unplaced; imported statements and their lines are deleted. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
     }
   }
 }

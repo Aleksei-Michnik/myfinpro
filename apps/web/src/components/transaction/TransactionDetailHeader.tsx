@@ -13,9 +13,11 @@ import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
 import { Card } from '@/components/ui/Card';
 import { Link } from '@/i18n/navigation';
+import { useAccountDirectory } from '@/lib/account/account-context';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useGroups } from '@/lib/group/group-context';
 import {
+  directionPresentation,
   formatOccurredAt,
   formatScopeLabel,
   formatSignedAmount,
@@ -44,6 +46,8 @@ export function TransactionDetailHeader({
 }: TransactionDetailHeaderProps) {
   const t = useTranslations('transactions');
   const tDetail = useTranslations('transactions.detail');
+  const tAccounts = useTranslations('accounts');
+  const directory = useAccountDirectory();
   const locale = useLocale();
   const { user } = useAuth();
   const { groups } = useGroups();
@@ -59,11 +63,7 @@ export function TransactionDetailHeader({
 
   const dateText = formatOccurredAt(transaction.occurredAt, locale);
   const amountText = formatSignedAmount(transaction, locale);
-  const directionClass =
-    transaction.direction === 'IN'
-      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
-      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
-  const directionLabel = transaction.direction === 'IN' ? t('directions.in') : t('directions.out');
+  const { directionClass, directionLabel } = directionPresentation(transaction, t);
   // Guard before translating (same convention as GroupCard's isKnownType):
   // `type`/`status` are forward-compat plain strings — an unknown value falls
   // back to the raw enum instead of a broken translation key.
@@ -118,6 +118,37 @@ export function TransactionDetailHeader({
         <Badge tone="primary" data-testid="detail-status">
           {statusLabel}
         </Badge>
+        {transaction.accountId && (
+          <Badge tone="neutral" data-testid="detail-account">
+            {directory?.get(transaction.accountId)?.name ?? '…'}
+          </Badge>
+        )}
+        {transaction.transferAccountId && (
+          <Badge tone="neutral" data-testid="detail-transfer">
+            <span aria-hidden="true" className="inline-block rtl:-scale-x-100">
+              →
+            </span>{' '}
+            {directory?.get(transaction.transferAccountId)?.name ?? '…'}
+          </Badge>
+        )}
+        {transaction.statementLineId && (
+          <Badge
+            tone="success"
+            title={tAccounts('row.bankConfirmedHint')}
+            data-testid="detail-bank-confirmed"
+          >
+            {tAccounts('row.bankConfirmed')}
+          </Badge>
+        )}
+        {transaction.accountId && (
+          <Link
+            href={`/accounts/${transaction.accountId}`}
+            className="text-xs text-primary-700 hover:underline dark:text-primary-300"
+            data-testid="detail-view-account"
+          >
+            {tAccounts('row.viewAccount')}
+          </Link>
+        )}
       </div>
 
       <div

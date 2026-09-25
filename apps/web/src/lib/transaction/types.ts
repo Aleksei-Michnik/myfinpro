@@ -152,6 +152,10 @@ export interface CreateTransactionInput {
   attributions: AttributionScope[];
   schedule?: never;
   plan?: PlanSpec;
+  /** Phase 20 — the account the money moved through (optional). */
+  accountId?: string | null;
+  /** Phase 20 — set only on a transfer: the destination account (direction OUT, `transfer` category). */
+  transferAccountId?: string | null;
 }
 
 // ── Plan wire types (Phase 6 · Iteration 6.20) ──────────────────────────────
@@ -302,6 +306,9 @@ export interface UpdateTransactionInput {
   categoryIds?: string[];
   note?: string | null;
   attributions?: AttributionScope[];
+  /** Phase 20 — `null` unplaces the transaction. */
+  accountId?: string | null;
+  transferAccountId?: string | null;
 }
 
 /**
@@ -338,6 +345,10 @@ export interface ListTransactionsParams {
   scope?: string;
   direction?: 'IN' | 'OUT';
   categoryId?: string;
+  /** Phase 20 — matches `accountId` OR `transferAccountId`. */
+  accountId?: string;
+  /** Phase 20 — `true` drops transfer rows. */
+  excludeTransfers?: boolean;
   /** ISO date (YYYY-MM-DD) or timestamp. */
   from?: string;
   to?: string;

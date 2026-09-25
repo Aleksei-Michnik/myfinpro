@@ -11,7 +11,12 @@
 // primary); the single-select picker acts as an "add" control over
 // removable chips.
 
-import { CURRENCY_CODES, isPlanKind, TRANSACTION_MAX_CATEGORIES } from '@myfinpro/shared';
+import {
+  CURRENCY_CODES,
+  isPlanKind,
+  TRANSACTION_MAX_CATEGORIES,
+  TRANSFER_CATEGORY_SLUG,
+} from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PropagationChoiceDialog } from './PropagationChoiceDialog';
@@ -33,10 +38,12 @@ import {
 } from './TransactionScheduleSubForm';
 import { TransactionScopeSelector } from './TransactionScopeSelector';
 import { TransactionTypeSelector } from './TransactionTypeSelector';
+import { AccountSelect } from '@/components/account/AccountSelect';
 import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { Dialog } from '@/components/ui/Dialog';
 import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
@@ -88,6 +95,8 @@ export interface TransactionFormDialogProps {
     /** Multi-category: ordered, first id = primary. */
     categoryIds: string[];
     currency: string;
+    /** Phase 20 — pre-place the transaction on an account. */
+    accountId: string | null;
   }>;
   onClose(): void;
   onSaved(transaction: TransactionSummary | null): void;
@@ -111,6 +120,12 @@ interface FormState {
   scopes: AttributionScope[];
   note: string;
   type: TransactionType;
+  /** Phase 20 — account placement; `null` = unplaced. */
+  accountId: string | null;
+  /** Phase 20 — transfer destination; only meaningful while `isTransfer`. */
+  transferAccountId: string | null;
+  /** Phase 20 — a transfer forces direction OUT and the `transfer` category. */
+  isTransfer: boolean;
 }
 
 interface ValidationErrors {
@@ -120,6 +135,8 @@ interface ValidationErrors {
   category?: string;
   scopes?: string;
   note?: string;
+  account?: string;
+  transfer?: string;
 }
 
 function transactionToState(p: TransactionSummary): FormState {
@@ -136,6 +153,9 @@ function transactionToState(p: TransactionSummary): FormState {
     ),
     note: p.note ?? '',
     type: (p.type as TransactionType) || 'ONE_TIME',
+    accountId: p.accountId ?? null,
+    transferAccountId: p.transferAccountId ?? null,
+    isTransfer: p.transferAccountId !== null && p.transferAccountId !== undefined,
   };
 }
 
@@ -168,6 +188,29 @@ function findAccessibleAttributions(
   return result;
 }
 
+/** The system `transfer` category (Phase 20) — the only category a transfer row may carry. */
+export function findTransferCategory(
+  cats: CategoryDto[] | null | undefined,
+): CategoryDto | undefined {
+  return (cats ?? []).find((c) => c.ownerType === 'system' && c.slug === TRANSFER_CATEGORY_SLUG);
+}
+
+/**
+ * What the API receives for a transfer: direction OUT and exactly the
+ * `transfer` category, whatever the hidden controls still hold.
+ */
+export function normalizeForSubmit(
+  state: FormState,
+  transferCategoryId: string | undefined,
+): FormState {
+  if (!state.isTransfer) return state;
+  return {
+    ...state,
+    direction: 'OUT',
+    categoryIds: transferCategoryId ? [transferCategoryId] : state.categoryIds,
+  };
+}
+
 /** Build a minimal UpdateTransactionInput containing only the changed fields. */
 export function computeDiff(
   original: TransactionSummary,
@@ -196,6 +239,14 @@ export function computeDiff(
     draft.categoryIds.every((id, i) => id === originalCategoryIds[i]);
   if (!categoriesMatch) {
     diff.categoryIds = draft.categoryIds;
+  }
+  // Phase 20 — account placement and transfer destination.
+  if ((draft.accountId ?? null) !== (original.accountId ?? null)) {
+    diff.accountId = draft.accountId ?? null;
+  }
+  const draftTransfer = draft.isTransfer ? (draft.transferAccountId ?? null) : null;
+  if (draftTransfer !== (original.transferAccountId ?? null)) {
+    diff.transferAccountId = draftTransfer;
   }
 
   const normalizedDraftNote = draft.note.length === 0 ? null : draft.note;
@@ -241,6 +292,7 @@ export function TransactionFormDialog({
   const tValidation = useTranslations('transactions.form.validation');
   const tCategoryPicker = useTranslations('transactions.categoryPicker');
   const tSchedule = useTranslations('transactions.schedule.form');
+  const tAccounts = useTranslations('accounts');
   const tScheduleValidation = useTranslations('transactions.schedule.form.validation');
   const tPropagate = useTranslations('transactions.propagate');
   const tPlanValidation = useTranslations('transactions.plan.form.validation');
@@ -355,6 +407,9 @@ export function TransactionFormDialog({
       scopes,
       note: '',
       type: 'ONE_TIME',
+      accountId: defaults?.accountId ?? null,
+      transferAccountId: null,
+      isTransfer: false,
     };
   }, [mode, effectiveTransaction?.id, refetchedTransaction]);
 
@@ -574,7 +629,16 @@ export function TransactionFormDialog({
       }
     }
 
-    if (s.categoryIds.length === 0) {
+    if (s.isTransfer) {
+      // Phase 20 — a transfer needs two distinct accounts of one currency;
+      // the category is the system `transfer` category, set at submit.
+      if (!s.accountId) next.account = tAccounts('transfer.validation.fromRequired');
+      if (!s.transferAccountId) next.transfer = tAccounts('transfer.validation.toRequired');
+      else if (s.transferAccountId === s.accountId) {
+        next.transfer = tAccounts('transfer.validation.sameAccount');
+      }
+      if (!findTransferCategory(cats)) next.category = tValidation('categoryRequired');
+    } else if (s.categoryIds.length === 0) {
       next.category = tValidation('categoryRequired');
     } else if (cats && cats.length > 0) {
       // Multi-category: every selected category must fit the direction.
@@ -613,6 +677,17 @@ export function TransactionFormDialog({
     if (!code) return false;
     if (code === 'TRANSACTION_INVALID_AMOUNT') {
       setErrors((prev) => ({ ...prev, amount: extractMessage(err) }));
+      return true;
+    }
+    if (code === 'TRANSACTION_TRANSFER_INVALID') {
+      setErrors((prev) => ({ ...prev, transfer: extractMessage(err) }));
+      return true;
+    }
+    if (
+      code === 'TRANSACTION_ACCOUNT_NOT_FOUND' ||
+      code === 'TRANSACTION_ACCOUNT_CURRENCY_MISMATCH'
+    ) {
+      setErrors((prev) => ({ ...prev, account: extractMessage(err) }));
       return true;
     }
     if (code === 'TRANSACTION_INVALID_CURRENCY') {
@@ -657,6 +732,7 @@ export function TransactionFormDialog({
   function runSave() {
     if (isGeneratedOccurrence) return;
     const { ok, amountCents, occurredAtIso, errors: valErrors } = validate(state, categories);
+    const effective = normalizeForSubmit(state, findTransferCategory(categories)?.id);
     setErrors(valErrors);
 
     // When the transaction is RECURRING (create or edit-with-existing-or-new-schedule),
@@ -693,7 +769,7 @@ export function TransactionFormDialog({
     // occurredAt and type are NOT cascadeable (period/schedule stays read-only,
     // deferred to 6.18.2), so they don't trigger the dialog on their own.
     if (mode === 'edit' && effectiveTransaction) {
-      const diff = computeDiff(effectiveTransaction, state, amountCents, occurredAtIso);
+      const diff = computeDiff(effectiveTransaction, effective, amountCents, occurredAtIso);
       const isTypeChange =
         state.type !== effectiveTransaction.type &&
         (state.type === 'ONE_TIME' || state.type === 'RECURRING');
@@ -713,7 +789,7 @@ export function TransactionFormDialog({
         try {
           if (mode === 'create') {
             const payload: CreateTransactionInput = {
-              direction: state.direction,
+              direction: effective.direction,
               type: isPlanCreate
                 ? (state.type as 'INSTALLMENT' | 'LOAN' | 'MORTGAGE')
                 : willBeRecurring
@@ -723,9 +799,13 @@ export function TransactionFormDialog({
               amountCents,
               currency: state.currency,
               occurredAt: occurredAtIso,
-              categoryIds: state.categoryIds,
+              categoryIds: effective.categoryIds,
               note: state.note.length > 0 ? state.note : undefined,
               attributions: state.scopes,
+              ...(effective.accountId ? { accountId: effective.accountId } : {}),
+              ...(effective.isTransfer && effective.transferAccountId
+                ? { transferAccountId: effective.transferAccountId }
+                : {}),
             };
             const created = await createTransaction(payload, signal);
             // Two-step create for RECURRING: transaction, then schedule. Roll
@@ -1081,47 +1161,51 @@ export function TransactionFormDialog({
           runSave();
         }}
       >
-        {/* Direction */}
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('direction')}
-          </div>
-          <div
-            className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
-            role="group"
-            aria-label={t('direction')}
-          >
-            <button
-              ref={directionRef}
-              type="button"
-              onClick={() => setDirection('IN')}
-              disabled={allInputsDisabled}
-              aria-pressed={state.direction === 'IN'}
-              data-testid="form-direction-in"
-              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                state.direction === 'IN'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              {t('directionIn')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDirection('OUT')}
-              disabled={allInputsDisabled}
-              aria-pressed={state.direction === 'OUT'}
-              data-testid="form-direction-out"
-              className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
-                state.direction === 'OUT'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              {t('directionOut')}
-            </button>
-          </div>
-        </div>
+        {!state.isTransfer && (
+          <>
+            {/* Direction */}
+            <div className="mb-3">
+              <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                {t('direction')}
+              </div>
+              <div
+                className="inline-flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-600"
+                role="group"
+                aria-label={t('direction')}
+              >
+                <button
+                  ref={directionRef}
+                  type="button"
+                  onClick={() => setDirection('IN')}
+                  disabled={allInputsDisabled}
+                  aria-pressed={state.direction === 'IN'}
+                  data-testid="form-direction-in"
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    state.direction === 'IN'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {t('directionIn')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDirection('OUT')}
+                  disabled={allInputsDisabled}
+                  aria-pressed={state.direction === 'OUT'}
+                  data-testid="form-direction-out"
+                  className={`border-l border-gray-300 px-3 py-1.5 text-sm font-medium transition-colors dark:border-gray-600 ${
+                    state.direction === 'OUT'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {t('directionOut')}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Amount + Currency + Date */}
         <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1189,82 +1273,139 @@ export function TransactionFormDialog({
           </label>
         </div>
 
-        {/* Categories — multi-category: the picker appends, the chips list
-              the selection in order with the first marked as primary. The
-              dialog-owned fetch surfaces via the standard container overlay. */}
-        <div className="relative mb-3">
-          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            <span>{t('categories')}</span>
-            <div className="mt-1">
-              <TransactionCategoryPicker
-                direction={state.direction}
-                value={null}
-                onChange={addCategory}
-                categories={availableCategories}
-                disabled={
-                  allInputsDisabled ||
-                  categoriesOp.isLoading ||
-                  state.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
-                }
-                testId="form-category-picker"
+        {/* Account + transfer (Phase 20.3) */}
+        <div className="mb-3 space-y-2">
+          <AccountSelect
+            label={state.isTransfer ? tAccounts('transfer.from') : tAccounts('select.label')}
+            value={state.accountId}
+            onChange={(id) =>
+              setState((s) => ({
+                ...s,
+                accountId: id,
+                transferAccountId: s.transferAccountId === id ? null : s.transferAccountId,
+              }))
+            }
+            currency={state.currency}
+            disabled={allInputsDisabled}
+            testId="form-account"
+            error={errors.account}
+          />
+          <Checkbox
+            checked={state.isTransfer}
+            onChange={(e) => {
+              const isTransfer = e.target.checked;
+              setState((s) => ({
+                ...s,
+                isTransfer,
+                transferAccountId: isTransfer ? s.transferAccountId : null,
+              }));
+            }}
+            disabled={allInputsDisabled || state.type !== 'ONE_TIME'}
+            label={tAccounts('transfer.toggle')}
+            data-testid="form-transfer-toggle"
+          />
+          {state.isTransfer && (
+            <>
+              <AccountSelect
+                label={tAccounts('transfer.to')}
+                value={state.transferAccountId}
+                onChange={(id) => setState((s) => ({ ...s, transferAccountId: id }))}
+                currency={state.currency}
+                excludeIds={state.accountId ? [state.accountId] : undefined}
+                disabled={allInputsDisabled}
+                testId="form-transfer-to"
+                error={errors.transfer}
               />
-            </div>
-          </label>
-          <LoadingOverlay active={categoriesOp.isLoading} />
-          {categoriesOp.isError && categoriesOp.error && (
-            <InlineErrorBanner
-              className="mt-1"
-              reason={categoriesOp.error.reason}
-              httpStatus={categoriesOp.error.httpStatus}
-              message={tCategoryPicker('errorLoading', {
-                message: categoriesOp.error.message ?? '',
-              })}
-              onRetry={() => void categoriesOp.retry()}
-              retrying={categoriesOp.isLoading}
-              data-testid="form-categories-load-error"
-            />
-          )}
-          {state.categoryIds.length > 0 && (
-            <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="form-category-chips">
-              {state.categoryIds.map((id, idx) => {
-                const name = categoryNameById.get(id) ?? id;
-                return (
-                  <li
-                    key={id}
-                    data-testid={`form-category-chip-${id}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                  >
-                    <span>{name}</span>
-                    {idx === 0 && (
-                      <Badge
-                        tone="primary"
-                        className="px-1.5 py-px text-[10px]"
-                        data-testid={`form-category-primary-${id}`}
-                      >
-                        {t('categoryPrimary')}
-                      </Badge>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeCategory(id)}
-                      disabled={allInputsDisabled}
-                      aria-label={t('categoryRemove', { name })}
-                      data-testid={`form-category-remove-${id}`}
-                      className="rounded-full px-0.5 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:text-gray-100"
-                    >
-                      ✕
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {errors.category && (
-            <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
-              {errors.category}
-            </span>
+              <p
+                className="text-xs text-gray-500 dark:text-gray-400"
+                data-testid="form-transfer-hint"
+              >
+                {tAccounts('transfer.hint')}
+              </p>
+            </>
           )}
         </div>
+
+        {!state.isTransfer && (
+          <>
+            {/* Categories — multi-category: the picker appends, the chips list
+              the selection in order with the first marked as primary. The
+              dialog-owned fetch surfaces via the standard container overlay. */}
+            <div className="relative mb-3">
+              <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+                <span>{t('categories')}</span>
+                <div className="mt-1">
+                  <TransactionCategoryPicker
+                    direction={state.direction}
+                    value={null}
+                    onChange={addCategory}
+                    categories={availableCategories}
+                    disabled={
+                      allInputsDisabled ||
+                      categoriesOp.isLoading ||
+                      state.categoryIds.length >= TRANSACTION_MAX_CATEGORIES
+                    }
+                    testId="form-category-picker"
+                  />
+                </div>
+              </label>
+              <LoadingOverlay active={categoriesOp.isLoading} />
+              {categoriesOp.isError && categoriesOp.error && (
+                <InlineErrorBanner
+                  className="mt-1"
+                  reason={categoriesOp.error.reason}
+                  httpStatus={categoriesOp.error.httpStatus}
+                  message={tCategoryPicker('errorLoading', {
+                    message: categoriesOp.error.message ?? '',
+                  })}
+                  onRetry={() => void categoriesOp.retry()}
+                  retrying={categoriesOp.isLoading}
+                  data-testid="form-categories-load-error"
+                />
+              )}
+              {state.categoryIds.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="form-category-chips">
+                  {state.categoryIds.map((id, idx) => {
+                    const name = categoryNameById.get(id) ?? id;
+                    return (
+                      <li
+                        key={id}
+                        data-testid={`form-category-chip-${id}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                      >
+                        <span>{name}</span>
+                        {idx === 0 && (
+                          <Badge
+                            tone="primary"
+                            className="px-1.5 py-px text-[10px]"
+                            data-testid={`form-category-primary-${id}`}
+                          >
+                            {t('categoryPrimary')}
+                          </Badge>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeCategory(id)}
+                          disabled={allInputsDisabled}
+                          aria-label={t('categoryRemove', { name })}
+                          data-testid={`form-category-remove-${id}`}
+                          className="rounded-full px-0.5 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-400 dark:hover:text-gray-100"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {errors.category && (
+                <span className="mt-1 text-xs text-red-600" data-testid="form-error-category">
+                  {errors.category}
+                </span>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Scopes */}
         <div className="mb-3">
