@@ -172,8 +172,17 @@ test.describe('Accounts happy path (20.3 + 20.5)', () => {
     await expect(page.getByTestId('account-tab-review-count')).toHaveText('6');
     const rows = page.getByTestId('account-review-list').locator('[data-testid^="line-row-"]');
     await expect(rows).toHaveCount(6);
-    const firstId = (await rows.first().getAttribute('data-testid'))!.replace('line-row-', '');
-    // Create: every line needs a category the first time round.
+    // Create: pick the first line proposed as "create" (a same-day equal amount
+    // may already carry a confident match — that row has no category picker).
+    const firstPicker = page
+      .getByTestId('account-review-list')
+      .locator('[data-testid^="line-category-picker-"]')
+      .first();
+    await expect(firstPicker).toBeVisible();
+    const firstId = (await firstPicker.getAttribute('data-testid'))!.replace(
+      'line-category-picker-',
+      '',
+    );
     await page
       .getByTestId(`line-category-picker-${firstId}`)
       .getByTestId('category-picker-select')

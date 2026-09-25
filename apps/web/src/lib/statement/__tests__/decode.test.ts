@@ -7,6 +7,7 @@ import {
   decodeStatementFile,
   decodeWorkbook,
   parseCsv,
+  redactFileName,
   statementFileKind,
 } from '../decode';
 
@@ -110,5 +111,12 @@ describe('decodeStatementFile', () => {
     await expect(decodeStatementFile(fileOf('h.csv', ''))).rejects.toMatchObject({
       code: 'unreadable',
     });
+  });
+});
+
+describe('redactFileName', () => {
+  it('hides digit runs that could be an account or card number, keeps the rest', () => {
+    expect(redactFileName('hapoalim_12345678_sept.xlsx')).toBe('hapoalim_…_sept.xlsx');
+    expect(redactFileName('export-2026-09.csv')).toBe('export-2026-09.csv');
   });
 });

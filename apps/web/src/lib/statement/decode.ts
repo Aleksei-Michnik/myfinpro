@@ -16,6 +16,9 @@ set_cptable(cptable);
 /** Hard cap before decoding — a statement is kilobytes, never more (research §6). */
 export const STATEMENT_FILE_MAX_BYTES = 5 * 1024 * 1024;
 
+/** Rows read from a sheet at most — five times the import cap, far above any statement. */
+export const STATEMENT_MAX_ROWS = 10_000;
+
 export const STATEMENT_FILE_EXTENSIONS = ['csv', 'xlsx', 'xls'] as const;
 export type StatementFileKind = (typeof STATEMENT_FILE_EXTENSIONS)[number];
 
@@ -110,12 +113,16 @@ function sniffDelimiter(text: string): string {
 export function decodeWorkbook(bytes: Uint8Array): string[][] {
   // `raw: true` on read keeps HTML/CSV cells as the text they were — SheetJS
   // would otherwise parse `01/09/2026` month-first, wrong for Israeli exports.
+  // Only the first sheet is decoded and rows are capped, so a hostile
+  // workbook cannot expand past the size cap into a frozen tab.
   const wb = read(bytes, {
     type: 'array',
     dense: true,
     raw: true,
     cellFormula: false,
     cellHTML: false,
+    sheets: 0,
+    sheetRows: STATEMENT_MAX_ROWS,
   });
   const first = wb.SheetNames[0];
   if (!first) return [];
@@ -146,4 +153,13 @@ export async function decodeStatementFile(file: File): Promise<DecodedStatement>
 /** Trim cells, drop rows that hold nothing. */
 function tidy(rows: string[][]): string[][] {
   return rows.map((r) => r.map((c) => c.trim())).filter((r) => r.some((c) => c !== ''));
+}
+
+/**
+ * Bank exports often carry the full account or card number in the file name;
+ * only the name's shape is kept for the imports list (design §9: no account
+ * number is ever stored). Digit runs of five or more become an ellipsis.
+ */
+export function redactFileName(name: string): string {
+  return name.replace(/\d{5,}/g, '…');
 }

@@ -32,12 +32,13 @@ import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { Stat } from '@/components/ui/Stat';
 import { Link } from '@/i18n/navigation';
 import { useAccounts, type AccountApiError } from '@/lib/account/account-context';
+import { drainSuggestions } from '@/lib/account/apply-suggestions';
 import {
   ACCOUNT_IMPORT_MAX_LINES,
   type AccountImport,
   type AccountSummary,
 } from '@/lib/account/types';
-import { StatementDecodeError, decodeStatementFile } from '@/lib/statement/decode';
+import { StatementDecodeError, decodeStatementFile, redactFileName } from '@/lib/statement/decode';
 import { formatAmount, formatOccurredDate } from '@/lib/transaction/formatters';
 import { useAsyncOperation } from '@/lib/ui';
 
@@ -223,7 +224,7 @@ export function ImportStatementDialog({
               accountId,
               {
                 source,
-                originalName: file?.name,
+                originalName: file ? redactFileName(file.name) : undefined,
                 lines: chunk,
                 // The statement balance belongs to the whole statement — sent once.
                 ...(last
@@ -256,14 +257,8 @@ export function ImportStatementDialog({
   const handleApply = async () => {
     if (!accountId) return;
     const count = await applyOp.run(async (signal) => {
-      let total = 0;
-      // The API caps each run; loop until the queue is drained.
-      for (;;) {
-        const res = await applySuggestions(accountId, undefined, signal);
-        total += res.matched + res.created + res.transferred;
-        if (res.remaining === 0 || res.matched + res.created + res.transferred === 0) break;
-      }
-      return total;
+      const t = await drainSuggestions(() => applySuggestions(accountId, undefined, signal));
+      return t.matched + t.created + t.transferred;
     });
     if (count === undefined) return;
     setApplied(count);

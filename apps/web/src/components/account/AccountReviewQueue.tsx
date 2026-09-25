@@ -21,6 +21,7 @@ import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { useAccounts, type AccountApiError } from '@/lib/account/account-context';
+import { drainSuggestions } from '@/lib/account/apply-suggestions';
 import { isReconciled } from '@/lib/account/formatters';
 import type {
   AccountSummary,
@@ -295,20 +296,9 @@ export function AccountReviewQueue({
   const applyAll = async () => {
     setConfirmApply(false);
     const total = await applyOp.run(async (signal) => {
-      let matched = 0;
-      let created = 0;
-      let transferred = 0;
-      let skipped = 0;
-      for (;;) {
-        const r = await applySuggestions(account.id, undefined, signal);
-        matched += r.matched;
-        created += r.created;
-        transferred += r.transferred;
-        skipped += r.skipped;
-        if (r.remaining === 0 || r.matched + r.created + r.transferred === 0) break;
-      }
-      addToast('success', t('applied', { matched, created, transferred, skipped }));
-      return matched + created + transferred;
+      const totals = await drainSuggestions(() => applySuggestions(account.id, undefined, signal));
+      addToast('success', t('applied', { ...totals }));
+      return totals.matched + totals.created + totals.transferred;
     });
     if (total === undefined) {
       addToast('error', (applyOp.error as AccountApiError | null)?.message ?? t('actionFailed'));
@@ -329,8 +319,10 @@ export function AccountReviewQueue({
   const onKeyDown = (e: KeyboardEvent<HTMLUListElement>) => {
     if (!active || candidatesFor) return;
     const target = e.target as HTMLElement;
+    // Inside a field only Escape is ours: Enter in a native <select> is the
+    // browser picking an option, never a commit (security review, finding 4).
     const inField = ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
-    if (inField && e.key !== 'Escape' && e.key !== 'Enter') return;
+    if (inField && e.key !== 'Escape') return;
     const d = decisions[active.id];
     switch (e.key) {
       case 'ArrowDown':
@@ -348,7 +340,6 @@ export function AccountReviewQueue({
         break;
       }
       case 'Enter':
-        if (inField && target.tagName !== 'SELECT') return;
         e.preventDefault();
         if (active.status === 'PENDING') void decide(active);
         break;
