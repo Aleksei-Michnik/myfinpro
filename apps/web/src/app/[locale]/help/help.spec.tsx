@@ -47,7 +47,18 @@ const { mockT } = vi.hoisted(() => {
     'security.forgotPassword.title': 'Forgot Your Password?',
     'security.forgotPassword.content':
       'Go to the <link>forgot password page</link> to request a password reset link.',
-    'gettingHelp.title': '6. Getting Help',
+    'connector.title': '6. Automate with a connector',
+    'connector.whatIsIt.title': 'What a connector is',
+    'connector.whatIsIt.content': 'A connector is a small program you run on your own computer...',
+    'connector.setup.title': 'Set it up',
+    'connector.setup.content':
+      'Create a token in <link>Settings → Connector tokens</link> and run the connector.',
+    'connector.lines.title': 'What happens to the lines',
+    'connector.lines.content':
+      'Lines the connector sends land as a normal import — review them in <link>the Review tab</link>.',
+    'connector.stayingSafe.title': 'Staying safe',
+    'connector.stayingSafe.content': 'Use one token per machine and give it an expiry...',
+    'gettingHelp.title': '7. Getting Help',
     'gettingHelp.contact.title': 'Contact & Support',
     'gettingHelp.contact.content': 'If you need assistance or have questions...',
   };
@@ -112,7 +123,8 @@ describe('HelpPage', () => {
       '3. Using the Dashboard',
       '4. Settings & Preferences',
       '5. Security Tips',
-      '6. Getting Help',
+      '6. Automate with a connector',
+      '7. Getting Help',
     ];
     for (const heading of expectedHeadings) {
       expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument();
@@ -135,6 +147,10 @@ describe('HelpPage', () => {
       'Strong Password Recommendations',
       'Keeping Your Account Secure',
       'Forgot Your Password?',
+      'What a connector is',
+      'Set it up',
+      'What happens to the lines',
+      'Staying safe',
       'Contact & Support',
     ];
     for (const heading of expectedSubheadings) {
@@ -149,6 +165,19 @@ describe('HelpPage', () => {
     });
     expect(forgotLink).toBeInTheDocument();
     expect(forgotLink).toHaveAttribute('href', '/auth/forgot-password');
+  });
+
+  it('renders the connector section with its anchor and links', async () => {
+    await renderPage();
+    expect(document.getElementById('connector')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings → Connector tokens' })).toHaveAttribute(
+      'href',
+      '/settings/tokens',
+    );
+    expect(screen.getByRole('link', { name: 'the Review tab' })).toHaveAttribute(
+      'href',
+      '/accounts',
+    );
   });
 
   it('renders a Back to Home link', async () => {

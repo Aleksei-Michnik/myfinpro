@@ -74,4 +74,9 @@ describe('ConfirmDialog (8.27)', () => {
     expect(confirm).toHaveAttribute('aria-busy', 'true');
     expect(confirm.querySelector('[data-testid="button-spinner"]')).toBeTruthy();
   });
+
+  it('stacked raises the backdrop above a host dialog', () => {
+    renderDialog({ stacked: true });
+    expect(screen.getByTestId('confirm-dialog-backdrop').className).toContain('z-[60]');
+  });
 });

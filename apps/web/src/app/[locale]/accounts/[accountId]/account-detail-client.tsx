@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
 import { Stat } from '@/components/ui/Stat';
 import { Tabs } from '@/components/ui/Tabs';
-import { useRouter, usePathname } from '@/i18n/navigation';
+import { Link, useRouter, usePathname } from '@/i18n/navigation';
 import { useAccounts } from '@/lib/account/account-context';
 import { displayLedgerCents, isCardOwed, isReconciled } from '@/lib/account/formatters';
 import { INSTITUTION_META, type AccountImport, type AccountSummary } from '@/lib/account/types';
@@ -40,6 +40,7 @@ function isTab(v: string | null): v is Tab {
 export function AccountDetailClient({ accountId }: { accountId: string }) {
   const t = useTranslations('accounts');
   const tDetail = useTranslations('accounts.detail');
+  const tTokens = useTranslations('settings.tokens');
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -328,6 +329,17 @@ export function AccountDetailClient({ accountId }: { accountId: string }) {
                 emptyAction={importButton}
               />
               <LoadingOverlay active={importsOp.isLoading && importsLoaded} />
+              {/* 20.7 — the connector's entry point where the need for it
+                  actually appears: after seeing what a manual import does. */}
+              <p className="mt-3 text-sm">
+                <Link
+                  href="/settings/tokens"
+                  className="text-primary-600 underline hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                  data-testid="account-imports-tokens-link"
+                >
+                  {tTokens('fromImports')}
+                </Link>
+              </p>
             </div>
           )}
 
