@@ -314,7 +314,9 @@ jobs:
           NEXT_PUBLIC_API_URL: /api
           API_INTERNAL_URL: http://api:3001
           # ── Receipt extraction (LLM) — provider/model are repo/env vars,
-          #    the API key is a secret. Absent → compose falls back to mock. ──
+          #    the API key is a secret. Absent → mock on staging/dev only; in
+          #    production an absent provider boots "unconfigured" (receipts fail
+          #    with a settings-facing reason) — see runbook-llm-extraction.md §0. ──
           RECEIPT_EXTRACTION_PROVIDER: ${{ vars.RECEIPT_EXTRACTION_PROVIDER }}
           RECEIPT_EXTRACTION_MODEL: ${{ vars.RECEIPT_EXTRACTION_MODEL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -46,6 +46,17 @@ export function findLlmModel(provider: string, modelId: string): LlmCatalogModel
 }
 
 /**
+ * Model used when a provider is chosen without a model: the deployment default
+ * binding (`RECEIPT_EXTRACTION_PROVIDER` without `RECEIPT_EXTRACTION_MODEL`)
+ * and the BYOK-without-selection fallback (8.11-hotfix). Every value must be a
+ * catalog id.
+ */
+export const LLM_DEFAULT_MODEL = {
+  anthropic: 'claude-opus-4-8',
+  openai: 'gpt-5.6',
+} as const satisfies Record<LlmProvider, string>;
+
+/**
  * Shape gate for BYOK API keys before storage — rejects obviously wrong
  * values (wrong provider, whitespace, truncated paste). Liveness is verified
  * separately with a real provider call at save time (runbook §9.4 layer 5).

@@ -51,6 +51,8 @@ const catalog = (over: Partial<LlmCatalogResponse> = {}): LlmCatalogResponse => 
   selection: null,
   credentials: [],
   sharedProviders: ['anthropic'],
+  deploymentProvider: 'anthropic',
+  effective: null,
   ...over,
 });
 
@@ -76,6 +78,7 @@ describe('LlmSettingsSection', () => {
       catalog({
         selection: { provider: 'anthropic', model: 'claude-sonnet-5' },
         credentials: [{ provider: 'openai', keyHint: 'cdef', updatedAt: '2026-07-12T00:00:00Z' }],
+        effective: { provider: 'anthropic', model: 'claude-sonnet-5', source: 'selection' },
       }),
     );
     render(<LlmSettingsSection />);
@@ -89,6 +92,46 @@ describe('LlmSettingsSection', () => {
     expect(screen.getByTestId('llm-delete-key-openai')).toBeInTheDocument();
     // Anthropic runs on the shared key — no personal key stored.
     expect(screen.getByTestId('llm-key-status-anthropic')).toHaveTextContent('sharedAvailable');
+    // A user with an explicit selection needs no hint about what runs.
+    expect(screen.queryByTestId('llm-effective-hint')).not.toBeInTheDocument();
+  });
+
+  it('hints that a stored key runs at its default model when no selection was ever made', async () => {
+    fetchCatalogMock.mockResolvedValue(
+      catalog({
+        credentials: [
+          { provider: 'anthropic', keyHint: 'wxyz', updatedAt: '2026-07-12T00:00:00Z' },
+        ],
+        effective: { provider: 'anthropic', model: 'claude-sonnet-5', source: 'credential' },
+      }),
+    );
+    render(<LlmSettingsSection />);
+
+    const hint = await screen.findByTestId('llm-effective-hint');
+    expect(hint).toHaveAttribute('role', 'status');
+    expect(hint).toHaveTextContent('effectiveCredential');
+    expect(hint).toHaveTextContent('Anthropic');
+    expect(hint).toHaveTextContent('Claude Sonnet 5');
+  });
+
+  it('warns with the amber demo-provider notice when the deployment default is mock', async () => {
+    fetchCatalogMock.mockResolvedValue(catalog({ deploymentProvider: 'mock', effective: null }));
+    render(<LlmSettingsSection />);
+
+    const hint = await screen.findByTestId('llm-effective-hint');
+    expect(hint).toHaveAttribute('role', 'status');
+    expect(hint).toHaveTextContent('serverMock');
+  });
+
+  it('warns with the amber notice when no provider is configured on the server', async () => {
+    fetchCatalogMock.mockResolvedValue(
+      catalog({ deploymentProvider: 'unconfigured', effective: null }),
+    );
+    render(<LlmSettingsSection />);
+
+    const hint = await screen.findByTestId('llm-effective-hint');
+    expect(hint).toHaveAttribute('role', 'status');
+    expect(hint).toHaveTextContent('serverUnconfigured');
   });
 
   it('saves a model selection and reloads the catalog', async () => {

@@ -3,6 +3,7 @@ import {
   findLlmModel,
   isLlmProvider,
   LLM_API_KEY_PATTERNS,
+  LLM_DEFAULT_MODEL,
   LLM_MODEL_CATALOG,
   LLM_PROVIDERS,
 } from '../types/llm.types';
@@ -29,6 +30,16 @@ describe('LLM catalog', () => {
     expect(findLlmModel('openai', 'claude-sonnet-5')).toBeNull();
     expect(findLlmModel('anthropic', 'gpt-5.6')).toBeNull();
     expect(findLlmModel('gemini', 'gemini-pro')).toBeNull();
+  });
+
+  it('every LLM_DEFAULT_MODEL value is a catalog id', () => {
+    for (const provider of LLM_PROVIDERS) {
+      const modelId = LLM_DEFAULT_MODEL[provider];
+      expect(findLlmModel(provider, modelId)).not.toBeNull();
+    }
+    // A provider without a default would silently fall back to `undefined`
+    // in the model-less paths (deployment binding, BYOK without selection).
+    expect(Object.keys(LLM_DEFAULT_MODEL).sort()).toEqual([...LLM_PROVIDERS].sort());
   });
 
   it('isLlmProvider narrows only known providers', () => {

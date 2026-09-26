@@ -1,3 +1,4 @@
+import { LLM_DEFAULT_MODEL } from '@myfinpro/shared';
 import { BadRequestException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -53,6 +54,31 @@ describe('LlmSettingsService', () => {
     });
     const catalog = await makeService().getCatalog('u1');
     expect(catalog.selection).toEqual({ provider: 'anthropic', model: 'claude-sonnet-5' });
+    expect(catalog.effective).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+      source: 'selection',
+    });
+  });
+
+  it('reports the effective binding of a user with a key but no selection', async () => {
+    credentialsMock.listCredentials.mockResolvedValue([
+      { provider: 'anthropic', keyHint: 'abcd', updatedAt: new Date() },
+    ]);
+    const catalog = await makeService().getCatalog('u1');
+    expect(catalog.selection).toBeNull();
+    expect(catalog.effective).toEqual({
+      provider: 'anthropic',
+      model: LLM_DEFAULT_MODEL.anthropic,
+      source: 'credential',
+    });
+    expect(catalog.deploymentProvider).toBe('mock');
+  });
+
+  it('reports an unconfigured deployment when production sets no provider', async () => {
+    const catalog = await makeService({ NODE_ENV: 'production' }).getCatalog('u1');
+    expect(catalog.deploymentProvider).toBe('unconfigured');
+    expect(catalog.effective).toBeNull();
   });
 
   it('rejects a half-null selection and unknown catalog pairs', async () => {

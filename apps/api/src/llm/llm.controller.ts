@@ -54,7 +54,10 @@ export class LlmController {
   @Get('catalog')
   @CustomThrottle({ limit: 30, ttl: 60000 })
   @ApiOperation({ summary: 'Model catalog with availability, current selection and key hints' })
-  @ApiOkResponse({ description: 'Catalog, selection and hint-only credentials' })
+  @ApiOkResponse({
+    description:
+      'Catalog, selection, hint-only credentials, the deployment default provider and the effective binding',
+  })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })
   async getCatalog(@CurrentUser() user: JwtPayload) {
     return this.settingsService.getCatalog(user.sub);

@@ -33,9 +33,12 @@ services:
       # Product image storage — same rule as receipts (8.25-hotfix-2: the
       # default container-local path wiped every picture on each deploy).
       PRODUCT_IMAGE_STORAGE_DIR: /data/products
-      # Receipt extraction (LLM) — defaults to the deterministic mock provider;
-      # set RECEIPT_EXTRACTION_PROVIDER=anthropic + ANTHROPIC_API_KEY to use Claude.
-      RECEIPT_EXTRACTION_PROVIDER: ${RECEIPT_EXTRACTION_PROVIDER:-mock}
+      # Receipt extraction (LLM) — unset → mock outside production; in
+      # production an unset provider is "unconfigured" (receipts fail with a
+      # settings-facing reason instead of the mock fixture). Set
+      # anthropic|openai + the matching *_API_KEY to use a real model for
+      # everyone.
+      RECEIPT_EXTRACTION_PROVIDER: ${RECEIPT_EXTRACTION_PROVIDER:-}
       RECEIPT_EXTRACTION_MODEL: ${RECEIPT_EXTRACTION_MODEL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

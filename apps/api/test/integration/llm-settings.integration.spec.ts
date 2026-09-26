@@ -81,6 +81,9 @@ describe('Per-user LLM settings (integration)', () => {
     expect(res.body.selection).toBeNull();
     expect(res.body.credentials).toEqual([]);
     expect(res.body.sharedProviders).toEqual([]);
+    // 8.11-hotfix: nothing to run on → the deployment default decides.
+    expect(res.body.effective).toBeNull();
+    expect(res.body.deploymentProvider).toBe('mock');
   });
 
   it('rejects selecting a model whose provider has no usable key', async () => {
@@ -117,6 +120,18 @@ describe('Per-user LLM settings (integration)', () => {
       .expect(200);
     expect(list.body.credentials).toHaveLength(1);
     expect(list.body.credentials[0]).not.toHaveProperty('encryptedValue');
+
+    // 8.11-hotfix: the stored key alone already binds extraction to that
+    // provider — no selection needed, and never the deployment mock.
+    const beforeSelection = await request(app.getHttpServer())
+      .get('/api/v1/llm/catalog')
+      .set(auth(alice.accessToken))
+      .expect(200);
+    expect(beforeSelection.body.selection).toBeNull();
+    expect(beforeSelection.body.effective).toMatchObject({
+      provider: 'openai',
+      source: 'credential',
+    });
 
     // Selection now allowed; catalog reflects both.
     await request(app.getHttpServer())

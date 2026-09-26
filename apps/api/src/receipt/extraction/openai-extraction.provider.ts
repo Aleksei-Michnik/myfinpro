@@ -1,4 +1,4 @@
-import type { ExtractionResult } from '@myfinpro/shared';
+import { LLM_DEFAULT_MODEL, type ExtractionResult } from '@myfinpro/shared';
 import { Logger } from '@nestjs/common';
 import {
   buildContinuationPrompt,
@@ -53,7 +53,7 @@ export class OpenAiExtractionProvider implements ReceiptExtractionProvider {
 
   constructor(options: LlmClientOptions = {}) {
     this.apiKey = options.apiKey ?? '';
-    this.model = options.model || 'gpt-4o';
+    this.model = options.model || LLM_DEFAULT_MODEL.openai;
     this.baseUrl = options.baseUrl || 'https://api.openai.com/v1';
   }
 

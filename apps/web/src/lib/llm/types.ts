@@ -24,10 +24,24 @@ export interface LlmCredentialHint {
   updatedAt: string;
 }
 
+/** The deployment default binding (what runs when `effective` is null). */
+export type DeploymentExtractionProvider = 'mock' | 'anthropic' | 'openai' | 'unconfigured';
+
+/** What a user's extraction would run on, before keys: a selection or a stored credential. */
+export interface LlmBinding {
+  provider: string;
+  model: string;
+  source: 'selection' | 'credential';
+}
+
 export interface LlmCatalogResponse {
   models: LlmCatalogModelEntry[];
   /** null = deployment default decides. */
   selection: LlmSelection | null;
   credentials: LlmCredentialHint[];
   sharedProviders: LlmProvider[];
+  /** The deployment default binding (what runs when `effective` is null). */
+  deploymentProvider: DeploymentExtractionProvider;
+  /** What this user's extraction would run on, before keys: null = deployment default. */
+  effective: LlmBinding | null;
 }

@@ -30,6 +30,7 @@ describe('ReceiptExtractionProcessor', () => {
       providerName: 'mock',
       model: null,
       keySource: 'default',
+      bindingSource: null,
     }),
   };
   const matcherMock = {
