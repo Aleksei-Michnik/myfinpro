@@ -864,3 +864,45 @@ added (`receipts.link.*`, `receipts.attach.{or,linkExisting}`,
 audit) + controller + transaction `hasReceipt`/`createdByMe`/`publishUpdatedById`;
 web `LinkTransactionDialog`/`LinkReceiptDialog`/`AttachReceiptDialog` specs. All
 touched suites green; typecheck + lint + prettier clean.
+
+## 8.11-hotfix — production ran the mock: no default without a key, stored key binds alone (2026-09-26)
+
+**Symptom.** Every online (URL) and photo receipt in production came back as the same
+"Mock Grocery / 16.60" sum. Read-only checks on the acceptor: the API booted with
+`RECEIPT_EXTRACTION_PROVIDER=mock` and empty provider keys because no GitHub variable or
+secret was ever set and both app composes turned "unset" into `mock`; the edge log showed
+the owner had stored a personal Anthropic key (2026-08-15) but never a model selection, and
+`ExtractionResolverService` ignored a key without a selection. Production's `LOG_LEVEL=warn`
+hid the runbook's info-level boot line.
+
+**API.** `pickLlmBinding` (`apps/api/src/llm/llm-binding.util.ts`) is the single binding rule for
+the resolver and `GET /llm/catalog`: selection → stored personal key (its provider +
+`LLM_DEFAULT_MODEL`, Anthropic first) → deployment default. A key-derived binding never inherits
+the shared deployment key: an unreadable stored key fails permanently with "save it again in
+Settings" (security review). `resolveDeploymentProvider`
+(`apps/api/src/receipt/extraction/deployment-provider.util.ts`): unset/blank is `mock` outside
+production and `unconfigured` under `NODE_ENV=production` — `UnconfiguredExtractionProvider`
+fails every receipt with a settings-facing reason instead of the fixture, and the factory logs
+both that and a deliberate production mock at **warn**. `LLM_DEFAULT_MODEL` (shared, asserted
+against the catalog) replaces the providers' inline fallbacks, retiring the out-of-catalog
+`gpt-4o` default. The catalog response gains `deploymentProvider` and `effective`; audit rows
+carry `bindingSource`. Composes now pass `${RECEIPT_EXTRACTION_PROVIDER:-}`; the workflow
+comments, `.env.example`, runbook §0/§5/§6/§9.3 and `wiki/receipts-and-llm.md` follow.
+
+**Web.** Settings → Account → AI model renders one status line (`llm-effective-hint`): "your
+{provider} key is used with {model}" when a key is stored without a selection, an amber notice
+when the server default is the demo provider or nothing is configured. EN+HE.
+
+**Decisions.** Staging keeps the deterministic mock (`NODE_ENV=staging`) so the e2e receipt spec
+stays repeatable; production may still run the mock only by setting the variable explicitly.
+The owner's stored key starts reading receipts on the next production deploy without any
+secret being added; a deployment-wide provider needs `RECEIPT_EXTRACTION_PROVIDER` + the key
+as GitHub environment variable/secret (runbook §2–§3).
+
+### Tests
+
+api unit 1396 green (resolver: key-without-selection, Anthropic tie-break, unreadable key never
+falls through; factory: production unset/blank/whitespace → `unconfigured`, explicit mock;
+binding util 6; settings service `effective`/`deploymentProvider`); shared 210 green (default
+models are catalog ids); web unit 1419 green (settings hint states); integration
+`llm-settings` extended with the key-before-selection catalog case.

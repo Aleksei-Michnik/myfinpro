@@ -85,10 +85,10 @@ recent registry products (cross-language matching stage) and an optional `onProg
 | `ResilientExtractionProvider`                              | Decorator: 3 attempts, exponential backoff from 2 s, breaker opens at 5 consecutive failures for 60 s. `ExtractionFailedError` never retries or trips it |
 
 Two resolution paths. `extraction-provider.factory.ts` binds the **deployment default** from
-`RECEIPT_EXTRACTION_PROVIDER` (`mock|anthropic|openai`) + `RECEIPT_EXTRACTION_MODEL`; an unknown
-value **fails the boot** by design. `ExtractionResolverService` (8.11) overrides it per uploader:
-user selection → user's own key → shared env key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) → permanent
-failure with a settings-facing message. Instances are cached (max 50) so breaker state stays coherent.
+`RECEIPT_EXTRACTION_PROVIDER` (unset = `mock`, or `unconfigured` under `NODE_ENV=production`; an
+unknown value **fails the boot**) + `RECEIPT_EXTRACTION_MODEL`. `ExtractionResolverService` (8.11)
+overrides it per uploader via `pickLlmBinding`: selection, else a stored personal key (its provider +
+`LLM_DEFAULT_MODEL`), else the default; then own key → shared env key (selections only) → permanent failure.
 
 BYOK: keys live only in `user_llm_credentials`, AES-256-GCM encrypted under
 `LLM_SECRETS_ENCRYPTION_KEY` (32-byte base64), encoded `v1:<iv>:<tag>:<ciphertext>` so rotation is
@@ -187,9 +187,10 @@ provider is the fixture (design docs still speak of "fixture receipts (EN + HE)"
 - **Optimization only runs post-CONFIRM**, because the status machine guarantees extraction never
   re-reads the pages — the original stays model-grade for its whole extraction-relevant life.
 - **Walkthrough matching is allowed in REVIEW _and_ CONFIRMED**; header edits are REVIEW-only.
-- Deployment-default model fallbacks in the providers are `claude-opus-4-8` and **`gpt-4o`** — the
-  latter is not in `LLM_MODEL_CATALOG`, so the default path can run a model the picker never offers
-  (checked 2026-09-24).
+- 8.11-hotfix: model fallbacks come from **`LLM_DEFAULT_MODEL`** (shared, catalog ids by
+  assertion); an unset `RECEIPT_EXTRACTION_PROVIDER` is `mock` only outside production — under
+  `NODE_ENV=production` it binds `UnconfiguredExtractionProvider` (permanent settings-facing
+  failure, never the fixture), and a stored personal key alone binds extraction (`pickLlmBinding`).
 - Never put `:` in a BullMQ jobId (BullMQ ≥5 rejects it, partially and silently —
   `docs/phase-8-progress.md` 8.25-hotfix-2).
 

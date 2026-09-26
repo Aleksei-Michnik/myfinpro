@@ -134,6 +134,35 @@ describe('extractionProviderFactory', () => {
     expect(provider).toBe(mock);
   });
 
+  it('treats an empty provider value as unset outside production', () => {
+    // Compose passes `${RECEIPT_EXTRACTION_PROVIDER:-}` — an empty string.
+    expect(factory(configWith({ RECEIPT_EXTRACTION_PROVIDER: '' }), mock)).toBe(mock);
+    expect(factory(configWith({ NODE_ENV: 'development' }), mock)).toBe(mock);
+  });
+
+  it('refuses to default to the mock in production', async () => {
+    const provider = factory(configWith({ NODE_ENV: 'production' }), mock);
+    expect(provider.name).toBe('unconfigured');
+    // The shape production actually boots with: compose passes an empty
+    // string for an undefined variable; whitespace counts as unset too.
+    expect(
+      factory(configWith({ NODE_ENV: 'production', RECEIPT_EXTRACTION_PROVIDER: '' }), mock).name,
+    ).toBe('unconfigured');
+    expect(
+      factory(configWith({ NODE_ENV: 'production', RECEIPT_EXTRACTION_PROVIDER: '  ' }), mock).name,
+    ).toBe('unconfigured');
+    await expect(provider.extract(IMAGE_INPUT, CTX)).rejects.toThrow(ExtractionFailedError);
+    await expect(provider.extract(IMAGE_INPUT, CTX)).rejects.toThrow(/Settings/);
+  });
+
+  it('still honours an explicit mock in production', () => {
+    const provider = factory(
+      configWith({ NODE_ENV: 'production', RECEIPT_EXTRACTION_PROVIDER: 'mock' }),
+      mock,
+    );
+    expect(provider).toBe(mock);
+  });
+
   it('wraps real providers in the resilience decorator', () => {
     const provider = factory(
       configWith({ RECEIPT_EXTRACTION_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-test' }),

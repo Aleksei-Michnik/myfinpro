@@ -187,6 +187,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
         provider: resolved.providerName,
         model: resolved.model,
         keySource: resolved.keySource,
+        bindingSource: resolved.bindingSource,
         items: itemCount,
         confidence: result.confidence,
       });
@@ -212,6 +213,7 @@ export class ReceiptExtractionProcessor extends WorkerHost {
           provider: resolved?.providerName ?? 'unresolved',
           model: resolved?.model ?? null,
           keySource: resolved?.keySource ?? null,
+          bindingSource: resolved?.bindingSource ?? null,
           permanent,
           reason,
         });

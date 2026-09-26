@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ExtractionResult } from '@myfinpro/shared';
+import { LLM_DEFAULT_MODEL, type ExtractionResult } from '@myfinpro/shared';
 import { Logger } from '@nestjs/common';
 import {
   buildContinuationPrompt,
@@ -48,7 +48,7 @@ export class AnthropicExtractionProvider implements ReceiptExtractionProvider {
 
   constructor(options: LlmClientOptions = {}) {
     this.client = new Anthropic({ apiKey: options.apiKey });
-    this.model = options.model || 'claude-opus-4-8';
+    this.model = options.model || LLM_DEFAULT_MODEL.anthropic;
   }
 
   async extract(input: ExtractionInput, ctx: ExtractionContext): Promise<ExtractionResult> {

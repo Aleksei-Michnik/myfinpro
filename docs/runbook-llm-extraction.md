@@ -17,9 +17,14 @@
 
 ## 0. Current state (read this first)
 
-Receipt extraction is **pluggable** and defaults to a deterministic **mock**
-provider. As shipped, **both staging and production run `mock`** until you
-explicitly configure a real provider **and redeploy**.
+Receipt extraction is **pluggable**. With `RECEIPT_EXTRACTION_PROVIDER`
+unset, dev, CI and **staging** run the deterministic **mock** provider;
+**production refuses to default to the mock** (since 2026-09-26): an unset
+provider boots as `unconfigured`, every receipt of a user without a personal
+key fails with a settings-facing reason, and the boot log carries a warning.
+Configure a real provider **and redeploy** (below), or let users bring their
+own key in Settings (§9) — a stored key is used even without a model
+selection (the provider's `LLM_DEFAULT_MODEL`).
 
 The mock always returns the same canned receipt:
 
@@ -29,7 +34,10 @@ merchant: "Mock Grocery"   total: $16.60   items: 2   confidence: high
 
 **If every uploaded receipt comes back as "Mock Grocery / $16.60", you are
 still on the mock provider — the LLM is not connected.** That is the #1 cause
-of "recognition looks broken / falls back to garbage". Fix = the steps below.
+of "recognition looks broken / falls back to garbage" (it hit production on
+2026-09-26: no variable, no key, and a personal key stored without a model
+selection was ignored — both closed by the 8.11 hotfix). Fix = the steps
+below, or a personal key in Settings → Account → AI model.
 
 There is **no silent runtime fallback to mock**: once a real provider is
 selected, a failed extraction retries (3×, exponential backoff) and then the
@@ -127,15 +135,17 @@ docker exec "$CID" sh -c '[ -n "$ANTHROPIC_API_KEY" ] && echo "key: set" || echo
 
 ## 5. Troubleshooting — "recognition works badly / falls back"
 
-| Symptom                                                                              | Cause                                                                        | Fix                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Every receipt = "Mock Grocery" / $16.60**                                          | Still on the **mock** provider                                               | `RECEIPT_EXTRACTION_PROVIDER` not set to `anthropic`, **or** set but **not redeployed**. Do Step 2 + Step 3; confirm the boot log (4a).                              |
-| Boot log says `anthropic` but receipts go **FAILED** with a 401/authentication error | Key missing / typo / no vision access                                        | Re-set `ANTHROPIC_API_KEY` (Step 2), redeploy. Verify `key: set` in 4a.                                                                                              |
-| **iPhone photos** fail / go `FAILED` (pre-7.11 builds only)                          | HEIC was stored as-is, and vision APIs reject `image/heic`                   | Fixed in 7.11: HEIC uploads are converted to JPEG at storage time. On current builds a HEIC rejection means the file itself is corrupt — re-shoot or export as JPEG. |
-| Receipts intermittently `FAILED`, log shows `circuit breaker OPEN`                   | Repeated provider errors (rate limit / outage) tripped the breaker           | Wait out the 60s cooldown; check Anthropic status + your rate limits/budget. The breaker half-opens automatically and closes on the next success.                    |
-| **URL receipts** recognize poorly                                                    | Pre-7.12: raw HTML noise; current builds reduce pages to readable text first | Still weaker than a photo/PDF for image-heavy pages (no rendering) — prefer uploading the file when quality matters.                                                 |
-| Log shows `stop=refusal` → receipt `FAILED`                                          | Safety classifier declined the document (more likely on `claude-fable-5`)    | Use `claude-opus-4-8` for extraction, or retry the receipt.                                                                                                          |
-| Blurry/rotated photo, wrong totals                                                   | Genuine recognition limit                                                    | Retake in good light; the review screen lets the user correct every field before confirming.                                                                         |
+| Symptom                                                                                    | Cause                                                                                                                                                 | Fix                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Every receipt = "Mock Grocery" / $16.60**                                                | Still on the **mock** provider (staging/dev; production cannot reach this since 2026-09-26)                                                           | `RECEIPT_EXTRACTION_PROVIDER` not set to `anthropic`, **or** set but **not redeployed**. Do Step 2 + Step 3; confirm the boot log (4a). Settings → AI model shows an amber notice in this state. |
+| Receipts `FAILED` with "No AI provider is configured for reading receipts…"                | Production with no provider variable and no personal key (`unconfigured`)                                                                             | Either configure the deployment default (Step 2 + Step 3) or store a personal key in Settings — it is used without a model selection.                                                            |
+| Receipts `FAILED` with "Your stored API key could not be read — save it again in Settings" | The uploader's stored key no longer decrypts (`LLM_SECRETS_ENCRYPTION_KEY` rotated, row corrupt); a key-derived binding never inherits the shared key | The user re-saves the key in Settings (or selects a model that the deployment key backs).                                                                                                        |
+| Boot log says `anthropic` but receipts go **FAILED** with a 401/authentication error       | Key missing / typo / no vision access                                                                                                                 | Re-set `ANTHROPIC_API_KEY` (Step 2), redeploy. Verify `key: set` in 4a.                                                                                                                          |
+| **iPhone photos** fail / go `FAILED` (pre-7.11 builds only)                                | HEIC was stored as-is, and vision APIs reject `image/heic`                                                                                            | Fixed in 7.11: HEIC uploads are converted to JPEG at storage time. On current builds a HEIC rejection means the file itself is corrupt — re-shoot or export as JPEG.                             |
+| Receipts intermittently `FAILED`, log shows `circuit breaker OPEN`                         | Repeated provider errors (rate limit / outage) tripped the breaker                                                                                    | Wait out the 60s cooldown; check Anthropic status + your rate limits/budget. The breaker half-opens automatically and closes on the next success.                                                |
+| **URL receipts** recognize poorly                                                          | Pre-7.12: raw HTML noise; current builds reduce pages to readable text first                                                                          | Still weaker than a photo/PDF for image-heavy pages (no rendering) — prefer uploading the file when quality matters.                                                                             |
+| Log shows `stop=refusal` → receipt `FAILED`                                                | Safety classifier declined the document (more likely on `claude-fable-5`)                                                                             | Use `claude-opus-4-8` for extraction, or retry the receipt.                                                                                                                                      |
+| Blurry/rotated photo, wrong totals                                                         | Genuine recognition limit                                                                                                                             | Retake in good light; the review screen lets the user correct every field before confirming.                                                                                                     |
 
 Quick "am I actually on the LLM?" check: upload one real receipt — if it does
 **not** say "Mock Grocery", the LLM is connected.
@@ -147,9 +157,11 @@ gh variable set RECEIPT_EXTRACTION_PROVIDER --env staging --body mock
 # then redeploy (Step 3)
 ```
 
-Or delete the variable (compose falls back to `mock` when unset). The
-`ANTHROPIC_API_KEY` secret can stay — it's ignored while the provider is
-`mock`.
+Or delete the variable: staging and dev then fall back to `mock`, while
+**production boots `unconfigured`** (receipts fail with a settings-facing
+reason unless the uploader stored a personal key). Setting `mock` explicitly
+in production is allowed but logs a warning at boot. The `ANTHROPIC_API_KEY`
+secret can stay — it's ignored while the provider is `mock`.
 
 ## 7. Local development
 
@@ -260,15 +272,18 @@ verifier never persisted, minimal scopes, and disconnect = local wipe
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY`           | Server-side **shared** key funding Anthropic calls for users without their own; unset → Anthropic entries hidden unless the user stored a personal key                                                   |
 | `OPENAI_API_KEY`              | Same for OpenAI                                                                                                                                                                                          |
-| `RECEIPT_EXTRACTION_PROVIDER` | Deployment **default** for users who never picked (and dev/CI: keep `mock`)                                                                                                                              |
+| `RECEIPT_EXTRACTION_PROVIDER` | Deployment **default** for users who never picked and hold no personal key (dev/CI/staging: unset = `mock`; **production: unset = `unconfigured`**, receipts fail with a settings-facing reason)         |
 | `RECEIPT_EXTRACTION_MODEL`    | Model for that default provider                                                                                                                                                                          |
 | `LLM_SECRETS_ENCRYPTION_KEY`  | **New secret** — 32-byte base64 master key for encrypting user-held LLM keys at rest (§9.4). With `NODE_ENV=production` the boot **fails** without it; elsewhere BYOK storage is disabled with a warning |
 | `LLM_KEY_LIVE_VALIDATION`     | `true` (default) probes a user key against the provider at save time; set `false` only in tests/offline dev                                                                                              |
 
-Key resolution per call: **user's own key** (if stored, for the chosen
-provider) → **shared server key** → provider hidden/call refused. Users may
-optionally bring their own provider key (BYOK) in Settings; billing for
-their calls then rides their key.
+Binding per call (`pickLlmBinding`, shared by the resolver and the catalog
+endpoint): the user's **selection** → otherwise a **stored personal key**
+picks its provider with `LLM_DEFAULT_MODEL` (Anthropic first when both are
+stored) → otherwise the deployment default. Key resolution for a binding:
+**user's own key** → **shared server key** → permanent failure with a
+settings-facing message. `GET /llm/catalog` reports both as `effective`
+and `deploymentProvider` so Settings can show the user what will run.
 
 ### 9.4 Security model for user-held LLM secrets (required layers)
 

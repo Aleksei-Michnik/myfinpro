@@ -1,3 +1,4 @@
+import { LLM_DEFAULT_MODEL } from '@myfinpro/shared';
 import type { ConfigService } from '@nestjs/config';
 import type { LlmCredentialsService } from '../../llm/llm-credentials.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -10,7 +11,7 @@ import { ResilientExtractionProvider } from './resilient-extraction.provider';
 
 describe('ExtractionResolverService', () => {
   const prismaMock = { user: { findUnique: jest.fn() } };
-  const credentialsMock = { resolveApiKey: jest.fn() };
+  const credentialsMock = { resolveApiKey: jest.fn(), listCredentials: jest.fn() };
   const defaultProvider: ReceiptExtractionProvider = { name: 'mock', extract: jest.fn() };
 
   const makeService = (env: Record<string, string> = {}) =>
@@ -24,6 +25,7 @@ describe('ExtractionResolverService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     credentialsMock.resolveApiKey.mockResolvedValue(null);
+    credentialsMock.listCredentials.mockResolvedValue([]);
   });
 
   it('returns the deployment default binding when the user has no selection', async () => {
@@ -32,6 +34,50 @@ describe('ExtractionResolverService', () => {
     expect(resolved.provider).toBe(defaultProvider);
     expect(resolved.keySource).toBe('default');
     expect(resolved.model).toBeNull();
+  });
+
+  it("uses the stored key's provider with its default model when no model is selected", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ llmProvider: null, llmModel: null });
+    credentialsMock.listCredentials.mockResolvedValue([
+      { provider: 'anthropic', keyHint: 'abcd', updatedAt: new Date() },
+    ]);
+    credentialsMock.resolveApiKey.mockResolvedValue('sk-ant-user-key');
+
+    const resolved = await makeService().resolveForUser('u1');
+    expect(resolved.providerName).toBe('anthropic');
+    expect(resolved.model).toBe(LLM_DEFAULT_MODEL.anthropic);
+    expect(resolved.keySource).toBe('user');
+    expect(resolved.provider).toBeInstanceOf(ResilientExtractionProvider);
+  });
+
+  it('prefers the Anthropic key when both providers have one and nothing is selected', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ llmProvider: null, llmModel: null });
+    credentialsMock.listCredentials.mockResolvedValue([
+      { provider: 'openai', keyHint: 'cdef', updatedAt: new Date() },
+      { provider: 'anthropic', keyHint: 'abcd', updatedAt: new Date() },
+    ]);
+    credentialsMock.resolveApiKey.mockResolvedValue('sk-ant-user-key');
+
+    const resolved = await makeService().resolveForUser('u1');
+    expect(resolved.providerName).toBe('anthropic');
+    expect(resolved.model).toBe(LLM_DEFAULT_MODEL.anthropic);
+  });
+
+  it('never lets a credential-derived binding inherit the shared deployment key', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ llmProvider: null, llmModel: null });
+    credentialsMock.listCredentials.mockResolvedValue([{ provider: 'anthropic' }]);
+    credentialsMock.resolveApiKey.mockResolvedValue(null); // row exists, decrypt failed
+    const service = makeService({ ANTHROPIC_API_KEY: 'sk-shared' });
+    await expect(service.resolveForUser('u1')).rejects.toThrow(ExtractionFailedError);
+    await expect(service.resolveForUser('u1')).rejects.toThrow(/save it again in settings/i);
+  });
+
+  it('still returns the deployment default when there is neither a selection nor a stored key', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ llmProvider: null, llmModel: null });
+    credentialsMock.listCredentials.mockResolvedValue([]);
+    const resolved = await makeService({ ANTHROPIC_API_KEY: 'sk-shared' }).resolveForUser('u1');
+    expect(resolved.provider).toBe(defaultProvider);
+    expect(resolved.keySource).toBe('default');
   });
 
   it("prefers the user's own key over the shared one", async () => {
