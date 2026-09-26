@@ -27,7 +27,11 @@ targets: `nest start --watch` and `next dev` over the bind-mounted `apps/*`, so 
 hot-reloads. The page is `http://localhost` through nginx (set `NGINX_PORT` if 80 is taken on your
 machine). To browse the stack at its **production hostname** over TLS, opt in to the shared local
 proxy from the private infra repo (`mdock/`) with `docker-compose.mdock.yml`; the two knobs are
-`MDOCK_PUBLIC_API_URL` and `MDOCK_DEV_ORIGINS` in your local `.env` (see `.env.example`).
+`MDOCK_PUBLIC_API_URL` and `MDOCK_DEV_ORIGINS` in your local `.env` (see `.env.example`). That
+proxy is Mdocker (infra `mdock/`), the local front door shared by mrmichnik, green-fluffy and this
+repo; green-fluffy runs it by default since 2026-09-26 (no localhost port, a relative API URL,
+`MDOCK_DEV_ORIGINS` from the file the toolkit generates from its registry) — the same default-on
+change is this repo's next step.
 
 The cross-project view — how every project reaches local, staging and production, and the gaps —
 is the private infra repo's `docs/13-deploy-runbook.md`.
