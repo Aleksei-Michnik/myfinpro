@@ -34,6 +34,7 @@ import {
 import { TransactionScopeSelector } from './TransactionScopeSelector';
 import { TransactionTypeSelector } from './TransactionTypeSelector';
 import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
+import { ReceiptIntake } from '@/components/receipt/ReceiptIntake';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
@@ -48,7 +49,6 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { isoToLocalInput, localInputToIso, nowLocalIso } from '@/lib/datetime';
 import { useGroups } from '@/lib/group/group-context';
 import { parseAmountToCents } from '@/lib/money';
-import { useReceipts } from '@/lib/receipt/receipt-context';
 import {
   getLastUsedDirection,
   getLastUsedScopes,
@@ -275,48 +275,16 @@ export function TransactionFormDialog({
   const categories = useOwnCategories ? (categoriesOp.data ?? null) : categoriesProp;
 
   // Phase 7.13 — transaction-first receipt intake: a receipt is the transaction's
-  // proving document, so its upload starts here. Phase 8.13 turns the single
-  // file picker into an intake chooser (device upload / e-receipt URL —
-  // design: docs/phase-8-receipt-intake-design.md §1). Either path creates
-  // the receipt and hands off to the extract → review → confirm pipeline,
+  // proving document, so its upload starts here. 8.29 hands every intake path
+  // (photo / browse / drop / URL) to the shared `ReceiptIntake`; this dialog
+  // only says where the receipt goes and what happens next — the review page,
   // which ends in the transaction this dialog would otherwise create by hand.
   const router = useRouter();
-  const { uploadReceipt, createFromUrl } = useReceipts();
-  const receiptFileRef = useRef<HTMLInputElement | null>(null);
-  const receiptUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const [receiptUrlOpen, setReceiptUrlOpen] = useState(false);
-  const [receiptUrl, setReceiptUrl] = useState('');
   const [manualReceiptOpen, setManualReceiptOpen] = useState(false);
-  const receiptOp = useAsyncOperation<boolean>({ scope: 'control' });
   const routeToReview = (receiptId: string) => {
     router.push(`/receipts/${receiptId}`);
     onClose();
   };
-  const handoffToReview = (create: (signal: AbortSignal) => Promise<{ id: string }>) => {
-    void receiptOp
-      .run(async (signal) => {
-        const created = await create(signal);
-        router.push(`/receipts/${created.id}`);
-        return true;
-      })
-      .then((r) => {
-        if (r !== undefined) onClose();
-      });
-  };
-  const handleReceiptFile = (file: File | undefined) => {
-    if (!file) return;
-    handoffToReview((signal) => uploadReceipt([file], signal));
-  };
-  const handleReceiptUrl = () => {
-    const url = receiptUrl.trim();
-    if (!url) return;
-    handoffToReview((signal) => createFromUrl(url, signal));
-  };
-  useEffect(() => {
-    if (receiptOp.error && receiptOp.error.reason !== 'aborted') {
-      addToast('error', receiptOp.error.message || t('fromReceiptFailed'));
-    }
-  }, [receiptOp.error, addToast, t]);
 
   // Phase 6 · 6.18.1.4-hotfix — refetch the freshest copy of the transaction
   // when the dialog opens in edit mode. Without this we'd render stale
@@ -923,100 +891,19 @@ export function TransactionFormDialog({
       </div>
 
       {mode === 'create' && (
-        <div
-          className="mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
-          data-testid="transaction-form-from-receipt"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs text-gray-600 dark:text-gray-300">{t('fromReceiptHint')}</span>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={receiptFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-                className="hidden"
-                onChange={(e) => {
-                  handleReceiptFile(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-                data-testid="transaction-form-receipt-input"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={receiptOp.isLoading}
-                onClick={() => receiptFileRef.current?.click()}
-                data-testid="transaction-form-receipt-button"
-              >
-                {receiptOp.isLoading ? <ButtonSpinner /> : null}
-                {t('fromReceiptDevice')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={receiptOp.isLoading}
-                aria-expanded={receiptUrlOpen}
-                aria-controls="transaction-form-receipt-url-row"
-                onClick={() => {
-                  setReceiptUrlOpen((v) => !v);
-                  setTimeout(() => receiptUrlInputRef.current?.focus(), 0);
-                }}
-                data-testid="transaction-form-receipt-url-toggle"
-              >
-                {t('fromReceiptUrl')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={receiptOp.isLoading}
-                onClick={() => setManualReceiptOpen(true)}
-                data-testid="transaction-form-receipt-barcodes"
-              >
-                {t('fromReceiptBarcodes')}
-              </Button>
-            </div>
-          </div>
-          {receiptUrlOpen && (
-            <div id="transaction-form-receipt-url-row" className="mt-2 flex gap-2">
-              <label htmlFor="transaction-form-receipt-url" className="sr-only">
-                {t('fromReceiptUrlLabel')}
-              </label>
-              <input
-                id="transaction-form-receipt-url"
-                ref={receiptUrlInputRef}
-                type="url"
-                inputMode="url"
-                value={receiptUrl}
-                onChange={(e) => setReceiptUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter adds the receipt; never submits the transaction form.
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleReceiptUrl();
-                  }
-                }}
-                placeholder={t('fromReceiptUrlPlaceholder')}
-                className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                data-testid="transaction-form-receipt-url-input"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={receiptOp.isLoading || receiptUrl.trim().length === 0}
-                onClick={handleReceiptUrl}
-                data-testid="transaction-form-receipt-url-submit"
-              >
-                {receiptOp.isLoading ? <ButtonSpinner /> : null}
-                {t('fromReceiptUrlSubmit')}
-              </Button>
-            </div>
-          )}
+        <div className="mb-4" data-testid="transaction-form-from-receipt">
+          <ReceiptIntake
+            target={{ kind: 'standalone' }}
+            hint={t('fromReceiptHint')}
+            testIdPrefix="transaction-form-receipt"
+            onCreated={(receipts) => {
+              const first = receipts[0];
+              if (first) routeToReview(first.id);
+            }}
+            onScanBarcodes={() => setManualReceiptOpen(true)}
+          />
           {/* Mounted only while open so its product/receipt hooks (and their
-                providers) aren't required by every transaction-form host. */}
+              providers) aren't required by every transaction-form host. */}
           {manualReceiptOpen && (
             <ManualReceiptDialog
               open

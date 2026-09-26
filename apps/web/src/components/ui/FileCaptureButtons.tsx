@@ -1,9 +1,9 @@
 'use client';
 
 // Phase 8.25 — THE file-capture mechanism (design §3.5): a browse + camera
-// button pair over two hidden inputs. Extracted from ReceiptUploadZone so
-// every "pick or photograph a file" surface (receipt intake, attach-to-
-// transaction, product pictures) shares one implementation. The camera
+// button pair over two hidden inputs, so every "pick or photograph a file"
+// surface (`ReceiptIntake` — receipts page, transaction form, attach-to-
+// transaction — and product pictures) shares one implementation. The camera
 // input's `capture` attribute opens the camera directly on phones; desktop
 // browsers fall back to a file picker.
 

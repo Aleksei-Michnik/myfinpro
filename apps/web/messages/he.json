@@ -23,6 +23,8 @@
       "nextPage": "העמוד הבא"
     },
     "upload": {
+      "browse": "בחירת קבצים",
+      "camera": "צילום תמונה",
       "rejectedType": "{name}: סוג הקובץ אינו נתמך",
       "rejectedSize": "{name}: הקובץ גדול מדי (עד {maxMb} MB)"
     }
@@ -722,14 +724,7 @@
       "occurrenceNotEditable": "זו הופעה שנוצרה אוטומטית ולא ניתנת לעריכה באיטרציה זו.",
       "othersPreserved": "השיוכים של משתמשים אחרים לתנועה זו לא ישונו.",
       "othersCount": "{count, plural, =1 {שיוך # נוסף} other {# שיוכים נוספים}} יישמרו.",
-      "fromReceiptHint": "יש קבלה? הוסיפו אותה ואנחנו נמלא את התנועה עבורכם.",
-      "fromReceiptDevice": "העלאה מהמכשיר הזה",
-      "fromReceiptUrl": "הוספה מכתובת URL",
-      "fromReceiptBarcodes": "סריקת ברקודים של מוצרים",
-      "fromReceiptUrlLabel": "כתובת הקבלה",
-      "fromReceiptUrlPlaceholder": "https://…",
-      "fromReceiptUrlSubmit": "הוספת קבלה",
-      "fromReceiptFailed": "הוספת הקבלה נכשלה"
+      "fromReceiptHint": "יש קבלה? הוסיפו אותה ואנחנו נמלא את התנועה עבורכם."
     },
     "types": {
       "label": "סוג",
@@ -1111,16 +1106,19 @@
     },
     "upload": {
       "title": "הוספת קבלה",
-      "dropLabel": "גררו לכאן תמונות של קבלה או לחצו לבחירה",
-      "formats": "JPEG, PNG, WebP, HEIC או PDF — עד 10MB",
-      "browse": "בחירת קבצים",
-      "camera": "צילום תמונה",
+      "addedToast": "{count, plural, =1 {קבלה נוספה} other {# קבלות נוספו}} — החילוץ החל"
+    },
+    "intake": {
+      "url": "הוספה מכתובת URL",
+      "urlLabel": "כתובת הקבלה",
       "urlPlaceholder": "קישור https:// לקבלה מקוונת",
-      "urlSubmit": "הוספת קישור",
-      "uploadedToast": "{count, plural, =1 {הקבלה הועלתה} other {# קבלות הועלו}} — החילוץ החל",
-      "urlAddedToast": "קישור הקבלה נוסף — החילוץ החל",
-      "failedToast": "ההעלאה נכשלה",
+      "urlSubmit": "הוספת קבלה",
+      "dropHint": "…או גררו לכאן תמונות או קובץ PDF — JPEG, PNG, WebP, HEIC או PDF, עד 10 MB לכל קובץ",
+      "barcodes": "סריקת ברקודים של מוצרים",
+      "linkExisting": "קישור קבלה קיימת",
+      "failedToast": "לא ניתן להוסיף את הקבלה",
       "tooManyPages": "קבלה יכולה לכלול עד {max} תמונות",
+      "pdfAlone": "יש להוסיף קובץ PDF של קבלה בנפרד",
       "stagedTitle": "תמונות של קבלה אחת",
       "stagedCount": "{count, plural, =1 {תמונה אחת} other {# תמונות}}",
       "stagedHint": "קבלה ארוכה? הוסיפו את התמונות שלה לפי הסדר, מלמעלה למטה — הן ייקראו כקבלה אחת.",
@@ -1156,14 +1154,7 @@
     },
     "attach": {
       "title": "צירוף קבלה",
-      "hint": "הוסיפו את הקבלה לתנועה הזו. נקרא אותה ונשווה למה שהזנתם.",
-      "urlLabel": "או הוספה מכתובת URL",
-      "urlPlaceholder": "https://…",
-      "urlSubmit": "הוספה",
-      "close": "סגירה",
-      "failed": "צירוף הקבלה נכשל",
-      "or": "או",
-      "linkExisting": "קישור קבלה קיימת"
+      "hint": "הוסיפו את הקבלה לתנועה הזו. נקרא אותה ונשווה למה שהזנתם."
     },
     "reconcile": {
       "title": "לעדכן את התנועה?",

@@ -215,7 +215,7 @@ describe('TransactionFormDialog', () => {
     const { onClose } = renderCreate();
 
     const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
-    fireEvent.change(screen.getByTestId('transaction-form-receipt-input'), {
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-file-input'), {
       target: { files: [file] },
     });
 
@@ -225,15 +225,15 @@ describe('TransactionFormDialog', () => {
   });
 
   it('create: a failed receipt upload toasts and keeps the dialog open', async () => {
-    uploadReceiptMock.mockRejectedValue(new Error('Unsupported file type'));
+    uploadReceiptMock.mockRejectedValue(new Error('Unreadable receipt'));
     const { onClose } = renderCreate();
 
-    fireEvent.change(screen.getByTestId('transaction-form-receipt-input'), {
-      target: { files: [new File(['x'], 'x.gif', { type: 'image/gif' })] },
+    fireEvent.change(screen.getByTestId('transaction-form-receipt-file-input'), {
+      target: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
     });
 
     await waitFor(() =>
-      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Unsupported')),
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Unreadable')),
     );
     expect(routerPushMock).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
