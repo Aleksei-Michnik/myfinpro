@@ -18,6 +18,10 @@ For extraction or LLM-provider work, load the `llm-extraction` skill first.
 
 ## Procedure
 
+0. **Search first.** Before writing any helper, DTO, guard, util, query or constant, grep
+   `apps/api/src` and `packages/shared` for one that exists (by name, then by behaviour) and
+   extend it. List what you reused in the report. Nothing speculative: no option or abstraction
+   the contract did not ask for.
 1. Schema first if needed (`prisma-migrations`), then `pnpm --filter api exec prisma generate`.
 2. Module → DTOs (class-validator, whitelist) → service → controller (Swagger decorators; throttle
    where the contract says) → wire into `AppModule`. Error constants per module; shared types into

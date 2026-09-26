@@ -14,9 +14,11 @@ import { useTranslations } from 'next-intl';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineLoader } from '@/components/ui/InlineLoader';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { RetryReturnDialog } from '@/components/ui/RetryReturnDialog';
+import { Textarea } from '@/components/ui/Textarea';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useTransactions } from '@/lib/transaction/transaction-context';
@@ -359,12 +361,12 @@ export const TransactionCommentList = forwardRef<
       )}
 
       {!listOp.isLoading && !listOp.isError && visible.length === 0 && hasLoadedOnce && (
-        <p
-          className="py-4 text-center text-sm text-gray-500 dark:text-gray-400"
+        <EmptyState
+          bordered={false}
+          className="py-4"
+          title={t('empty')}
           data-testid="comment-list-empty"
-        >
-          {t('empty')}
-        </p>
+        />
       )}
 
       <ul className="space-y-3">
@@ -399,14 +401,14 @@ export const TransactionCommentList = forwardRef<
 
               {editing ? (
                 <div className="space-y-2">
-                  <textarea
+                  <Textarea
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     maxLength={2000}
                     rows={3}
                     disabled={savingThisRow}
                     data-testid={`comment-edit-textarea-${c.id}`}
-                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    size="sm"
                   />
                   {editError && (
                     <p className="text-xs text-red-600" role="alert">
@@ -486,9 +488,8 @@ export const TransactionCommentList = forwardRef<
                   <div className="flex gap-2">
                     <Button
                       type="button"
-                      variant="primary"
+                      variant="danger"
                       size="sm"
-                      className="!bg-red-600 hover:!bg-red-700 focus:!ring-red-500"
                       onClick={() => confirmDelete(c)}
                       disabled={deletingThisRow}
                       aria-busy={deletingThisRow}

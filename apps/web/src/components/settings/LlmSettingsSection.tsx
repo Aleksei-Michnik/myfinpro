@@ -11,6 +11,8 @@ import { LLM_PROVIDERS, type LlmProvider } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
 import type { LlmCatalogResponse, LlmCredentialHint } from '@/lib/llm/types';
 import { useLlmApi } from '@/lib/llm/use-llm-api';
@@ -85,10 +87,7 @@ export function LlmSettingsSection() {
   }, [saveOp.error, addToast, t]);
 
   return (
-    <div
-      className="mb-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
-      data-testid="llm-section"
-    >
+    <Card padding="lg" className="mb-8" data-testid="llm-section">
       <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">{t('title')}</h2>
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">{t('description')}</p>
 
@@ -119,13 +118,14 @@ export function LlmSettingsSection() {
             >
               {t('modelLabel')}
             </label>
-            <select
+            <Select
               id="llm-model-select"
               data-testid="llm-model-select"
               value={selectedValue}
               onChange={(e) => setSelectedValue(e.target.value)}
               aria-describedby="llm-model-hint"
-              className={inputClass}
+              size="sm"
+              wrapperClassName="contents"
             >
               <option value="">{t('defaultOption')}</option>
               {LLM_PROVIDERS.map((provider) => (
@@ -140,7 +140,7 @@ export function LlmSettingsSection() {
                     ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
             <p id="llm-model-hint" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {t('modelHint')}
             </p>
@@ -175,7 +175,7 @@ export function LlmSettingsSection() {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

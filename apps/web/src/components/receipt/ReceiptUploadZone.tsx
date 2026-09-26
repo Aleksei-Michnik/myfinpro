@@ -8,6 +8,7 @@
 import { useTranslations } from 'next-intl';
 import { useRef, useState, type DragEvent } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import {
   FileCaptureButtons,
   type FileCaptureButtonsHandle,
@@ -43,11 +44,7 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
   };
 
   return (
-    <section
-      className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
-      aria-label={t('title')}
-      data-testid="receipt-upload-zone"
-    >
+    <Card as="section" padding="sm" aria-label={t('title')} data-testid="receipt-upload-zone">
       <div
         role="button"
         tabIndex={0}
@@ -132,6 +129,6 @@ export function ReceiptUploadZone({ onFiles, onUrl, pending = false }: ReceiptUp
           {t('urlSubmit')}
         </Button>
       </form>
-    </section>
+    </Card>
   );
 }

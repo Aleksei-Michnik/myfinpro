@@ -47,6 +47,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "cron-parser": "^4.9.0",
+    "express": "^5.2.1",
     "express-session": "^1.19.0",
     "heic-convert": "^2.1.0",
     "helmet": "^8.1.0",

@@ -1,0 +1,26 @@
+# Local only. Serves this stack at its production hostname through the shared local reverse proxy
+# from the infra repo (mdock/), which terminates TLS on 127.0.0.1:443 and routes by hostname to
+# nginx here. Opt in with:
+#
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.mdock.yml
+#   docker compose up -d
+#
+# All it does is put nginx on the proxy's network, where the proxy reaches it by container name;
+# the hostname itself is registered in the infra repo, never here. The one thing the app has to
+# know is its browser-side API URL: set MDOCK_PUBLIC_API_URL in your local .env to the production
+# API URL, and the page served at the production hostname calls the API at that same origin.
+services:
+  nginx:
+    networks:
+      - myfinpro-net
+      - mdock_net
+  web:
+    environment:
+      NEXT_PUBLIC_API_URL: ${MDOCK_PUBLIC_API_URL:-http://localhost/api}
+      # Hot reload behind the proxy: Next 16 blocks /_next dev requests (assets, HMR socket) from
+      # an origin it does not know. The production hostname, from your local .env, never from git.
+      MDOCK_DEV_ORIGINS: ${MDOCK_DEV_ORIGINS:-}
+
+networks:
+  mdock_net:
+    external: true

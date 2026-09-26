@@ -7,6 +7,8 @@
 // parent — this component only emits the next value.
 
 import { useTranslations } from 'next-intl';
+import { Badge } from '@/components/ui/Badge';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { useGroups } from '@/lib/group/group-context';
 import type { AttributionScope } from '@/lib/transaction/types';
 
@@ -68,45 +70,38 @@ export function TransactionScopeSelector({
       data-testid="transaction-scope-selector"
     >
       {!hidePersonal && (
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-          <input
-            type="checkbox"
-            checked={hasPersonal(value)}
-            onChange={togglePersonal}
-            disabled={disabled}
-            data-testid="scope-toggle-personal"
-            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-          />
-          <span>{t('personal')}</span>
-        </label>
+        <Checkbox
+          checked={hasPersonal(value)}
+          onChange={togglePersonal}
+          disabled={disabled}
+          data-testid="scope-toggle-personal"
+          align="center"
+          label={t('personal')}
+        />
       )}
 
       {visibleGroups.map((g) => {
         const role = (g.role ?? '').toLowerCase();
         const roleLabel = role === 'admin' ? t('groupRole.admin') : null;
         return (
-          <label
+          <Checkbox
             key={g.id}
-            className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"
-          >
-            <input
-              type="checkbox"
-              checked={hasGroup(value, g.id)}
-              onChange={() => toggleGroup(g.id)}
-              disabled={disabled}
-              data-testid={`scope-toggle-group-${g.id}`}
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span>{g.name}</span>
-            {roleLabel && (
-              <span
-                className="rounded bg-primary-100 px-1.5 text-xs text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
-                data-testid={`scope-group-role-${g.id}`}
-              >
-                {roleLabel}
+            checked={hasGroup(value, g.id)}
+            onChange={() => toggleGroup(g.id)}
+            disabled={disabled}
+            data-testid={`scope-toggle-group-${g.id}`}
+            align="center"
+            label={
+              <span className="inline-flex items-center gap-2">
+                <span>{g.name}</span>
+                {roleLabel && (
+                  <Badge tone="primary" data-testid={`scope-group-role-${g.id}`}>
+                    {roleLabel}
+                  </Badge>
+                )}
               </span>
-            )}
-          </label>
+            }
+          />
         );
       })}
 

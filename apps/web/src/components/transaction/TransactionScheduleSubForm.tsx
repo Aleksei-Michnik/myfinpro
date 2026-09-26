@@ -7,6 +7,7 @@
 // ONE_TIME and RECURRING preserves the in-progress draft (sticky form).
 
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/ui/Select';
 import type { ScheduleSpec } from '@/lib/transaction/types';
 
 export type ScheduleRepeatMode = 'every' | 'cron';
@@ -262,20 +263,21 @@ export function TransactionScheduleSubForm({
                 className="mt-1 w-24 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
               />
             </label>
-            <select
+            <Select
               value={state.everyUnit}
               onChange={(e) => set({ everyUnit: e.target.value as ScheduleEveryUnit })}
               disabled={disabled}
               data-testid="schedule-every-unit"
               aria-label={t('every.unitLabel')}
-              className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              size="sm"
+              fullWidth={false}
             >
               <option value="minute">{t('every.unitMinute')}</option>
               <option value="hour">{t('every.unitHour')}</option>
               <option value="day">{t('every.unitDay')}</option>
               <option value="week">{t('every.unitWeek')}</option>
               <option value="month">{t('every.unitMonth')}</option>
-            </select>
+            </Select>
           </div>
           <p
             className="mt-1 text-xs text-gray-500 dark:text-gray-400"

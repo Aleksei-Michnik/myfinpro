@@ -20,6 +20,18 @@ MyFinPro deploys to a dedicated Ubuntu server using Docker Compose with **blue-g
 
 > Domain values are stored as GitHub Secrets (`CLOUDFLARE_STAGING_SUBDOMAIN`, `CLOUDFLARE_PRODUCTION_SUBDOMAIN`).
 
+### Local development
+
+`docker compose up -d` (or `scripts/dev.sh`) runs the whole stack from the development image
+targets: `nest start --watch` and `next dev` over the bind-mounted `apps/*`, so every edit
+hot-reloads. The page is `http://localhost` through nginx (set `NGINX_PORT` if 80 is taken on your
+machine). To browse the stack at its **production hostname** over TLS, opt in to the shared local
+proxy from the private infra repo (`mdock/`) with `docker-compose.mdock.yml`; the two knobs are
+`MDOCK_PUBLIC_API_URL` and `MDOCK_DEV_ORIGINS` in your local `.env` (see `.env.example`).
+
+The cross-project view — how every project reaches local, staging and production, and the gaps —
+is the private infra repo's `docs/13-deploy-runbook.md`.
+
 ### Pipeline Flow
 
 ```mermaid
@@ -102,6 +114,15 @@ lint-and-typecheck → unit-tests (parallel with build)
 | `i18n`       | English and Hebrew localization, URL-based locale switching |
 | `responsive` | Layout adapts correctly to mobile, tablet, desktop          |
 
+### Scheduled Backups
+
+**Workflow:** [`.github/workflows/backup.yml`](../.github/workflows/backup.yml)
+
+- **Trigger:** daily at 02:17 UTC, or manual dispatch (`drill=true` adds the restore drill)
+- **What it does:** dumps the production and staging databases inside their MySQL containers,
+  verifies and prunes the files on the server, and fails when the newest backup is older than
+  26 hours. Only the SSH secrets are used. Details: [`backup.md`](backup.md).
+
 ### Production Deployment
 
 **Workflow:** [`.github/workflows/deploy-production.yml`](../.github/workflows/deploy-production.yml)
@@ -114,10 +135,13 @@ lint-and-typecheck → unit-tests (parallel with build)
   3. **Verify staging tests passed** (must be successful and < 24h old)
   4. Build Docker images (API + Web)
   5. Push images to GHCR with `latest`, version tag, and `<sha>` tags
-  6. SSH into production server
-  7. Export secrets as shell environment variables
-  8. Run blue-green deploy via [`scripts/deploy.sh`](../scripts/deploy.sh)
-  9. On failure: automatic rollback to previous slot
+  6. **Dump the production database** inside its MySQL container to
+     `/opt/myfinpro/backups/production/pre-deploy-<stamp>.sql.gz` (five kept) — a slot rollback
+     does not roll the database back; see [`backup.md`](backup.md) "Pre-deploy dump"
+  7. SSH into production server
+  8. Export secrets as shell environment variables
+  9. Run blue-green deploy via [`scripts/deploy.sh`](../scripts/deploy.sh)
+  10. On failure: automatic rollback to previous slot
 
 ---
 

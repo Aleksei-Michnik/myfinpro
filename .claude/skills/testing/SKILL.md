@@ -20,6 +20,8 @@ Full matrix, helpers and gotchas: `wiki/testing.md`. Strategy and expected level
 | Web e2e (local) | `pnpm test:e2e` (Playwright, `apps/web/e2e/*.spec.ts`, `PLAYWRIGHT_BASE_URL`) | running stack (`local-stack`), mock extraction provider |
 | Staging suites  | `pnpm test:staging`, `pnpm test:e2e:staging`                                  | CI after a staging deploy                               |
 
+Exploratory / usability runs of a surface: the `playwright-qa` skill (throwaway `e2e/qa-*.spec.ts`,
+screenshots, console collector), promoted into a committed spec once the flow is proven.
 One file: `pnpm --filter api exec jest src/<module>/<file>.spec.ts`;
 `pnpm --filter web exec vitest run src/<path>`; `pnpm --filter web exec playwright test e2e/<file>.spec.ts --project=chromium`.
 

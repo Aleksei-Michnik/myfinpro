@@ -21,7 +21,8 @@ on `IMPLEMENTATION-PLAN.md` §5 on the phase branch, plus a report the owner can
 
 - **architect** first when a row lacks contracts (schema, endpoints, DTOs, shared types). Its
   `contracts.md` is what parallel workers build against.
-- Then in parallel, each with `isolation: "worktree"` on branch `phase/<N>`: **api-coder** (API +
+- Then in parallel, each in its own worktree created by you from `phase/<N>` (`git worktree add
+~/myfinpro-p<N>-<track> p<N>/<track>`; the shared clone may be in use by another session): **api-coder** (API +
   shared), **web-coder** (after **ui-designer** has a spec for any new surface),
   **i18n-translator** once keys exist. Cap 3 implementation tracks.
 - **Prisma migrations are serialized**: one holder at a time, granted in integration order with

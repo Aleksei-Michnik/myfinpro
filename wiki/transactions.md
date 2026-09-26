@@ -33,7 +33,7 @@ Types `ONE_TIME`, `RECURRING`, `LIMITED_PERIOD`, `INSTALLMENT`, `LOAN`, `MORTGAG
 ## Categories
 
 - Owner types `system` (seeded, immutable — `CATEGORY_SYSTEM_IMMUTABLE`) / `user` / `group`; group category writes need the **group admin** role (`CATEGORY_GROUP_NOT_ADMIN`).
-- 25 system defaults (18 OUT + 7 IN) in `packages/shared/src/constants/default-categories.ts`, upserted idempotently by `seed-system-categories.ts` (prisma seed, integration setup, and `SystemCategoriesBootstrap` on API boot).
+- 26 system defaults (18 OUT + 7 IN + 1 BOTH, the Phase 20 `transfer`) in `packages/shared/src/constants/default-categories.ts`, upserted idempotently by `seed-system-categories.ts` (prisma seed, integration setup, and `SystemCategoriesBootstrap` on API boot).
 - Direction filtering is a superset match: `direction IN (requested, 'BOTH')`.
 - Deleting an in-use category requires `?replaceWithCategoryId=`; the service reassigns primary and additional rows in one transaction, de-duplicating where the replacement is already attached, and audits `CATEGORY_REASSIGNED`.
 - **Multi-category** since migration `20260724100000_multi_category_transactions`: `categoryIds` is ordered, element 0 = primary, every id must match the transaction's direction. The `categoryId` list filter is an any-match over primary ∪ additional.

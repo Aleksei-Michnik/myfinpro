@@ -37,10 +37,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Make scripts executable
-        run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh
+        run: chmod +x scripts/backup.sh scripts/restore.sh scripts/verify-backup.sh scripts/check-backup-age.sh scripts/backup-copy.sh
+
+      - name: Install age (pinned release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R FiloSottile/age v1.3.2 -p 'age-v1.3.2-linux-amd64.tar.gz' -O "$RUNNER_TEMP/age.tgz"
+          tar -xzf "$RUNNER_TEMP/age.tgz" -C "$RUNNER_TEMP"
+          sudo install -m 755 "$RUNNER_TEMP/age/age" "$RUNNER_TEMP/age/age-keygen" /usr/local/bin/
+          age --version
 
       - name: Wait for MySQL to be ready
         run: |
@@ -262,11 +271,18 @@ jobs:
 
           echo "backup_file=$BACKUP_FILE" >> "$GITHUB_ENV"
 
-      - name: Run verify-backup script
+      - name: Run verify-backup script with the restore drill
         run: |
           ./scripts/verify-backup.sh \
             --backup-dir /tmp/myfinpro-backups \
-            --max-age-hours 1
+            --max-age-hours 1 \
+            --test-restore \
+            --host 127.0.0.1 \
+            --port 3306 \
+            --user root \
+            --database "$MYSQL_DATABASE"
+        env:
+          MYSQL_PASSWORD: ${{ env.MYSQL_ROOT_PASSWORD }}
 
       - name: Drop original database for restore test
         run: |
@@ -337,6 +353,42 @@ jobs:
             exit 1
           fi
 
+      - name: Off-box copy round trip (throwaway key, local bare store)
+        run: |
+          set -euo pipefail
+          age-keygen -o "$RUNNER_TEMP/identity.txt" 2>/dev/null
+          AGE_RECIPIENT="$(age-keygen -y "$RUNNER_TEMP/identity.txt")"
+          export AGE_RECIPIENT
+          git init -q --bare -b main "$RUNNER_TEMP/store.git"
+          export STORE_URL="file://$RUNNER_TEMP/store.git"
+
+          # First copy: the drill's dump, then decrypt it from the store and compare.
+          SOURCE_FILE="$backup_file" ./scripts/backup-copy.sh production
+          git clone -q "$STORE_URL" "$RUNNER_TEMP/store-check"
+          name="$(basename "$backup_file")"
+          age -d -i "$RUNNER_TEMP/identity.txt" -o "$RUNNER_TEMP/roundtrip.sql.gz" "$RUNNER_TEMP/store-check/production/$name.age"
+          if cmp -s "$backup_file" "$RUNNER_TEMP/roundtrip.sql.gz"; then
+            echo "✓ Decrypted copy is byte-identical to the backup"
+          else
+            echo "::error::Decrypted copy differs from the backup"
+            exit 1
+          fi
+
+          # Second copy of a newer file with STORE_KEEP=1: the older one must be pruned and the
+          # store history must stay a single commit.
+          newer="$RUNNER_TEMP/myfinpro_2099-01-01_00-00-00.sql.gz"
+          cp "$backup_file" "$newer"
+          STORE_KEEP=1 SOURCE_FILE="$newer" ./scripts/backup-copy.sh production
+          rm -rf "$RUNNER_TEMP/store-check"
+          git clone -q "$STORE_URL" "$RUNNER_TEMP/store-check"
+          kept="$(ls "$RUNNER_TEMP/store-check/production")"
+          commits="$(git -C "$RUNNER_TEMP/store-check" rev-list --count HEAD)"
+          echo "Store keeps: $kept (history: $commits commit)"
+          [[ "$kept" == "myfinpro_2099-01-01_00-00-00.sql.gz.age" && "$commits" == "1" ]] || {
+            echo "::error::Store retention or single-snapshot history failed"
+            exit 1
+          }
+
       - name: Test backup age check script (should pass)
         run: |
           ./scripts/check-backup-age.sh \
@@ -345,7 +397,7 @@ jobs:
 
       - name: Test backup age check script (should fail with low threshold)
         run: |
-          # This should exit 1 because we set max-age to 0 hours
+          # Exits 1 because the age is compared in seconds against a 0-hour threshold
           if ./scripts/check-backup-age.sh --backup-dir /tmp/myfinpro-backups --max-age 0; then
             echo "::error::Expected check-backup-age to fail with 0-hour threshold"
             exit 1
@@ -365,3 +417,4 @@ jobs:
           echo "| Restore successful | ✅ |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Data integrity | ✅ |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Age check | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Off-box copy round trip | ✅ |" >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Link } from '@/i18n/navigation';
 
 export default async function HelpPage() {
@@ -6,10 +7,7 @@ export default async function HelpPage() {
 
   return (
     <article className="max-w-3xl mx-auto space-y-10 leading-relaxed text-gray-800 dark:text-gray-200">
-      <header>
-        <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">{t('title')}</h1>
-        <p className="text-gray-600 dark:text-gray-400">{t('subtitle')}</p>
-      </header>
+      <PageHeader size="lg" title={t('title')} description={t('subtitle')} />
 
       {/* 1. Getting Started */}
       <section className="space-y-6">

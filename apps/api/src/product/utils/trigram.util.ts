@@ -8,7 +8,12 @@
  * and word starts weigh more than word middles.
  */
 
-function trigramsOf(value: string): Set<string> {
+/**
+ * The trigram set of a string. Exported since 20.4: the statement matcher
+ * scores one line against hundreds of candidates and must build each set
+ * ONCE per import rather than once per comparison (security review H1).
+ */
+export function trigramsOf(value: string): Set<string> {
   const grams = new Set<string>();
   for (const word of value.split(' ')) {
     if (!word) continue;
@@ -21,22 +26,29 @@ function trigramsOf(value: string): Set<string> {
 }
 
 /**
+ * Dice coefficient over two prepared trigram sets: 2·|A∩B| / (|A|+|B|), in
+ * [0, 1]. The string form (`trigramSimilarity`) derives from this one, so a
+ * caller that can reuse its sets pays for them once.
+ */
+export function diceSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  // Iterate the smaller set — O(min) lookups against the larger.
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const gram of small) {
+    if (large.has(gram)) shared++;
+  }
+  return (2 * shared) / (a.size + b.size);
+}
+
+/**
  * Dice coefficient over trigram sets: 2·|A∩B| / (|A|+|B|), in [0, 1].
  * Inputs are expected to be pre-normalized with `normalizeLookupName`.
  */
 export function trigramSimilarity(a: string, b: string): number {
   if (!a || !b) return 0;
   if (a === b) return 1;
-  const ta = trigramsOf(a);
-  const tb = trigramsOf(b);
-  if (ta.size === 0 || tb.size === 0) return 0;
-  let shared = 0;
-  // Iterate the smaller set — O(min) lookups against the larger.
-  const [small, large] = ta.size <= tb.size ? [ta, tb] : [tb, ta];
-  for (const gram of small) {
-    if (large.has(gram)) shared++;
-  }
-  return (2 * shared) / (ta.size + tb.size);
+  return diceSimilarity(trigramsOf(a), trigramsOf(b));
 }
 
 /**

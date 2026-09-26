@@ -61,7 +61,7 @@ describe('PropagationChoiceDialog', () => {
 
   it('backdrop mousedown cancels; clicks inside do not', () => {
     const { onCancel } = renderDialog();
-    fireEvent.mouseDown(screen.getByTestId('propagation-choice-dialog'));
+    fireEvent.mouseDown(screen.getByTestId('propagation-choice-dialog-backdrop'));
     expect(onCancel).toHaveBeenCalledTimes(1);
     fireEvent.mouseDown(screen.getByTestId('propagation-confirm'));
     expect(onCancel).toHaveBeenCalledTimes(1);

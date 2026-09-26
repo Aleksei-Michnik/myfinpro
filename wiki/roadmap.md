@@ -7,23 +7,24 @@ Read when: picking the next iteration, judging whether two pieces of work can ru
 Dependencies are from `IMPLEMENTATION-PLAN.md` §9.1–§9.2. "Last shipped" comes from the phase
 progress doc, cross-checked against `git log` on `develop`.
 
-| Phase                        | Status         | Last shipped         | Next | Hard deps       | External blockers                                                |
-| ---------------------------- | -------------- | -------------------- | ---- | --------------- | ---------------------------------------------------------------- |
-| 0–5 Foundation → Groups      | ✅ complete    | 2026-04-24           | —    | —               | —                                                                |
-| 6 Transactions (unified)     | ✅ complete    | 2026-07-04 (21 its.) | —    | 5               | —                                                                |
-| 7 Receipts & LLM extraction  | ✅ complete    | 2026-07-09 (13 its.) | —    | 6               | —                                                                |
-| 8 Product catalog & barcode  | 🔄 in progress | 8.28 (2026-07-24)    | 8.16 | 7               | device camera for 8.6 scanning; Open Food Facts API              |
-| 9 Purchase analytics         | 🔄 in progress | 9.1 (2026-07-20)     | 9.2  | 8               | production-size fixtures for the 9.8 p95 < 500 ms gate           |
-| 10 Budgets                   | 🔄 in progress | 10.4 (2026-07-20)    | 10.5 | 6 only          | none (10.9/10.10 workers ship behind `BUDGET_ALERTS_ENABLED`)    |
-| 11 MCP server                | ⬜ not started | —                    | 11.1 | 9.7 + 7         | OAuth consent screen; live Claude/ChatGPT connectors for 11.7    |
-| 12 Telegram bot              | ⬜ not started | —                    | 12.1 | 3               | **BotFather registration + public webhook**                      |
-| 13 Telegram mini app         | ⬜ not started | —                    | 13.1 | 12A (12.1–12.4) | Telegram mini-app hosting/registration                           |
-| 14 Bot receipt processing    | ⬜ not started | —                    | 14.1 | 7 + 12A         | same bot registration                                            |
-| 15 Bot analytics             | ⬜ not started | —                    | 15.1 | 9 + 12          | same bot registration                                            |
-| 16 LLM assistant (in-app)    | ⬜ not started | —                    | 16.1 | 7 + 9 (+11)     | LLM provider keys (BYOK layer exists from 8.11)                  |
-| 17 WebMCP                    | ⬜ not started | —                    | 17.1 | 11              | **moving spec** — `navigator.modelContext` Chromium origin trial |
-| 18 Centralized search        | ⬜ not started | —                    | 18.1 | 7 + 8           | none                                                             |
-| 19 LLM usage & cost tracking | ⬜ not started | —                    | 19.1 | 8.11            | per-model pricing map must be maintained by hand                 |
+| Phase                        | Status         | Last shipped         | Next | Hard deps               | External blockers                                                |
+| ---------------------------- | -------------- | -------------------- | ---- | ----------------------- | ---------------------------------------------------------------- |
+| 0–5 Foundation → Groups      | ✅ complete    | 2026-04-24           | —    | —                       | —                                                                |
+| 6 Transactions (unified)     | ✅ complete    | 2026-07-04 (21 its.) | —    | 5                       | —                                                                |
+| 7 Receipts & LLM extraction  | ✅ complete    | 2026-07-09 (13 its.) | —    | 6                       | —                                                                |
+| 8 Product catalog & barcode  | 🔄 in progress | 8.28 (2026-07-24)    | 8.16 | 7                       | device camera for 8.6 scanning; Open Food Facts API              |
+| 9 Purchase analytics         | 🔄 in progress | 9.1 (2026-07-20)     | 9.2  | 8                       | production-size fixtures for the 9.8 p95 < 500 ms gate           |
+| 10 Budgets                   | 🔄 in progress | 10.4 (2026-07-20)    | 10.5 | 6 only                  | none (10.9/10.10 workers ship behind `BUDGET_ALERTS_ENABLED`)    |
+| 11 MCP server                | ⬜ not started | —                    | 11.1 | 9.7 + 7                 | OAuth consent screen; live Claude/ChatGPT connectors for 11.7    |
+| 12 Telegram bot              | ⬜ not started | —                    | 12.1 | 3                       | **BotFather registration + public webhook**                      |
+| 13 Telegram mini app         | ⬜ not started | —                    | 13.1 | 12A (12.1–12.4)         | Telegram mini-app hosting/registration                           |
+| 14 Bot receipt processing    | ⬜ not started | —                    | 14.1 | 7 + 12A                 | same bot registration                                            |
+| 15 Bot analytics             | ⬜ not started | —                    | 15.1 | 9 + 12                  | same bot registration                                            |
+| 16 LLM assistant (in-app)    | ⬜ not started | —                    | 16.1 | 7 + 9 (+11)             | LLM provider keys (BYOK layer exists from 8.11)                  |
+| 17 WebMCP                    | ⬜ not started | —                    | 17.1 | 11                      | **moving spec** — `navigator.modelContext` Chromium origin trial |
+| 18 Centralized search        | ⬜ not started | —                    | 18.1 | 7 + 8                   | none                                                             |
+| 19 LLM usage & cost tracking | ⬜ not started | —                    | 19.1 | 8.11                    | per-model pricing map must be maintained by hand                 |
+| 20 Accounts & bank sync      | 🔄 in progress | design (2026-09-25)  | 20.1 | 6 (+7–8 for enrichment) | export formats drift; the connector needs the user's own machine |
 
 Iteration budgets (plan §5 "Phase Size Guidelines"): 8 → 10 + follow-ups, 9 → 8, 10 → 10, 11 → 8,
 12 → 4 + 12, 13 → 10, 14 → 6, 15 → 4, 16 → 7, 17 → 4, 18 → 7, 19 → 6. Target size is 6–10
@@ -68,6 +69,8 @@ graph LR
   P9 --> P15
   P8 --> P18[18 Search]
   P8 --> P19[19 LLM cost]
+  P6 --> P20[20 Accounts & bank sync]
+  P20 --> P10
 ```
 
 ## What can run in parallel right now
@@ -84,7 +87,7 @@ Must be serialized:
 
 - **Prisma migrations.** Expand-only, one migration per iteration, applied in order; two phases
   writing migrations in the same window will collide on migration ordering. Coordinate 9.2/9.7
-  (`analytics_views`, `habit_summaries`), 10.9 (`dedup_key`) and 18.1 (taxonomy).
+  (`analytics_views`, `habit_summaries`), 10.9 (`dedup_key`), 18.1 (taxonomy) and 20.2/20.7 (accounts, `api_tokens`).
 - **`packages/shared` types** consumed by both apps — land the shared change first, then API, then
   web, so typecheck never breaks mid-stack.
 - **Phase 11 → 17**: WebMCP reuses the Phase 11 tool contracts; there is one canonical tool surface.
@@ -139,6 +142,11 @@ finds, analytics aggregates.
 **19 — LLM usage & cost tracking.** 19.1 `llm_usage_events` ledger, 19.2 provider metering,
 19.3 pricing map + cost, 19.4 entity attribution, 19.5 usage API + BYOK dashboard, 19.6 tests +
 retention. Matters most for BYOK users (8.11). Ledger writes must never block the metered call.
+
+**20 — Accounts, balances & bank sync** (added 2026-09-25). 20.1 UI kit, 20.2 schema + API,
+20.3 accounts UI, 20.4 statement parsing + import API, 20.5 import/review UI, 20.6 two-way
+enrichment, 20.7 user-run connector, 20.8 balance alerts + release. Design:
+`docs/phase-20-accounts-design.md`; wiki [accounts-and-sync.md](accounts-and-sync.md).
 
 ## Renumbering map
 

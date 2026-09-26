@@ -40,7 +40,10 @@ exists). Terse — a coder reads it in one pass:
 
 ## Rules
 
-DRY: extend the existing mechanism, never add a parallel one. No legacy paths: name what gets
-removed. Keep money, period and scoping invariants as `wiki/architecture-map.md` states them.
+**Search before you design.** For every model, endpoint, helper, component or type you are about
+to name, grep the code for one that already does it (by name, then by behaviour) and say in the
+contract what is reused and what is genuinely new, with a one-line reason; a contract that adds a
+parallel mechanism is wrong. Smallest change that meets the acceptance criteria — no option,
+abstraction or configurability nobody asked for. No legacy paths: name what gets removed. Keep money, period and scoping invariants as `wiki/architecture-map.md` states them.
 Split work so that API, web and translations can proceed in parallel against your contracts.
 Run prettier on written files. Never edit application code, schema or tests.

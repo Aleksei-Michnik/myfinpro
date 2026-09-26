@@ -64,11 +64,12 @@ Shared names to keep aligned: agents `architect`, `orchestrator`, `ui-designer`,
 
 ## Open items that touch this repo
 
-1. Mdock adoption PR (small; unblocked now).
-2. Production workflow → dispatch-only with confirmed ref (owner decision; `devops`).
-3. `deploy.sh`/`rollback.sh` pipefail verification check.
-4. Infra Phase 5 (edge ownership, resolver fix, shared relay) — after the WordPress cutover; not ours to start.
-5. Haraka retirement — per the infra repo's mail README, after Phase 5.
+1. Mdock adoption: merged 2026-09-25 (PR #51 → `develop`, 7a810da: opt-in overlay `docker-compose.mdock.yml`, `MDOCK_DEV_ORIGINS` for Next dev origins, local nginx upstreams by container name because the shared proxy network makes bare service names ambiguous). Hot reload verified end to end; the API dev image was fixed the same day (PR #54) to generate the Prisma client and clear host build artefacts.
+2. Production backups: closed 2026-09-25 — `backup.yml` (daily, in-container dump, age gate, and an encrypted off-box copy into the private `<repository>-backups` store once the owner sets the variable and the secret) and a pre-deploy dump step in `deploy-production.yml`; the infra runbook §5/§7 still describes the gap and needs updating on the infra side.
+3. Production workflow → dispatch-only with confirmed ref (owner decision; `devops`).
+4. `deploy.sh`/`rollback.sh` pipefail verification check.
+5. Infra Phase 5 (edge ownership, resolver fix, shared relay) — after the WordPress cutover; not ours to start.
+6. Haraka retirement — per the infra repo's mail README, after Phase 5.
 
 ## Re-check on every sync
 

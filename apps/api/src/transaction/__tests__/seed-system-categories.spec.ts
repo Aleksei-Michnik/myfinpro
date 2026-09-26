@@ -106,12 +106,15 @@ describe('seedSystemCategories', () => {
     });
   });
 
-  it('seeds the expected 25 defaults (18 OUT + 7 IN)', async () => {
+  it('seeds the expected 26 defaults (18 OUT + 7 IN + 1 BOTH)', async () => {
     const outCount = DEFAULT_CATEGORIES.filter((c) => c.direction === 'OUT').length;
     const inCount = DEFAULT_CATEGORIES.filter((c) => c.direction === 'IN').length;
+    const bothCount = DEFAULT_CATEGORIES.filter((c) => c.direction === 'BOTH').length;
 
     expect(outCount).toBe(18);
     expect(inCount).toBe(7);
-    expect(DEFAULT_CATEGORIES.length).toBe(25);
+    // Phase 20 §2.4 — the `transfer` category every transfer row is filed under.
+    expect(bothCount).toBe(1);
+    expect(DEFAULT_CATEGORIES.length).toBe(26);
   });
 });

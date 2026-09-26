@@ -1,3 +1,4 @@
+import { MAX_MINOR_UNITS } from '@myfinpro/shared';
 import { getQueueToken } from '@nestjs/bullmq';
 import {
   BadRequestException,
@@ -63,6 +64,15 @@ describe('TransactionService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    // Phase 20.2 — the visibility + currency lookup behind accountId /
+    // transferAccountId. Defaults to "no visible account" in beforeEach.
+    account: {
+      findMany: jest.fn(),
+    },
+    // Phase 20.2 — the `transfer` system-category lookup a transfer must pass.
+    category: {
+      findFirst: jest.fn(),
+    },
     transactionSchedule: {
       findUnique: jest.fn().mockResolvedValue(null),
       delete: jest.fn().mockResolvedValue({}),
@@ -106,6 +116,8 @@ describe('TransactionService', () => {
     status: 'POSTED',
     note: null,
     parentTransactionId: null,
+    accountId: null,
+    transferAccountId: null,
     createdById: 'user-1',
     createdAt: now,
     updatedAt: now,
@@ -178,6 +190,10 @@ describe('TransactionService', () => {
     );
     // Remaining-count default: transaction still has attributions after remove.
     prismaMock.transactionAttribution.count.mockResolvedValue(1);
+    prismaMock.account.findMany.mockResolvedValue([]);
+    // Default: the primary category IS the `transfer` system category, so the
+    // transfer tests only have to opt out of it.
+    prismaMock.category.findFirst.mockResolvedValue({ id: 'cat-transfer' });
   });
 
   // ── type guard ──
@@ -315,12 +331,19 @@ describe('TransactionService', () => {
       }
     });
 
-    it('rejects amountCents above 1e11 cap', async () => {
+    // The cap is the INT column's own ceiling (MAX_MINOR_UNITS), so an amount
+    // the API accepts is always an amount the database can store.
+    it('rejects amountCents above the money cap', async () => {
+      await expect(
+        service.create('user-1', baseDto({ amountCents: MAX_MINOR_UNITS + 1 })),
+      ).rejects.toBeInstanceOf(BadRequestException);
       try {
-        await service.create('user-1', baseDto({ amountCents: 1e11 + 1 }));
+        await service.create('user-1', baseDto({ amountCents: MAX_MINOR_UNITS + 1 }));
+        throw new Error('expected a rejection');
       } catch (err) {
         expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_INVALID_AMOUNT);
       }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
     });
   });
 
@@ -1616,10 +1639,11 @@ describe('TransactionService', () => {
       }
     });
 
-    it('amount > 1e11 cents → 400 TRANSACTION_INVALID_AMOUNT', async () => {
+    it('amount above the money cap → 400 TRANSACTION_INVALID_AMOUNT', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(makeFullRow());
       try {
-        await service.update('user-1', 'pay-1', { amountCents: 1e11 + 1 });
+        await service.update('user-1', 'pay-1', { amountCents: MAX_MINOR_UNITS + 1 });
+        throw new Error('expected a rejection');
       } catch (err) {
         expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_INVALID_AMOUNT);
       }
@@ -3056,6 +3080,126 @@ describe('TransactionService', () => {
       expect(r.affectedChildrenCount).toBe(0);
     });
 
+    // ── Phase 20.2 — the cascade path re-checks the account placement ──
+
+    it('rejects flipping a transfer to IN — both ledgers would gain the amount', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        recurringParent({ type: 'ONE_TIME', accountId: 'acct-1', transferAccountId: 'acct-2' }),
+      );
+      // The transfer category is BOTH, so the direction check that guards
+      // ordinary rows waves this through — only the placement guard catches it.
+      categoryServiceMock.findById.mockResolvedValue(
+        okCategory({ slug: 'transfer', direction: 'BOTH' }),
+      );
+
+      try {
+        await service.editTransactionWithPropagation(
+          'user-1',
+          'pay-1',
+          { direction: 'IN' },
+          'self',
+        );
+        throw new Error('expected a rejection');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a currency change that orphans the placement, cascading or not', async () => {
+      for (const propagate of ['self', 'all'] as const) {
+        jest.clearAllMocks();
+        prismaMock.auditLog.create.mockResolvedValue({});
+        prismaMock.transaction.findFirst.mockResolvedValue(
+          recurringParent({ accountId: 'acct-1' }),
+        );
+        prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
+        categoryServiceMock.findById.mockResolvedValue(okCategory());
+        // The account is visible but denominated in USD.
+        prismaMock.account.findMany.mockResolvedValue([
+          { id: 'acct-1', currency: 'USD', archivedAt: null },
+        ]);
+
+        try {
+          await service.editTransactionWithPropagation(
+            'user-1',
+            'pay-1',
+            { currency: 'EUR' },
+            propagate,
+          );
+          throw new Error('expected a rejection');
+        } catch (err) {
+          expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH);
+        }
+        expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+      }
+    });
+
+    it('404s an amount edit on a row placed on an account the editor can no longer use', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent({ accountId: 'acct-1' }));
+      prismaMock.account.findMany.mockResolvedValue([]); // archived, deleted or left the group
+
+      try {
+        await service.editTransactionWithPropagation(
+          'user-1',
+          'pay-1',
+          { amountCents: 9999 },
+          'all',
+        );
+        throw new Error('expected a rejection');
+      } catch (err) {
+        expect(err).toBeInstanceOf(NotFoundException);
+        expect(codeOf(err)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND);
+      }
+      expect(prismaMock.transaction.update).not.toHaveBeenCalled();
+    });
+
+    it('applies and cascades a placement change to the parent and every child', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.transaction.findMany.mockResolvedValue([childRow({ id: 'c1' })]);
+      prismaMock.account.findMany.mockResolvedValue([
+        { id: 'acct-1', currency: 'USD', archivedAt: null },
+      ]);
+
+      const r = await service.editTransactionWithPropagation(
+        'user-1',
+        'pay-1',
+        { accountId: 'acct-1' },
+        'all',
+      );
+
+      expect(r.affectedChildrenCount).toBe(1);
+      for (const id of ['pay-1', 'c1']) {
+        expect(prismaMock.transaction.update).toHaveBeenCalledWith({
+          where: { id },
+          data: { account: { connect: { id: 'acct-1' } } },
+        });
+      }
+    });
+
+    it('clears the placement with an explicit null', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent({ accountId: 'acct-1' }));
+
+      await service.editTransactionWithPropagation('user-1', 'pay-1', { accountId: null }, 'self');
+
+      expect(prismaMock.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { account: { disconnect: true } },
+      });
+      // Nothing left to place, so no account lookup was needed.
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+
+    it('leaves an unplaced row alone — no account lookup at all', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
+      prismaMock.transaction.findMany.mockResolvedValue([]);
+
+      await service.editTransactionWithPropagation('user-1', 'pay-1', { amountCents: 42 }, 'all');
+
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+
     it('emits transaction.updated for the parent AND each updated child, after the transaction commits', async () => {
       prismaMock.transaction.findFirst.mockResolvedValue(recurringParent());
       prismaMock.transaction.findMany.mockResolvedValue([
@@ -3228,6 +3372,234 @@ describe('TransactionService', () => {
         );
         expect(summary.id).toBe('pay-1');
       });
+    });
+  });
+
+  // ── Phase 20.2 — accounts and transfers (design §6.3) ──
+
+  describe('account placement', () => {
+    const visibleAccount = (over: Record<string, unknown> = {}) => ({
+      id: 'acct-1',
+      currency: 'USD',
+      archivedAt: null,
+      ...over,
+    });
+
+    beforeEach(() => {
+      categoryServiceMock.findById.mockResolvedValue(okCategory());
+      prismaMock.transaction.create.mockResolvedValue(makePersistedTransaction());
+    });
+
+    it('persists a visible, same-currency account on create', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount()]);
+
+      await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+
+      const arg = prismaMock.transaction.create.mock.calls[0][0] as {
+        data: { accountId: string | null; transferAccountId: string | null };
+      };
+      expect(arg.data.accountId).toBe('acct-1');
+      expect(arg.data.transferAccountId).toBeNull();
+      // The lookup is scoped to accounts the caller can see; the archived flag
+      // is judged per id afterwards, because an existing placement may stay.
+      const where = prismaMock.account.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(where.where.AND[0]).toEqual({ id: { in: ['acct-1'] } });
+      expect(where.where.AND[1]).toEqual({
+        OR: [
+          { scopeType: 'personal', ownerId: 'user-1' },
+          { scopeType: 'group', group: { memberships: { some: { userId: 'user-1' } } } },
+        ],
+      });
+    });
+
+    it('404s an account that is missing, invisible or archived — one code, no leak', async () => {
+      prismaMock.account.findMany.mockResolvedValue([]);
+      await expect(service.create('user-1', baseDto({ accountId: 'acct-1' }))).rejects.toThrow(
+        NotFoundException,
+      );
+      try {
+        await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+      } catch (e) {
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_NOT_FOUND);
+      }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an account whose currency differs from the transaction', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ currency: 'ILS' })]);
+      try {
+        await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_ACCOUNT_CURRENCY_MISMATCH);
+      }
+    });
+
+    it('accepts a well-formed transfer between two own accounts', async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+
+      await service.create('user-1', baseDto({ accountId: 'acct-1', transferAccountId: 'acct-2' }));
+
+      const arg = prismaMock.transaction.create.mock.calls[0][0] as {
+        data: { accountId: string | null; transferAccountId: string | null };
+      };
+      expect(arg.data).toMatchObject({ accountId: 'acct-1', transferAccountId: 'acct-2' });
+    });
+
+    it.each([
+      ['an IN direction', { direction: 'IN' as const, accountId: 'acct-1' }],
+      ['no source account', { accountId: undefined }],
+      ['the same account twice', { accountId: 'acct-2' }],
+      ['a RECURRING parent', { type: 'RECURRING' as const, accountId: 'acct-1' }],
+    ])('rejects a transfer with %s', async (_label, over) => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      try {
+        await service.create(
+          'user-1',
+          baseDto({ transferAccountId: 'acct-2', ...over } as Partial<CreateTransactionDto>),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it("requires the transfer row's category to be the `transfer` system category", async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      // No system category with slug `transfer` matches the given id.
+      prismaMock.category.findFirst.mockResolvedValue(null);
+
+      try {
+        await service.create(
+          'user-1',
+          baseDto({ accountId: 'acct-1', transferAccountId: 'acct-2' }),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      expect(prismaMock.category.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ ownerType: 'system', slug: 'transfer' }),
+        }),
+      );
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects additional categories on a transfer — it is not spending', async () => {
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-1' }),
+        visibleAccount({ id: 'acct-2' }),
+      ]);
+      try {
+        await service.create(
+          'user-1',
+          baseDto({
+            categoryIds: ['cat-transfer', 'cat-2'],
+            accountId: 'acct-1',
+            transferAccountId: 'acct-2',
+          }),
+        );
+        throw new Error('expected a rejection');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BadRequestException);
+        expect(codeOf(e)).toBe(TRANSACTION_ERRORS.TRANSACTION_TRANSFER_INVALID);
+      }
+      // The category set is rejected before any lookup is attempted.
+      expect(prismaMock.category.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('leaves the category of a non-transfer row alone', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount()]);
+      await service.create('user-1', baseDto({ accountId: 'acct-1' }));
+      expect(prismaMock.category.findFirst).not.toHaveBeenCalled();
+    });
+
+    // Archiving stops evaluation, not the past (design §2.1).
+    it('refuses a NEW placement onto an archived account', async () => {
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ archivedAt: new Date() })]);
+      await expect(
+        service.create('user-1', baseDto({ accountId: 'acct-1' })),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prismaMock.transaction.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the history of an archived account editable', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        makeFullRow({ accountId: 'acct-1', createdById: 'user-1' }),
+      );
+      prismaMock.account.findMany.mockResolvedValue([visibleAccount({ archivedAt: new Date() })]);
+      prismaMock.transaction.findUnique.mockResolvedValue(makeFullRow({ accountId: 'acct-1' }));
+
+      await expect(service.update('user-1', 'pay-1', { amountCents: 4321 })).resolves.toMatchObject(
+        { id: 'pay-1' },
+      );
+      expect(prismaMock.transaction.update).toHaveBeenCalled();
+    });
+
+    it('still refuses moving a row onto a different archived account', async () => {
+      prismaMock.transaction.findFirst.mockResolvedValue(
+        makeFullRow({ accountId: 'acct-1', createdById: 'user-1' }),
+      );
+      prismaMock.account.findMany.mockResolvedValue([
+        visibleAccount({ id: 'acct-2', archivedAt: new Date() }),
+      ]);
+
+      await expect(
+        service.update('user-1', 'pay-1', { accountId: 'acct-2' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('does not touch the accounts table when no account is given', async () => {
+      await service.create('user-1', baseDto());
+      expect(prismaMock.account.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('list() account filters', () => {
+    beforeEach(() => {
+      prismaMock.transaction.findMany.mockResolvedValue([]);
+    });
+
+    it('accountId matches both sides of a movement', async () => {
+      await service.list('user-1', { accountId: 'acct-1' } as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).toContainEqual({
+        OR: [{ accountId: 'acct-1' }, { transferAccountId: 'acct-1' }],
+      });
+    });
+
+    it('excludeTransfers=true drops transfer rows', async () => {
+      await service.list('user-1', { excludeTransfers: 'true' } as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).toContainEqual({ transferAccountId: null });
+    });
+
+    it('leaves transfers in when excludeTransfers is absent', async () => {
+      await service.list('user-1', {} as ListTransactionsQueryDto);
+      const arg = prismaMock.transaction.findMany.mock.calls[0][0] as {
+        where: { AND: Array<Record<string, unknown>> };
+      };
+      expect(arg.where.AND).not.toContainEqual({ transferAccountId: null });
     });
   });
 });
