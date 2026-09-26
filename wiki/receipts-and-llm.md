@@ -135,9 +135,10 @@ Events (`apps/api/src/realtime/events.types.ts`), uploader only: `receipt.update
 row). Stages: `preparing sending processing thinking generating continuing repairing`; emission is
 throttled to one event / 300 ms with `thought` capped at 400 chars (`extraction-progress.util.ts`).
 `ExtractionActivity` renders it as a review-page panel or an inline list row; with no events it
-rotates generic verbs until `receipt.updated` unmounts it. `DocumentViewer` (zoom/pan, page
-navigator, PDF fallback) and `FileCaptureButtons` (browse + camera pair) are the shared primitives —
-do not hand-roll replacements.
+rotates generic verbs until `receipt.updated` unmounts it. Never hand-roll a replacement for the
+shared primitives: `ReceiptIntake` (8.29 — THE way a receipt gets in on every host:
+camera/browse/drop/URL, the client gate, page staging, the create call), `DocumentViewer`
+(zoom/pan, page navigator, PDF fallback) and `FileCaptureButtons` (browse + camera pair).
 
 ## API surface
 
