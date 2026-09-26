@@ -164,4 +164,6 @@ transactions hide their id too; the sanitiser's character class rewritten as esc
 file is diffable. Integration: `accounts-import` (18) + `accounts-import-limits` (3, incl. a
 full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; api unit 1381.
 
+**Released** — 20.1, 20.2 and 20.4 reached production on 2026-09-26 (release merge `57943c8`; CI, staging deploy and staging tests green; production health verified after the blue-green swap).
+
 **Next** — 20.5 (import wizard + review UI) after 20.3.
