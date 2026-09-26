@@ -7,14 +7,14 @@
 // holds a stored key. Credential writes may 401 with LLM_REAUTH_REQUIRED on
 // a long-idle session — surfaced as a "sign in again" toast.
 
-import { LLM_PROVIDERS, type LlmProvider } from '@myfinpro/shared';
+import { isLlmProvider, LLM_PROVIDERS, type LlmProvider } from '@myfinpro/shared';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/components/ui/Toast';
-import type { LlmCatalogResponse, LlmCredentialHint } from '@/lib/llm/types';
+import type { LlmBinding, LlmCatalogResponse, LlmCredentialHint } from '@/lib/llm/types';
 import { useLlmApi } from '@/lib/llm/use-llm-api';
 import { useAsyncOperation } from '@/lib/ui';
 
@@ -37,6 +37,12 @@ const inputClass =
 function modelLabel(label: string, provider: LlmProvider): string {
   const prefix = `${PROVIDER_NAMES[provider]} `;
   return label.startsWith(prefix) ? label.slice(prefix.length) : label;
+}
+
+/** Catalog label for a binding's model; falls back to the raw id when retired/unknown. */
+function effectiveModelLabel(models: LlmCatalogResponse['models'], binding: LlmBinding): string {
+  const entry = models.find((m) => m.provider === binding.provider && m.id === binding.model);
+  return entry ? modelLabel(entry.label, entry.provider) : binding.model;
 }
 
 export function LlmSettingsSection() {
@@ -144,6 +150,38 @@ export function LlmSettingsSection() {
             <p id="llm-model-hint" className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {t('modelHint')}
             </p>
+            {catalog.effective?.source === 'credential' && (
+              <p
+                data-testid="llm-effective-hint"
+                role="status"
+                className="mt-2 text-xs text-gray-600 dark:text-gray-300"
+              >
+                {t('effectiveCredential', {
+                  provider: isLlmProvider(catalog.effective.provider)
+                    ? PROVIDER_NAMES[catalog.effective.provider]
+                    : catalog.effective.provider,
+                  model: effectiveModelLabel(catalog.models, catalog.effective),
+                })}
+              </p>
+            )}
+            {catalog.effective === null && catalog.deploymentProvider === 'mock' && (
+              <p
+                data-testid="llm-effective-hint"
+                role="status"
+                className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+              >
+                {t('serverMock')}
+              </p>
+            )}
+            {catalog.effective === null && catalog.deploymentProvider === 'unconfigured' && (
+              <p
+                data-testid="llm-effective-hint"
+                role="status"
+                className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+              >
+                {t('serverUnconfigured')}
+              </p>
+            )}
             <Button
               variant="primary"
               size="md"

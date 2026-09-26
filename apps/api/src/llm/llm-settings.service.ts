@@ -2,7 +2,12 @@ import { findLlmModel, LLM_MODEL_CATALOG, LLM_PROVIDERS, type LlmProvider } from
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  resolveDeploymentProvider,
+  type DeploymentExtractionProvider,
+} from '../receipt/extraction/deployment-provider.util';
 import { LLM_ERRORS } from './constants/llm-errors';
+import { pickLlmBinding, type LlmBinding } from './llm-binding.util';
 import { LlmCredentialsService, type LlmCredentialHint } from './llm-credentials.service';
 
 /** Deployment-level ("shared") API key env var per provider. */
@@ -24,6 +29,10 @@ export interface LlmCatalogResponse {
   credentials: LlmCredentialHint[];
   /** Providers usable without a personal key (deployment key present). */
   sharedProviders: LlmProvider[];
+  /** The deployment default binding (what runs when `effective` is null). */
+  deploymentProvider: DeploymentExtractionProvider;
+  /** What this user's extraction would run on, before keys: null = deployment default. */
+  effective: LlmBinding | null;
 }
 
 /**
@@ -31,6 +40,11 @@ export interface LlmCatalogResponse {
  * A model is "available" to a user when its provider has a deployment key
  * or the user stored their own; selection of an unavailable model is
  * rejected here rather than surfacing later as a failed extraction.
+ *
+ * 8.11-hotfix: the catalog also answers "what would actually run for me?" —
+ * `effective` (the binding before keys, `null` = deployment default) and
+ * `deploymentProvider` — so the settings UI can warn about a stored key with
+ * no selection, or a deployment still serving the mock.
  */
 @Injectable()
 export class LlmSettingsService {
@@ -62,6 +76,12 @@ export class LlmSettingsService {
           : null,
       credentials,
       sharedProviders: shared,
+      deploymentProvider: resolveDeploymentProvider(this.configService),
+      effective: pickLlmBinding({
+        llmProvider: user.llmProvider,
+        llmModel: user.llmModel,
+        credentialProviders: credentials.map((c) => c.provider),
+      }),
     };
   }
 
