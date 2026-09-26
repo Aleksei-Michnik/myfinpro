@@ -18,6 +18,15 @@ pnpm 10. Compose: `docker-compose.yml` (+ `docker-compose.override.yml`) defines
 3. Ports (env var names, defaults): nginx `NGINX_PORT` (80), API `API_PORT` (3001) at `/api/v1`,
    web dev 3000, MySQL `MYSQL_EXTERNAL_PORT` (3307), Redis `REDIS_EXTERNAL_PORT` (6380).
    Swagger at `/api/docs` behind the nginx port.
+4. Host `next dev` against any running API (2026-09-26): `API_INTERNAL_URL=http://localhost:<api
+port>/api/v1 NEXT_PUBLIC_API_URL=/api pnpm --filter web exec next dev --port <n>` — the config
+   rewrites `/api/:path*` onto `API_INTERNAL_URL`, so the public base must be `/api`, not the code
+   default `/api/v1`. `/api/health` is the web's own route; probe `/api/receipts` (401 = proxied).
+   Stop it by the pid bound to the port (`ss -ltnp`), never `pkill -f '<command>'` (it matches and
+   kills the calling shell, exit 144).
+5. A fresh worktree needs `pnpm install --frozen-lockfile --prefer-offline`, then
+   `pnpm --filter @myfinpro/shared build` and `pnpm --filter api exec prisma generate` before any
+   typecheck or test — without them `tsc` reports a missing `@myfinpro/shared` or `PrismaService` members.
 
 When the stack runs **in containers** (`docker compose up -d`, with or without the mdock overlay):
 the API dev image has no generated Prisma client and a host `apps/api/tsconfig.build.tsbuildinfo`

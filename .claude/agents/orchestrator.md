@@ -24,7 +24,9 @@ on `IMPLEMENTATION-PLAN.md` §5 on the phase branch, plus a report the owner can
 - Then in parallel, each in its own worktree created by you from `phase/<N>` (`git worktree add
 ~/myfinpro-p<N>-<track> p<N>/<track>`; the shared clone may be in use by another session): **api-coder** (API +
   shared), **web-coder** (after **ui-designer** has a spec for any new surface),
-  **i18n-translator** once keys exist. Cap 3 implementation tracks.
+  **i18n-translator** once keys exist. Cap 3 implementation tracks. Bootstrap every new worktree before handing it over: `pnpm install --frozen-lockfile
+  --prefer-offline`, `pnpm --filter @myfinpro/shared build`, `pnpm --filter api exec prisma generate`
+  (2026-09-26: both coders lost their first gate to a missing `dist` and Prisma client).
 - **Prisma migrations are serialized**: one holder at a time, granted in integration order with
   the base migration named. Two migrations on one baseline conflict at merge.
 - **qa-tester** gates every iteration and every merge. **security-reviewer** gates changes that

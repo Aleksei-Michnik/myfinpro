@@ -13,7 +13,10 @@ not a root cause — the two RCAs in `docs/` exist because plausible fixes shipp
 
 1. Reproduce: locally with the real stack (`local-stack`) or with a failing test. If it reproduces
    only in staging or production, ask for the evidence to be captured there (a log excerpt, an SSE
-   trace, a request id) — never operate those environments yourself.
+   trace, a request id) — never operate those environments yourself. When the owner asks for the
+   server logs, the read-only evidence the permission layer allows is `docker logs`, `docker exec …
+printenv` (names, non-secret values) and edge access-log greps with client addresses stripped;
+   a database query is refused (2026-09-26) — ask the owner for that number instead.
 2. Evidence before hypotheses: logs, the failing assertion, `git log -S`/`git bisect` when a
    regression is suspected, `wiki/gotchas.md` for known traps (stale MySQL image, pipefail with
    `grep -q`, SSE reconnect storms, timezone-sensitive tests).

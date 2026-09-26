@@ -41,6 +41,12 @@ PLAYWRIGHT_BASE_URL=http://localhost:<PORT> pnpm --filter web exec playwright te
 
 `PLAYWRIGHT_BASE_URL` makes the config's `webServer` block reuse the running stack instead of
 starting `pnpm run dev` on port 3000. Screenshots go under the scratchpad (absolute `path`).
+Registration is throttled to 5 per 60 s per IP (`auth.controller.ts`): one fresh user per spec
+file, `--workers=1`, and pace reruns — a stall on `/auth/register` is the throttle, not the flow.
+Attribute console errors by response (method + URL + status). Two dev-mode noises are known and
+not findings (2026-09-26): an anonymous `POST /auth/refresh` 401 on page load (StrictMode
+double-mounts the silent refresh) and `net::ERR_FILE_NOT_FOUND` when a revoked blob URL's page
+navigates away.
 
 Check, and screenshot, every combination that the conventions promise:
 

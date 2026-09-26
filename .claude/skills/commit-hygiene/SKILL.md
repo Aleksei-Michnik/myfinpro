@@ -21,6 +21,9 @@ owner's actions (`/release` for the owner's own procedure).
    `Co-Authored-By`, mentions of AI assistants in the message, staged `.env`/`.kilocode` files, and
    any regex listed in the optional local file `$HOME/.config/myfinpro/forbidden-patterns` (one
    per line — the place for the project's hostnames, which must not be written into this repo).
+   The credential regex also catches test placeholders of 12+ characters after a key-like name
+   (a 13-character `sk-ant-…` key fixture, a 13-character `PASSWORD` fixture): keep fixtures under 12 characters
+   (`'sk-shared'`, `'E2eIntake1!'` — still 8+ with upper, lower and a digit for registration).
 
 ## Message
 

@@ -22,8 +22,10 @@ Full matrix, helpers and gotchas: `wiki/testing.md`. Strategy and expected level
 
 Exploratory / usability runs of a surface: the `playwright-qa` skill (throwaway `e2e/qa-*.spec.ts`,
 screenshots, console collector), promoted into a committed spec once the flow is proven.
-One file: `pnpm --filter api exec jest src/<module>/<file>.spec.ts`;
-`pnpm --filter web exec vitest run src/<path>`; `pnpm --filter web exec playwright test e2e/<file>.spec.ts --project=chromium`.
+One file: `pnpm --filter api exec jest src/<module>/<file>.spec.ts` (a family:
+`--testPathPatterns='src/(receipt|llm)/'`); `pnpm --filter web exec vitest run src/<path>` — the
+`test:unit` script ignores extra arguments (`pnpm --filter web test:unit -- <path>` runs everything);
+`pnpm --filter web exec playwright test e2e/<file>.spec.ts --project=chromium`.
 
 ## Writing tests
 

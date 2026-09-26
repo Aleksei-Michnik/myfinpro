@@ -120,7 +120,9 @@ docker exec "$CID" printenv RECEIPT_EXTRACTION_PROVIDER   # expect: anthropic
 docker exec "$CID" sh -c '[ -n "$ANTHROPIC_API_KEY" ] && echo "key: set" || echo "key: MISSING"'
 ```
 
-(For production use `myfinpro-prod-api`.)
+(For production use `myfinpro-prod-api`. Production logs at `warn`, so the info line above is
+absent there — only the 8.11-hotfix warnings (`none configured`, `mock (production)`) show; the
+`printenv` checks are the confirmation.)
 
 ### 4b. End-to-end smoke test
 

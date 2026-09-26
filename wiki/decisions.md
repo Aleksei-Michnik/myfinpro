@@ -47,6 +47,9 @@ Status is **binding** unless a later row supersedes it. Dates are the date the d
 | 2026-07-19 | The platform upgrade order is Node → TypeScript → MySQL, each its own commit behind a green CI + staging gate, with the database step additionally gated on a verified backup and explicit approval.                      | Only the database step is stateful and not cleanly reversible.                                                     | `docs/platform-upgrade-2026.md` §3                                           | binding — the sequencing rule applies to every future runtime bump                                                 |
 | 2026-04-11 | Mail always uses the production mail domain (`MAIL_DOMAIN`) as the sender in both environments, and DKIM is signed by the application, not the relay.                                                                     | The staging domain has no SPF record and mail was rejected; the relay's signing plugin crashes the message stream. | `docker-compose.*.app.yml`, `apps/api/src/mail/mail.service.ts`              | binding                                                                                                            |
 
+| 2026-09-26 | Production never defaults to the mock extraction provider: an unset `RECEIPT_EXTRACTION_PROVIDER` is `unconfigured` (receipts fail with a settings-facing reason); staging and dev keep the mock. Taken in the 8.11 hotfix; owner to confirm. | Production served the fixture as "recognition" for months; staging's e2e stays deterministic. |
+| 2026-09-26 | A stored personal LLM key alone binds extraction (its provider + `LLM_DEFAULT_MODEL`); the shared deployment key backs explicit selections only. Taken in the 8.11 hotfix; owner to confirm. | A saved key is intent; an unreadable key must fail, never bill the deployment's key. |
+
 ## Known drift to fix, not to re-decide
 
 - `docs/progress.md` tech-stack table says Next.js 15; `apps/web/package.json` has Next 16.

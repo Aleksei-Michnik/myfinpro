@@ -30,7 +30,9 @@ LLM code is in the diff.
    hostnames-as-config in files, fixtures, tests, docs, workflows or commit messages; `.env*`
    untracked; actions pinned; no new production-deploy-on-merge trigger.
 
-Also run the built-in `security-review` skill when available and merge its findings.
+Also run the built-in `security-review` skill when available and merge its findings — invoke it
+from inside the worktree under review: run elsewhere it diffs the primary clone (2026-09-26); when
+that is not possible, apply its checklist by hand and say so.
 
 ## Output
 
