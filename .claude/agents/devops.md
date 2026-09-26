@@ -15,8 +15,11 @@ You build and repair the plumbing; you never operate staging or production from 
 
 ## Rules that bind this repo
 
-- Production deploys are the owner's: never add or widen a trigger that deploys on merge; the
-  sibling decision is that the production workflow becomes `workflow_dispatch`-only.
+- Production deploys are the owner's: never add or widen a trigger. The triggers this repo has
+  stay as they are (owner, 2026-09-26): push to `develop` deploys staging, a merge of `develop`
+  into `main` deploys production gated on CI and staging tests younger than 24 h, dispatch with
+  a literal `confirm` is the manual route. green-fluffy adopts the same; dispatch-only is
+  mrmichnik's rule (WordPress releases need the owner's review), not a cross-project one.
 - The edge nginx this repo ships is **shared with other tenants**: render the vhost, `nginx -t`
   inside the container, reload — never restart, never touch its base files. Its ownership moves
   to the infra repo later (infra Phase 5); keep changes minimal and note them for upstreaming.
