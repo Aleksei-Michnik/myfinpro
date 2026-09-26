@@ -2,7 +2,7 @@
 
 Read when: anything deploy-, compose-, nginx-, mail- or local-dev-shaped. Refresh with the
 `infra-sync` skill (`infra-scout` agent) when this date is older than 7 days. Sources: the private
-infra repo (`~/Aleksei-Michnik/infra`: `README.md`, `docs/notes/next-session.md`, `mdock/`), the
+infra repo (`~/Aleksei-Michnik/infra`: `README.md`, `docs/notes/next-session.md`, `mdocker/`), the
 private WordPress repo (`~/mrmichnik`) and `~/Aleksei-Michnik/green-fluffy`, all read-only. This is a
 **public** repository: servers, users and hostnames appear here by role only.
 
@@ -37,15 +37,15 @@ private WordPress repo (`~/mrmichnik`) and `~/Aleksei-Michnik/green-fluffy`, all
   grepping a saved body (`e169324`). Check our `scripts/deploy.sh` and `rollback.sh` for the same
   construct before trusting a "verification failed" (`gotchas.md`).
 
-## Mdock — local front door (infra Phase 6, built 2026-09-24)
+## Mdocker — local front door (infra Phase 6, built 2026-09-24)
 
-- `infra/mdock/` exists and is committed (`05b3a45`): `hosts.json` registry, `mdock.sh`
+- `infra/mdocker/` exists and is committed (`05b3a45`): `hosts.json` registry, `mdocker.sh`
   (`up | down | status | certs | trust | browser`), Traefik v3.6 on `127.0.0.1:443` with a mkcert
   certificate, `browser.bat` (Windows Chrome, primary on this WSL2 workstation) and `browser.sh`.
   The WordPress repo has adopted it (`9e398e8`).
 - **This project is already registered**: id `myfinpro`, upstream `myfinpro-nginx:80`,
-  `hostHeader: localhost`, network `mdock_net`. Adoption here (`next-session.md` §2 step 5, our
-  own small PR, `devops`): the local `nginx` service joins the external `mdock_net` network; the
+  `hostHeader: localhost`, network `mdocker_net`. Adoption here (`next-session.md` §2 step 5, our
+  own small PR, `devops`): the local `nginx` service joins the external `mdocker_net` network; the
   route comes from the registry's generated file provider, so **no hostname is written in this
   repo**; the published port may stay for the old workflow. Playwright cannot use Chrome resolver
   rules — keep base URLs env-driven.
@@ -64,7 +64,7 @@ Shared names to keep aligned: agents `architect`, `orchestrator`, `ui-designer`,
 
 ## Open items that touch this repo
 
-1. Mdock adoption: merged 2026-09-25 (PR #51 → `develop`, 7a810da: opt-in overlay `docker-compose.mdock.yml`, `MDOCK_DEV_ORIGINS` for Next dev origins, local nginx upstreams by container name because the shared proxy network makes bare service names ambiguous). Hot reload verified end to end; the API dev image was fixed the same day (PR #54) to generate the Prisma client and clear host build artefacts.
+1. Mdocker adoption: merged 2026-09-25 (PR #51 → `develop`, 7a810da: opt-in overlay `docker-compose.mdocker.yml`, `MDOCKER_DEV_ORIGINS` for Next dev origins, local nginx upstreams by container name because the shared proxy network makes bare service names ambiguous). Hot reload verified end to end; the API dev image was fixed the same day (PR #54) to generate the Prisma client and clear host build artefacts.
 2. Production backups: closed 2026-09-25 — `backup.yml` (daily, in-container dump, age gate, and an encrypted off-box copy into the private `<repository>-backups` store once the owner sets the variable and the secret) and a pre-deploy dump step in `deploy-production.yml`; the infra runbook §5/§7 still describes the gap and needs updating on the infra side.
 3. Production workflow → dispatch-only with confirmed ref (owner decision; `devops`).
 4. `deploy.sh`/`rollback.sh` pipefail verification check.
@@ -74,6 +74,6 @@ Shared names to keep aligned: agents `architect`, `orchestrator`, `ui-designer`,
 ## Re-check on every sync
 
 `infra/docs/notes/next-session.md` (top, §2 table), `infra/docs/notes/phase-2-pipeline.md` §1,
-`infra/mdock/{hosts.json,README.md}`, `infra/templates/` (exists?), `infra/mail/README.md`,
+`infra/mdocker/{hosts.json,README.md}`, `infra/templates/` (exists?), `infra/mail/README.md`,
 `git -C ~/Aleksei-Michnik/infra log --since=<this date>`, `git -C ~/mrmichnik log --since=<this date>`,
 `~/Aleksei-Michnik/green-fluffy/.claude` and `wiki/` for name drift.

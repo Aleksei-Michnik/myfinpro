@@ -1,6 +1,6 @@
 ---
 name: infra-scout
-description: Probes the sibling repositories read-only — the private infra repo, the WordPress repo and green-fluffy — for changes that affect this project (Mdock local dev, shared edge, deploy templates and workflows, mail relay, secrets policy, agent-suite conventions) and refreshes wiki/infra-context.md with dated facts. Use at the start of deploy, compose, CI or nginx work, when an infra question comes up, or when the wiki's sync date is more than a week old.
+description: Probes the sibling repositories read-only — the private infra repo, the WordPress repo and green-fluffy — for changes that affect this project (Mdocker local dev, shared edge, deploy templates and workflows, mail relay, secrets policy, agent-suite conventions) and refreshes wiki/infra-context.md with dated facts. Use at the start of deploy, compose, CI or nginx work, when an infra question comes up, or when the wiki's sync date is more than a week old.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 skills: [infra-sync]

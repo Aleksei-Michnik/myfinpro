@@ -13,10 +13,12 @@ const nextConfig: NextConfig = {
   // Standalone output for Docker deployments
   output: 'standalone',
 
-  // mdock (infra repo): the page is served at the production hostname while Next sees localhost,
+  // mdocker (infra repo): the page is served at the production hostname while Next sees localhost,
   // and Next 16 answers 403 to /_next dev requests from an origin it does not know. Set only by
-  // docker-compose.mdock.yml from the developer's local .env; empty everywhere else.
-  allowedDevOrigins: process.env.MDOCK_DEV_ORIGINS ? process.env.MDOCK_DEV_ORIGINS.split(',') : [],
+  // docker-compose.mdocker.yml from the developer's local .env; empty everywhere else.
+  allowedDevOrigins: process.env.MDOCKER_DEV_ORIGINS
+    ? process.env.MDOCKER_DEV_ORIGINS.split(',')
+    : [],
 
   // Allow Server Actions from reverse proxy origins (CloudFlare)
   experimental: {

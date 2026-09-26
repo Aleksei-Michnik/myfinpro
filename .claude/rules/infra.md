@@ -22,8 +22,8 @@ paths:
 - Production deploys are the owner's; do not add or change a trigger that deploys on merge.
   `.claude/settings.json` lets you `gh workflow run` / `gh run watch|list|view`: dispatch
   `test-staging.yml` and `backup.yml` freely; `deploy-production.yml` only when the owner says so
-  in the session. (A push to `main` still deploys — known divergence, aligned with the infra
-  Phase 5 templates.)
+  in the session. (A push to `main` deploys production: the pattern the owner kept as-is on 2026-09-26, shared
+  with green-fluffy; mrmichnik alone is dispatch-only — infra doc 13 §2.)
 - Verify locally what can be verified: `docker compose config -q`, image builds, `nginx -t`,
   shell scripts with `bash -n` and `shellcheck` when available; say what could only be checked
   after a push.
