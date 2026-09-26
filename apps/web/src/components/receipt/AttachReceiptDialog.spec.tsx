@@ -30,6 +30,9 @@ function renderDialog() {
   return { onClose, onAttached };
 }
 
+/** 8.29 — the URL field lives behind the intake's toggle. */
+const openUrlRow = () => fireEvent.click(screen.getByTestId('attach-receipt-url-toggle'));
+
 describe('AttachReceiptDialog (8.15)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,6 +59,7 @@ describe('AttachReceiptDialog (8.15)', () => {
     attachUrlMock.mockResolvedValue(created);
     const { onAttached } = renderDialog();
 
+    openUrlRow();
     fireEvent.change(screen.getByTestId('attach-receipt-url-input'), {
       target: { value: '  https://shop.example/r/9  ' },
     });
@@ -89,6 +93,7 @@ describe('AttachReceiptDialog (8.15)', () => {
     attachUrlMock.mockRejectedValue(new Error('This transaction already has a receipt'));
     const { onAttached } = renderDialog();
 
+    openUrlRow();
     fireEvent.change(screen.getByTestId('attach-receipt-url-input'), {
       target: { value: 'https://shop.example/r/9' },
     });

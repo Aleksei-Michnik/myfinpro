@@ -23,6 +23,8 @@
       "nextPage": "Next page"
     },
     "upload": {
+      "browse": "Browse files",
+      "camera": "Take a photo",
       "rejectedType": "{name}: unsupported file type",
       "rejectedSize": "{name}: the file is too large (up to {maxMb} MB)"
     }
@@ -719,14 +721,7 @@
       "occurrenceNotEditable": "This is a generated occurrence and can't be edited in this iteration.",
       "othersPreserved": "Other users' attributions on this transaction will not be touched.",
       "othersCount": "{count, plural, =1 {# other attribution} other {# other attributions}} will be preserved.",
-      "fromReceiptHint": "Have a receipt? Add it and we will fill the transaction in for you.",
-      "fromReceiptDevice": "Upload from this device",
-      "fromReceiptUrl": "Add from URL",
-      "fromReceiptBarcodes": "Scan product barcodes",
-      "fromReceiptUrlLabel": "Receipt URL",
-      "fromReceiptUrlPlaceholder": "https://…",
-      "fromReceiptUrlSubmit": "Add receipt",
-      "fromReceiptFailed": "Failed to add the receipt"
+      "fromReceiptHint": "Have a receipt? Add it and we will fill the transaction in for you."
     },
     "types": {
       "label": "Type",
@@ -1108,16 +1103,19 @@
     },
     "upload": {
       "title": "Add a receipt",
-      "dropLabel": "Drop receipt photos here or click to browse",
-      "formats": "JPEG, PNG, WebP, HEIC or PDF — up to 10MB",
-      "browse": "Browse files",
-      "camera": "Take a photo",
+      "addedToast": "{count, plural, =1 {Receipt added} other {# receipts added}} — extraction started"
+    },
+    "intake": {
+      "url": "Add from URL",
+      "urlLabel": "Receipt URL",
       "urlPlaceholder": "https:// link to an online receipt",
-      "urlSubmit": "Add URL",
-      "uploadedToast": "{count, plural, =1 {Receipt uploaded} other {# receipts uploaded}} — extraction started",
-      "urlAddedToast": "Receipt URL added — extraction started",
-      "failedToast": "Upload failed",
+      "urlSubmit": "Add receipt",
+      "dropHint": "…or drop photos or a PDF here — JPEG, PNG, WebP, HEIC or PDF, up to 10 MB each",
+      "barcodes": "Scan product barcodes",
+      "linkExisting": "Link an existing receipt",
+      "failedToast": "Could not add the receipt",
       "tooManyPages": "A receipt can have up to {max} photos",
+      "pdfAlone": "A PDF receipt must be added on its own",
       "stagedTitle": "Photos of one receipt",
       "stagedCount": "{count, plural, =1 {# photo} other {# photos}}",
       "stagedHint": "A long receipt? Add its photos in order, top to bottom — they will be read as one receipt.",
@@ -1153,14 +1151,7 @@
     },
     "attach": {
       "title": "Attach a receipt",
-      "hint": "Add the receipt for this transaction. We'll read it and check it against what you entered.",
-      "urlLabel": "Or add from a URL",
-      "urlPlaceholder": "https://…",
-      "urlSubmit": "Add",
-      "close": "Close",
-      "failed": "Failed to attach the receipt",
-      "or": "or",
-      "linkExisting": "Link an existing receipt"
+      "hint": "Add the receipt for this transaction. We'll read it and check it against what you entered."
     },
     "reconcile": {
       "title": "Update the transaction?",

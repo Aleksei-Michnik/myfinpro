@@ -1,17 +1,18 @@
 'use client';
 
 // Phase 7 · Iteration 7.7 — client orchestrator for the receipts page:
-// intake (drop / browse / camera / URL) + the uploader's receipt list with
-// live lifecycle updates (SSE receipt.updated / receipt.deleted, refetch on
-// realtime reconnect per docs/ui-realtime-conventions.md).
+// intake (8.29: the shared `ReceiptIntake` — photo / browse / drop / URL /
+// barcodes) + the uploader's receipt list with live lifecycle updates (SSE
+// receipt.updated / receipt.deleted, refetch on realtime reconnect per
+// docs/ui-realtime-conventions.md).
 
-import { RECEIPT_MAX_FILE_SIZE_BYTES, RECEIPT_MAX_FILES } from '@myfinpro/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExtractionActivity } from '@/components/receipt/ExtractionActivity';
 import { LinkTransactionDialog } from '@/components/receipt/LinkTransactionDialog';
+import { ManualReceiptDialog } from '@/components/receipt/ManualReceiptDialog';
+import { ReceiptIntake } from '@/components/receipt/ReceiptIntake';
 import { ReceiptStatusPill } from '@/components/receipt/ReceiptStatusPill';
-import { ReceiptUploadZone } from '@/components/receipt/ReceiptUploadZone';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,12 +20,14 @@ import { InlineErrorBanner } from '@/components/ui/InlineErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useToast } from '@/components/ui/Toast';
 import { Link, useRouter } from '@/i18n/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
+import { useCategories } from '@/lib/category/category-context';
+import type { CategoryDto } from '@/lib/category/types';
 import { useRealtimeEvents } from '@/lib/realtime/use-realtime-events';
 import { useRealtimeResync } from '@/lib/realtime/use-realtime-resync';
 import { useReceipts } from '@/lib/receipt/receipt-context';
 import type { ReceiptSummary } from '@/lib/receipt/types';
 import { useAsyncOperation } from '@/lib/ui';
-import { RECEIPT_ACCEPT, uploadRejectionMessage, validateUploadFiles } from '@/lib/upload';
 
 function formatMoney(cents: number, currency: string | null, locale: string): string {
   try {
@@ -45,10 +48,11 @@ function formatWhen(iso: string, locale: string): string {
 export function ReceiptsClient() {
   const t = useTranslations('receipts');
   const tLink = useTranslations('receipts.link');
-  const tUpload = useTranslations('common.upload');
   const locale = useLocale();
   const router = useRouter();
-  const { uploadReceipt, createFromUrl, fetchList, retryReceipt, removeReceipt } = useReceipts();
+  const { fetchList, retryReceipt, removeReceipt } = useReceipts();
+  const { user } = useAuth();
+  const { fetchAll } = useCategories();
   const { addToast } = useToast();
 
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
@@ -56,11 +60,11 @@ export function ReceiptsClient() {
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   // 8.28 — the receipt whose "link to a transaction" picker is open.
   const [linkingReceipt, setLinkingReceipt] = useState<ReceiptSummary | null>(null);
-  // 8.22 — photos staged as the pages of ONE long receipt before uploading.
-  const [staged, setStaged] = useState<File[]>([]);
+  // 8.29 — compose a receipt from product barcodes instead of a photo.
+  const [barcodesOpen, setBarcodesOpen] = useState(false);
 
   const listOp = useAsyncOperation<ReceiptSummary[]>({ scope: 'container' });
-  const intakeOp = useAsyncOperation<number>({ scope: 'control' });
+  const categoriesOp = useAsyncOperation<CategoryDto[]>({ scope: 'control' });
   const rowOp = useAsyncOperation<boolean>({ scope: 'control' });
 
   const loadFirstPage = useCallback(() => {
@@ -99,77 +103,29 @@ export function ReceiptsClient() {
     setReceipts((prev) => prev.filter((r) => r.id !== event.receiptId));
   });
 
-  const uploadBatches = (batches: File[][]) => {
-    void intakeOp
-      .run(async (signal) => {
-        for (const batch of batches) {
-          const created = await uploadReceipt(batch, signal);
-          setReceipts((prev) =>
-            prev.some((r) => r.id === created.id) ? prev : [created, ...prev],
-          );
-        }
-        return batches.length;
-      })
-      .then((count) => {
-        if (count !== undefined) {
-          addToast('success', t('upload.uploadedToast', { count }));
-        }
-      });
-  };
-
-  const stagePages = (files: File[]) => {
-    setStaged((prev) => {
-      const next = [...prev, ...files];
-      if (next.length > RECEIPT_MAX_FILES) {
-        addToast('error', t('upload.tooManyPages', { max: RECEIPT_MAX_FILES }));
-        return next.slice(0, RECEIPT_MAX_FILES);
-      }
-      return next;
+  // 8.29 — every create comes back from `ReceiptIntake`: prepend the new
+  // rows (dedupe against a realtime event that may have arrived first) and
+  // confirm with one toast. Failures are the component's own (toast there).
+  const handleCreated = (created: ReceiptSummary[]) => {
+    setReceipts((prev) => {
+      const known = new Set(prev.map((r) => r.id));
+      return [...created.filter((r) => !known.has(r.id)), ...prev];
     });
+    addToast('success', t('upload.addedToast', { count: created.length }));
   };
 
-  // Routing (8.22): PDFs are always standalone receipts; camera shots stage
-  // as pages of one long receipt (shoot → add page → … → upload); a multi-
-  // image pick stages too so the user chooses one-vs-separate explicitly.
-  // A single picked image with an empty tray uploads straight away.
-  const handleFiles = (rawFiles: File[], source: 'picker' | 'camera') => {
-    // 8.27 — type/size gate before any request (drops bypass the accept attr).
-    const { accepted, rejected } = validateUploadFiles(rawFiles, {
-      accept: RECEIPT_ACCEPT,
-      maxBytes: RECEIPT_MAX_FILE_SIZE_BYTES,
-    });
-    for (const rejection of rejected) {
-      addToast('error', uploadRejectionMessage(tUpload, rejection, RECEIPT_MAX_FILE_SIZE_BYTES));
-    }
-    const pdfs = accepted.filter((f) => f.type === 'application/pdf');
-    const images = accepted.filter((f) => f.type !== 'application/pdf');
-    if (pdfs.length > 0) uploadBatches(pdfs.map((pdf) => [pdf]));
-    if (images.length === 0) return;
-    if (source === 'picker' && staged.length === 0 && images.length === 1) {
-      uploadBatches([images]);
-      return;
-    }
-    stagePages(images);
-  };
-
-  const handleUrl = (url: string) => {
-    void intakeOp
-      .run(async (signal) => {
-        const created = await createFromUrl(url, signal);
-        setReceipts((prev) => (prev.some((r) => r.id === created.id) ? prev : [created, ...prev]));
-        return 1;
-      })
-      .then((r) => {
-        if (r !== undefined) addToast('success', t('upload.urlAddedToast'));
-      });
-  };
-
-  // Intake failures surface as an error toast (mirrors the 6.18.2 pattern).
+  // The barcode composer needs the user's OUT categories for the products it
+  // creates inline; load them once the dialog is asked for.
   useEffect(() => {
-    if (intakeOp.error && intakeOp.error.reason !== 'aborted') {
-      addToast('error', intakeOp.error.message || t('upload.failedToast'));
-    }
-  }, [intakeOp.error, addToast, t]);
+    if (!barcodesOpen) return;
+    void categoriesOp.run((signal) => fetchAll(signal));
+    // categoriesOp identity is stable (useAsyncOperation contract).
+  }, [barcodesOpen, fetchAll]);
+  const outCategories = useMemo(
+    () => (categoriesOp.data ?? []).filter((c) => c.direction !== 'IN'),
+    [categoriesOp.data],
+  );
+
   useEffect(() => {
     if (rowOp.error && rowOp.error.reason !== 'aborted') {
       addToast('error', rowOp.error.message || t('list.actionFailed'));
@@ -230,24 +186,19 @@ export function ReceiptsClient() {
     <main className="container mx-auto max-w-3xl space-y-6 px-4 py-8">
       <PageHeader title={t('title')} />
 
-      <ReceiptUploadZone onFiles={handleFiles} onUrl={handleUrl} pending={intakeOp.isLoading} />
-
-      {staged.length > 0 && (
-        <StagedPagesTray
-          files={staged}
-          pending={intakeOp.isLoading}
-          onRemove={(index) => setStaged((prev) => prev.filter((_, i) => i !== index))}
-          onUploadOne={() => {
-            uploadBatches([staged]);
-            setStaged([]);
-          }}
-          onUploadSeparately={() => {
-            uploadBatches(staged.map((file) => [file]));
-            setStaged([]);
-          }}
-          onClear={() => setStaged([])}
+      <Card
+        as="section"
+        padding="sm"
+        aria-label={t('upload.title')}
+        data-testid="receipt-upload-zone"
+      >
+        <ReceiptIntake
+          target={{ kind: 'standalone' }}
+          testIdPrefix="receipt"
+          onCreated={handleCreated}
+          onScanBarcodes={() => setBarcodesOpen(true)}
         />
-      )}
+      </Card>
 
       <section aria-label={t('list.title')} data-testid="receipts-list" aria-live="polite">
         {listOp.isLoading && receipts.length === 0 && (
@@ -402,6 +353,21 @@ export function ReceiptsClient() {
         )}
       </section>
 
+      {/* 8.29 — compose a receipt by scanning the products themselves.
+          Mounted only while open so its product hooks stay off the page. */}
+      {barcodesOpen && (
+        <ManualReceiptDialog
+          open
+          defaultCurrency={user?.defaultCurrency ?? 'USD'}
+          categories={outCategories}
+          onClose={() => setBarcodesOpen(false)}
+          onCreated={(receipt) => {
+            setBarcodesOpen(false);
+            router.push(`/receipts/${receipt.id}`);
+          }}
+        />
+      )}
+
       {/* 8.28 — link a standalone receipt to an existing transaction. */}
       {linkingReceipt && (
         <LinkTransactionDialog
@@ -423,115 +389,5 @@ export function ReceiptsClient() {
         />
       )}
     </main>
-  );
-}
-
-interface StagedPagesTrayProps {
-  files: File[];
-  pending: boolean;
-  onRemove(index: number): void;
-  onUploadOne(): void;
-  onUploadSeparately(): void;
-  onClear(): void;
-}
-
-/**
- * 8.22 — the pending pages of one long receipt: thumbnails in shot order,
- * per-page remove, and the one-receipt vs separate-receipts choice. More
- * photos added while the tray is open append to it.
- */
-function StagedPagesTray({
-  files,
-  pending,
-  onRemove,
-  onUploadOne,
-  onUploadSeparately,
-  onClear,
-}: StagedPagesTrayProps) {
-  const t = useTranslations('receipts.upload');
-  const urls = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
-  useEffect(
-    () => () => {
-      for (const url of urls) URL.revokeObjectURL(url);
-    },
-    [urls],
-  );
-
-  return (
-    <section
-      className="rounded-lg border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-900/10"
-      aria-label={t('stagedTitle')}
-      data-testid="staged-pages"
-    >
-      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-        {t('stagedTitle')}{' '}
-        <span className="text-gray-500 dark:text-gray-400">
-          {t('stagedCount', { count: files.length })}
-        </span>
-      </p>
-      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{t('stagedHint')}</p>
-
-      <ul className="mt-3 flex flex-wrap gap-2">
-        {files.map((file, index) => (
-          <li key={`${file.name}-${index}`} className="relative">
-            {/* Blob object-URL — next/image can't consume it. */}
-            <img
-              src={urls[index]}
-              alt={t('pageAlt', { page: index + 1 })}
-              className="h-20 w-16 rounded border border-gray-300 object-cover dark:border-gray-600"
-              data-testid={`staged-page-${index + 1}`}
-            />
-            <span className="absolute bottom-0.5 start-0.5 rounded bg-gray-900/70 px-1 text-[10px] leading-4 text-white">
-              {index + 1}
-            </span>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => onRemove(index)}
-              aria-label={t('removePage', { page: index + 1 })}
-              data-testid={`staged-page-remove-${index + 1}`}
-              className="absolute -end-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-xs leading-none text-white hover:bg-gray-900 disabled:opacity-40"
-            >
-              ✕
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          disabled={pending}
-          onClick={onUploadOne}
-          data-testid="staged-upload-one"
-        >
-          {t('uploadAsOne', { count: files.length })}
-        </Button>
-        {files.length > 1 && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={pending}
-            onClick={onUploadSeparately}
-            data-testid="staged-upload-separately"
-          >
-            {t('uploadSeparately')}
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={onClear}
-          data-testid="staged-clear"
-        >
-          {t('stagedClear')}
-        </Button>
-      </div>
-    </section>
   );
 }

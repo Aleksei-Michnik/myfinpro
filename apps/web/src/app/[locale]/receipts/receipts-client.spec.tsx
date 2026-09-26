@@ -34,6 +34,22 @@ vi.mock('@/components/ui/Toast', () => ({
   useToast: () => ({ addToast: addToastMock }),
 }));
 
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: () => ({ user: { id: 'me', defaultCurrency: 'USD' } }),
+}));
+
+// 8.29 — the page loads the OUT categories for the barcode composer.
+const fetchAllMock = vi.fn();
+vi.mock('@/lib/category/category-context', () => ({
+  useCategories: () => ({ fetchAll: fetchAllMock }),
+}));
+
+// The barcode composer has its own spec; here we only need to see it mount.
+vi.mock('@/components/receipt/ManualReceiptDialog', () => ({
+  ManualReceiptDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="manual-receipt-stub" /> : null,
+}));
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: Record<string, unknown>) => (
     <a href={href as string} {...props}>
@@ -105,6 +121,7 @@ describe('ReceiptsClient', () => {
     realtimeHandlers.length = 0;
     resyncCallbacks.length = 0;
     fetchListMock.mockResolvedValue(page([]));
+    fetchAllMock.mockResolvedValue([]);
   });
 
   it('loads and renders the first page with status pills', async () => {
@@ -137,98 +154,57 @@ describe('ReceiptsClient', () => {
     await waitFor(() => expect(screen.getByTestId('receipts-empty')).toBeInTheDocument());
   });
 
-  it('uploads dropped files, prepends the row, and toasts', async () => {
+  it('prepends what the intake created and confirms with one toast (8.29)', async () => {
     render(<ReceiptsClient />);
     await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
     uploadReceiptMock.mockResolvedValue(makeReceipt({ id: 'r-new' }));
 
     const file = new File(['x'], 'r.jpg', { type: 'image/jpeg' });
-    fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [file] } });
+    fireEvent.drop(screen.getByTestId('receipt-intake'), { dataTransfer: { files: [file] } });
 
     await waitFor(() => expect(screen.getByTestId('receipt-row-r-new')).toBeInTheDocument());
     expect(uploadReceiptMock).toHaveBeenCalledWith([file], expect.anything());
-    expect(addToastMock).toHaveBeenCalledWith('success', 'upload.uploadedToast:1');
+    expect(addToastMock).toHaveBeenCalledWith('success', 'upload.addedToast:1');
   });
 
-  it('multiple dropped images stage as pages of one receipt (8.22)', async () => {
+  it('counts several created receipts in one toast and dedupes against the list', async () => {
     global.URL.createObjectURL = vi.fn(() => 'blob:mock');
     global.URL.revokeObjectURL = vi.fn();
+    fetchListMock.mockResolvedValue(page([makeReceipt({ id: 'r-a' })]));
     render(<ReceiptsClient />);
-    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
-    uploadReceiptMock.mockResolvedValue(makeReceipt({ id: 'r-multi' }));
-
-    const p1 = new File(['1'], 'p1.jpg', { type: 'image/jpeg' });
-    const p2 = new File(['2'], 'p2.jpg', { type: 'image/jpeg' });
-    fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [p1, p2] } });
-
-    // Nothing uploads yet — the tray holds both photos.
-    expect(uploadReceiptMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId('staged-pages')).toBeInTheDocument();
-    expect(screen.getByTestId('staged-page-2')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('staged-upload-one'));
-    await waitFor(() =>
-      expect(uploadReceiptMock).toHaveBeenCalledWith([p1, p2], expect.anything()),
-    );
-    expect(uploadReceiptMock).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.queryByTestId('staged-pages')).not.toBeInTheDocument());
-  });
-
-  it('staged photos can upload as separate receipts instead (8.22)', async () => {
-    global.URL.createObjectURL = vi.fn(() => 'blob:mock');
-    global.URL.revokeObjectURL = vi.fn();
-    render(<ReceiptsClient />);
-    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('receipt-row-r-a')).toBeInTheDocument());
     uploadReceiptMock
       .mockResolvedValueOnce(makeReceipt({ id: 'r-a' }))
       .mockResolvedValueOnce(makeReceipt({ id: 'r-b' }));
 
-    const p1 = new File(['1'], 'p1.jpg', { type: 'image/jpeg' });
-    const p2 = new File(['2'], 'p2.jpg', { type: 'image/jpeg' });
-    fireEvent.drop(screen.getByTestId('receipt-dropzone'), { dataTransfer: { files: [p1, p2] } });
-
-    fireEvent.click(screen.getByTestId('staged-upload-separately'));
-    await waitFor(() => expect(uploadReceiptMock).toHaveBeenCalledTimes(2));
-    expect(uploadReceiptMock).toHaveBeenNthCalledWith(1, [p1], expect.anything());
-    expect(uploadReceiptMock).toHaveBeenNthCalledWith(2, [p2], expect.anything());
-  });
-
-  it('adds URL receipts through the form', async () => {
-    render(<ReceiptsClient />);
-    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
-    createFromUrlMock.mockResolvedValue(makeReceipt({ id: 'r-url', source: 'url' }));
-
-    fireEvent.change(screen.getByTestId('receipt-url-input'), {
-      target: { value: 'https://r.example/x' },
+    fireEvent.drop(screen.getByTestId('receipt-intake'), {
+      dataTransfer: {
+        files: [
+          new File(['1'], 'p1.jpg', { type: 'image/jpeg' }),
+          new File(['2'], 'p2.jpg', { type: 'image/jpeg' }),
+        ],
+      },
     });
-    fireEvent.click(screen.getByTestId('receipt-url-submit'));
+    fireEvent.click(screen.getByTestId('receipt-staged-upload-separately'));
 
-    await waitFor(() => expect(screen.getByTestId('receipt-row-r-url')).toBeInTheDocument());
-    expect(createFromUrlMock).toHaveBeenCalledWith('https://r.example/x', expect.anything());
+    await waitFor(() => expect(screen.getByTestId('receipt-row-r-b')).toBeInTheDocument());
+    expect(addToastMock).toHaveBeenCalledWith('success', 'upload.addedToast:2');
+    expect(screen.getAllByTestId(/^receipt-row-/)).toHaveLength(2);
   });
 
-  it('a failed upload surfaces an error toast', async () => {
-    render(<ReceiptsClient />);
-    await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
-    uploadReceiptMock.mockRejectedValue(new Error('Storage unavailable'));
-
-    fireEvent.drop(screen.getByTestId('receipt-dropzone'), {
-      dataTransfer: { files: [new File(['x'], 'r.jpg', { type: 'image/jpeg' })] },
-    });
-    await waitFor(() =>
-      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('Storage')),
-    );
-  });
-
-  it('client-side validation rejects unsupported drops before any request (8.27)', async () => {
+  it('offers the barcode composer with the OUT categories (8.29)', async () => {
+    fetchAllMock.mockResolvedValue([
+      { id: 'c-out', direction: 'OUT' },
+      { id: 'c-in', direction: 'IN' },
+    ]);
     render(<ReceiptsClient />);
     await waitFor(() => expect(fetchListMock).toHaveBeenCalled());
 
-    fireEvent.drop(screen.getByTestId('receipt-dropzone'), {
-      dataTransfer: { files: [new File(['x'], 'x.gif', { type: 'image/gif' })] },
-    });
-    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith('error', 'rejectedType'));
-    expect(uploadReceiptMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('manual-receipt-stub')).toBeNull();
+    fireEvent.click(screen.getByTestId('receipt-barcodes'));
+
+    expect(screen.getByTestId('manual-receipt-stub')).toBeInTheDocument();
+    await waitFor(() => expect(fetchAllMock).toHaveBeenCalled());
   });
 
   it('retries FAILED receipts and patches the row', async () => {

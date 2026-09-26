@@ -47,8 +47,6 @@ export function ProductGallery({ product, editable, onChanged }: ProductGalleryP
   const tDetail = useTranslations('products.detail');
   const tCommon = useTranslations('common');
   const tUpload = useTranslations('common.upload');
-  // Camera label rides the intake-zone key — same wording everywhere.
-  const uploadT = useTranslations('receipts.upload');
   const { uploadImage, removeImage, reorderImage, productImageUrl } = useProducts();
   const { addToast } = useToast();
 
@@ -298,7 +296,7 @@ export function ProductGallery({ product, editable, onChanged }: ProductGalleryP
             disabled={op.isLoading}
             onFiles={onPictures}
             browseLabel={t('addPicture')}
-            cameraLabel={uploadT('camera')}
+            cameraLabel={tUpload('camera')}
             testIdPrefix="product-gallery"
             variant="outline"
           />

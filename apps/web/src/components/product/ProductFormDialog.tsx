@@ -66,8 +66,6 @@ export function ProductFormDialog({
 }: ProductFormDialogProps) {
   const t = useTranslations('products.form');
   const tLookup = useTranslations('products.lookup');
-  // Camera label rides the intake-zone key — same wording everywhere.
-  const uploadT = useTranslations('receipts.upload');
   const tUpload = useTranslations('common.upload');
   const locale = useLocale();
   const {
@@ -580,7 +578,7 @@ export function ProductFormDialog({
                 disabled={saveOp.isLoading || picturesOp.isLoading}
                 onFiles={onPictures}
                 browseLabel={t('addPicture')}
-                cameraLabel={uploadT('camera')}
+                cameraLabel={tUpload('camera')}
                 testIdPrefix="product-picture"
                 variant="outline"
               />
