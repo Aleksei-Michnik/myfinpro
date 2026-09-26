@@ -55,7 +55,12 @@ test.describe('Receipts happy path (7.10)', () => {
     await expect(firstRow.locator('[data-status="REVIEW"]')).toBeVisible({ timeout: 60_000 });
 
     // ── Review ────────────────────────────────────────────────────────────
-    await firstRow.locator('[data-testid^="receipt-link-"]').click();
+    // Pre-existing selector-ambiguity fix (unrelated to 8.29, untouched by
+    // this branch): once REVIEW/CONFIRMED, the row also renders the 8.28
+    // "link to an existing transaction" button `receipt-link-transaction-*`,
+    // which shares the `receipt-link-*` prefix with this merchant-name link.
+    // Scope by tag (`<a>` vs `<button>`) to disambiguate.
+    await firstRow.locator('a[data-testid^="receipt-link-"]').click();
     await expect(page.getByTestId('review-merchant')).toHaveValue('Mock Grocery', {
       timeout: 30_000,
     });
@@ -71,8 +76,12 @@ test.describe('Receipts happy path (7.10)', () => {
     await page.getByTestId('category-picker-select').selectOption({ index: 1 });
     await page.getByTestId('receipt-confirm-submit').click();
 
-    // Lands on the new payment's detail page.
-    await expect(page).toHaveURL(/\/payments\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    // Lands on the new transaction's detail page (stale "payments" route
+    // assertion fixed — pre-existing, unrelated to 8.29: the app renamed
+    // payments to transactions in a later phase and this spec, being local-
+    // only, was never re-run against it; `receipt-review-client.tsx` has
+    // pushed to `/transactions/<id>` for a while).
+    await expect(page).toHaveURL(/\/transactions\/[0-9a-f-]{36}/, { timeout: 30_000 });
     await expect(page.getByText('$16.60').first()).toBeVisible({ timeout: 15_000 });
   });
 });
