@@ -69,7 +69,7 @@ Load exactly what the row says; the wiki page is mandatory for the role, not opt
 | Accounts, balances, transfers, statement import, connector           | `api-coder` / `web-coder`          | `testing`                           | `accounts-and-sync`                          |
 | Change touches auth, scoping, uploads, LLM credentials, CI/deploy    | `security-reviewer` (after coding) | —                                   | `auth-and-groups`                            |
 | Bug with unclear cause; staging/production incident                  | `debugger`                         | `local-stack`, `testing`            | `gotchas`                                    |
-| Compose, Dockerfile, nginx, workflows, scripts, Mdock                | `devops`                           | `infra-sync`, `local-stack`         | `deployment-and-ops`, `infra-context`        |
+| Compose, Dockerfile, nginx, workflows, scripts, Mdocker              | `devops`                           | `infra-sync`, `local-stack`         | `deployment-and-ops`, `infra-context`        |
 | Infra question; `infra-context` sync older than 7 days               | `infra-scout`                      | `infra-sync`                        | `infra-context`                              |
 | UI text added or changed                                             | `i18n-translator`                  | `i18n`                              | `ui-design-system` (i18n section)            |
 | Schema change (any role)                                             | —                                  | `prisma-migrations`                 | `data-model`                                 |

@@ -1,6 +1,6 @@
 ---
 name: local-stack
-description: Bring up, check and use the local development stack — Docker infra at the pinned versions, migrations, API and web dev servers, ports and health probes, mock extraction provider — and what changes when Mdock (shared local Traefik, production hostnames) is adopted. Use when a task needs the app running locally, before Playwright or integration tests, or when a local service misbehaves.
+description: Bring up, check and use the local development stack — Docker infra at the pinned versions, migrations, API and web dev servers, ports and health probes, mock extraction provider — and what changes when Mdocker (shared local Traefik, production hostnames) is adopted. Use when a task needs the app running locally, before Playwright or integration tests, or when a local service misbehaves.
 ---
 
 # Local stack
@@ -19,7 +19,7 @@ pnpm 10. Compose: `docker-compose.yml` (+ `docker-compose.override.yml`) defines
    web dev 3000, MySQL `MYSQL_EXTERNAL_PORT` (3307), Redis `REDIS_EXTERNAL_PORT` (6380).
    Swagger at `/api/docs` behind the nginx port.
 
-When the stack runs **in containers** (`docker compose up -d`, with or without the mdock overlay):
+When the stack runs **in containers** (`docker compose up -d`, with or without the mdocker overlay):
 the API dev image has no generated Prisma client and a host `apps/api/tsconfig.build.tsbuildinfo`
 makes Nest emit only declarations — see the four container rows in `wiki/gotchas.md` (2026-09-25)
 before debugging a red `myfinpro-api`. Ports 3000/3001 may be held by a sibling project; set
@@ -39,7 +39,7 @@ before debugging a red `myfinpro-api`. Ports 3000/3001 may be held by a sibling 
 `docker compose down` keeps volumes; `docker compose down -v` destroys the **local** DB — fine
 for local, and exactly what must never be run against the infra compose files.
 
-## Mdock (coming)
+## Mdocker (coming)
 
 The sibling infra repo provides a shared local Traefik on 80/443 and a hostname registry so the
 production URLs resolve to the local stack in an isolated browser profile. Adoption here is a

@@ -1,6 +1,6 @@
 ---
 name: devops
-description: Owns local and CI/CD plumbing in this repo — docker-compose files, Dockerfiles, nginx templates for the shared edge, GitHub workflows, deploy/rollback/backup scripts, the Mdock local-dev adoption — aligned with the shared infra conventions from the sibling infra repo. Use for image or CI failures and any change under infrastructure/, scripts/, .github/ or compose files. Never operates production.
+description: Owns local and CI/CD plumbing in this repo — docker-compose files, Dockerfiles, nginx templates for the shared edge, GitHub workflows, deploy/rollback/backup scripts, the Mdocker local-dev adoption — aligned with the shared infra conventions from the sibling infra repo. Use for image or CI failures and any change under infrastructure/, scripts/, .github/ or compose files. Never operates production.
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 model: sonnet
 skills: [local-stack, stack-versions, infra-sync, commit-hygiene]
@@ -28,7 +28,7 @@ You build and repair the plumbing; you never operate staging or production from 
 - Images at pinned versions verified online (`stack-versions`); actions pinned; least-privilege
   `permissions:`; secrets by **name**; no addresses, usernames or hostnames-as-config in files.
 - Never `docker compose down -v` an infra compose file — production volumes.
-- Mdock adoption (local Traefik on 80/443, hostname registry, isolated browser profile) is its own
+- Mdocker adoption (local Traefik on 80/443, hostname registry, isolated browser profile) is its own
   small PR: join the external network, add the routes, drop the published port — the hostname is
   written only in the infra registry, never hardcoded here.
 
