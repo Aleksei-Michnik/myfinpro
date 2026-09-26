@@ -906,3 +906,33 @@ falls through; factory: production unset/blank/whitespace → `unconfigured`, ex
 binding util 6; settings service `effective`/`deploymentProvider`); shared 210 green (default
 models are catalog ids); web unit 1419 green (settings hint states); integration
 `llm-settings` extended with the key-before-selection catalog case.
+
+## 8.29 — Unified receipt intake (2026-09-26)
+
+Spec: [`docs/ui/8.29-receipt-intake.md`](ui/8.29-receipt-intake.md). Three surfaces had three
+intakes: the receipts page (drop zone + browse/camera + URL form + staging tray), the
+attach-receipt sheet (browse/camera + URL field, no tray) and the add-transaction "From receipt"
+block (a raw single-file input with **no camera button and no client-side gate** — on a phone it
+opened the document picker while the other two offered the camera), each with its own strings.
+
+**Web.** `components/receipt/ReceiptIntake.tsx` is THE intake: photograph / browse / drop / URL
+(collapsible row, Enter never submits a host form), the type + size gate (`lib/upload.ts`),
+multi-photo staging (`StagedPagesTray`, moved out of the page), the PDF/image routing of 8.22
+and the create call for a `standalone` or a `transaction` target, one control-scope op for files
+and URLs. Hosts pass the extra methods they offer (`onScanBarcodes` on the receipts page and the
+transaction form, `onLinkExisting` on the attach sheet) and `onCreated`. `ReceiptUploadZone` is
+deleted; `/receipts` gains the barcode composer. Strings consolidate into `receipts.intake.*`,
+`common.upload.{browse,camera}` and `receipts.upload.addedToast` (31 superseded keys removed per
+locale; one orphan, `receipts.attach.close`, removed). Kit order (browse, then camera) kept.
+
+**Docs.** `wiki/ui-design-system.md` (two rows), `wiki/receipts-and-llm.md`,
+`docs/image-handling.md` §4.
+
+### Tests
+
+web unit 1425 green (`ReceiptIntake.spec` 17: routing per target, gate type + size, staging cap,
+URL row, drop, pending, extras; hosts' specs updated); e2e `receipt-intake.spec.ts` (3, new:
+transaction-form intake, attach sheet) and the repaired `receipts.spec.ts` (1) green against the
+local stack; Playwright QA pass in en/he, light/dark, desktop/390 px with no regression
+(two pre-existing console noises noted: the dev-mode double silent refresh 401 and a revoked
+blob URL after navigation). Security review: no finding.

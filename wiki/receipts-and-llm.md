@@ -136,9 +136,8 @@ row). Stages: `preparing sending processing thinking generating continuing repai
 throttled to one event / 300 ms with `thought` capped at 400 chars (`extraction-progress.util.ts`).
 `ExtractionActivity` renders it as a review-page panel or an inline list row; with no events it
 rotates generic verbs until `receipt.updated` unmounts it. Never hand-roll a replacement for the
-shared primitives: `ReceiptIntake` (8.29 — THE way a receipt gets in on every host:
-camera/browse/drop/URL, the client gate, page staging, the create call), `DocumentViewer`
-(zoom/pan, page navigator, PDF fallback) and `FileCaptureButtons` (browse + camera pair).
+shared primitives: `ReceiptIntake` (8.29 — THE intake on every host: camera/browse/drop/URL, the
+client gate, page staging, the create call), `DocumentViewer` and `FileCaptureButtons`.
 
 ## API surface
 
