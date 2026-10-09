@@ -106,10 +106,10 @@ export class TransactionScheduleService implements OnApplicationBootstrap {
   }
 
   /**
-   * The deploy pipeline boots the new container BEFORE running migrations,
-   * so the first attempt can race a schema change (as the 8.20 rename did).
-   * On a query-level failure, retry a few times in the background — the
-   * timer is unref'd so it never holds the process open.
+   * Boot can still meet a database that is briefly unreachable (until
+   * 2026-10 the deploy also booted the new slot before migrating, which the
+   * 8.20 rename raced). On a query-level failure, retry a few times in the
+   * background — the timer is unref'd so it never holds the process open.
    */
   private async reconcileSchedulers(attempt = 1): Promise<void> {
     const MAX_ATTEMPTS = 5;

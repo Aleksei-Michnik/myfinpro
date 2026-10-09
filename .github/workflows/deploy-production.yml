@@ -223,8 +223,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # A slot rollback does not roll the database back, and `prisma migrate deploy` runs in
-      # the new slot before traffic switches. Dump first, so a release that changed the schema
+      # A slot rollback does not roll the database back, and `prisma migrate deploy` runs
+      # before the new slot starts, ahead of the traffic switch. Dump first, so a release that changed the schema
       # has something to restore (docs/backup.md "Disaster Recovery Procedure"). The dump runs
       # inside the MySQL container with the container's own environment — the single quotes
       # keep $MYSQL_ROOT_PASSWORD from expanding anywhere but there — so this step needs only

@@ -49,6 +49,7 @@ Status is **binding** unless a later row supersedes it. Dates are the date the d
 
 | 2026-09-26 | Production never defaults to the mock extraction provider: an unset `RECEIPT_EXTRACTION_PROVIDER` is `unconfigured` (receipts fail with a settings-facing reason); staging and dev keep the mock. Taken in the 8.11 hotfix; owner to confirm. | Production served the fixture as "recognition" for months; staging's e2e stays deterministic. |
 | 2026-09-26 | A stored personal LLM key alone binds extraction (its provider + `LLM_DEFAULT_MODEL`); the shared deployment key backs explicit selections only. Taken in the 8.11 hotfix; owner to confirm. | A saved key is intent; an unreadable key must fail, never bill the deployment's key. |
+| 2026-10-09 | Migrations finish before the new slot boots: `deploy.sh` runs `prisma migrate deploy` in a one-off container from the new image, then starts the slot. Boot code no longer races a migration that succeeds; the scheduler retry (`0150a24`) and the seed's catch stay for a failed migration or an unreachable database. | Two boot tasks lost a release to the race; the seed's loss left production without the `transfer` category. |
 
 ## Known drift to fix, not to re-decide
 
@@ -56,3 +57,4 @@ Status is **binding** unless a later row supersedes it. Dates are the date the d
 - `IMPLEMENTATION-PLAN.md` §8.6 still shows `node:24-alpine` and §8.7 a 30/12/6 retention; the Dockerfiles use `node:26-alpine` and the backup scripts keep 7 daily + 4 weekly.
 - `IMPLEMENTATION-PLAN.md` §8.5 deployment notifications were never built.
 - `docker-compose.{staging,production}.yml` (monolithic) are superseded by the `infra`/`app` pair and are not used by the pipeline.
+- `Rollback on failure` runs after any failed step of a `deploy` job (checkout, backup, file copy, or `deploy.sh` before its step 8: health check, post-switch verification, lock contention) and `rollback.sh` trusts `.deploy-metadata`, which is current only after a successful deploy or rollback. On a stale file it targets the release **before last** and stops the serving slot. Staging takes that downgrade; production escapes it by accident — its rollback step does not pass `LLM_SECRETS_ENCRYPTION_KEY`, so the older API cannot boot, the health wait fails before the switch, and the target slot is left restart-looping. Adding that key without a stale-metadata guard (a per-run id written at step 8 and checked by the rollback) arms the downgrade (checked 2026-10-09; not yet fixed).

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { SystemCategoriesBootstrap } from '../system-categories.bootstrap';
 
 describe('SystemCategoriesBootstrap', () => {
@@ -73,5 +74,26 @@ describe('SystemCategoriesBootstrap', () => {
     const boot = new SystemCategoriesBootstrap(prisma as never);
 
     await expect(boot.onModuleInit()).resolves.toBeUndefined();
+  });
+
+  it('logs the cause and the stack of a failed seed', async () => {
+    process.env.NODE_ENV = 'production';
+    const failure = new Error("Data too long for column 'direction' at row 1");
+    const prisma = {
+      category: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockRejectedValue(failure),
+        update: jest.fn(),
+      },
+    };
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+    await new SystemCategoriesBootstrap(prisma as never).onModuleInit();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Failed to seed system categories on boot: ${failure.message}`,
+      failure.stack,
+    );
+    errorSpy.mockRestore();
   });
 });

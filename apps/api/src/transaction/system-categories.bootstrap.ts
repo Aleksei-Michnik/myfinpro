@@ -27,7 +27,11 @@ export class SystemCategoriesBootstrap implements OnModuleInit {
       this.logger.log(`System categories ensured (${results.size} defaults).`);
     } catch (err) {
       // Never break application boot over a seed failure — log and continue.
-      this.logger.error('Failed to seed system categories on boot', err as Error);
+      // Cause in the message, stack as the second argument: the nestjs-pino
+      // bridge hands an Error passed after the message to pino as a printf
+      // argument, which pino drops — production logged no cause at all.
+      const error = err as Error;
+      this.logger.error(`Failed to seed system categories on boot: ${error.message}`, error.stack);
     }
   }
 }

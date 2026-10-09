@@ -50,8 +50,8 @@ Pinned actions: `actions/checkout@v6`, `actions/setup-node@v6`, `pnpm/action-set
 
 1. `flock` on `.deploy.lock`; read `.active-slot` (`blue`/`green`) → deploy to the other; `.deploy-metadata` keeps the previous tag (it is `source`d, so the intended `IMAGE_TAG` is saved and restored around that line — do not remove that dance).
 2. Prune old logs/dangling images, `docker compose pull` the slot, `up -d` the infra stack, wait for `<prefix>-mysql` and `<prefix>-redis` to report healthy.
-3. Start the slot with `--force-recreate` after `docker rm -f` of stale slot containers.
-4. `docker exec <api slot> npx prisma migrate deploy` — **the container boots before the migration runs**; code must tolerate the pre-migration schema for a few seconds (`0150a24`).
+3. `docker rm -f` stale slot containers, then `docker compose run --rm --no-deps -T api npx prisma migrate deploy </dev/null` — a one-off container from the new image migrates **before the new slot boots**, so boot-time work (system-category seed, scheduler reconciliation) sees the final schema (since 2026-10-09; before, the slot booted first and the seed lost the 20.2 `transfer` category to that race).
+4. Start the slot with `--force-recreate`.
 5. Wait for Docker healthchecks on the new api and web containers (90 s each).
 6. Render `infrastructure/nginx/conf.d/ssl.conf.template` with `envsubst '$SERVER_NAME $ACTIVE_SLOT $ENVIRONMENT'` into the shared nginx `conf.d/<env>.conf`, then `nginx -t` **inside the shared container**, then `nginx -s reload`. Never `restart` and never `--force-recreate` the edge — that drops its DNS cache for running containers.
 7. Drain 5 s, verify `GET /api/v1/health` through nginx; on failure re-render the previous slot, reload, stop the new slot, exit 1.
@@ -67,7 +67,7 @@ Rollback: `scripts/rollback.sh <env>` reads `.deploy-metadata`, starts the previ
 
 ## Migrations
 
-Expand-then-contract only (`IMPLEMENTATION-PLAN.md` §8.3): additive migration first; remove columns/tables in a later migration after the old slot is gone. Both slots can serve traffic during a swap, so every migration must be compatible with N-1 code. `prisma migrate deploy` runs in the new slot; a non-baseline failure is only **warned** about and the deploy continues (`scripts/deploy.sh` step 4.5) — check deploy logs for `Migration failure is NOT a baseline issue`.
+Expand-then-contract only (`IMPLEMENTATION-PLAN.md` §8.3): additive migration first; remove columns/tables in a later migration after the old slot is gone. Both slots can serve traffic during a swap, so every migration must be compatible with N-1 code. `prisma migrate deploy` runs in a one-off container before the new slot starts; a failure is only **warned** about and the deploy continues (`scripts/deploy.sh` step 4) — check deploy logs for `prisma migrate deploy failed`. It must not abort there until the workflow's rollback is fixed (`decisions.md`, known drift). The bootstrap-era fallback that dropped tables on a "schema is not empty" error is gone.
 
 ## Backups
 
