@@ -167,3 +167,32 @@ full 2000-line chunk) + `accounts-crud` + `transactions-accounts` = 63 green; ap
 **Released** — 20.1, 20.2 and 20.4 reached production on 2026-09-26 (release merge `57943c8`; CI, staging deploy and staging tests green; production health verified after the blue-green swap).
 
 **Next** — 20.5 (import wizard + review UI) after 20.3.
+
+## 20.2-hotfix — the `transfer` category never reached production (2026-10-09)
+
+**Symptom.** The production boot log of the 2026-09-26 release carried `Failed to seed system
+categories on boot` with no cause. Creating a transfer from a statement line answers 500 ("The
+'transfer' system category is missing"), and a transfer transaction cannot pass its category guard.
+
+**Cause.** `scripts/deploy.sh` started the new slot first and ran `prisma migrate deploy` inside it
+five seconds later. The boot-time seed ran before `20260925120100_phase20_2_category_direction_width`
+widened `categories.direction`, so creating `transfer` (`BOTH`) into `VARCHAR(3)` failed with `P2000`
+(MySQL 1406). The seed runs only at boot, so nothing retried it. Reproduced against a disposable
+MySQL 9.7: 25 system categories and no `transfer` with the narrow column, 26 after widening. The
+cause was invisible because the seed passed its `Error` after the message, which the nestjs-pino
+bridge hands to pino as a printf argument that pino drops.
+
+**Fix.** `deploy.sh` migrates in a one-off container from the new image (`docker compose run --rm
+--no-deps -T api npx prisma migrate deploy`) before the slot starts — what
+`docs/phase-2-design.md` specified from the start; a failure still warns and continues because an
+abort would trigger the rollback on stale metadata (`wiki/decisions.md`, known drift). The
+bootstrap-era fallback that dropped tables, `users` among them, on a baseline error is removed.
+The seed logs its cause and stack. Production regains `transfer` on its next API boot.
+
+### Tests
+
+api unit 1397 green (`system-categories.bootstrap.spec` gains the cause-and-stack case); the new
+log line proven through the real Nest logger → nestjs-pino → pino chain. `bash -n scripts/deploy.sh`;
+`docker compose run --rm --no-deps -T` checked locally for exit code, environment, network,
+generated name and restart policy. Security review: no vulnerability; its two robustness points
+(stale-slot cleanup before the migration, the one-off container detached from stdin) are applied.

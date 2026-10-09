@@ -1,7 +1,7 @@
 # MyFinPro — Project Progress
 
-> **Last updated:** 2026-09-26
-> **Current work:** Phase 20 — Accounts, Balances & Bank Sync (designed 2026-09-25; 20.1 UI kit, 20.2 accounts schema + API and 20.4 statement import API live in production since 2026-09-26; 20.3 and 20.5 next) · Phase 9 — Purchase Analytics (9.1 aggregation engine shipped, saved views next) · Phase 8 — Product Catalog, Matching & Barcode (8.1–8.29 shipped; 8.11-hotfix + 8.29 unified receipt intake on 2026-09-26) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
+> **Last updated:** 2026-10-09
+> **Current work:** Phase 20 — Accounts, Balances & Bank Sync (designed 2026-09-25; 20.1 UI kit, 20.2 accounts schema + API and 20.4 statement import API live in production since 2026-09-26; 20.2-hotfix on 2026-10-09: migrations now run before the new slot boots, so the missing `transfer` category returns; 20.3 and 20.5 next) · Phase 9 — Purchase Analytics (9.1 aggregation engine shipped, saved views next) · Phase 8 — Product Catalog, Matching & Barcode (8.1–8.29 shipped; 8.11-hotfix + 8.29 unified receipt intake on 2026-09-26) · Phase 10 — Budgets & Spending Targets (10.1 shipped, budgets API in flight)
 
 This document is an **index**: per-phase status and a short summary, with a link to each phase's detailed progress document (`phase-<number>-progress.md`). Formatting rules for progress documentation live in [`.kilocode/rules/docs.md`](../.kilocode/rules/docs.md).
 

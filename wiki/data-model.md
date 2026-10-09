@@ -154,8 +154,8 @@ Regenerate/apply from the repo root: `pnpm db:generate`, `pnpm db:migrate` (dev)
 `prisma/seed.ts` seeds only a dev user (`dev@myfinpro.test`, no password hash) and the system
 categories. Deploys run `migrate deploy` but **not** `db:seed`, so `SystemCategoriesBootstrap`
 (`apps/api/src/transaction/system-categories.bootstrap.ts`) re-runs `seedSystemCategories()` on every
-API boot; it is skipped when `NODE_ENV=test` and swallows its own errors so a seed failure can never
-break boot. The seeder uses `findFirst` + `create`/`update` rather than `upsert` because `ownerId` is
+API boot (after the deploy's migrations since 2026-10-09); it is skipped when `NODE_ENV=test` and logs
+its own errors with cause and stack, so a seed failure can never break boot. The seeder uses `findFirst` + `create`/`update` rather than `upsert` because `ownerId` is
 NULL for system rows and MySQL upserts on a composite unique with a NULL member are unreliable.
 `DEFAULT_CATEGORIES` in `packages/shared` holds **26** (18 OUT + 7 IN + 1 BOTH — the Phase 20
 `transfer` category), as `transaction/__tests__/seed-system-categories.spec.ts` asserts.
