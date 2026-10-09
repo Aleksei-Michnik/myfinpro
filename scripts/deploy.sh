@@ -176,32 +176,26 @@ wait_for_container_health "${CONTAINER_PREFIX}-mysql" 60
 wait_for_container_health "${CONTAINER_PREFIX}-redis" 30
 info "Infrastructure services are healthy."
 
-# ─── Step 4: Start new slot ─────────────────────────────────────────────────
+# ─── Step 4: Run database migrations ────────────────────────────────────────
 
-log "Starting new slot: ${NEXT_SLOT}..."
-# Remove any stale containers from the target slot (e.g. leftover from
-# a previous failed deploy that left the slot in a half-created state).
+# Remove any stale containers from the target slot first (e.g. leftover from
+# a previous failed deploy that left the slot in a half-created state), so no
+# old API in that slot runs boot work or workers while the schema changes.
 # We use docker rm -f by explicit container name because compose-based
 # cleanup fails when containers have mismatched project labels (e.g.
 # from an older deploy that used a different -p project name).
 log "Cleaning up stale ${NEXT_SLOT} containers (if any)..."
 docker rm -f "${CONTAINER_PREFIX}-api-${NEXT_SLOT}" "${CONTAINER_PREFIX}-web-${NEXT_SLOT}" 2>/dev/null || true
-# --force-recreate ensures containers use the freshly pulled image,
-# even if Docker thinks the config hasn't changed.
-docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
-  -f "$APP_COMPOSE" up -d --force-recreate
 
-# ─── Step 4.5: Run database migrations ──────────────────────────────────────
+# A one-off container from the new image applies the migrations BEFORE the new
+# slot boots, so boot-time work (the system-category seed, the scheduler
+# reconciliation) never runs against the pre-migration schema. The old slot
+# keeps serving on the migrated schema meanwhile (expand-then-contract only).
+log "Running database migrations (one-off container, image ${IMAGE_TAG})..."
 
-log "Running database migrations..."
-# Wait a few seconds for the API container to start
-sleep 5
-
-API_CONTAINER="${CONTAINER_PREFIX}-api-${NEXT_SLOT}"
-
-# Capture migration output for error analysis (temporarily disable errexit)
 set +e
-MIGRATE_OUTPUT=$(docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1)
+MIGRATE_OUTPUT=$(docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+  -f "$APP_COMPOSE" run --rm --no-deps -T api npx prisma migrate deploy 2>&1 </dev/null)
 MIGRATE_EXIT=$?
 set -e
 
@@ -210,44 +204,18 @@ echo "$MIGRATE_OUTPUT" | tee -a "$LOG_FILE"
 if [ $MIGRATE_EXIT -eq 0 ]; then
   info "Database migrations applied successfully."
 else
-  warn "prisma migrate deploy failed (exit code: $MIGRATE_EXIT)"
-
-  # Check if this is a baseline issue — database has pre-existing tables
-  # but no migration history. Prisma outputs "schema is not empty" and
-  # links to the baseline docs when this happens.
-  if echo "$MIGRATE_OUTPUT" | grep -qi "not empty\|baseline"; then
-    log "Baseline issue detected — database has pre-existing tables without migration history."
-    log "Dropping pre-existing tables for clean Prisma migration..."
-    log "  (Safe: no user data exists in pre-Prisma bootstrap phase)"
-
-    # Drop all existing tables (including _prisma_migrations if partially created)
-    # so prisma migrate deploy can run from scratch.
-    # We use prisma db execute to run raw SQL — avoids needing mysql client.
-    docker exec "$API_CONTAINER" sh -c '
-      echo "SET FOREIGN_KEY_CHECKS=0;" > /tmp/drop_tables.sql
-      echo "DROP TABLE IF EXISTS health_checks;" >> /tmp/drop_tables.sql
-      echo "DROP TABLE IF EXISTS refresh_tokens;" >> /tmp/drop_tables.sql
-      echo "DROP TABLE IF EXISTS audit_logs;" >> /tmp/drop_tables.sql
-      echo "DROP TABLE IF EXISTS users;" >> /tmp/drop_tables.sql
-      echo "DROP TABLE IF EXISTS _prisma_migrations;" >> /tmp/drop_tables.sql
-      echo "SET FOREIGN_KEY_CHECKS=1;" >> /tmp/drop_tables.sql
-      npx prisma db execute --stdin < /tmp/drop_tables.sql
-    ' 2>&1 | tee -a "$LOG_FILE" || {
-      error "Failed to drop pre-existing tables."
-    }
-
-    # Now run prisma migrate deploy on the clean database
-    if docker exec "$API_CONTAINER" npx prisma migrate deploy 2>&1 | tee -a "$LOG_FILE"; then
-      info "Database baseline complete — all migrations applied from scratch."
-    else
-      error "Prisma migrate deploy failed even after dropping tables! Manual intervention needed."
-    fi
-  else
-    warn "Migration failure is NOT a baseline issue — investigate manually."
-  fi
+  # Warn and continue, as before: exiting here would make the workflow run
+  # rollback.sh, which acts on the previous deploy's metadata.
+  warn "prisma migrate deploy failed (exit code: $MIGRATE_EXIT) — investigate manually."
 fi
 
-info "Database migration step complete."
+# ─── Step 4.5: Start new slot ───────────────────────────────────────────────
+
+log "Starting new slot: ${NEXT_SLOT}..."
+# --force-recreate ensures containers use the freshly pulled image,
+# even if Docker thinks the config hasn't changed.
+docker compose -p "myfinpro-${ENVIRONMENT}-${NEXT_SLOT}" \
+  -f "$APP_COMPOSE" up -d --force-recreate
 
 # ─── Step 5: Wait for health checks ─────────────────────────────────────────
 
